@@ -44,12 +44,17 @@ module Ww
     # not associated with HTTP. *detail* may provide further explanation.
     defrecord Aborted, detail : String
 
+    alias Notification = ResponseReady
+
+    # Signals that a `Response` for *uri* is ready; *uri*'s corresponding promise was
+    # fulfilled and discarded.
+    defrecord ResponseReady, uri : URI
+
     @@lock = Sync::Mutex.new
     @@running = false
     @@cache = Cache.new
     @@workspace = {} of URI => Sync::Future(Response)
     @@msgs = BlockingQueue(Msg).new
-    @@waiters = BlockingSignal.new
 
     # :nodoc:
     alias Msg = URIAdded
@@ -266,7 +271,11 @@ module Ww
         @@workspace.delete(uri)
       end
 
-      @@waiters.call
+      @@listener_queue_lock.synchronize do
+        @@listener_queues.each do |queue|
+          queue << ResponseReady.new(uri)
+        end
+      end
     end
 
     # Returns the `Response` for *uri*.
@@ -321,9 +330,28 @@ module Ww
       end
     end
 
-    # Blocks the calling fiber until something managed by `HTTPService` changes.
-    def wait(epoch : UInt64) : UInt64
-      @@waiters.wait(epoch)
+    @@listener_queue_lock = Sync::Mutex.new
+    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
+
+    # Taps the block into the stream of notifications broadcast by the service.
+    # The calling fiber blocks while waiting for notifications.
+    def listen(& : Notification ->) : Nil
+      queue = BlockingQueue(Notification).new
+
+      @@listener_queue_lock.synchronize do
+        @@listener_queues << queue
+      end
+
+      begin
+        loop do
+          notification = queue.shift
+          yield notification
+        end
+      ensure
+        @@listener_queue_lock.synchronize do
+          @@listener_queues.delete(queue)
+        end
+      end
     end
   end
 end
