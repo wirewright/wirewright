@@ -8,10 +8,6 @@ shards:
     git: https://github.com/ysbaddaden/sdl.cr.git
     version: 0.1.0+git.commit.5a222701cc83aad89e1eab80812af97b12d6188a
 
-  sync:
-    git: https://github.com/ysbaddaden/sync.git
-    version: 0.1.0+git.commit.389fc5b6da92f1a06faa4925cffb036322d0e0b5
-
   zstd:
     git: https://github.com/didactic-drunk/zstd.cr.git
     version: 1.2.0

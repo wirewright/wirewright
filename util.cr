@@ -3822,11 +3822,327 @@ class BlockingQueue(T)
   end
 end
 
-class ::Sync::Future
-  def inspect(io)
-    io << "#<Sync::Future:0x"
-    object_id.to_s(io, 16)
-    io << " ...>"
+# Copied from https://github.com/ysbaddaden/sync
+
+module ::Sync
+  annotation Safe
+  end
+
+  # :nodoc:
+  struct Dll(T)
+    module Node
+      macro included
+        property next : ::Pointer(self) = ::Pointer(self).null
+        property prev : ::Pointer(self) = ::Pointer(self).null
+
+        macro init(*args)
+          \%node = ::{{@type}}.new(\{{args.splat}})
+          ::Sync::Dll(::{{@type}}).init(pointerof(\%node))
+          pointerof(\%node)
+        end
+
+        def alone? : Bool
+          @next == @prev
+        end
+      end
+    end
+
+    # Nodes must be explicitly initialized to point to themselves, so they act
+    # as a circular list with a single element. Since we include Node into
+    # structs, we can't have the initializer do it automatically (the struct is
+    # returned by copy, and the pointers become invalid).
+    def self.init(node : Pointer(T)) : Nil
+      node.value.next = node
+      node.value.prev = node
+    end
+
+    # Points to the `Node` at the tail of the list.
+    @list : Pointer(T) = Pointer(T).null
+
+    def empty? : Bool
+      @list.null?
+    end
+
+    # Returns the last node in the list. Returns a NULL pointer when empty.
+    def last? : Pointer(T)
+      @list
+    end
+
+    # Returns the first node in the list. Returns a NULL pointer when empty.
+    def first? : Pointer(T)
+      if list = @list
+        list.value.next
+      else
+        Pointer(T).null
+      end
+    end
+
+    # Returns the node that comes immediately after *node* in the list. Returns
+    # a NULL pointer if *node* is the last node in the list.
+    def next?(node : Pointer(T)) : Pointer(T)
+      if node != @list
+        node.value.next
+      else
+        Pointer(T).null
+      end
+    end
+
+    # Returns the node that comes immediately before *node* in the list. Returns
+    # a NULL pointer id *node* is the first node in the list.
+    def prev?(node : Pointer(T)) : Pointer(T)
+      if node != @list.value.next
+        node.value.prev
+      else
+        Pointer(T).null
+      end
+    end
+
+    # Yields each node in the list. The block owns the node; it can be deleted
+    # from the list, for example, then inserted into another list.
+    def each(& : Pointer(T) ->) : Nil
+      node = first?
+
+      while node
+        next_ = next?(node)
+        yield node
+        node = next_
+      end
+    end
+
+    # Removes and yields each node in the list. The block owns the node; it can
+    # be inserted into another list, for example.
+    def consume_each(& : Pointer(T) ->) : Nil
+      while list = @list
+        node = list.value.next
+        delete(node)
+        yield node
+      end
+    end
+
+    # Removes *node* from the list.
+    def delete(node : Pointer(T)) : Nil
+      if @list == node
+        if @list.value.prev == @list
+          @list = Pointer(T).null
+        else
+          @list = @list.value.prev
+        end
+      end
+      node.value.next.value.prev = node.value.prev
+      node.value.prev.value.next = node.value.next
+      node.value.next = node
+      node.value.prev = node
+    end
+
+    # Removes and returns the last *node* from the list.
+    def pop? : Pointer(T)
+      if node = @list
+        delete(node)
+        node
+      else
+        Pointer(T).null
+      end
+    end
+
+    # Removes and returns the first *node* from the list.
+    def shift? : Pointer(T)
+      if (list = @list) && (node = list.value.next)
+        delete(node)
+        node
+      else
+        Pointer(T).null
+      end
+    end
+
+    # Inserts *node* into the list, at the beginning.
+    def unshift(node : Pointer(T)) : Nil
+      unless node.null?
+        # raise "BUG: #{node} isn't in pristine state" unless node.value.alone?
+
+        if @list.null?
+          @list = node.value.prev
+        else
+          self.class.splice_after(@list, node)
+        end
+      end
+    end
+
+    # Inserts *node* into the list, at the end.
+    def push(node : Pointer(T)) : Nil
+      unless node.null?
+        # raise "BUG: #{node} isn't in pristine state" unless node.value.alone?
+
+        unshift(node.value.next)
+        @list = node
+      end
+    end
+
+    # Makes *succ* and its successors come after *node*.
+    def self.splice_after(node : Pointer(T), succ : Pointer(T)) : Nil
+      tmp1 = node.value.next
+      tmp2 = succ.value.prev
+
+      node.value.next = succ
+      succ.value.prev = node
+
+      tmp2.value.next = tmp1
+      tmp1.value.prev = tmp2
+    end
+  end
+
+  struct Waiter
+    include Dll::Node
+  end
+
+  class Error
+    # Raised by `Future` when the future failed without an explicit exception.
+    class Failed < Error
+    end
+  end
+
+  # An object that will eventually hold a value.
+  #
+  # You can for example delegate the computation of a value to another fiber,
+  # that can resolve is asynchronously, without blocking the current fiber, that
+  # can regularly poll for the value, or explicitly wait until the value is
+  # resolved.
+  #
+  # For example:
+  #
+  # ```
+  # result = Future(Int32).new
+  #
+  # spawn do
+  #   result.set(compute_some_value)
+  # rescue exception
+  #   result.fail(exception)
+  # end
+  #
+  # loop do
+  #   do_something
+  #
+  #   if value = result.get?
+  #     p value
+  #     break
+  #   end
+  # end
+  # ```
+  @[Sync::Safe]
+  class Future(T)
+    # :nodoc:
+    enum State
+      UNSET
+      RESOLVED
+      FAILED
+    end
+
+    @reason : Exception | String | Nil
+
+    def initialize
+      {% if (T.union? && T.union_types.any? { |t| t == Nil }) || T == Nil %}
+        {% raise "Can't create Sync::Future for a nilable type" %}
+      {% end %}
+      @value = uninitialized T
+      @mu = MU.new
+      @state = State::UNSET
+      @waiters = Dll(Waiter).new
+    end
+
+    # Sets the value, then wakes up pending fibers.
+    #
+    # Raises a `RuntimeError` if the future has already been resolved or has
+    # already failed.
+    def set(value : T) : T
+      resolve(State::RESOLVED) { @value = value }
+      value
+    end
+
+    # Sets the future as failed, then wakes up pending fibers.
+    #
+    # Raises a `RuntimeError` if the future has already been resolved or has
+    # already failed.
+    def fail(reason : Exception | String | Nil = nil) : Nil
+      resolve(State::FAILED) { @reason = reason }
+    end
+
+    private def resolve(new_state, &)
+      @mu.lock
+
+      unless @state.unset?
+        @mu.unlock
+        raise RuntimeError.new("Can't resolve a future twice")
+      end
+
+      # we need an explicit fence for the compiler and weak cpu architectures
+      # (e.g. ARM) to not reorder the memory stores, so any thread can safely
+      # access the value, or the reason, depending on the observed state
+      yield
+      Atomic.fence(:acquire_release)
+      @state = new_state
+
+      @mu.unlock
+
+      # @waiters is owned by the current fiber (neither #resolve nor #get will
+      # try to access it anymore), we can safely iterate the list
+      @waiters.consume_each(&.value.wake)
+    end
+
+    # Returns the value if resolved, otherwise returns `nil` immediately.
+    # Raises an exception if the future has failed.
+    def get? : T?
+      case @state
+      when State::RESOLVED
+        @value
+      when State::FAILED
+        raise_exception!
+      end
+    end
+
+    # Returns the value.
+    # Blocks the current fiber until the future is resolved.
+    # Raises an exception if the future has failed.
+    def get : T
+      loop do
+        case @state
+        when State::RESOLVED
+          return @value
+        when State::FAILED
+          raise_exception!
+        when State::UNSET
+          waiter = Waiter.init(:reader)
+          @mu.lock
+          if @state.unset?
+            @waiters.push(waiter)
+            @mu.unlock
+            waiter.value.wait
+          else
+            @mu.unlock
+          end
+        end
+      end
+    end
+
+    private def raise_exception! : NoReturn
+      case reason = @reason
+      in Exception
+        raise reason
+      in String
+        raise Error::Failed.new(reason)
+      in Nil
+        raise Error::Failed.new
+      end
+    end
+
+    # :nodoc:
+    def dup
+      {% raise "Can't dup {{@type}}" %}
+    end
+
+    def inspect(io)
+      io << "#<Sync::Future:0x"
+      object_id.to_s(io, 16)
+      io << " ...>"
+    end
   end
 end
 

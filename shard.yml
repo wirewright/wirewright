@@ -14,8 +14,6 @@ dependencies:
   sdl:
     github: ysbaddaden/sdl.cr
     commit: 5a22270
-  sync:
-    github: ysbaddaden/sync
   zstd:
     github: didactic-drunk/zstd.cr
 # dependencies:

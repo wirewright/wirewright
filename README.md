@@ -81,7 +81,7 @@ which ideas were inspired by (or taken from!) whom. Hopefully, this would be pos
 
 Wirewright currently only runs on Linux.
 
-Wirewright can be built with Crystal 1.19.0 or later. If I forget to update the version number here, please
+Wirewright can be built with Crystal 1.20.0 or later. If I forget to update the version number here, please
 remember that Wirewright more than likely depends on the newest features and bug-fixes in Crystal. So you are
 advised to build Wirewright with the latest version of Crystal.
 
