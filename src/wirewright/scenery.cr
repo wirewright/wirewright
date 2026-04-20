@@ -151,22 +151,13 @@ module Ww::Scenery
       end
     end
 
-    # The maximum screen width (see `screen`).
-    MAX_SCREEN_WIDTH = 16_000
-
-    # The maximum screen height (see `screen`).
-    MAX_SCREEN_HEIGHT = 16_000
-
     # Constructs a *screen*, which is basically a `PixelRect`.
     #
-    # - *width* is the width of the screen, clamped between 0 and `MAX_SCREEN_WIDTH`.
-    # - *height* is the height of the screen, clamped between 0 and `MAX_SCREEN_HEIGHT`.
+    # - *width* and *height* are turned into PixelRect-safe sizes using `PixelRect.clamp`.
     # - *backdrop* is the clear color of the screen. See `PixelRect` for more info
     #   on what colors you are recommended to use for *backdrop*.
     def screen(width : Magnitude, height : Magnitude, backdrop : Pigment::RGBA) : PixelRect
-      iwidth = width.to_i.clamp(0..MAX_SCREEN_WIDTH)
-      iheight = height.to_i.clamp(0..MAX_SCREEN_HEIGHT)
-
+      iwidth, iheight = PixelRect.clamp(width, height)
       pixels = Slice(Pixel).new(iwidth * iheight, Pixel.of(backdrop))
 
       PixelRect.new(pixels, iwidth, iheight, backdrop, clear: true)

@@ -16,6 +16,21 @@ module Ww::Scenery
     def initialize(@pixels : Slice(Pixel), @width, @height, @backdrop, @clear : Bool)
     end
 
+    # The maximum PixelRect width (see `screen`).
+    MAX_WIDTH = 16_000
+
+    # The maximum PixelRect height (see `screen`).
+    MAX_HEIGHT = 16_000
+
+    # Turns an arbitrary *width* and *height* into *screen width* and *screen height*,
+    # which can be safely used with `PixelRect`.
+    def self.clamp(width : Magnitude, height : Magnitude) : {Int32, Int32}
+      iwidth = width.to_i.clamp(0..MAX_WIDTH)
+      iheight = height.to_i.clamp(0..MAX_HEIGHT)
+
+      {iwidth, iheight}
+    end
+
     def to_unsafe : UInt8*
       @pixels.unsafe_slice_of(UInt8).to_unsafe
     end
