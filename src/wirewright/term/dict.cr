@@ -393,7 +393,7 @@ module Ww
       Term[index32?(term)]
     end
 
-    # O(1) Nth entry in `each_entry`-order (items unordered, pairs unordered).
+    # Near constant-time Nth entry in `each_entry`-order (items unordered, pairs unordered).
     @[Dncast]
     def nth?(index : Int32) : {Term, Term}?
       nth?(index.to_u32)
@@ -415,7 +415,7 @@ module Ww
       nth?(index) || raise IndexError.new
     end
 
-    # O(1) Nth entry in `items` followed by `Part::PairsOrd`-order.
+    # Near constant-time Nth entry in `items` followed by `Part::PairsOrd`-order.
     @[Dncast]
     def ordnth?(index : Int32) : {Term, Term}?
       if 0 <= index < itemsize
@@ -794,20 +794,12 @@ module Ww
 
     # Yields a `Commit` object which allows you to mutate a copy of `self`.
     #
-    # - The commit object is marked as resolved after the block. You should not
-    #   retain it. If you do, all operations on the object (including readonly ones)
-    #   will raise `ResolvedError`.
-    # - If you pass the commit object to another fiber in the block, e.g. via a channel,
-    #   and fiber yield immediately after that, the commit obviously would not be marked
-    #   as resolved as the resolution code would not have been reached yet. However,
-    #   if you then attempt to call mutation methods on the commit, another error,
-    #   `ReadonlyError`, will be raised. In other words, the yielded commit object
-    #   is readonly for any other fiber except for the fiber that it was originally
-    #   yielded to.
+    # Returns `self` if the transaction did not touch the dictionary at all. On
+    # the other hand, if the dictionary was changed but then the changes were
+    # reverted, this method will return a new dictionary.
     #
-    # Returns `self` if the transaction did not touch the dictionary at all. If
-    # the dictionary was changed but then the changes were reverted, this method
-    # will return a new dictionary.
+    # WARNING: The yielded commit is allocated on the stack. It is your responsibility
+    # to make sure it does not outlive the block. If it does, that's UB.
     @[Dncast]
     def transaction(& : Dict::Commit ->) : Dict
       commit = stack_alloc Commit.new(self)

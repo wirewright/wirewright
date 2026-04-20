@@ -381,7 +381,7 @@ module Ww::M1
   #
   # Most matches are rejections in practice. This function tries to minimize
   # work while maximizing rejections that it's responsible for, so that the vastly
-  # more expensive `match` or `backmap` downstream isn't triggered without
+  # more expensive `matches` or `backmap` downstream isn't triggered without
   # due cause.
   #
   # Whereas `matches` employs backtracking search, bits of constraint satisfaction

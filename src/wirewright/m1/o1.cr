@@ -275,7 +275,7 @@ module Ww::M1
     end
   end
 
-  # Runs the sketch propagation algorithm on operators in *pattern*.
+  # Runs the capture propagation algorithm on operators in *pattern*.
   #
   # This adds the `captures` entry to every operator, holding a list of captures
   # that this operator and its members make.

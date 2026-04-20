@@ -13,8 +13,9 @@ class Ww::Term::Dict
   #
   # Summaries are updated live as dictionaries change. They are defined recursively,
   # which means dicts can do something called *summary-driven descent*. Depending
-  # on the distribution of indexed data, this can give you huge or negligible
-  # performance improvements.
+  # on the distribution of indexed data and how it is queried, this can give you
+  # huge or negligible performance improvements. In general, I would say the improvements
+  # are moderate to high.
   #
   # - *size* tells the number of entries in the dictionary of interest.
   #   It is precise. Overflow is a runtime error which will crash Wirewright.
@@ -28,7 +29,8 @@ class Ww::Term::Dict
   # - *hashcode* is the hashcode. It is *unordered* for both tries. That is,
   #   hashes of entries are combined commutatively. This is in support of the basic
   #   idea behind dicts; in that even though they have all sorts of complexity &
-  #   indexing under the hood, on the outside, they're just *sets of entries*.
+  #   indexing under the hood, on the outside, they're just *sets of entries* (-ish,
+  #   of course; the identity of an entry is determined by its key, not the whole entry).
   # - *key sketch* is a sketch of the keys of this dict and all nested dicts.
   #   For example, if a pattern expects to find the key `x` *somewhere* in a dict,
   #   or in one of its nested dicts, whatever; it will first check the key sketch.
@@ -70,6 +72,11 @@ class Ww::Term::Dict
   #
   # The above totals at 32 bytes, which is basically 2xu128 per summary. Two summaries
   # fit in a cache line (64 bytes) which is interesting as we union summaries by two.
+  #
+  # NOTE: The correct solution, instead of the above, seems to be to distinguish
+  # between metrics that support both #add() and #delete() (size, hashcode); and ones
+  # that support only #add() (maxdepth, size set, sketches, histogram). This already
+  # allows us to compact the summary somewhat.
   record Summary,
     size : UInt32,
     maxdepth16 : UInt16,

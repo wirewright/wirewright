@@ -4,7 +4,7 @@ class Ww::Term::Dict
   # `0..7` to an `Int32`. We say that a map like this has 8 *slots*.
   #
   # NOTE: For consistency, we only accept and respond with keys of type *I*.
-  # This may need some casting on your end.
+  # This may require some casting on your end.
   struct SmallMap(T, I)
     # :nodoc:
     getter buffer : T*

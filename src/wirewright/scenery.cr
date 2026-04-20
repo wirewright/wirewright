@@ -61,6 +61,7 @@ module Ww::Scenery
     def initialize(@width, @height, @recognized_root, @pending)
     end
 
+    # Scenes are compared by width, height, and content.
     def_equals_and_hash width, height, recognized_root
   end
 

@@ -67,7 +67,7 @@ module Ww::M1
   # Returns the *head* of a normal pattern *pattern*.
   #
   # The head of a pattern is the first literal in an expected dictionary matchee.
-  # For example, in `(+ a_ b_)` that would be `+`; and in `(`a `b x←qux x_ y_)` that
+  # For example, in `(+ a_ b_)` that would be `+`; and in ``(`a `b x←qux x_ y_)`` that
   # would be `qux`, and so on: groups, slots, and `min > 1` `%past`s and `%many`s are
   # handled properly by this function, as are literal dicts.
   #
