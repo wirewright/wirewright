@@ -137,6 +137,22 @@ module Ww
     defrecord ContentReading, blob : Term::Blob
     defrecord DigestReading, digest : Bytes, bytesize : Int64
 
+    alias Notification = ReportInvalid | ReadingInvalid | ReportReady | ReadingReady
+
+    # Signals that the `Report` for *path* was invalidated.
+    defrecord ReportInvalid, path : Path
+
+    # Signals that the `Reading` for *path* was invalidated.
+    defrecord ReadingInvalid, path : Path
+
+    # Signals that a `Report` for *path* is ready; *path*'s corresponding promise was
+    # fulfilled and discarded.
+    defrecord ReportReady, path : Path
+
+    # Signals that a `Reading` for *path* is ready; *path*'s corresponding promise was
+    # fulfilled and discarded.
+    defrecord ReadingReady, path : Path
+
     alias Msg = ReportWanted | ReadingWanted | Write | PathMonitorService::Notification
 
     defrecord ReportWanted, path : Path
@@ -409,22 +425,6 @@ module Ww
     @@listener_queue_lock = Sync::Mutex.new
     @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
 
-    alias Notification = ReportInvalid | ReadingInvalid | ReportReady | ReadingReady
-
-    # Signals that the `Report` for *path* was invalidated.
-    defrecord ReportInvalid, path : Path
-
-    # Signals that the `Reading` for *path* was invalidated.
-    defrecord ReadingInvalid, path : Path
-
-    # Signals that a `Report` for *path* is ready; its corresponding promise was
-    # fulfilled and discarded.
-    defrecord ReportReady, path : Path
-
-    # Signals that a `Reading` for *path* is ready; its corresponding promise was
-    # fulfilled and discarded.
-    defrecord ReadingReady, path : Path
-
     # :nodoc:
     def invalidate(path : Path, cls : Report.class) : Nil
       @@report_lock.synchronize do
@@ -589,7 +589,8 @@ module Ww
       invalidate(path, Reading)
     end
 
-    # Blocks the calling fiber until any of *paths* is invalidated.
+    # Taps the block into the stream of notifications broadcast by the service.
+    # The calling fiber blocks while waiting for notifications.
     def listen(& : Notification ->) : Nil
       queue = BlockingQueue(Notification).new
 
