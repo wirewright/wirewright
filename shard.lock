@@ -8,6 +8,10 @@ shards:
     git: https://github.com/ysbaddaden/sdl.cr.git
     version: 0.1.0+git.commit.5a222701cc83aad89e1eab80812af97b12d6188a
 
+  sdl-crystal-bindings:
+    git: https://github.com/hadeweka/sdl-crystal-bindings.git
+    version: 0.5.0+git.commit.b0a3ac28f265fba7fc34aed89dc75d00fa806c04
+
   zstd:
     git: https://github.com/didactic-drunk/zstd.cr.git
     version: 1.2.0

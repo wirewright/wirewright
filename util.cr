@@ -1,4 +1,4 @@
-macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false)
+macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false, smart = false)
   struct {{name.id}}
     {% for dep in includes %}
       include {{dep}}
@@ -8,7 +8,11 @@ macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false)
       {% if property.is_a?(Assign) %}
         getter {{property.target.id}}
       {% elsif property.is_a?(TypeDeclaration) %}
-        getter {{property}}
+        {% if smart && property.type.resolve.nilable? %}
+          getter? {{property}}
+        {% else %}
+          getter {{property}}
+        {% end %}
       {% else %}
         getter :{{property.id}}
       {% end %}

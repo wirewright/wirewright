@@ -7,13 +7,16 @@ module Ww::Scenery
     # Returns the height of this pixel rect.
     getter height : Int32
 
+    # Returns the stride, aka pitch, of the texture (bytes).
+    getter stride : Int32
+
     # Returns the clear color, which we call *backdrop*.
     getter backdrop : Pigment::RGBA
 
     # Returns `true` if this pixel rect consists exclusively of `backdrop` pixels.
     getter? clear : Bool
 
-    def initialize(@pixels : Slice(Pixel), @width, @height, @backdrop, @clear : Bool)
+    def initialize(@pixels : Pointer(Pixel), @width, @height, @stride, @backdrop, @clear : Bool)
     end
 
     # The maximum PixelRect width (see `screen`).
@@ -32,7 +35,7 @@ module Ww::Scenery
     end
 
     def to_unsafe : UInt8*
-      @pixels.unsafe_slice_of(UInt8).to_unsafe
+      @pixels.as(UInt8*)
     end
 
     # NOTE: Make sure to have backdrop's alpha at 255, otherwise it'll
@@ -48,11 +51,6 @@ module Ww::Scenery
       backdrop
     end
 
-    # :nodoc:
-    def stride
-      @width * 4
-    end
-
     # Marks this pixel rect as dirty.
     def dirty : Nil
       @clear = false
@@ -61,39 +59,6 @@ module Ww::Scenery
     # Returns `true` if this pixel rect is dirty.
     def dirty? : Bool
       !clear?
-    end
-
-    # Clears this pixel rect with the backdrop color if it is dirty.
-    def clear
-      return if @clear
-
-      @pixels.fill(Pixel.of(@backdrop))
-      @clear = true
-    end
-
-    # Clears the given *region* with the backdrop color if it is dirty.
-    def clear(region : Rect) : Nil
-      return if @clear
-
-      # Snap to pixel coordinates.
-      region = region.snap
-
-      # Bound top-left point safely.
-      tl_x = region.tl.x.clamp(Magnitude.new(0)..Magnitude.new(@width)).to_i
-      tl_y = region.tl.y.clamp(Magnitude.new(0)..Magnitude.new(@height)).to_i
-
-      # Bound bottom-right point safely.
-      br_x = region.br.x.clamp(Magnitude.new(0)..Magnitude.new(@width)).to_i
-      br_y = region.br.y.clamp(Magnitude.new(0)..Magnitude.new(@height)).to_i
-
-      assert tl_x <= br_x
-      assert tl_y <= br_y
-
-      pixel = Pixel.of(@backdrop)
-
-      (tl_y...br_y).each do |y|
-        @pixels.fill(pixel, y * @width + tl_x, br_x - tl_x)
-      end
     end
 
     # Returns a blob representing the content of this pixel rect as a PPM image.

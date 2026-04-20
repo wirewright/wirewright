@@ -1,0 +1,299 @@
+{% skip_file unless flag?(:sdl3) %}
+
+require "sdl-crystal-bindings/sdl3-crystal-bindings"
+
+module Ww
+  # Internal SDL3 wrapper.
+  #
+  # Uses [Hadeweka/SDL-Crystal-Bindings](https://github.com/Hadeweka/SDL-Crystal-Bindings).
+  module SDL
+    extend self
+
+    FALSE = 0u8
+    TRUE  = 1u8
+
+    private macro assert_true(call)
+      assert({{call}} == {{@type}}::TRUE)
+    end
+
+    @@deq : UInt32 = 0
+
+    def init : Nil
+      assert_true LibSDL.set_hint(LibSDL::HINT_NO_SIGNAL_HANDLERS, "1")
+      assert_true LibSDL.set_hint(LibSDL::HINT_QUIT_ON_LAST_WINDOW_CLOSE, "0")
+      assert_true LibSDL.init(LibSDL::InitFlags::VIDEO)
+
+      first_event_code = LibSDL.register_events(1)
+      assert first_event_code > 0, "LibSDL.register_events(1)"
+
+      @@deq = first_event_code
+    end
+
+    # WARNING: Callers are responsible for destroying cursors using `destroy`.
+    alias Cursor = LibSDL::Cursor*
+    alias SystemCursor = LibSDL::SystemCursor
+
+    def make(cls : Cursor.class, id : SystemCursor) : Cursor
+      cursor = LibSDL.create_system_cursor(id)
+      assert cursor, "LibSDL.create_system_cursor(#{id})"
+
+      cursor
+    end
+
+    # WARNING: Callers are responsible for destroying windows using `destroy`.
+    alias Window = LibSDL::Window*
+    # WARNING: Callers are responsible for destroying renderers using `destroy`.
+    alias Renderer = LibSDL::Renderer*
+    alias WindowFlags = LibSDL::WindowFlags
+
+    def make(cls : {Window.class, Renderer.class}, title : String, width : Int32, height : Int32, flags = WindowFlags::None) : {Window, Renderer}
+      assert_true LibSDL.create_window_and_renderer(title, width, height, flags, out window, out renderer)
+
+      {window, renderer}
+    end
+
+    # WARNING: Callers are responsible for destroying textures using `destroy`.
+    alias Texture = LibSDL::Texture*
+    alias PixelFormat = LibSDL::PixelFormat
+    alias TextureAccess = LibSDL::TextureAccess
+
+    def make(cls : Texture.class, renderer : Renderer, width : Int32, height : Int32, format : PixelFormat, access : TextureAccess) : Texture
+      texture = LibSDL.create_texture(renderer, format, access, width, height)
+      assert texture, "LibSDL.create_texture(renderer, #{format}, #{access}, #{width}, #{height})"
+
+      texture
+    end
+
+    def destroy(entity : Window) : Nil
+      LibSDL.destroy_window(entity)
+    end
+
+    def destroy(entity : Renderer) : Nil
+      LibSDL.destroy_renderer(entity)
+    end
+
+    def destroy(entity : Texture) : Nil
+      LibSDL.destroy_texture(entity)
+    end
+
+    def destroy(entity : Cursor) : Nil
+      LibSDL.destroy_cursor(entity)
+    end
+
+    alias WindowId = LibSDL::WindowID
+
+    def id(window : Window) : WindowId
+      id = LibSDL.get_window_id(window)
+      assert id > 0, "LibSDL.get_window_id"
+
+      id
+    end
+
+    def set(window : Window, *, resizable : Bool) : Nil
+      assert_true LibSDL.set_window_resizable(window, resizable ? TRUE : FALSE)
+    end
+
+    def set(window : Window, *, title : String) : Nil
+      assert_true LibSDL.set_window_title(window, title)
+    end
+
+    def set(window : Window, *, input : Bool) : Nil
+      if input
+        assert_true LibSDL.start_text_input(window)
+      else
+        assert_true LibSDL.stop_text_input(window)
+      end
+    end
+
+    def resize(window : Window, width : Int32, height : Int32) : Nil
+      assert_true LibSDL.set_window_size(window, width, height)
+    end
+
+    def lock(texture : Texture, & : Void*, Int32 ->)
+      assert_true LibSDL.lock_texture(texture, nil, out pixelsptr, out pitch)
+
+      begin
+        yield pixelsptr, pitch
+      ensure
+        LibSDL.unlock_texture(texture)
+      end
+    end
+
+    def copy(src texture : Texture, dst renderer : Renderer, width : Int32, height : Int32)
+      rect = LibSDL::FRect.new(x: 0, y: 0, w: width, h: height)
+
+      assert_true LibSDL.render_texture(renderer, texture,
+        srcrect: pointerof(rect),
+        dstrect: pointerof(rect),
+      )
+    end
+
+    def present(renderer : Renderer) : Nil
+      assert_true LibSDL.render_present(renderer)
+    end
+
+    def show(window : Window) : Nil
+      assert_true LibSDL.show_window(window)
+    end
+
+    def cursor=(cursor : Bool) : Bool
+      if cursor
+        assert_true LibSDL.show_cursor
+      else
+        assert_true LibSDL.hide_cursor
+      end
+      cursor
+    end
+
+    def cursor=(cursor : Cursor) : Cursor
+      assert_true LibSDL.set_cursor(cursor)
+
+      cursor
+    end
+
+    def hide(window : Window) : Nil
+      assert_true LibSDL.hide_window(window)
+    end
+
+    def push(event : Deq)
+      assert @@deq > 0
+
+      raw_event = LibSDL::Event.new(type: @@deq)
+      assert_true LibSDL.push_event(pointerof(raw_event))
+    end
+
+    def pump : Nil
+      LibSDL.pump_events
+    end
+
+    def wait : Event
+      assert_true LibSDL.wait_event(out event)
+
+      transcribe(event)
+    end
+
+    alias EventType = LibSDL::EventType
+
+    alias MouseId = LibSDL::MouseID
+    alias KeyboardId = LibSDL::KeyboardID
+    alias Scancode = LibSDL::Scancode
+
+    enum MouseButton : UInt8
+      Left   = 1
+      Middle = 2
+      Right  = 3
+      X1     = 4
+      X2     = 5
+    end
+
+    alias Event = Deq | WindowEvent | MouseEvent | KeyboardEvent | TextEvent | UnknownEvent
+
+    defrecord Deq
+
+    alias WindowEvent = WindowMouseFocusGained | WindowMouseFocusLost | WindowExposed |
+                        WindowResized | WindowClosed | WindowFocusGained | WindowFocusLost |
+                        WindowMinimized | WindowRestored
+
+    defrecord WindowMouseFocusGained, window_id : WindowId
+    defrecord WindowMouseFocusLost, window_id : WindowId
+    defrecord WindowExposed, window_id : WindowId
+    defrecord WindowResized, window_id : WindowId, width : Int32, height : Int32
+    defrecord WindowClosed, window_id : WindowId
+    defrecord WindowFocusGained, window_id : WindowId
+    defrecord WindowFocusLost, window_id : WindowId
+    defrecord WindowMinimized, window_id : WindowId
+    defrecord WindowRestored, window_id : WindowId
+
+    alias MouseEvent = MouseMoved | MouseButtonEvent | MouseWheelScrolled
+    alias MouseButtonEvent = MouseButtonUp | MouseButtonDown
+
+    defrecord MouseMoved, window_id : WindowId, mouse_id : MouseId, x : Float32, y : Float32
+    defrecord MouseButtonUp, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
+    defrecord MouseButtonDown, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
+    defrecord MouseWheelScrolled, window_id : WindowId, mouse_id : MouseId, dx : Float32, dy : Float32
+
+    alias KeyboardEvent = KeyboardKeyEvent
+    alias KeyboardKeyEvent = KeyboardKeyDown | KeyboardKeyUp
+    alias TextEvent = TextEntered
+
+    defrecord KeyboardKeyDown, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode
+    defrecord KeyboardKeyUp, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode
+    defrecord TextEntered, window_id : WindowId, rune : String
+
+    defrecord UnknownEvent
+
+    private def transcribe(event : LibSDL::Event) : Event
+      if event.type == @@deq
+        return Deq.new
+      end
+
+      case type = LibSDL::EventType.new(event.type.to_i)
+      when .window_mouse_enter?
+        WindowMouseFocusGained.new(event.window.window_id)
+      when .window_mouse_leave?
+        WindowMouseFocusLost.new(event.window.window_id)
+      when .window_exposed?
+        WindowExposed.new(event.window.window_id)
+      when .window_resized?
+        WindowResized.new(event.window.window_id,
+          width: event.window.data1,
+          height: event.window.data2,
+        )
+      when .window_close_requested?
+        WindowClosed.new(event.window.window_id)
+      when .window_focus_gained?
+        WindowFocusGained.new(event.window.window_id)
+      when .window_focus_lost?
+        WindowFocusLost.new(event.window.window_id)
+      when .window_minimized?
+        WindowMinimized.new(event.window.window_id)
+      when .window_restored?
+        WindowRestored.new(event.window.window_id)
+      when .mouse_motion?
+        MouseMoved.new(event.motion.window_id,
+          mouse_id: event.motion.which,
+          x: event.motion.x,
+          y: event.motion.y,
+        )
+      when .mouse_wheel?
+        # https://wiki.libsdl.org/SDL3/SDL_MouseWheelEvent
+        case event.wheel.direction
+        in .normal?  then factor = 1.0f32
+        in .flipped? then factor = -1.0f32
+        end
+
+        MouseWheelScrolled.new(event.wheel.window_id,
+          mouse_id: event.wheel.which,
+          dx: event.wheel.x * factor,
+          dy: event.wheel.y * factor,
+        )
+      when .mouse_button_up?
+        MouseButtonUp.new(event.button.window_id,
+          mouse_id: event.button.which,
+          button: MouseButton.new(event.button.button),
+          clicks: event.button.clicks,
+        )
+      when .mouse_button_down?
+        MouseButtonDown.new(event.button.window_id,
+          mouse_id: event.button.which,
+          button: MouseButton.new(event.button.button),
+          clicks: event.button.clicks,
+        )
+      when .text_input?
+        TextEntered.new(event.text.window_id, String.new(event.text.text))
+      when .key_up?
+        KeyboardKeyUp.new(event.key.window_id,
+          keyboard_id: event.key.which,
+          scancode: Scancode.new(event.key.scancode),
+        )
+      when .key_down?
+        KeyboardKeyDown.new(event.key.window_id,
+          keyboard_id: event.key.which,
+          scancode: Scancode.new(event.key.scancode),
+        )
+      else
+        UnknownEvent.new
+      end
+    end
+  end
+end

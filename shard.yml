@@ -11,6 +11,9 @@ crystal: ">= 1.16.0"
 dependencies:
   permafrost:
     github: homonoidian/permafrost
+  sdl-crystal-bindings:
+    github: Hadeweka/sdl-crystal-bindings
+    version: 0.5.0
   sdl:
     github: ysbaddaden/sdl.cr
     commit: 5a22270

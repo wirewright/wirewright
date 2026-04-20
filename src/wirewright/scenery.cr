@@ -158,9 +158,10 @@ module Ww::Scenery
     #   on what colors you are recommended to use for *backdrop*.
     def screen(width : Magnitude, height : Magnitude, backdrop : Pigment::RGBA) : PixelRect
       iwidth, iheight = PixelRect.clamp(width, height)
+      stride = iwidth * 4
       pixels = Slice(Pixel).new(iwidth * iheight, Pixel.of(backdrop))
 
-      PixelRect.new(pixels, iwidth, iheight, backdrop, clear: true)
+      PixelRect.new(pixels, iwidth, iheight, stride, backdrop, clear: true)
     end
 
     # Writes the raster image for *command* to *screen*.
