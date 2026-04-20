@@ -1,5 +1,5 @@
 module Ww
-  # Implements a poll-oriented, shared, centralized HTTP client service.
+  # A poll-oriented, global HTTP client service.
   #
   # Currently, only the HTTP GET method is supported. More methods may be
   # supported in the future.

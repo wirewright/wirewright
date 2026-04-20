@@ -1,5 +1,5 @@
 module Ww
-  # A poll-oriented, in-memory, global API for accessing the file system.
+  # A poll-oriented, in-memory, global file system access service.
   #
   # `PathService` often acts as a reactive file system cache. I.e., when you
   # ask for a `report`, it performs some IO asynchronously and puts the result
