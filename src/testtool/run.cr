@@ -231,16 +231,19 @@ module Testtool
     in_ruleset, in_rest = Ruleset.ruleset_and_rest(Ruleset::DEFAULT_SELECTOR, test.in)
     in_instance = Alloy.compose(in_ruleset, Term[], Alloy.template(Term[], Term.of(in_rest)))
 
-    scene, ppm = measure(stat) do
+    scene_out, ppm = measure(stat) do
       cache = Scenery::Safe.cache
-      scene = Scenery::Safe.scene(cache, in_instance, test.width, test.height).unwrap
-      raster = Scenery::Safe.rasterize(cache, scene, backdrop: test.backdrop)
-      {scene, raster.to_ppm}
+      scene_out = Scenery::Safe.scene(cache, in_instance, test.width, test.height)
+      raster = Scenery::Safe.rasterize(cache, scene_out.unwrap, backdrop: test.backdrop)
+      {scene_out, raster.to_ppm}
     end
 
     unless ppm == test.out_ppm
       fail_path = Path["/tmp/scenery.#{test.path.stem}.fail.ppm"]
       complaints << complaint("in.wwml does not match out.ppm (writing to #{fail_path})")
+      scene_out.diagnostics.each do |diagnostic|
+        complaints << complaint("diagnostic: #{diagnostic.inspect}")
+      end
       PathService.write(fail_path, ppm).wait
       return
     end
@@ -251,7 +254,7 @@ module Testtool
       Term.case(item) do
         matchpi %{[hit query_ pattern_]} do
           hit_query = Scenery::HitQuery.parse(query)
-          _, observers = Scenery::Safe.describe(scene, Slice[hit_query])
+          _, observers = Scenery::Safe.describe(scene_out.unwrap, Slice[hit_query])
           unless observers.any? { |observer| M1.probe?(pattern, observer) }
             complaints << complaint("did not hit according to", query: query, pattern: pattern)
           end
