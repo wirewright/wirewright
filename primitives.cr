@@ -147,36 +147,6 @@ PRIMITIVES = ProcRuleset.build do
     Term::Str.new(s.as_s.escaped)
   end
 
-  rulepi1 %[(ml/term ml_string)] do
-    term = ML.term(ml.to(String))
-
-    {:ok, term}
-  rescue e : ML::SyntaxError
-    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
-
-    Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
-  end
-
-  rulepi1 %[(ml/terms ml_string)] do
-    terms = ML.terms(ml.to(String))
-
-    {:ok, terms}
-  rescue e : ML::SyntaxError
-    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
-
-    Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
-  end
-
-  rulepi1 %[(ml/document ml_string)] do
-    document = ML.document(ml.to(String))
-
-    {:ok, document}
-  rescue e : ML::SyntaxError
-    excerpt, line, column = ML::SyntaxError.lookaround(e.text)
-
-    Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
-  end
-
   rulepi1 %[(< a_number b_number)] do
     a.as_n < b.as_n
   end
@@ -213,28 +183,6 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(entries xs_dict)] do
     Term[xs.ee(ordered: true)]
-  end
-
-  rulepi1 %[(dict entries list←((%past (_ _) min: 0)))] do
-    Term::Dict.build do |commit|
-      list.items.each do |(key, value)|
-        commit.with(key, value)
-      end
-    end
-  end
-
-  rulepi1 %[(cat xs_dict+)] do
-    Term::Dict.build do |commit|
-      xs.items.each do |x|
-        x = x.unsafe_as_d
-
-        commit.concat(x.items)
-
-        x.each_entry(in: Term::Dict.pairspart) do |k, v|
-          commit.with(k, v)
-        end
-      end
-    end
   end
 
   rulepi1 %[(union xs_dict*)] do
@@ -337,8 +285,7 @@ PRIMITIVES = ProcRuleset.build do
   # TODO: floor/ceil/round on list of numbers
 
   rulepi1 %[(upcase arg_string)] { arg.upcase }
-  # TODO: downcase -> dncase for symmetry
-  rulepi1 %[(downcase arg_string)] { arg.downcase }
+  rulepi1 %[(dncase arg_string)] { arg.downcase }
 
   # TODO: upcase/dncase args_string is mass-upcase/dncase
   # TODO: upcase/dncase on list of strings
