@@ -93,6 +93,9 @@ Wirewright requires the following libraries. You should install them before buil
 the project. Most Linux distributions have these in their package registry.
 
 - [SDL2](https://www.libsdl.org/) (but we are migrating to SDL3)
+- [FriBidi](https://github.com/fribidi/fribidi)
+- [FreeType](https://freetype.org/)
+- [HarfBuzz](https://github.com/harfbuzz/harfbuzz)
 - [XXhash](https://github.com/Cyan4973/xxHash)
 - [GMP](https://gmplib.org/)
 - [PCRE2](https://github.com/PCRE2Project/pcre2)
