@@ -96,8 +96,7 @@ the project. Most Linux distributions have these in their package registry.
 - [Unibreak](https://github.com/adah1972/libunibreak/)
 - [Raqm](https://github.com/HOST-Oman/libraqm)
 - [XXhash](https://github.com/Cyan4973/xxHash)
-- `libmagic` (not sure what to link here)
-- [Zstd](https://github.com/facebook/zstd)
+- `libmagic` (version 5.46; 5.47 seems to have broken `magic_buffer` so it mis-identifies things)
 - [GMP](https://gmplib.org/)
 - [PCRE2](https://github.com/PCRE2Project/pcre2)
 

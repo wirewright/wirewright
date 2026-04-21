@@ -1,6 +1,5 @@
 require "log"
 require "big"
-require "zstd"
 require "uuid"
 require "json"
 require "sync/*"
