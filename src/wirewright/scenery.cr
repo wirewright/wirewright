@@ -162,7 +162,7 @@ module Ww::Scenery
       stride = iwidth * 4
       pixels = Slice(Pixel).new(iwidth * iheight, Pixel.of(backdrop))
 
-      PixelRect.new(pixels, iwidth, iheight, stride, backdrop, clear: true)
+      PixelRect.new(pixels.to_unsafe.as(UInt8*), iwidth, iheight, stride, backdrop, clear: true)
     end
 
     # Writes the raster image for *command* to *screen*.

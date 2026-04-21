@@ -16,7 +16,8 @@ module Ww::Scenery
     # Returns `true` if this pixel rect consists exclusively of `backdrop` pixels.
     getter? clear : Bool
 
-    def initialize(@pixels : Pointer(Pixel), @width, @height, @stride, @backdrop, @clear : Bool)
+    # :nodoc:
+    def initialize(@pixels : Pointer(UInt8), @width, @height, @stride, @backdrop, @clear : Bool)
     end
 
     # The maximum PixelRect width (see `screen`).
@@ -35,7 +36,16 @@ module Ww::Scenery
     end
 
     def to_unsafe : UInt8*
-      @pixels.as(UInt8*)
+      @pixels
+    end
+
+    # Yields each pixel in this rect, top-to-bottom, left-to-right.
+    def each(& : Pixel ->) : Nil
+      @height.times do |y|
+        @width.times do |x|
+          yield (@pixels + y*@stride + x*4).as(Pixel*).value
+        end
+      end
     end
 
     # NOTE: Make sure to have backdrop's alpha at 255, otherwise it'll
@@ -68,7 +78,7 @@ module Ww::Scenery
         io << @width << " " << @height << "\n"
         io << "255\n"
 
-        @pixels.each do |pixel|
+        each do |pixel|
           r, g, b, _ = pixel.rgba
           io << r << " " << g << " " << b << "\n"
         end
