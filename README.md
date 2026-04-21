@@ -92,11 +92,9 @@ You will need to install [Crystal](https://github.com/crystal-lang/crystal) befo
 Wirewright requires the following libraries. You should install them before building
 the project. Most Linux distributions have these in their package registry.
 
-- [SDL2](https://www.libsdl.org/)
+- [SDL2](https://www.libsdl.org/) (but we are migrating to SDL3)
 - [Unibreak](https://github.com/adah1972/libunibreak/)
-- [Raqm](https://github.com/HOST-Oman/libraqm)
 - [XXhash](https://github.com/Cyan4973/xxHash)
-- `libmagic` (version 5.46; 5.47 seems to have broken `magic_buffer` so it mis-identifies things)
 - [GMP](https://gmplib.org/)
 - [PCRE2](https://github.com/PCRE2Project/pcre2)
 
@@ -107,6 +105,7 @@ Wirewright vendors the following libraries (see the vendor/ directory):
 
 - [PlutoVG](https://github.com/sammycage/plutovg)
 - [PlutoSVG](https://github.com/sammycage/plutosvg)
+- [Raqm](https://github.com/HOST-Oman/libraqm)
 
 ### Building the dev tool
 

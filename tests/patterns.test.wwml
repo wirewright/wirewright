@@ -112,7 +112,7 @@
 ;; %mime
 (pattern (%mime "text/plain" _)
   (- 1 "John Doe" qux () true false)
-  (+ ⟬feed⟭))
+  (+ ⟬4b 61 69 78 6f 2c 20 6d 75 6e 64 75 61 21⟭))
 
 ;; %mime
 (pattern (%mime "image/png" _)

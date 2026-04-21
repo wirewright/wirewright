@@ -186,13 +186,11 @@ module Ww
     # Returns the classification of this blob.
     #
     # NOTE: The classification is computed on-demand unless it was explicitly provided
-    # by the constructors of this object. We uses libmagic to classify the bytes. libmagic
-    # is pretty expensive. Its expected runtime is in the high hundreds of microseconds to
-    # milliseconds even for very small blobs (e.g., on my machine, 300 bytes is detected as
-    # plaintext in about 1 millisecond). The classification is cached thereafter. Constructors
-    # which do expensive stuff anyway (e.g. `PathService`, when reading a file) usually
-    # precompute `Classif` as well, so that clients never have to go through this expense.
-    # Worst-case analysis, however, must account for missing `Classif`.
+    # by the constructors of this object. We use our own, in-house `PantoMIME` to classify
+    # the bytes. `PantoMIME` could be expensive. The classification is cached thereafter.
+    # Constructors which do expensive stuff anyway (e.g. `PathService`, when reading a file)
+    # usually precompute `Classif` as well, so that clients never have to go through this
+    # expense. Worst-case analysis, however, must account for a missing `Classif`.
     @[Dncast]
     def classif
       if classif = @classif.get(:acquire)
@@ -250,7 +248,7 @@ module Ww
 
     # Constructs a classification object for *slice*.
     def self.of(slice : Bytes) : Classif?
-      of(Magic.mime(slice))
+      of(PantoMIME.detect(slice))
     end
 
     # Constructs a classification object based on a known *mime* type. We normally
