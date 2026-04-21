@@ -1,5 +1,6 @@
 @[Link("fribidi")]
-@[Link("raqm")]
+@[Link("harfbuzz")]
+@[Link(ldflags: "#{__DIR__}/../../../vendor/raqm/lib/libraqm.a")]
 lib Raqm
   type Handle = Void*
 
