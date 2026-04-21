@@ -12,6 +12,10 @@ _*
 
 !PLAN
 !LICENSE
+!COPYING
+!VERSION
+!AUTHORS
+!NEWS
 
 ### Above combination will ignore all files without extension ###
 /junk/
