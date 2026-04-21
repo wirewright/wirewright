@@ -1,0 +1,363 @@
+Only in code: CMakeCache.txt
+Only in code: CMakeFiles
+Only in code: cmake_install.cmake
+Only in code/examples: CMakeFiles
+Only in code/examples: cmake_install.cmake
+Only in code/examples: Makefile
+Only in code/examples: smiley
+Only in orig: .git
+Only in orig: .github
+diff '--color=auto' -ur orig/.gitignore code/.gitignore
+--- orig/.gitignore	2026-04-22 00:55:55.121446568 +0300
++++ code/.gitignore	2026-03-22 03:00:13.099953251 +0300
+@@ -1,2 +1,9 @@
+ /build
++CMakeCache.txt
++CMakeFiles
++CMakeScripts
++Makefile
++cmake_install.cmake
++install_manifest.txt
++compile_commands.json
+ *.user
+diff '--color=auto' -ur orig/include/plutovg.h code/include/plutovg.h
+--- orig/include/plutovg.h	2026-04-22 00:55:55.121446568 +0300
++++ code/include/plutovg.h	2026-03-21 00:51:46.063481557 +0300
+@@ -277,11 +277,11 @@
+ 
+ /**
+  * @brief Parses an SVG transform string into a matrix.
+- * 
++ *
+  * @param matrix A pointer to a `plutovg_matrix_t` object to store the result.
+  * @param data Input SVG transform string.
+  * @param length Length of the string, or `-1` if null-terminated.
+- * 
++ *
+  * @return `true` on success, `false` on failure.
+  */
+ PLUTOVG_API bool plutovg_matrix_parse(plutovg_matrix_t* matrix, const char* data, int length);
+@@ -841,6 +841,10 @@
+  */
+ PLUTOVG_API void plutovg_font_face_get_metrics(const plutovg_font_face_t* face, float size, float* ascent, float* descent, float* line_gap, plutovg_rect_t* extents);
+ 
++PLUTOVG_API void plutovg_font_face_get_kerning(plutovg_font_face_t* face, float size, int codepoint1, int codepoint2, int* kerning);
++
++PLUTOVG_API void plutovg_font_face_pixels_to_scale(plutovg_font_face_t* face, float pixels, float* scale);
++
+ /**
+  * @brief Retrieves metrics for a specified glyph at a given size.
+  *
+@@ -853,6 +857,8 @@
+  */
+ PLUTOVG_API void plutovg_font_face_get_glyph_metrics(plutovg_font_face_t* face, float size, plutovg_codepoint_t codepoint, float* advance_width, float* left_side_bearing, plutovg_rect_t* extents);
+ 
++PLUTOVG_API void plutovg_font_face_get_glyph_metrics_by_index(plutovg_font_face_t* face, float size, int index, float* advance_width, float* left_side_bearing, plutovg_rect_t* extents);
++
+ /**
+  * @brief Retrieves the path of a glyph and its advance width.
+  *
+@@ -880,6 +886,12 @@
+  */
+ PLUTOVG_API float plutovg_font_face_traverse_glyph_path(plutovg_font_face_t* face, float size, float x, float y, plutovg_codepoint_t codepoint, plutovg_path_traverse_func_t traverse_func, void* closure);
+ 
++PLUTOVG_API int plutovg_font_face_get_glyph_index(plutovg_font_face_t* face, plutovg_codepoint_t codepoint);
++
++PLUTOVG_API float plutovg_font_face_get_glyph_path_by_index(plutovg_font_face_t* face, float size, float x, float y, int index, plutovg_path_t* path);
++
++PLUTOVG_API float plutovg_font_face_traverse_glyph_path_by_index(plutovg_font_face_t* face, float size, float x, float y, int index, plutovg_path_traverse_func_t traverse_func, void* closure);
++
+ /**
+  * @brief Computes the bounding box of a text string and its advance width.
+  *
+@@ -981,9 +993,9 @@
+ 
+ /**
+  * @brief Load all font faces from files in a directory recursively and add them to the cache.
+- * 
++ *
+  * This scans the specified directory recursively and loads all supported font files.
+- * 
++ *
+  * @param cache A pointer to a `plutovg_font_face_cache_t` object.
+  * @param dirname Path to the directory containing font files.
+  * @return The number of faces successfully loaded, or `-1` if font face cache loading is disabled.
+@@ -994,7 +1006,7 @@
+  * @brief Load all available system font faces and add them to the cache.
+  *
+  * This scans standard system font directories recursively and loads all supported font files.
+- * 
++ *
+  * @param cache A pointer to a `plutovg_font_face_cache_t` object.
+  * @return The number of faces successfully loaded, or `-1` if font face cache loading is disabled.
+  */
+@@ -1023,7 +1035,7 @@
+ 
+ /**
+  * @brief Initializes a color using RGB components in the 0-1 range.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+  * @param r Red component (0 to 1).
+  * @param g Green component (0 to 1).
+@@ -1033,7 +1045,7 @@
+ 
+ /**
+  * @brief Initializes a color using RGBA components in the 0-1 range.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+  * @param r Red component (0 to 1).
+  * @param g Green component (0 to 1).
+@@ -1044,7 +1056,7 @@
+ 
+ /**
+  * @brief Initializes a color using RGB components in the 0-255 range.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+  * @param r Red component (0 to 255).
+  * @param g Green component (0 to 255).
+@@ -1054,7 +1066,7 @@
+ 
+ /**
+  * @brief Initializes a color using RGBA components in the 0-255 range.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+  * @param r Red component (0 to 255).
+  * @param g Green component (0 to 255).
+@@ -1065,7 +1077,7 @@
+ 
+ /**
+  * @brief Initializes a color from a 32-bit unsigned RGBA value.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+  * @param value 32-bit unsigned RGBA value.
+  */
+@@ -1073,7 +1085,7 @@
+ 
+ /**
+  * @brief Initializes a color from a 32-bit unsigned ARGB value.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+  * @param value 32-bit unsigned ARGB value.
+  */
+@@ -1102,29 +1114,29 @@
+ 
+ /**
+  * @brief Converts a color to a 32-bit unsigned RGBA value.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+- * 
++ *
+  * @return 32-bit unsigned RGBA value.
+  */
+ PLUTOVG_API unsigned int plutovg_color_to_rgba32(const plutovg_color_t* color);
+ 
+ /**
+  * @brief Converts a color to a 32-bit unsigned ARGB value.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object.
+- * 
++ *
+  * @return 32-bit unsigned ARGB value.
+  */
+ PLUTOVG_API unsigned int plutovg_color_to_argb32(const plutovg_color_t* color);
+ 
+ /**
+  * @brief Parses a color from a string using CSS color syntax.
+- * 
++ *
+  * @param color A pointer to a `plutovg_color_t` object to store the parsed color.
+  * @param data A pointer to the input string containing the color data.
+  * @param length The length of the input string in bytes, or `-1` if the string is null-terminated.
+- * 
++ *
+  * @return The number of characters consumed on success (including leading/trailing spaces), or 0 on failure.
+  */
+ PLUTOVG_API int plutovg_color_parse(plutovg_color_t* color, const char* data, int length);
+@@ -2280,7 +2292,7 @@
+  * Computes an axis-aligned bounding box in user space that encloses the area
+  * which would be affected by a fill operation (`plutovg_canvas_fill()`) given the current path,
+  * fill rule, and transformation state.
+- * 
++ *
+  * @note Clipping and surface dimensions are not considered in this calculation.
+  *
+  * @param canvas A pointer to a `plutovg_canvas_t` object.
+@@ -2452,6 +2464,8 @@
+  */
+ PLUTOVG_API float plutovg_canvas_add_glyph(plutovg_canvas_t* canvas, plutovg_codepoint_t codepoint, float x, float y);
+ 
++PLUTOVG_API float plutovg_canvas_add_glyph_by_index(plutovg_canvas_t* canvas, int index, float x, float y);
++
+ /**
+  * @brief Adds text to the current path at the specified origin.
+  *
+Only in code: Makefile
+Only in code: plutovgConfig.cmake
+Only in code: plutovgConfigVersion.cmake
+Only in code: plutovg.pc
+Only in code: plutovgTargets.cmake
+diff '--color=auto' -ur orig/source/plutovg-canvas.c code/source/plutovg-canvas.c
+--- orig/source/plutovg-canvas.c	2026-04-22 00:55:55.121446568 +0300
++++ code/source/plutovg-canvas.c	2026-03-19 01:25:19.310685210 +0300
+@@ -664,6 +664,14 @@
+     return 0.f;
+ }
+ 
++float plutovg_canvas_add_glyph_by_index(plutovg_canvas_t* canvas, int index, float x, float y)
++{
++    plutovg_state_t* state = canvas->state;
++    if(state->font_face && state->font_size > 0.f)
++        return plutovg_font_face_get_glyph_path_by_index(state->font_face, state->font_size, x, y, index, canvas->path);
++    return 0.f;
++}
++
+ float plutovg_canvas_add_text(plutovg_canvas_t* canvas, const void* text, int length, plutovg_text_encoding_t encoding, float x, float y)
+ {
+     plutovg_state_t* state = canvas->state;
+diff '--color=auto' -ur orig/source/plutovg-font.c code/source/plutovg-font.c
+--- orig/source/plutovg-font.c	2026-04-22 00:55:55.121446568 +0300
++++ code/source/plutovg-font.c	2026-03-28 03:58:13.444758603 +0300
+@@ -360,6 +360,19 @@
+     }
+ }
+ 
++void plutovg_font_face_get_kerning(plutovg_font_face_t* face, float size, int codepoint1, int codepoint2, int* kerning)
++{
++  float scale = plutovg_font_face_get_scale(face, size);
++  int kern = stbtt_GetCodepointKernAdvance(&face->info, codepoint1, codepoint2);
++
++  *kerning = (float)kern * scale;
++}
++
++void plutovg_font_face_pixels_to_scale(plutovg_font_face_t* face, float pixels, float* scale)
++{
++  *scale = stbtt_ScaleForPixelHeight(&face->info, pixels);
++}
++
+ static plutovg_glyph_t* plutovg_font_face_get_glyph(plutovg_font_face_t* face, plutovg_codepoint_t codepoint)
+ {
+     return plutovg_glyph_cache_get(&face->cache, face, codepoint);
+@@ -379,6 +392,30 @@
+     }
+ }
+ 
++void plutovg_font_face_get_glyph_metrics_by_index(plutovg_font_face_t* face, float size, int index, float* advance_width, float* left_side_bearing, plutovg_rect_t* extents)
++{
++    float scale = plutovg_font_face_get_scale(face, size);
++
++    int advance_width_dst;
++    int left_side_bearing_dst;
++    int x1_dst, y1_dst, x2_dst, y2_dst;
++
++    stbtt_GetGlyphHMetrics(&face->info, index, &advance_width_dst, &left_side_bearing_dst);
++
++    if(!stbtt_GetGlyphBox(&face->info, index, &x1_dst, &y1_dst, &x2_dst, &y2_dst)) {
++        x1_dst = y1_dst = x2_dst = y2_dst = 0;
++    }
++
++    if(advance_width) *advance_width = advance_width_dst * scale;
++    if(left_side_bearing) *left_side_bearing = left_side_bearing_dst * scale;
++    if(extents) {
++        extents->x = x1_dst * scale;
++        extents->y = y2_dst * -scale;
++        extents->w = (x2_dst - x1_dst) * scale;
++        extents->h = (y1_dst - y2_dst) * -scale;
++    }
++}
++
+ static void glyph_traverse_func(void* closure, plutovg_path_command_t command, const plutovg_point_t* points, int npoints)
+ {
+     plutovg_path_t* path = (plutovg_path_t*)(closure);
+@@ -458,6 +495,84 @@
+     return glyph->advance_width * scale;
+ }
+ 
++
++int plutovg_font_face_get_glyph_index(plutovg_font_face_t* face, plutovg_codepoint_t codepoint)
++{
++    return stbtt_FindGlyphIndex(&face->info, codepoint);
++}
++
++float plutovg_font_face_get_glyph_path_by_index(plutovg_font_face_t* face, float size, float x, float y, int index, plutovg_path_t* path)
++{
++    return plutovg_font_face_traverse_glyph_path_by_index(face, size, x, y, index, glyph_traverse_func, path);
++}
++
++float plutovg_font_face_traverse_glyph_path_by_index(plutovg_font_face_t* face, float size, float x, float y, int index, plutovg_path_traverse_func_t traverse_func, void* closure)
++{
++    float scale = plutovg_font_face_get_scale(face, size);
++    plutovg_matrix_t matrix;
++    plutovg_matrix_init_translate(&matrix, x, y);
++    plutovg_matrix_scale(&matrix, scale, -scale);
++
++    plutovg_point_t points[3];
++    plutovg_point_t current_point = {0, 0};
++
++    stbtt_vertex* glyph_vertices;
++    int glyph_nvertices = stbtt_GetGlyphShape(&face->info, index, &glyph_vertices);
++    int glyph_advance_width;
++    int _glyph_left_side_bearing;
++
++    stbtt_GetGlyphHMetrics(&face->info, index, &glyph_advance_width, &_glyph_left_side_bearing);
++
++    for(int i = 0; i < glyph_nvertices; i++) {
++        stbtt_vertex vertex = glyph_vertices[i];
++
++        switch(vertex.type) {
++        case STBTT_vmove:
++            points[0].x = vertex.x;
++            points[0].y = vertex.y;
++            current_point = points[0];
++            plutovg_matrix_map_points(&matrix, points, points, 1);
++            traverse_func(closure, PLUTOVG_PATH_COMMAND_MOVE_TO, points, 1);
++            break;
++        case STBTT_vline:
++            points[0].x = vertex.x;
++            points[0].y = vertex.y;
++            current_point = points[0];
++            plutovg_matrix_map_points(&matrix, points, points, 1);
++            traverse_func(closure, PLUTOVG_PATH_COMMAND_LINE_TO, points, 1);
++            break;
++        case STBTT_vcurve:
++            points[0].x = 2.f / 3.f * vertex.cx + 1.f / 3.f * current_point.x;
++            points[0].y = 2.f / 3.f * vertex.cy + 1.f / 3.f * current_point.y;
++            points[1].x = 2.f / 3.f * vertex.cx + 1.f / 3.f * vertex.x;
++            points[1].y = 2.f / 3.f * vertex.cy + 1.f / 3.f * vertex.y;
++            points[2].x = vertex.x;
++            points[2].y = vertex.y;
++            current_point = points[2];
++            plutovg_matrix_map_points(&matrix, points, points, 3);
++            traverse_func(closure, PLUTOVG_PATH_COMMAND_CUBIC_TO, points, 3);
++            break;
++        case STBTT_vcubic:
++            points[0].x = vertex.cx;
++            points[0].y = vertex.cy;
++            points[1].x = vertex.cx1;
++            points[1].y = vertex.cy1;
++            points[2].x = vertex.x;
++            points[2].y = vertex.y;
++            current_point = points[2];
++            plutovg_matrix_map_points(&matrix, points, points, 3);
++            traverse_func(closure, PLUTOVG_PATH_COMMAND_CUBIC_TO, points, 3);
++            break;
++        default:
++            assert(false);
++        }
++    }
++
++    stbtt_FreeShape(&face->info, glyph_vertices);
++
++    return glyph_advance_width * scale;
++}
++
+ float plutovg_font_face_text_extents(plutovg_font_face_t* face, float size, const void* text, int length, plutovg_text_encoding_t encoding, plutovg_rect_t* extents)
+ {
+     plutovg_text_iterator_t it;
