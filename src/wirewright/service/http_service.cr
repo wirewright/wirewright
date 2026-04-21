@@ -165,7 +165,11 @@ module Ww
 
           # If the server tells us the MIME type, use that, otherwise, we'll try to
           # guess it.
-          if mime_type = response.mime_type
+          #
+          # If the server says application/octet-stream, aka binary, then we'll try to
+          # classify it ourselves as well. I'm not sure how good the idea is, but I'm
+          # getting unreliable mime_types on different platforms from this.
+          if (mime_type = response.mime_type) && mime_type.media_type != "application/octet-stream"
             classif = Term::Blob::Classif.of(mime_type)
           end
           body.classify!(classif)
