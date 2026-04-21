@@ -93,7 +93,6 @@ Wirewright requires the following libraries. You should install them before buil
 the project. Most Linux distributions have these in their package registry.
 
 - [SDL2](https://www.libsdl.org/) (but we are migrating to SDL3)
-- [Unibreak](https://github.com/adah1972/libunibreak/)
 - [XXhash](https://github.com/Cyan4973/xxHash)
 - [GMP](https://gmplib.org/)
 - [PCRE2](https://github.com/PCRE2Project/pcre2)
@@ -106,6 +105,7 @@ Wirewright vendors the following libraries (see the vendor/ directory):
 - [PlutoVG](https://github.com/sammycage/plutovg)
 - [PlutoSVG](https://github.com/sammycage/plutosvg)
 - [Raqm](https://github.com/HOST-Oman/libraqm)
+- [Unibreak](https://github.com/adah1972/libunibreak/)
 
 ### Building the dev tool
 

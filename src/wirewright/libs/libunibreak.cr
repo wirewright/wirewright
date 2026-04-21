@@ -1,4 +1,4 @@
-@[Link("unibreak")]
+@[Link(ldflags: "#{__DIR__}/../../../vendor/unibreak/lib/libunibreak.a")]
 lib Unibreak
   enum LineBreak : UInt8
     MustBreak
