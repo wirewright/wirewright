@@ -275,6 +275,8 @@ module Ww
           end
         end
 
+        entries.sort_by!(&.path)
+
         DirListing.new(info.modification_time, entries.to_unsafe_readonly_slice!)
       end
 

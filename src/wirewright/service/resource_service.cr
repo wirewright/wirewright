@@ -128,6 +128,7 @@ module Ww
           )
         end
 
+        entries.sort_by!(&.weight)
         entries.to_unsafe_readonly_slice!
       end
     end
