@@ -768,7 +768,7 @@ module Ww
         session.command = command1
 
         SDL.lock(session.texture) do |pixels, pitch|
-          screen = Scenery::PixelRect.new(pixels.as(Scenery::Pixel*), width, height, pitch, session.spec.backdrop, clear: false)
+          screen = Scenery::PixelRect.new(pixels.as(UInt8*), width, height, pitch, session.spec.backdrop, clear: false)
           Scenery::Safe.rasterize(screen, command1, dirty_rects)
         end
 

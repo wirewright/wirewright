@@ -17,7 +17,7 @@ module Ww::Scenery
     getter? clear : Bool
 
     # :nodoc:
-    def initialize(@pixels : Pointer(UInt8), @width, @height, @stride, @backdrop, @clear : Bool)
+    def initialize(@pixels : UInt8*, @width, @height, @stride, @backdrop, @clear : Bool)
     end
 
     # The maximum PixelRect width (see `screen`).
