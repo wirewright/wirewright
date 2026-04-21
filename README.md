@@ -96,7 +96,6 @@ the project. Most Linux distributions have these in their package registry.
 - [FriBidi](https://github.com/fribidi/fribidi)
 - [FreeType](https://freetype.org/)
 - [HarfBuzz](https://github.com/harfbuzz/harfbuzz)
-- [XXhash](https://github.com/Cyan4973/xxHash)
 - [GMP](https://gmplib.org/)
 - [PCRE2](https://github.com/PCRE2Project/pcre2)
 
@@ -109,6 +108,7 @@ Wirewright vendors the following libraries (see the vendor/ directory):
 - [PlutoSVG](https://github.com/sammycage/plutosvg)
 - [Raqm](https://github.com/HOST-Oman/libraqm)
 - [Unibreak](https://github.com/adah1972/libunibreak/)
+- [XXhash](https://github.com/Cyan4973/xxHash)
 
 ### Building the dev tool
 

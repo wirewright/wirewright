@@ -860,14 +860,6 @@ module Ww
   # Hashing, comparison
 
   struct Term
-    # :nodoc:
-    @[Link("xxhash")]
-    lib LibXXH64
-      type State = Void*
-
-      fun hashcode = XXH3_64bits(input : Void*, length : LibC::SizeT) : UInt64
-    end
-
     # Reference: https://mostlymangling.blogspot.com/2019/01/better-stronger-mixer-and-test-procedure.html
     # See also: https://jonkagstrom.com/bit-mixer-construction/
     private def self.mix(x : UInt64) : UInt64

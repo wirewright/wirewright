@@ -11,7 +11,7 @@ module Ww
 
     def initialize(@value : String)
       # Strings use XXH3 to compute their hashcode.
-      @hashcode = Term::LibXXH64.hashcode(@value.to_unsafe, @value.bytesize)
+      @hashcode = LibXXH64.hashcode(@value.to_unsafe, @value.bytesize)
     end
 
     def self.new(value : Escaped)
