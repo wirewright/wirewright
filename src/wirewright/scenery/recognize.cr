@@ -1245,68 +1245,54 @@ module Ww::Scenery
         Suspense(RecognizedNode).new(ZStack.new(children), placeholder)
       end
 
-      # |@ scenery.dyn
+      # |@ scenery.variant
       #
       # |@pattern
-      # [dyn branches_+]
+      # (variant children_* ⍊ if: cond_)
       #
-      # |@key branches scenery.dyn.branch
-      # One or more branches. Unrecognized terms are ignored.
+      # |@key children scenery
+      #
+      # |@key cond nitrene.expr
+      # A Nitrene expression which should evaluate to a non-`false` for the variant to
+      # be shown.
+      #
+      # The following variables are given to the expression:
+      # - `min-w`: a number telling the parent's min-width constraint.
+      # - `min-h`: a number telling the parent's min-height constraint.
+      # - `max-w`: `∞` if unrestricted, otherwise a number telling the parent's
+      #   min-width constraint.
+      # - `max-h`: `∞` if unrestricted, otherwise a number telling the parent's
+      #   min-height constraint.
+      # - `w`: tells the child's content width.
+      # - `h`: tells the child's content height.
       #
       # |@block
-      # Picks one of the *branches* _dyn_amically based on upbound and downbound sizes.
-      #
-      # `dyn` is how you do size dependent layout in Scenery (both content-size
-      # and parent-size dependent).
+      # Shows a z-stack of *children* if a Nitrene *cond*ition equipped with layout-
+      # related measurements evaluates to a non-`false`.
       #
       # ```
-      # (dyn
-      #   (when (< w 100) ;; my content width < 100
-      #     (x-stack gap: 10
-      #       (img src: (file "/tmp/bobby.jpg"))
-      #       (p caption: "Bobby")))
-      #   (when (< max-w 50) ;; parent's max-w requirement < 50
-      #     (p caption: "B."))
-      #   (when _ ;; otherwise
-      #     (y-stack gap: 10
-      #       (img src: (file "/tmp/bobby.jpg"))
-      #       (p caption: "Bobby"))))
+      # (z-stack
+      #   (variant if: (in-range? max-w (500 ..< ∞))
+      #     (text caption: "lg"))
+      #   (variant if: (in-range? max-w (350 ..< 500))
+      #     (text caption: "md"))
+      #   (variant if: (in-range? max-w (200 ..< 350))
+      #     (text caption: "sm"))
+      #   (variant if: (in-range? max-w (-∞ ..< 200))
+      #     (text caption: "xs")))
       # ```
-      matchpi %{[dyn subterms_+]} do
-        branches = subterms.items.to_compact_readonly_slice do |subterm|
-          # |@ scenery.dyn.branch
-          #
-          # |@pattern
-          # [when cond_ deps_*]
-          #
-          # |@key cond nitrene
-          # A Nitrene expression which should evaluate to a non-`false` if the branch
-          # should be taken, and all other branches abandoned; or to `false` if the branch
-          # should be skipped.
-          #
-          # The following variables are given to the expression:
-          # - `min-w`: a number telling the parent's min-width constraint.
-          # - `min-h`: a number telling the parent's min-height constraint.
-          # - `max-w`: `∞` if unrestricted, otherwise a number telling the parent's
-          #   min-width constraint.
-          # - `max-h`: `∞` if unrestricted, otherwise a number telling the parent's
-          #   min-height constraint.
-          # - `w`: tells the child's content width.
-          # - `h`: tells the child's content height.
-          #
-          # |@key deps scenery
-          # _Dep_endencie_s_ of the condition: conceptually, the children of the z-stack
-          # that `dyn` should be replaced with in case *cond*ition is true.
-          Term.matchpi?(subterm, %{[when cond_ deps_*]}) do
-            children = recognize(cache, nodes: deps.items)
-
-            DynBranch(RecognizedNode).new(cond, child: ZStack.new(children))
-          end
+      #
+      # NOTE: This way of doing conditional layout isn't particularly efficient, since all
+      # branches are loaded anyway (otherwise, there would be no way for the layout engine
+      # to know which branch to pick). Just like with CSS media queries, consider alternative
+      # means of responsivity (e.g., `x-wrap`) before choosing to use `variant`.
+      matchpi %{(variant subterms_* ⍊ if: cond_)} do
+        children = recognize(cache, nodes: subterms.items)
+        if children.all?(Inert)
+          return Inert.new
         end
 
-        return Inert.new if branches.empty?
-
-        Dyn.new(branches)
+        Variant(RecognizedNode).new(cond, children)
       end
 
       matchpi %{(observer subterms_+ ⍊ id_)} do

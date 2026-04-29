@@ -279,7 +279,9 @@ module Ww::Scenery
     end
   end
 
-  private def min_size!(cache, node : Floating | Overlay | Viewport) : Point
+  # FIXME: Variant's min size isn't really 0x0, is it? We should somehow compute
+  # the proper min size *while avoiding circularity*.
+  private def min_size!(cache, node : Floating | Overlay | Viewport | Variant) : Point
     Point[0, 0]
   end
 
@@ -329,13 +331,6 @@ module Ww::Scenery
     )
 
     min_size(cache, main)
-  end
-
-  # The min-size of a Dyn is the max min-size of its branches.
-  private def min_size!(cache, node : Dyn) : Point
-    node.branches.reduce(Point[0, 0]) do |memo, branch|
-      Point.max(memo, min_size(cache, branch.child))
-    end
   end
 
   private def min_size(cache, nodes : Slice(ShapedNode)) : Point
@@ -694,7 +689,7 @@ module Ww::Scenery
     size(cache, cross, cst)
   end
 
-  private def size!(cache, node : Dyn, cst : Cst) : {SizedNode, Size}
+  private def size!(cache, node : Variant, cst : Cst) : {SizedNode, Size}
     vars = Term[
       "min-w": cst.min_w.infinite? ? :∞ : cst.min_w,
       "max-w": cst.max_w.infinite? ? :∞ : cst.max_w,
@@ -702,24 +697,21 @@ module Ww::Scenery
       "max-h": cst.max_h.infinite? ? :∞ : cst.max_h,
     ]
 
-    node.branches.each do |branch|
-      _, branch_size = size(cache, branch.child, Cst.content)
+    interior = ZStack.new(node.children)
+    _, content_size = size(cache, interior, Cst.content)
+    width = content_size.outer.x
+    height = content_size.outer.y
 
-      width = branch_size.outer.x
-      height = branch_size.outer.y
+    vars = vars
+      .with(:w, width.infinite? ? :∞ : width)
+      .with(:h, height.infinite? ? :∞ : height)
 
-      vars = vars
-        .with(:w, width.infinite? ? :∞ : width)
-        .with(:h, height.infinite? ? :∞ : height)
-
-      outcome = Nitrene.eval(vars, branch.cond)
-      next if outcome.result == Term.of(false)
-
-      return size(cache, branch.child, cst)
+    outcome = Nitrene.eval(vars, node.cond)
+    if outcome.result == Term.of(false)
+      return Inert.new, Size.new(Point[0, 0])
     end
 
-    # No branch matched.
-    {Inert.new, Size.new(Point[0, 0])}
+    size(cache, interior, cst)
   end
 
   private def box_size(cache, node : ShapedNode, cst : Cst) : {SizedNode, Size}

@@ -27,7 +27,7 @@ module Ww::Scenery
                          Page(RecognizedNode) |
                          Overlay(RecognizedNode) |
                          Suspense(RecognizedNode) |
-                         Dyn(RecognizedNode) |
+                         Variant(RecognizedNode) |
                          Observer(RecognizedNode) |
                          Observable(RecognizedNode) |
                          Gate(RecognizedNode)
@@ -57,7 +57,7 @@ module Ww::Scenery
                     Aim(AssetNode) |
                     Page(AssetNode) |
                     Overlay(AssetNode) |
-                    Dyn(AssetNode) |
+                    Variant(AssetNode) |
                     Observer(AssetNode) |
                     Observable(AssetNode) |
                     Gate(AssetNode)
@@ -90,7 +90,7 @@ module Ww::Scenery
                      Aim(ShapedNode) |
                      Page(ShapedNode) |
                      Overlay(ShapedNode) |
-                     Dyn(ShapedNode) |
+                     Variant(ShapedNode) |
                      Observer(ShapedNode) |
                      Observable(ShapedNode) |
                      Gate(ShapedNode)
@@ -592,14 +592,10 @@ module Ww::Scenery
     placeholder : Node,
     caches_hash: true
 
-  defcase Dyn(Node),
-    branches : Slice(DynBranch(Node)),
-    caches_hash: true
-
-  defrecord DynBranch(Node),
+  defcase Variant(Node),
     cond : Term,
-    child : Node,
-    copying: true
+    children : Slice(Node),
+    caches_hash: true
 
   defcase Observer(Node),
     id : Term,

@@ -328,26 +328,17 @@ module Ww::Scenery
     end
   end
 
-  private def shape!(cache, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Observer | Observable | Gate) : ShapedNode
+  private def shape!(cache, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Observer | Observable | Gate) : ShapedNode
     children = node.children.to_readonly_slice { |child| shape(cache, child).as(ShapedNode) }
 
     node.copy_with(children: children)
-  end
-
-  private def shape!(cache, node : Dyn) : ShapedNode
-    branches = node.branches.to_readonly_slice do |branch|
-      DynBranch(ShapedNode).new(branch.cond, shape(cache, branch.child))
-    end
-
-    shaped_dyn = Dyn(ShapedNode).new(branches)
-    shaped_dyn.as(ShapedNode)
   end
 
   private def shape(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph) : ShapedNode
     node
   end
 
-  private def shape(cache, node : Text | Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Dyn | Observer | Observable | Gate) : ShapedNode
+  private def shape(cache, node : Text | Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Observer | Observable | Gate) : ShapedNode
     cache.shaping.put_if_absent(node) { shape!(cache, node) }
   end
 

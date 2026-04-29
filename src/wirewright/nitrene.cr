@@ -54,6 +54,9 @@ module Ww::Nitrene
     end
   end
 
+  # NOTE: The behavior of Arith operations is mostly based on [Wolfram Mathematica](https://www.wolfram.com/mathematica/),
+  # which seems to be a good source for this kind of stuff.
+
   # :nodoc:
   def add(a : Arith, b : Arith) : Arith
     case {a, b}
@@ -368,6 +371,31 @@ module Ww::Nitrene
 
       matchpi %{(= ref_ _*)} do
         ok(term.items.move(1).all? { |other| ref == other })
+      end
+
+      matchpi %{(in-range? arg-value_ (arg-b_ ..< arg-e_))} do
+        Outcome.accumulate(amend: true) do |acc| # ?!
+          value = acc.unwrap(eval(vars, arg_value).at(1))
+          b = acc.unwrap(eval(vars, arg_b).at(2, 0))
+          e = acc.unwrap(eval(vars, arg_e).at(2, 2))
+
+          n = arith?(value)
+          if n.nil? || n.is_a?(ArithIndet)
+            next ok_despite(Term.of(:literal, Term.morph(term, {1, value}, {2, 0, b}, {2, 2, e})), "not a comparable arithmetic unit").at(1)
+          end
+
+          lo = arith?(b)
+          if lo.nil? || lo.is_a?(ArithIndet)
+            next ok_despite(Term.of(:literal, Term.morph(term, {1, value}, {2, 0, b}, {2, 2, e})), "not a comparable arithmetic unit").at(2, 0)
+          end
+
+          hi = arith?(e)
+          if hi.nil? || hi.is_a?(ArithIndet)
+            next ok_despite(Term.of(:literal, Term.morph(term, {1, value}, {2, 0, b}, {2, 2, e})), "not a comparable arithmetic unit").at(2, 2)
+          end
+
+          ok((lo == n || lt?(lo, n)) && lt?(n, hi))
+        end
       end
 
       matchpi %{(approx arg_)} do

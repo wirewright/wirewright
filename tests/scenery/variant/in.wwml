@@ -10,20 +10,22 @@ height: 1000
       ^… props)
 
 (Resizable)
-  => (dyn
-       (when (>= max-w 500)
+  => (z-stack
+       (variant if: (in-range? max-w (500 ..< ∞))
          (text caption: "lg" color: white))
-       (when (>= max-w 350)
+       (variant if: (in-range? max-w (350 ..< 500))
          (text caption: "md" color: white))
-       (when (>= max-w 200)
+       (variant if: (in-range? max-w (200 ..< 350))
          (text caption: "sm" color: white))
-       (when true
+       (variant if: (in-range? max-w (-∞ ..< 200))
          (text caption: "xs" color: white)))
 
 (Card)
-  => (dyn
-       (when (>= max-w 400) (CardLg))
-       (when _ (CardSm)))
+  => (z-stack
+       (variant if: (in-range? max-w (400 ..< ∞))
+         (CardLg))
+       (variant if: (in-range? max-w (-∞ ..< 400))
+         (CardSm)))
 
 ;; Reference (loosely based on): https://tailwindcss.com/docs/responsive-design#overview
 (Card⸨Sm,Lg⸩)
@@ -59,12 +61,12 @@ height: 1000
                    color: (oklch 0.85 0 0)))))))
 
 (InnerSize node_)
-  => (dyn
-       (when (>= w 100)
+  => (z-stack
+       (variant if: (in-range? w (100 ..< ∞))
          (y-stack
            (text caption: ">= 100px" color: yellow)
            ^(view node)))
-       (when true
+       (variant if: (in-range? w (-∞ ..< 100))
          (y-stack
            (text caption: "< 100px" color: yellow)
            ^(view node))))

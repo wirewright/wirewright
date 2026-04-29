@@ -31,7 +31,7 @@ module Ww::Scenery
     query_set(node.font, node.codepoints)
   end
 
-  private def queries!(cache, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Observer | Observable | Gate) : QuerySet
+  private def queries!(cache, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Observer | Observable | Gate) : QuerySet
     query_set(node.children) do |commit, child|
       queries = queries(cache, child)
       queries.each { |query| commit.add(query) }
@@ -40,13 +40,6 @@ module Ww::Scenery
 
   private def queries!(cache, node : Suspense) : QuerySet
     queries(cache, node.content) + queries(cache, node.placeholder)
-  end
-
-  private def queries!(cache, node : Dyn) : QuerySet
-    query_set(node.branches) do |commit, branch|
-      queries = queries(cache, branch.child)
-      queries.each { |query| commit.add(query) }
-    end
   end
 
   private def queries(cache, node : RecognizedNode) : QuerySet
@@ -93,6 +86,10 @@ module Ww::Scenery
     Resn::Ready.new(node.copy_with(src: asset))
   end
 
+  # TODO: As fonts load, the font stack will be populated & more characters will show
+  # (if some were missing). Only if no fonts are available will we mark Text as Pending.
+  # I feel this kind of behavior should be user-configurable. Maybe they want to wait
+  # until all fonts load...
   private def resolve!(cache : CacheSet, assets : Asset::Map, node : Text) : Resn::Any
     font_asset_stack = node.font_stack.to_compact_readonly_slice do |query|
       next unless asset = assets[query]?
@@ -134,7 +131,7 @@ module Ww::Scenery
     Resn::Ready.new(icon_glyph)
   end
 
-  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Observer | Observable | Gate) : Resn::Any
+  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Observer | Observable | Gate) : Resn::Any
     cls = Resn::Ready
 
     children = node.children.to_readonly_slice do |child|
@@ -156,21 +153,6 @@ module Ww::Scenery
     end
 
     Resn::Ready.new(resn.node)
-  end
-
-  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Dyn) : Resn::Any
-    cls = Resn::Ready
-
-    branches = node.branches.to_readonly_slice do |branch|
-      case resn = resolve(cache, assets, branch.child)
-      in Resn::Wait then cls = Resn::Wait
-      in Resn::Ready
-      end
-
-      DynBranch(AssetNode).new(branch.cond, resn.node)
-    end
-
-    cls.new(Dyn(AssetNode).new(branches))
   end
 
   private def resolve(cache : CacheSet, assets : Asset::Map, node : RecognizedNode) : Resn::Any
