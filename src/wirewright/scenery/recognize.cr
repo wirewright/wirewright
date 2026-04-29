@@ -724,8 +724,8 @@ module Ww::Scenery
       #
       # |@pattern
       # (limit children_+ ⍊
-      #   min-w⋮ 0
-      #   min-h⋮ 0
+      #   min-w_⋮ 0
+      #   min-h_⋮ 0
       #   max-w_⋮ ∞
       #   max-h_⋮ ∞)
       #
