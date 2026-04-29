@@ -67,7 +67,7 @@ module Ww
   # dedicated worker fibers (reads).
   #
   # `report` and `read` provide a cheap way to poll the file system. They can be
-  # called millions of times per second on most hardware. All IO work happens
+  # called millions of times per second on modern hardware. All IO work happens
   # in the message loop or on dedicated fibers, at its own pace, which is in turn
   # dictated by the disk and so on.
   #

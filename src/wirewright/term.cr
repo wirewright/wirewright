@@ -1221,6 +1221,8 @@ module Ww
     #
     # If two keys are equal and both values are dictionaries, those dictionaries are
     # recursively merged. Otherwise, prefers *b*'s values.
+    #
+    # See also: `union` for shallow merge.
     def self.merge(a : Dict, b : Dict) : Dict
       return b if a.empty?
       return a if b.empty?
@@ -1370,8 +1372,8 @@ module Ww
     end
 
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys
-    # are skipped.
-    def self.exclude(a : Dict, keys : Enumerable(Term)) : Dict
+    # are skipped. *keys* are converted to `Term` using `Term.of`.
+    def self.exclude(a : Dict, keys : Enumerable) : Dict
       a.transaction do |commit|
         keys.each { |key| commit.without(key) }
       end
@@ -1379,8 +1381,8 @@ module Ww
 
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys are
     # skipped. Raises `TypeCastError` if *a* is not a dict. Upcasts the result
-    # back to `Term`.
-    def self.exclude(a : Term, keys : Enumerable(Term)) : Term
+    # back to `Term`. *keys* are converted to `Term` using `Term.of`
+    def self.exclude(a : Term, keys : Enumerable) : Term
       Term.of(exclude(a.as_d, keys))
     end
 
@@ -1484,9 +1486,9 @@ module Ww
 
     # A utility function to perform one or more assignments on root.
     #
-    # Each assign in *assignments* is a tuple of the form: `{*keypath, value}`. Here, *keypath*
-    # represents one or more keypath, and *value* is the target value, which could be any
-    # object including `nil`; the latter signifying removal. See also: `assign`.
+    # Each assign in *assignments* is a tuple of the form: `{*keypath, value}`. Here,
+    # *keypath* represents one or more keys, and *value* is the target value, which could
+    # be any object including `nil`; the latter signifying removal. See also: `assign`.
     #
     # Like `assign`, this function keeps the type of *root* as the return type. If you
     # give it a `root : Term`, it will return a `Term`; if you give it `root : Term::Dict`,

@@ -168,7 +168,7 @@ module Ww
           #
           # If the server says application/octet-stream, aka binary, then we'll try to
           # classify it ourselves as well. I'm not sure how good the idea is, but I'm
-          # getting unreliable mime_types on different platforms from this.
+          # getting unreliable mime_types on some platforms without this.
           if (mime_type = response.mime_type) && mime_type.media_type != "application/octet-stream"
             classif = Term::Blob::Classif.of(mime_type)
           end
@@ -286,12 +286,9 @@ module Ww
     #
     # The response is cached until eviction or invalidation (see `invalidate`).
     #
-    # `Present` response bodies are weakly cached: `HTTPService` does not retain
-    # a strong reference to them; thus, the GC is allowed to collect them after
-    # you drop the returned response.
-    #
-    # This function is poll-friendly: it can be called millions of times per second
-    # with very little overhead. IO and retries are performed on separate fibers.
+    # This function is poll-friendly: it can be called millions of times per second on
+    # modern hardware, with very little overhead. IO and retries are performed on
+    # separate fibers.
     #
     # You can execute multiple fetches simultaneosuly simply by scheduling them
     # before waiting on them:
@@ -329,9 +326,7 @@ module Ww
 
     # Invalidates all caches associated with *uri*.
     def invalidate(uri : URI) : Nil
-      @@lock.synchronize do
-        @@cache.delete(uri)
-      end
+      @@lock.synchronize { @@cache.delete(uri) }
     end
 
     @@listener_queue_lock = Sync::Mutex.new
