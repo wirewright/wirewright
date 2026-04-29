@@ -253,41 +253,67 @@ module Ww::Scenery
         string = caption.to(String)
 
         Term.case(node) do
-          # |@ scenery.text.transform
+          # |@ scenery.text.case
           #
           # |@pattern
-          # (text ⍊ transform: {+¦ upcase})
+          # (text ⍊ case: upcase)
           #
           # |@block
           # Transforms all characters in the caption to uppercase.
-          matchpi %{{¦ transform: {¦ upcase: true -dncase}}} do
+          matchpi %{{¦ case: upcase}} do
             string = string.upcase
             continue
           end
 
-          # |@ scenery.text.transform
+          # |@ scenery.text.case
           #
           # |@pattern
-          # (text ⍊ transform: {+¦ dncase})
+          # (text ⍊ case: dncase)
           #
           # |@block
           # Transforms all characters in the caption to lowercase.
-          matchpi %{{¦ transform: {¦ dncase: true -upcase}}} do
+          matchpi %{{¦ case: dncase}} do
             string = string.downcase
+            continue
+          end
+
+          # |@ scenery.text.case
+          #
+          # |@pattern
+          # (text ⍊ case: title)
+          #
+          # |@block
+          # Transforms the caption to titlecase.
+          matchpi %{{¦ case: title}} do
+            string = string.titleize
+            continue
+          end
+
+          # |@ scenery.text.case
+          #
+          # |@pattern
+          # (text ⍊ case: upcase-first)
+          #
+          # |@block
+          # Transforms the first letter in the caption to uppercase.
+          matchpi %{{¦ case: upcase-first}} do
+            unless string.empty?
+              string = string[0].upcase + string[1..]
+            end
             continue
           end
 
           # |@ scenery.text.transform
           #
           # |@pattern
-          # (text ⍊ transform: {+¦ strip})
+          # (text ⍊ transform: strip)
           #
           # |@block
           # Removes whitespace from the beginning and the end of the caption.
           #
           # This transform is incompatible with `underline` and `selection`,
           # since both of them require stable character indices.
-          matchpi %{{¦ -underline -selection transform: {+¦ strip}}} do
+          matchpi %{{¦ transform: strip}} do
             string = string.strip
             continue
           end
@@ -295,7 +321,7 @@ module Ww::Scenery
           # |@ scenery.text.transform
           #
           # |@pattern
-          # (text ⍊ transform: {+¦ pretty})
+          # (text ⍊ transform: pretty)
           #
           # |@block
           # Removes whitespace from the beginning and the end of the caption,
@@ -304,7 +330,7 @@ module Ww::Scenery
           #
           # This transform is incompatible with `underline` and `selection`,
           # since both of them require stable character indices.
-          matchpi %{{¦ -underline -selection transform: {+¦ pretty}}} do
+          matchpi %{{¦ transform: pretty}} do
             string = string.strip.squeeze(" \n")
             continue
           end

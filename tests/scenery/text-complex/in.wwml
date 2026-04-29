@@ -259,23 +259,23 @@ backdrop: (oklch 0.2 0 0)
     (BoundedText
       color: white
       caption: "tRansForM: upcasE"
-      transform: {+ upcase})
+      case: upcase)
     (BoundedText
       color: white
       caption: "TRANSFORM: DnCase"
-      transform: {+ dncase})
+      case: dncase)
     (BoundedText
       color: white
       caption: "   No   strip   ")
     (BoundedText
       color: white
       caption: "   Yes   strip   "
-      transform: {+ strip})
+      transform: strip)
     (content y: true
       (BoundedText
         color: white
         caption: "   Pretty   strip   "
-        transform: {+ pretty}))
+        transform: pretty))
     (content y: true
       (BoundedText
         color: white
@@ -284,7 +284,7 @@ backdrop: (oklch 0.2 0 0)
       (BoundedText
         color: white
         caption: "   \n\nnl  strip\n\n   "
-        transform: {+ pretty})))
+        transform: pretty)))
 
   (x-stack gap: 10
     ;; Remote font
