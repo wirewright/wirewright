@@ -20,6 +20,53 @@
 module Ww::Scenery
   extend self
 
+  # Contains caches used by Scenery.
+  class CacheSet
+    # :nodoc:
+    getter recognition
+    # :nodoc:
+    getter query
+    # :nodoc:
+    getter resolution
+    # :nodoc:
+    getter assets
+    # :nodoc:
+    getter shaping
+    # :nodoc:
+    getter shaped_items
+    # :nodoc:
+    getter min_size
+    # :nodoc:
+    getter measurement
+    # :nodoc:
+    getter boxes
+    # :nodoc:
+    getter elevate
+    # :nodoc:
+    getter aim
+    # :nodoc:
+    getter vbox
+    # :nodoc:
+    getter depict
+
+    # :nodoc:
+    def initialize
+      @recognition = GenerationalCache(Term, RecognizedNode).new
+      @query = GenerationalCache(RecognizedNode, QuerySet).new
+      @resolution = GenerationalCache({Asset::Map, RecognizedNode}, Resn::Any).new
+      @assets = GenerationalCache({Asset::Query, Term::Blob}, Outcome::Accepted(Asset::Any?)).new
+      @shaping = GenerationalCache(AssetNode, ShapedNode).new
+      @shaped_items = GenerationalCache(ShapeInput, Slice(ShapedSemiStyledGlyph)).new
+      @min_size = GenerationalCache(ShapedNode, Point).new
+      @measurement = GenerationalCache({ShapedNode, Cst}, {SizedNode, Size}).new
+      @boxes = GenerationalCache({SizedNode, Size}, OriginBox).new
+      @elevate = GenerationalCache({SizedNode, OriginBox}, ElevateResponse).new
+      @aim = GenerationalCache({ElevatedNode, OriginBox}, AimResponse).new
+      @vbox = GenerationalCache({AimedNode, OriginBox}, VBox).new
+      @depict = GenerationalCache({AimedNode, OriginBox}, DrawCommand).new
+    end
+  end
+
   # An immutable representation of a Scenery scene at a particular instant.
   #
   # It is safe to pass scenes around between different threads.
@@ -278,7 +325,6 @@ require "./scenery/rounded_rect"
 require "./scenery/tf"
 require "./scenery/unit"
 require "./scenery/paint"
-require "./scenery/cache"
 require "./scenery/node"
 require "./scenery/asset"
 require "./scenery/recognize"

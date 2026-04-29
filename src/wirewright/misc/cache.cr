@@ -459,4 +459,59 @@ module Ww
       end
     end
   end
+
+  # A cache that maintains two "generations", the *active* and *surviving*
+  # generation. In Scenery, they represent the previous frame and the current,
+  # in-progress frame, correspondingly.
+  #
+  # As the current frame is constructed, cache hits are "moved" from the previous
+  # frame to the current frame. At the end of an `epoch`, we remove all unhit entries
+  # from the previous frame, and swap.
+  #
+  # This means we only cache things that are reused across two frames, and drop
+  # all other things -- not *really* all other things, though. For example, in
+  # Scenery, assets can be retained for a longer time due to `HTTPService`
+  # and `PathService` caches. So `GenerationalCache` can be thought of as a kind
+  # of "short-term memory" cache; with asset caches etc. a "long-term memory" cache.
+  class GenerationalCache(K, V)
+    include ICache(K, V)
+
+    def initialize
+      @active = {} of K => V
+      @surviving = {} of K => V
+    end
+
+    def get?(key : K) : V?
+      if value = @active.delete(key)
+        @surviving[key] = value
+        return value
+      end
+
+      @surviving[key]?
+    end
+
+    # Sets the cached value of *key* to *value*. Returns *value*.
+    def put(key : K, value : V) : V
+      @active.delete(key)
+      @surviving[key] = value
+    end
+
+    # Removes the cached value of *key*. Returns the value. Returns `nil` if none.
+    def delete(key : K) : V?
+      @active.delete(key) || @surviving.delete(key)
+    end
+
+    # Clears this cache.
+    def clear : Nil
+      @active.clear
+      @surviving.clear
+    end
+
+    def epoch(&)
+      yield
+    ensure
+      @active.clear
+      @active, @surviving = @surviving, @active
+    end
+  end
 end
