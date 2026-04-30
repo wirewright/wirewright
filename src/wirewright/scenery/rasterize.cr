@@ -72,19 +72,20 @@ module Ww::Scenery
       raise "pvg: failed to create canvas for surface of size #{screen.width}x#{screen.height}"
     end
 
+    # Add a 1px margin to conceal any float/rasterization artifacts.
+    dirty_rects = dirty_rects.map(&.snap.margin(1))
+
     begin
+      dirty_rects.each do |dirty_rect|
+        PlutoVG.canvas_add_rect(canvas, dirty_rect.x, dirty_rect.y, dirty_rect.w, dirty_rect.h)
+        PlutoVG.canvas_set_rgba(canvas, *screen.backdrop.rgba)
+        PlutoVG.canvas_fill(canvas)
+      end
+
       dirty = Rect.empty
 
       dirty_rects.each do |dirty_rect|
-        # Add a 1px margin to hide any float/rasterization artifacts.
-        dirty_rect = dirty_rect.margin(1)
-
         PlutoVG.canvas_add_rect(canvas, dirty_rect.x, dirty_rect.y, dirty_rect.w, dirty_rect.h)
-        if screen.dirty?
-          PlutoVG.canvas_set_rgba(canvas, *screen.backdrop.rgba)
-          PlutoVG.canvas_fill_preserve(canvas)
-        end
-
         dirty = Rect.union(dirty, dirty_rect)
       end
 
