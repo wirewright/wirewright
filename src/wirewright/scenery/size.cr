@@ -484,20 +484,25 @@ module Ww::Scenery
 
   private def size!(cache, node : Limit, cst : Cst) : {SizedNode, Size}
     min_w = node.min_w.resolve(cst.max_w)
-    max_w = node.max_w.try(&.resolve(cst.max_w)) || Magnitude::INFINITY
+    if min_w.infinite?
+      min_w = cst.min_w
+    end
 
     min_h = node.min_h.resolve(cst.max_h)
+    if min_h.infinite?
+      min_h = cst.min_h
+    end
+
+    max_w = node.max_w.try(&.resolve(cst.max_w)) || Magnitude::INFINITY
     max_h = node.max_h.try(&.resolve(cst.max_h)) || Magnitude::INFINITY
 
     child_max_w = Math.min(max_w, cst.max_w)
     child_max_h = Math.min(max_h, cst.max_h)
 
-    child_cst = Cst.new(
-      min_w: Math.min(child_max_w, Math.max(min_w, cst.min_w)),
-      max_w: child_max_w,
-      min_h: Math.min(child_max_h, Math.max(min_h, cst.min_h)),
-      max_h: child_max_h,
-    )
+    child_min_w = Math.min(child_max_w, Math.max(min_w, cst.min_w))
+    child_min_h = Math.min(child_max_h, Math.max(min_h, cst.min_h))
+
+    child_cst = Cst.new(child_min_w, child_max_w, child_min_h, child_max_h)
 
     box_size(cache, node, child_cst)
   end
