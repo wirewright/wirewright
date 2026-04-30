@@ -1,6 +1,8 @@
 module Ww::Scenery
   # Represents a _c_on_s_train_t_.
   defrecord Cst, min_w : Magnitude, max_w : Magnitude, min_h : Magnitude, max_h : Magnitude, copying: true do
+    assert !min_w.infinite?
+    assert !min_h.infinite?
     assert min_w <= max_w
     assert min_h <= max_h
   end

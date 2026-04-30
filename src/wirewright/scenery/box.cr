@@ -40,6 +40,7 @@ module Ww::Scenery
   struct OriginBox
     def initialize(@box : Box)
       assert @box.at_origin?
+      assert !@box.bounds.inf?
     end
 
     delegate :bounds, :children, to: @box
