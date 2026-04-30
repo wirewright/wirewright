@@ -135,7 +135,7 @@ module Ww
     # Constructs an exact number term from a Crystal number *n*.
     def self.exact(n : Float) : Num
       unless n.finite? # Infinite or NaN
-        raise MathDomainError.new
+        raise MathDomainError.new("#{n}")
       end
 
       if n.integer? && Int61::MIN <= n <= Int61::MAX
@@ -188,7 +188,7 @@ module Ww
     # Constructs an approximate number term from a Crystal float *n*.
     def self.approx(n : Float)
       unless n.finite? # Infinite or NaN
-        raise MathDomainError.new
+        raise MathDomainError.new("#{n}")
       end
 
       new(n.to_f64)
