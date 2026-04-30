@@ -330,6 +330,7 @@ module Ww
       height_pref : Int32,
       width_real : Int32,
       height_real : Int32,
+      backdrop_real : Pigment::RGBA,
       state : WindowState,
       command : Scenery::DrawCommand?,
       scenesrc : Scenery::SceneSource?,
@@ -489,14 +490,17 @@ module Ww
       end
 
       def handle(event : SDL::WindowExposed) : Nil
-        session(event) { |session_key, session| tick(session_key, session) }
+        session(event) do |session_key, session|
+          tick(session_key, session, force_redraw: true)
+        end
       end
 
       # When we resize a window, we update its size preference and tick() it.
       def handle(event : SDL::WindowResized) : Nil
         before_tick_handle(event) do |_, session|
-          session.width_pref = event.width
-          session.height_pref = event.height
+          width, height = Scenery::PixelRect.clamp(event.width.to_f32, event.height.to_f32)
+          session.width_pref = width
+          session.height_pref = height
         end
       end
 
@@ -640,6 +644,7 @@ module Ww
           height_pref: height,
           width_real: width,
           height_real: height,
+          backdrop_real: msg.spec.backdrop,
           state: WindowState::Open | WindowState::Visible,
           command: nil,
           scenesrc: nil,
@@ -689,6 +694,10 @@ module Ww
           session.width_pref, session.height_pref = Scenery::PixelRect.clamp(spec1.width, spec1.height)
         end
 
+        unless spec0.cursor == spec1.cursor
+          set_cursor(spec1.cursor)
+        end
+
         tick(msg.session_key, session)
       ensure
         msg.wg.done
@@ -719,22 +728,23 @@ module Ww
         tick
       end
 
-      def tick : Nil
-        @sessions.each { |session_key, session| tick(session_key, session) }
+      def tick(**kwargs) : Nil
+        @sessions.each { |session_key, session| tick(session_key, session, **kwargs) }
       end
 
-      def tick(session_key : Term, session : Session) : Nil
-        scene = redraw(session)
+      def tick(session_key : Term, session : Session, **kwargs) : Nil
+        scene = redraw(session, **kwargs)
         redescribe(session_key, session, scene)
       end
 
-      def redraw(session : Session) : Scenery::Scene
+      # Returns the scene that was drawn.
+      def redraw(session : Session, *, force_redraw : Bool = false) : Scenery::Scene
         width = session.width_real
         height = session.height_real
 
         # Resize the texture and the window according to the size preference.
-        resized = {session.width_pref, session.height_pref} != {width, height}
-        if resized
+        size_changed = {session.width_pref, session.height_pref} != {width, height}
+        if size_changed
           width, height = session.width_pref, session.height_pref
 
           SDL.resize(session.window, width, height)
@@ -749,31 +759,47 @@ module Ww
           session.height_real = height
         end
 
+        backdrop_changed = session.backdrop_real != session.spec.backdrop
+        if backdrop_changed
+          session.backdrop_real = session.spec.backdrop
+          # We'll trigger a full rasterize() below, no need to do anything here...
+        end
+
+        # Make a scene source or use the latest one.
         scenesrc0 = session.scenesrc
         scenesrc1 = Scenery::Safe.scenesrc(session.cache, session.spec.content, Magnitude.new(width), Magnitude.new(height))
         unless scenesrc0 == scenesrc1
           session.scenesrc = scenesrc1
         end
 
+        # Poll the source for the latest version of the scene. It changes as more
+        # images and fonts load and so on.
         scene = Scenery::Safe.poll(session.cache, scenesrc1).unwrap
 
+        invalidated = size_changed || backdrop_changed
+
         command1 = Scenery::Safe.depict(session.cache, scene)
-        if (command0 = session.command) && !resized
+        if (command0 = session.command) && !invalidated
           dirty_rects = Scenery::Safe.diff(command0, command1)
         else
-          # Trigger full redraw if the texture is brand new (which happens at the very
-          # beginning or on resize, see above).
+          # Trigger full rasterize() if the texture was invalidated (which happens at the very
+          # beginning, on resize, on backdrop change, etc., see above).
           dirty_rects = Slice[Scenery::Rect[0, 0, width, height]]
         end
         session.command = command1
 
-        SDL.lock(session.texture) do |pixels, pitch|
-          screen = Scenery::PixelRect.new(pixels.as(UInt8*), width, height, pitch, session.spec.backdrop, clear: false)
-          Scenery::Safe.rasterize(screen, command1, dirty_rects)
+        if dirty_rects.present?
+          # Transfer pixel data to SDL.
+          SDL.lock(session.texture) do |pixels, pitch|
+            screen = Scenery::PixelRect.new(pixels.as(UInt8*), width, height, pitch, session.spec.backdrop, clear: false)
+            Scenery::Safe.rasterize(screen, command1, dirty_rects)
+          end
         end
 
-        SDL.copy(session.texture, session.renderer, width, height)
-        SDL.present(session.renderer)
+        if dirty_rects.present? || force_redraw
+          SDL.copy(session.texture, session.renderer, width, height)
+          SDL.present(session.renderer)
+        end
 
         scene
       end
