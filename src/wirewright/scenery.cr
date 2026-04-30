@@ -201,23 +201,25 @@ module Ww::Scenery
 
     # Constructs a *screen*, which is basically a `PixelRect`.
     #
-    # - *width* and *height* are turned into PixelRect-safe sizes using `PixelRect.clamp`.
-    # - *backdrop* is the clear color of the screen. See `PixelRect` for more info
-    #   on what colors you are recommended to use for *backdrop*.
-    def screen(width : Magnitude, height : Magnitude, backdrop : Pigment::RGBA) : PixelRect
+    # *width* and *height* are turned into PixelRect-safe sizes using `PixelRect.clamp`.
+    def screen(width : Magnitude, height : Magnitude) : PixelRect
       iwidth, iheight = PixelRect.clamp(width, height)
       stride = iwidth * 4
-      pixels = Slice(Pixel).new(iwidth * iheight, Pixel.of(backdrop))
+      pixels = Slice(Pixel).new(iwidth * iheight, Pixel.of(Pigment.black))
 
-      PixelRect.new(pixels.to_unsafe.as(UInt8*), iwidth, iheight, stride, backdrop, clear: true)
+      PixelRect.new(pixels.to_unsafe.as(UInt8*), iwidth, iheight, stride)
     end
 
     # Writes the raster image for *command* to *screen*.
     #
     # See `.rasterize(PixelRect, DrawCommand, Slice(Rect))` for more info.
-    def rasterize(screen : PixelRect, command : DrawCommand, dirty_rects : Slice(Rect)) : Nil
+    #
+    # EXPERIMENTAL: *dirty_rects* support is experimental. It can improve performance
+    # substantially, but I don't know whether what we do right now actually covers all
+    # cases; my suspicion is that we may be filtering out commands that we shouldn't.
+    def rasterize(screen : PixelRect, command : DrawCommand, backdrop : Pigment::RGBA, dirty_rects : Slice(Rect)) : Nil
       @@lock.synchronize do
-        Scenery.rasterize(screen, command, dirty_rects)
+        Scenery.rasterize(screen, command, backdrop, dirty_rects)
       end
     end
 
@@ -225,12 +227,12 @@ module Ww::Scenery
     #
     # Uses PlutoVG and PlutoSVG to rasterize *command*.
     #
-    # EXPERIMENTAL: *dirty_rects* support is experimental. It can improve performance
-    # substantially, but I don't know whether what we do right now actually covers all
-    # cases; my suspicion is that we may be filtering out commands that we shouldn't.
-    def rasterize(screen : PixelRect, command : DrawCommand) : Nil
+    # *backdrop* is the clear color for the resulting pixel rect. It is highly
+    # advised to have it be fully opaque. Having a transparent backdrop may harm
+    # anti-aliasing.
+    def rasterize(screen : PixelRect, command : DrawCommand, backdrop : Pigment::RGBA) : Nil
       @@lock.synchronize do
-        Scenery.rasterize(screen, command)
+        Scenery.rasterize(screen, command, backdrop)
       end
     end
 
@@ -241,16 +243,13 @@ module Ww::Scenery
     #
     # *cache* is the cache set to use (see `cache_set`).
     #
-    # *backdrop* is the clear color for the resulting pixel rect. See `PixelRect` for more info
-    # on what colors you are recommended to use for *backdrop*.
-    #
     # NOTE: If you've already constructed a `screen`, do not use this function;
-    # use `rasterize(PixelRect, DrawCommand)` instead. This function is meant for
+    # use `rasterize(PixelRect, DrawCommand, Pigment::RGBA)` instead. This function is meant for
     # one-shot use.
-    def rasterize(cache : CacheSet, scene : Scene, *, backdrop : Pigment::RGBA) : PixelRect
-      screen = screen(scene.width, scene.height, backdrop)
+    def rasterize(cache : CacheSet, scene : Scene, backdrop : Pigment::RGBA) : PixelRect
+      screen = screen(scene.width, scene.height)
       command = depict(cache, scene)
-      rasterize(screen, command)
+      rasterize(screen, command, backdrop)
       screen
     end
 
@@ -292,7 +291,7 @@ module Ww::Scenery
       cache = cache_set
 
       scene(cache, document, width, height).map do |scene|
-        rasterize(cache, scene, backdrop: backdrop)
+        rasterize(cache, scene, backdrop)
       end
     end
 

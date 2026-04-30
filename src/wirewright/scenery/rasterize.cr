@@ -54,14 +54,14 @@ module Ww::Scenery
   end
 
   # See `Safe.rasterize`.
-  def rasterize(screen : PixelRect, command : DrawCommand) : Nil
+  def rasterize(screen : PixelRect, command : DrawCommand, backdrop : Pigment::RGBA) : Nil
     dirty_rects = Slice[Rect[0, 0, screen.width, screen.height]]
 
-    rasterize(screen, command, dirty_rects)
+    rasterize(screen, command, backdrop, dirty_rects)
   end
 
   # :ditto:
-  def rasterize(screen : PixelRect, command : DrawCommand, dirty_rects : Slice(Rect)) : Nil
+  def rasterize(screen : PixelRect, command : DrawCommand, backdrop : Pigment::RGBA, dirty_rects : Slice(Rect)) : Nil
     return if dirty_rects.empty?
 
     unless surface = PlutoVG.surface_create_for_data(screen, screen.width, screen.height, screen.stride)
@@ -78,7 +78,7 @@ module Ww::Scenery
     begin
       dirty_rects.each do |dirty_rect|
         PlutoVG.canvas_add_rect(canvas, dirty_rect.x, dirty_rect.y, dirty_rect.w, dirty_rect.h)
-        PlutoVG.canvas_set_rgba(canvas, *screen.backdrop.rgba)
+        PlutoVG.canvas_set_rgba(canvas, *backdrop.rgba)
         PlutoVG.canvas_fill(canvas)
       end
 
@@ -96,9 +96,6 @@ module Ww::Scenery
       PlutoVG.canvas_destroy(canvas)
       PlutoVG.surface_destroy(surface)
     end
-
-    # Mark the screen as dirty.
-    screen.dirty
   end
 
   private def rasterize_set_paint(canvas, paint : Paint::Solid, bounds : Rect) : Nil

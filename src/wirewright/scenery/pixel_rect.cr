@@ -10,14 +10,8 @@ module Ww::Scenery
     # Returns the stride, aka pitch, of the texture (bytes).
     getter stride : Int32
 
-    # Returns the clear color, which we call *backdrop*.
-    getter backdrop : Pigment::RGBA
-
-    # Returns `true` if this pixel rect consists exclusively of `backdrop` pixels.
-    getter? clear : Bool
-
     # :nodoc:
-    def initialize(@pixels : UInt8*, @width, @height, @stride, @backdrop, @clear : Bool)
+    def initialize(@pixels : UInt8*, @width, @height, @stride)
     end
 
     # The maximum PixelRect width (see `screen`).
@@ -46,29 +40,6 @@ module Ww::Scenery
           yield (@pixels + y*@stride + x*4).as(Pixel*).value
         end
       end
-    end
-
-    # NOTE: Make sure to have backdrop's alpha at 255, otherwise it'll
-    # mess up anti-aliasing.
-    #
-    # NOTE: You must `clear` manually (and redraw) if you want the change to apply.
-    def backdrop=(backdrop : Pigment::RGBA) : Pigment::RGBA
-      unless @backdrop == backdrop
-        @clear = false
-        @backdrop = backdrop
-      end
-
-      backdrop
-    end
-
-    # Marks this pixel rect as dirty.
-    def dirty : Nil
-      @clear = false
-    end
-
-    # Returns `true` if this pixel rect is dirty.
-    def dirty? : Bool
-      !clear?
     end
 
     # Returns a blob representing the content of this pixel rect as a PPM image.

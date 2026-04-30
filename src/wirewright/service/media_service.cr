@@ -791,8 +791,8 @@ module Ww
         if dirty_rects.present?
           # Transfer pixel data to SDL.
           SDL.lock(session.texture) do |pixels, pitch|
-            screen = Scenery::PixelRect.new(pixels.as(UInt8*), width, height, pitch, session.spec.backdrop, clear: false)
-            Scenery::Safe.rasterize(screen, command1, dirty_rects)
+            screen = Scenery::PixelRect.new(pixels.as(UInt8*), width, height, pitch)
+            Scenery::Safe.rasterize(screen, command1, session.spec.backdrop, dirty_rects)
           end
         end
 
