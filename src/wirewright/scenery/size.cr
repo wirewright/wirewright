@@ -735,7 +735,7 @@ module Ww::Scenery
       .with(:h, height.infinite? ? :∞ : height)
 
     outcome = Nitrene.eval(vars, node.cond)
-    if outcome.result == Term.of(false)
+    if outcome.unwrap == Term.of(false)
       return Inert.new, Size.new(Point[0, 0])
     end
 

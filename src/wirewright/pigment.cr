@@ -127,7 +127,7 @@ module Ww::Pigment
   private def ok_clamp(value : Float, range, *, despite : {_, _})
     key, detail = despite
 
-    Outcome.at(key, Outcome.ok_despite(value.clamp(range), detail))
+    Outcome.ok_despite(value.clamp(range), detail).at(key)
   end
 
   private def rej
@@ -224,7 +224,7 @@ module Ww::Pigment
 
       matchpi %{(oklch ±l ±c (%any° h_string h_symbol))}, h: String do
         unless hv = HUES[h]?
-          return Outcome.at(3, ok_despite(nil, "unrecognized hue name"))
+          return ok_despite(nil, "unrecognized hue name").at(3)
         end
 
         oklch(Term.of(:oklch, l, c, hv))
@@ -518,7 +518,7 @@ module Ww::Pigment
             opacity = acc.unwrap(ok_clamp(opacity, 0.0f32..1.0f32, despite: {2, "opacity out of range 0-1"}))
           end
 
-          color = acc.unwrap(Outcome.at(1, eval(arg)), rej: nil)
+          color = acc.unwrap(eval(arg).at(1)) { }
 
           if color
             ok(RGBA.new(color.r, color.g, color.b, color.a * opacity))
@@ -555,8 +555,8 @@ module Ww::Pigment
             ratio = acc.unwrap(ok_clamp(ratio, 0.0f32..1.0f32, despite: {3, "ratio out of range 0-1"}))
           end
 
-          color0 = acc.unwrap(Outcome.at(1, eval(arg0)), rej: nil)
-          color1 = acc.unwrap(Outcome.at(2, eval(arg1)), rej: nil)
+          color0 = acc.unwrap(eval(arg0).at(1)) { }
+          color1 = acc.unwrap(eval(arg1).at(2)) { }
 
           if color0 && color1
             ok(mix(color0, color1, ratio))
@@ -570,21 +570,13 @@ module Ww::Pigment
     end
   end
 
-  @@cache = SyncLRU(Term, RGBA).new(capacity: 256)
+  @@cache = SyncLRU(Term, Out).new(capacity: 256)
 
   # Returns the RGBA value of *expr*, if any, along with zero or more diagnostics.
   def eval(expr : Term) : Out
-    if rgba = @@cache.get?(expr)
-      return ok(rgba)
+    @@cache.put_if_absent(expr) do
+      Outcome.choice(atom(expr), fn(expr))
     end
-
-    outcome = Outcome.choice(atom(expr), fn(expr))
-
-    unless rgba = Outcome.as_just_ok?(outcome)
-      return outcome
-    end
-
-    ok(@@cache.put(expr, rgba))
   end
 
   # Returns the RGBA value of *expr*. Discards all diagnostics. Returns `nil`
@@ -592,7 +584,7 @@ module Ww::Pigment
   #
   # Use `eval` instead if you want to obtain detailed diagnostics.
   def rgba?(expr : Term) : RGBA?
-    Outcome.unwrap?(eval(expr))
+    eval(expr).unwrap?
   end
 
   # Returns the RGBA value of *expr*. Discards all diagnostics. Returns *fallback*

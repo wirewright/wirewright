@@ -194,7 +194,7 @@ module Ww::Nitrene
 
     # Validate arguments.
     args.map! do |arg|
-      arg.fmap do |value|
+      arg.bind do |value|
         if arith = arith?(value).as?(T)
           operands << arith
 
@@ -268,7 +268,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(// subterm0_ subterm1_)} do
-        Outcome.fmap(eval(vars, subterm0).at(1), eval(vars, subterm1).at(2)) do |v, w|
+        Outcome.bind(eval(vars, subterm0).at(1), eval(vars, subterm1).at(2)) do |v, w|
           unless p = v.as_n?
             next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "not a number")
           end
@@ -286,7 +286,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(mod subterm0_ subterm1_)} do
-        Outcome.fmap(eval(vars, subterm0).at(1), eval(vars, subterm1).at(2)) do |v, w|
+        Outcome.bind(eval(vars, subterm0).at(1), eval(vars, subterm1).at(2)) do |v, w|
           unless p = v.as_n?
             next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "not a number")
           end
@@ -399,7 +399,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(approx arg_)} do
-        eval(vars, arg).at(1).fmap do |v|
+        eval(vars, arg).at(1).bind do |v|
           if n = v.as_n?
             ok(Term::Num.approx(n))
           else
@@ -409,7 +409,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(floor arg_)} do
-        eval(vars, arg).at(1).fmap do |v|
+        eval(vars, arg).at(1).bind do |v|
           if n = v.as_n?
             ok(Term::Num.exact(n.floor))
           else
@@ -419,7 +419,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(ceil arg_)} do
-        eval(vars, arg).at(1).fmap do |v|
+        eval(vars, arg).at(1).bind do |v|
           if n = v.as_n?
             ok(Term::Num.exact(n.ceil))
           else
@@ -429,7 +429,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(round arg_)} do
-        eval(vars, arg).at(1).fmap do |v|
+        eval(vars, arg).at(1).bind do |v|
           if n = v.as_n?
             ok(Term::Num.exact(n.round))
           else

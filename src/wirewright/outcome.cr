@@ -10,6 +10,16 @@ module Ww
 
     # Describes an object (entity) an evaluation process wants to highlight.
     module Entity
+      # Prepends a sequence of spots constituting a path to this entity, which
+      # results in a `Diagnostic`.
+      def at(spot, *spots) : Diagnostic
+        current = self
+        spots.reverse_each do |spot|
+          current = Outcome.elaborate(Diagnostic.key(spot), current)
+        end
+
+        Outcome.elaborate(Diagnostic.key(spot), current)
+      end
     end
 
     # Describes a step along the path to the object (entity) highlighted by
@@ -64,9 +74,6 @@ module Ww
     # A function, unit, agent, etc. evaluated the input successfully, providing zero
     # or more diagnostic messages alongside the result.
     struct Accepted(T)
-      # :nodoc:
-      getter result : T
-
       # Returns the diagnostics associated with this outcome.
       getter diagnostics : Slice(Diagnostic)
 
@@ -74,31 +81,42 @@ module Ww
       def initialize(@result : T, @diagnostics : Slice(Diagnostic))
       end
 
-      # Shorthand for `Outcome.elaborate(Diagnostic.key(key), self)`.
-      def at(key)
+      # Prepends a sequence of *key* spots to all diagnostics in this outcome.
+      def at(*keys) : Accepted
         if @diagnostics.empty? # Fast path
           return self
         end
 
-        Outcome.elaborate(Diagnostic.key(key), self)
+        current = self
+        keys.reverse_each do |key|
+          current = Outcome.elaborate(Diagnostic.key(key), current)
+        end
+
+        current
       end
 
       # Shorthand for `Outcome.amend(self, &)`.
-      def amend(&)
+      def amend(&) : Accepted
         Outcome.amend(self) { |result| yield result }
       end
 
       # Shorthand for `Outcome.map(self, &)`.
-      def map(&)
-        Outcome.map(self) { |result| yield result }
+      def map(&) : Accepted
+        Accepted.new((yield @result), @diagnostics)
       end
 
-      # Shorthand for `Outcome.fmap(self, &)`.
-      def fmap(&)
-        Outcome.fmap(self) { |result| yield result }
+      # Shorthand for `Outcome.bind(self, &)`.
+      def bind(&)
+        Outcome.bind(self) { |result| yield result }
       end
 
+      # Returns the underlying object.
       def unwrap : T
+        @result
+      end
+
+      # :ditto:
+      def unwrap? : T?
         @result
       end
     end
@@ -107,53 +125,46 @@ module Ww
     # it did not recognize the input in any meaningful way; the input "fell through".
     # The caller should try something else.
     struct Rejected
-      def unwrap
-        raise ArgumentError.new
+      # Passthrough.
+      def at(*keys) : Rejected
+        self
+      end
+
+      # :ditto:
+      def map(&) : Rejected
+        self
+      end
+
+      # :ditto:
+      def bind(&) : Rejected
+        self
+      end
+
+      # Returns `nil`.
+      def unwrap? : Nil
       end
     end
 
-    # TODO: Some functions below belong to the instance-side of Accepted and Rejected!!
-
+    # Constructs an `Accepted` outcome for *result*.
     def ok(result) : Accepted
       Accepted.new(result, diagnostics: Slice(Diagnostic).empty)
     end
 
+    # Constructs an `Accepted` outcome with a diagnostic. *args* are passed to
+    # `Diagnostic.of` to create the diagnostic.
     def ok_despite(result, *args) : Accepted
       Accepted.new(result, diagnostics: Slice[Diagnostic.new(Slice(Diagnostic::Spot).empty, Diagnostic.of(*args))])
     end
 
+    # Constructs a `Rejected` outcome.
     def rej : Rejected
       Rejected.new
     end
 
-    def at(key, outcome)
-      elaborate(Diagnostic.key(key), outcome)
-    end
-
-    def unwrap?(outcome : Accepted)
-      outcome.result
-    end
-
-    def unwrap?(outcome : Rejected)
-    end
-
-    def as_just_ok?(outcome : Accepted)
-      outcome.diagnostics.empty? ? outcome.result : nil
-    end
-
-    def as_just_ok?(outcome : Rejected)
-    end
-
-    def map(outcome : Accepted, &)
-      Accepted.new((yield outcome.result), outcome.diagnostics)
-    end
-
-    def map(outcome : Rejected, &)
-      outcome
-    end
-
-    def fmap(outcome outcome0 : Accepted, &)
-      outcome1 = yield outcome0.result
+    # Lets the block process the result of *outcome* and respond with an outcome.
+    # Rejection wins; if the block accepts the result, diagnostics are concatenated.
+    def bind(outcome outcome0 : Accepted, &)
+      outcome1 = yield outcome0.unwrap
       unless outcome1.is_a?(Accepted)
         return outcome1
       end
@@ -162,13 +173,18 @@ module Ww
         return outcome1
       end
 
-      Accepted.new(outcome1.result, outcome0.diagnostics + outcome1.diagnostics)
+      Accepted.new(outcome1.unwrap, outcome0.diagnostics + outcome1.diagnostics)
     end
 
-    def fmap(outcome : Rejected, &)
+    # :ditto:
+    def bind(outcome : Rejected, &)
       Rejected.new
     end
 
+    # Lets the block process the result of *outcome* and respond with an outcome.
+    # Rejection wins; if the block accepts the result with no diagnostics, all diagnostics
+    # of *outcome* are discarded. Hence the name, "amend" -- you "forgive" any diagnostics in
+    # *outcome* if the block succeeds.
     def amend(outcome outcome0 : Accepted, &)
       outcome1 = yield outcome0.result
       unless outcome1.is_a?(Accepted)
@@ -182,18 +198,22 @@ module Ww
       Accepted.new(outcome1.result, outcome0.diagnostics + outcome1.diagnostics)
     end
 
+    # :ditto:
     def amend(outcome : Rejected, &)
       Rejected.new
     end
 
-    macro fmap(outcome0, outcome1, *outcomes, &block)
-      {{@type}}.fmap({{outcome0}}) do |%result|
-        {{@type}}.fmap({{outcome1}}, {{outcomes.splat}}) do |*%results|
+    # Lets the block process the results of more than one outcome; otherwise
+    # the same as `bind`.
+    macro bind(outcome0, outcome1, *outcomes, &block)
+      {{@type}}.bind({{outcome0}}) do |%result|
+        {{@type}}.bind({{outcome1}}, {{outcomes.splat}}) do |*%results|
           pass(%result, *%results) {{block}}
         end
       end
     end
 
+    # Returns the first `Accepted` branch. If no branch accepts, returns `Rejected`.
     macro choice(*branches)
       pass do
         {% for branch, index in branches %}
@@ -206,7 +226,26 @@ module Ww
       end
     end
 
-    def elaborate(outcome : Accepted, & : -> Diagnostic::Spot)
+    # Returns the first `Accepted` branch. If no branch accepts, raises `ArgumentError`.
+    # Therefore, the return type here is just `Accepted`.
+    macro choice!(*branches)
+      pass do
+        {% for branch, index in branches %}
+          if %var{index} = {{branch}}.as?({{@type}}::Accepted)
+            next %var{index}
+          end
+        {% end %}
+
+        raise ArgumentError.new
+      end
+    end
+
+    # Prepends the spot returned by the block to all diagnostics in *outcome*.
+    #
+    # We accept the block instead of taking `Diagnostic::Spot` as-is to avoid
+    # computing the spot (which may be expensive) in the happy path, which is by
+    # far the most common path (i.e., no diagnostics).
+    def elaborate(outcome : Accepted, & : -> Diagnostic::Spot) : Accepted
       if outcome.diagnostics.empty?
         return outcome
       end
@@ -217,22 +256,26 @@ module Ww
         elaborate(spot, bt)
       end
 
-      Accepted.new(outcome.result, diagnostics)
+      Accepted.new(outcome.unwrap, diagnostics)
     end
 
-    def elaborate(outcome : Rejected, &)
+    # :ditto:
+    def elaborate(outcome : Rejected, &) : Rejected
       outcome
     end
 
+    # :nodoc:
     def elaborate(spot : Diagnostic::Spot, entity : Diagnostic::Entity) : Diagnostic
       Diagnostic.new(Slice[spot.as(Diagnostic::Spot)], entity)
     end
 
+    # :nodoc:
     def elaborate(spot : Diagnostic::Spot, diagnostic : Diagnostic) : Diagnostic
       Diagnostic.new(diagnostic.path.prepend(spot), diagnostic.entity)
     end
 
-    def elaborate(spot : Diagnostic::Spot, outcome)
+    # Prepends *spot* to all diagnostics in *outcome*.
+    def elaborate(spot : Diagnostic::Spot, outcome : Accepted | Rejected)
       elaborate(outcome) { spot }
     end
 
@@ -257,23 +300,23 @@ module Ww
       def unwrap(outcome : Accepted)
         @diagnostics.concat(outcome.diagnostics)
 
-        outcome.result
+        outcome.unwrap
       end
 
-      def unwrap(outcome : Accepted, *, rej)
+      def unwrap(outcome : Accepted, &)
         unwrap(outcome)
       end
 
-      def unwrap(outcome : Rejected, *, rej)
-        rej
+      def unwrap(outcome : Rejected, &)
+        yield
       end
     end
 
     # Lets you accumulate diagnostics.
     #
     # If *amend* is `true`, the accumulated diagnostics are discarded if the block
-    # accpets `Accepted`. Otherwise, the block's diagnostics are merged with
-    # the accumulated ones.
+    # accepts without diagnostics. Otherwise, the block's diagnostics are concatenated
+    # to the accumulated ones.
     def accumulate(*, amend : Bool = false, & : Accumulator -> Accepted | Rejected)
       diagnostics = Pf::Kit.stack_array(Diagnostic)
 
@@ -288,7 +331,7 @@ module Ww
 
       diagnostics.concat(outcome.diagnostics)
 
-      Accepted.new(outcome.result, diagnostics.to_unsafe_readonly_slice!)
+      Accepted.new(outcome.unwrap, diagnostics.to_unsafe_readonly_slice!)
     end
   end
 end

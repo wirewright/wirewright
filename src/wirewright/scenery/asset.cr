@@ -405,7 +405,7 @@ module Ww::Scenery
           acc << Outcome.elaborate(Asset::QueryRef.new(entry.query), Diagnostic.of("could not load asset: #{response.detail}"))
         in ResourceService::Present
           parseout = cache.put_if_absent({entry.query, response.content}) do
-            Outcome.map(Asset.parse(entry.query, response.content), &.as(Asset::Any?))
+            Asset.parse(entry.query, response.content).map(&.as(Asset::Any?))
           end
 
           asset = acc.unwrap(Outcome.elaborate(Asset::QueryRef.new(entry.query), parseout))
