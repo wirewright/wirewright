@@ -315,6 +315,14 @@ module Ww
     # Parses *term* into a query.
     def query?(term : Term) : Query?
       Term.case(term) do
+        matchpi %{(codex name_string)}, name: String do
+          codex(name)
+        end
+
+        matchpi %{(runtime path_string)}, path: Path do
+          runtime(path)
+        end
+
         matchpi %{(file path_string)}, path: Path do
           file(path)
         end
