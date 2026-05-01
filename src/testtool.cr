@@ -31,6 +31,7 @@ module Testtool
 
   defcase AssertionAssets,
     theme : Microfold::Theme?,
+    mu_codex : Microfold2::Codex?,
     editR : Rewriter?,
     uiR : Rewriter?,
     dw : Channel(DwUIR::Request)

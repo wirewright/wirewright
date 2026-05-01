@@ -2461,9 +2461,12 @@ end
 
 struct Slice(T)
   def self.of(*objects)
-    Slice(typeof(Enumerable.element_type(objects))).new(objects.size, read_only: true) do |index|
-      objects[index].as(typeof(Enumerable.element_type(objects)))
+    pointer = Pointer(T).malloc(objects.size)
+    objects.each_with_index do |object, index|
+      pointer[index] = object
     end
+
+    Slice(T).new(pointer, objects.size, read_only: true)
   end
 
   def self.join(left : Indexable(Slice(T)), mid : Indexable(U), right : Indexable(Slice(V))) forall T, U, V

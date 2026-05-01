@@ -1350,6 +1350,18 @@ module Ww
       Term.of(union(Term[a], Term[b]))
     end
 
+    # Intersects a dictionary with a *mask*: if *mask* contains a key, then
+    # the intersection of *a* with the *mask* contains the key.
+    def self.intersection(a : Dict, mask : Dict) : Dict
+      Dict.build do |commit|
+        a.each_entry do |key, value|
+          next unless key.in?(mask)
+
+          commit.with(key, value)
+        end
+      end
+    end
+
     # :nodoc:
     def self.extension?(b : Dict, *, of a : Dict) : Bool
       return false if a.size > b.size
@@ -1378,6 +1390,16 @@ module Ww
     # *b* is equal to *a*.
     def self.extension?(b : Term, *, of a : Term) : Bool
       extension?(Term[b], of: Term[a])
+    end
+
+    # Returns a copy of the dict *a* with keys in *keys*. *keys* are converted
+    # to `Term` using `Term.of`.
+    def self.select(a : Dict, keys : Enumerable) : Dict
+      Dict.build do |commit|
+        keys.each do |key|
+          commit.with(key, a[key]?)
+        end
+      end
     end
 
     # Returns a copy of the dict *a* with all of *keys* removed. Missing keys

@@ -164,6 +164,20 @@ module Testtool
     end
   end
 
+  def mu_codex?(index : Term::Dict) : Microfold2::Codex?
+    theme_query = index[:microfold2, :codex]?.try { |query| ResourceService.query?(query) }
+    theme_rem = index[:microfold2, :rem]?.as_n?
+    return unless theme_query && theme_rem
+
+    log("Loading Microfold2 codex #{theme_query}, rem: #{theme_rem}")
+
+    pipe(theme_query,
+      ResourceService.read_string,
+      ML.document,
+      Microfold2.codex(rem: theme_rem),
+    ).unwrap
+  end
+
   # Constructs an editR rewriter based on definitions from *index*, if any.
   def editR?(index : Term::Dict, base : Path) : Rewriter?
     return unless path = index[:editR, :codex]?.try(&.to?(Path))
@@ -225,7 +239,12 @@ module Testtool
 
         if conf.assets
           unless theme = theme?(index, base: conf.tests_path)
-            err("Microfold theme path and rem not recognized or undefined, aborting")
+            err("Microfold theme path or rem not recognized or undefined, aborting")
+            return
+          end
+
+          unless mu_codex = mu_codex?(index)
+            err("Microfold2 codex query or rem not recognized or undefined, aborting")
             return
           end
 
@@ -240,7 +259,7 @@ module Testtool
           end
         end
 
-        yield AssertionAssets.new(theme, editR, uiR, dw)
+        yield AssertionAssets.new(theme, mu_codex, editR, uiR, dw)
       end
     ensure
       server.close

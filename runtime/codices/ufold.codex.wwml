@@ -1,0 +1,1751 @@
+;; This is the standard *codex* for Microfold, Wirewright's box model/
+;; styling... thing.
+;;
+;; This particular codex and Microfold as a whole are inspired *immensely*
+;; by Tailwind. All credit for the design system, the particular values used,
+;; the naming conventions, and so on, goes to the Tailwind folks
+;; (see https://tailwindcss.com).
+;;
+;; NOTE: Tailwind seems to have changed somewhat since I've last looked at it
+;; (and that was a long time ago!) So some things may be inconsistent. Consistency
+;; is not the goal, however. Microfold is not an implementation of Tailwind
+;; in any sensible way. The situation is close to Crystal vs. Ruby -- Crystal
+;; is not an implementation of Ruby, nor is there a goal to keep Crystal consistent
+;; with Ruby; it just so happens that Crystal was inspired by Ruby, just like
+;; Microfold was inspired by Tailwind, and that there's a huge lot of overlap
+;; in terms of syntax & naming, sometimes deliberately maintained, so much so
+;; that simple Ruby programs may run using Crystal; but that is never
+;; really guaranteed.
+
+--- globals
+
+;; The spacing factor.
+;;
+;; Reference: https://v3.tailwindcss.com/docs/customizing-spacing#default-spacing-scale
+spacing: (* 0.25 rem)
+
+;; Negative unit shorthands.
+-rem: (* -1 rem)
+-spacing: (* -1 spacing)
+
+
+--- presets
+
+p: "font-sans font-text text-base text-neutral"
+a: "font-sans font-text text-base text-blue-500 underline underline-all underline-offset-0.6"
+h1: "font-sans font-bold text-4xl text-neutral"
+h2: "font-sans font-semibold text-3xl text-neutral"
+h3: "font-sans font-medium text-2xl text-neutral"
+h4: "font-sans font-medium text-xl text-neutral"
+h5: "font-sans font-medium text-lg text-neutral"
+h6: "font-sans font-semibold text-xs text-neutral upcase"
+icon: "font-icons font-base text-neutral"
+group: "flow-col"
+code: "font-mono font-normal text-xs/4 bg-neutral-900 text-neutral-300 px-3 py-2 rounded border-l-md border-blue-400"
+button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 rounded content-center content-clip hover:bg-blue-700 hover:text-white hover:cursor-pointer active:bg-blue-600"
+
+
+--- definitions
+
+;;
+;; Padding utilities.
+;;
+
+;; p-5, px-5, py-3, pl-0.5 pt-0.5, ...
+(group
+  (defn p
+    (shorthand (prefix "p-" (number p))
+      (px py ^:p)))
+
+  (defn px
+    (shorthand (prefix "px-" (number p))
+      (pl pr ^:p)))
+
+  (defn py
+    (shorthand (prefix "py-" (number p))
+      (pt pb ^:p)))
+
+  (defn (padding-box pl)
+    (utility (prefix "pl-" (number p))
+      {pl: ^(* p spacing)}))
+
+  (defn (padding-box pr)
+    (utility (prefix "pr-" (number p))
+      {pr: ^(* p spacing)}))
+
+  (defn (padding-box pt)
+    (utility (prefix "pt-" (number p))
+      {pt: ^(* p spacing)}))
+
+  (defn (padding-box pb)
+    (utility (prefix "pb-" (number p))
+      {pb: ^(* p spacing)})))
+
+;; p-5px, px-5px, py-3px, pl-0.5px pt-0.5px, ...
+(group
+  (defn p-px
+    (shorthand (circumfix "p-" (number p) "px")
+      (px-px py-px ^:p)))
+
+  (defn px-px
+    (shorthand (circumfix "px-" (number p) "px")
+      (pl-px pr-px ^:p)))
+
+  (defn py-px
+    (shorthand (circumfix "py-" (number p) "px")
+      (pt-px pb-px ^:p)))
+
+  (defn (padding-box pl-px)
+    (utility (circumfix "pl-" (number p) "px")
+      {pl: ^p}))
+
+  (defn (padding-box pr-px)
+    (utility (circumfix "pr-" (number p) "px")
+      {pr: ^p}))
+
+  (defn (padding-box pt-px)
+    (utility (circumfix "pt-" (number p) "px")
+      {pt: ^p}))
+
+  (defn (padding-box pb-px)
+    (utility (circumfix "pb-" (number p) "px")
+      {pb: ^p})))
+
+;;
+;; Margin utilities.
+;;
+
+;; m-5, mx-5, my-3, ml-0.5 mt-0.5, ...
+(group
+  (defn m
+    (shorthand (prefix "m-" (number m))
+      (mx my ^:m)))
+
+  (defn mx
+    (shorthand (prefix "mx-" (number m))
+      (ml mr ^:m)))
+
+  (defn my
+    (shorthand (prefix "my-" (number m))
+      (mt mb ^:m)))
+
+  (defn (margin-box ml)
+    (utility (prefix "ml-" (number m))
+      {ml: ^(* m spacing)}))
+
+  (defn (margin-box mr)
+    (utility (prefix "mr-" (number m))
+      {mr: ^(* m spacing)}))
+
+  (defn (margin-box mt)
+    (utility (prefix "mt-" (number m))
+      {mt: ^(* m spacing)}))
+
+  (defn (margin-box mb)
+    (utility (prefix "mb-" (number m))
+      {mb: ^(* m spacing)})))
+
+;; m-5px, mx-5px, my-3px, ml-0.5px mt-0.5px, ...
+(group
+  (defn m-px
+    (shorthand (circumfix "m-" (number m) "px")
+      (mx-px my-px ^:m)))
+
+  (defn mx-px
+    (shorthand (circumfix "mx-" (number m) "px")
+      (ml-px mr-px ^:m)))
+
+  (defn my-px
+    (shorthand (circumfix "my-" (number m) "px")
+      (mt-px mb-px ^:m)))
+
+  (defn (margin-box ml-px)
+    (utility (circumfix "ml-" (number m) "px")
+      {ml: ^m}))
+
+  (defn (margin-box mr-px)
+    (utility (circumfix "mr-" (number m) "px")
+      {mr: ^m}))
+
+  (defn (margin-box mt-px)
+    (utility (circumfix "mt-" (number m) "px")
+      {mt: ^m}))
+
+  (defn (margin-box mb-px)
+    (utility (circumfix "mb-" (number m) "px")
+      {mb: ^m})))
+
+;;
+;; Background utilities.
+;;
+
+;; Solid paint.
+(for bg-box
+  (utility (prefix "bg-" (one-of colors fill))
+    {^:fill}))
+
+;; Linear gradient paint.
+(for bg-box
+  (utility "bg-linear"
+    {fill: linear-gradient}))
+
+(for bg-box
+  (utility (prefix "linear-from-" (one-of gradient-points point))
+    {gradient-begin-l: ^(value point l)
+     gradient-begin-t: ^(value point t)}))
+
+(for bg-box
+  (utility (prefix "linear-to-" (one-of gradient-points point))
+    {gradient-end-l: ^(value point l)
+     gradient-end-t: ^(value point t)}))
+
+;; Gradient stops
+(group
+  (for bg-box
+    (utility (prefix "from-" (one-of colors color))
+      {gradient-from: ^color}))
+
+  (for bg-box
+    (utility (prefix "via-" (one-of colors color))
+      {gradient-via: ^color}))
+
+  (for bg-box
+    (utility (prefix "to-" (one-of colors color))
+      {gradient-to: ^color})))
+
+;;
+;; Border radius utilities.
+;;
+
+(defn (bg-box rounded-tl)
+  (utility (prefix "rounded-tl-" (one-of radii radius))
+    {radius-tl: ^radius}))
+
+(defn (bg-box rounded-tr)
+  (utility (prefix "rounded-tr-" (one-of radii radius))
+    {radius-tr: ^radius}))
+
+(defn (bg-box rounded-bl)
+  (utility (prefix "rounded-bl-" (one-of radii radius))
+    {radius-bl: ^radius}))
+
+(defn (bg-box rounded-br)
+  (utility (prefix "rounded-br-" (one-of radii radius))
+    {radius-br: ^radius}))
+
+(defn rounded-l
+  (shorthand (prefix "rounded-l-" (one-of radii radius))
+    (rounded-tl rounded-bl ^:radius)))
+
+(defn rounded-r
+  (shorthand (prefix "rounded-r-" (one-of radii radius))
+    (rounded-tr rounded-br ^:radius)))
+
+(defn rounded-t
+  (shorthand (prefix "rounded-t-" (one-of radii radius))
+    (rounded-tl rounded-tr ^:radius)))
+
+(defn rounded-b
+  (shorthand (prefix "rounded-b-" (one-of radii radius))
+    (rounded-bl rounded-br ^:radius)))
+
+(defn rounded
+  (shorthand (prefix "rounded-" (one-of radii radius))
+    (rounded-l rounded-r ^:radius)))
+
+(alias "rounded" "rounded-md")
+(alias "rounded-t" "rounded-t-md")
+(alias "rounded-b" "rounded-b-md")
+(alias "rounded-l" "rounded-l-md")
+(alias "rounded-r" "rounded-r-md")
+(alias "rounded-tl" "rounded-tl-md")
+(alias "rounded-tr" "rounded-tr-md")
+(alias "rounded-bl" "rounded-bl-md")
+(alias "rounded-br" "rounded-br-md")
+
+;;
+;; Border utilities.
+;;
+
+(for bg-box
+  (utility (prefix "border-" (one-of colors stroke))
+    {^:stroke}))
+
+;; border-l-xs, border-x-md, border-lg, ...
+(group
+  (defn (bg-box border-l)
+    (utility (prefix "border-l-" (one-of border-sizes size))
+      {thickness-l: ^size}))
+
+  (defn (bg-box border-r)
+    (utility (prefix "border-r-" (one-of border-sizes size))
+      {thickness-r: ^size}))
+
+  (defn (bg-box border-t)
+    (utility (prefix "border-t-" (one-of border-sizes size))
+      {thickness-t: ^size}))
+
+  (defn (bg-box border-b)
+    (utility (prefix "border-b-" (one-of border-sizes size))
+      {thickness-b: ^size}))
+
+  (defn border-x
+    (shorthand (prefix "border-x-" (one-of border-sizes size))
+      (border-l border-r ^:size)))
+
+  (defn border-y
+    (shorthand (prefix "border-y-" (one-of border-sizes size))
+      (border-t border-b ^:size)))
+
+  (defn border
+    (shorthand (prefix "border-" (one-of border-sizes size))
+      (border-l border-r border-t border-b ^:size))))
+
+;; border-l-3px, border-x-5px, border-3px, ...
+(group
+  (defn (bg-box border-l-px)
+    (utility (circumfix "border-l-" (number size) "px")
+      {thickness-l: ^size}))
+
+  (defn (bg-box border-r-px)
+    (utility (circumfix "border-r-" (number size) "px")
+      {thickness-r: ^size}))
+
+  (defn (bg-box border-t-px)
+    (utility (circumfix "border-t-" (number size) "px")
+      {thickness-t: ^size}))
+
+  (defn (bg-box border-b-px)
+    (utility (circumfix "border-b-" (number size) "px")
+      {thickness-b: ^size}))
+
+  (defn border-x-px
+    (shorthand (circumfix "border-x-" (number size) "px")
+      (border-l-px border-r-px ^:size)))
+
+  (defn border-y-px
+    (shorthand (circumfix "border-y-" (number size) "px")
+      (border-t-px border-b-px ^:size)))
+
+  (defn border-px
+    (shorthand (circumfix "border-" (number size) "px")
+      (border-l-px border-r-px border-t-px border-b-px ^:size))))
+
+(alias "border" "border-1px")
+(alias "border-x" "border-x-1px")
+(alias "border-y" "border-y-1px")
+(alias "border-l" "border-l-1px")
+(alias "border-r" "border-r-1px")
+(alias "border-t" "border-t-1px")
+(alias "border-b" "border-b-1px")
+
+;;
+;; Text color utilities.
+;;
+
+(for text-box
+  (utility (prefix "text-" (one-of colors color))
+    {^:color}))
+
+;;
+;; Letter spacing utilities.
+;;
+;; NOTE: our approach differs slightly in that we measure tracking in terms
+;; of whitespace character width (whereas Tailwind measures it in `em`s).
+;;
+
+;; E.g. tracking-tight
+(for text-box
+  (utility (prefix "tracking-" (one-of tracking-values tracking))
+    {^:tracking}))
+
+;; E.g. tracking-3px
+(for text-box
+  (utility (circumfix "tracking-" (number value) "px")
+    {tracking: (^value px)}))
+
+;;
+;; Line height utilities.
+;;
+
+;; E.g. leading-snug
+(for text-box
+  (utility (prefix "leading-" (one-of leading-values-rel leading))
+    {^:leading}))
+
+;; E.g. leading-lg, i.e., for a particular font size.
+(for text-box
+  (utility (prefix "leading-" (one-of leading-values-abs leading))
+    {^:leading}))
+
+;; E.g. leading-3, uses the spacing scale.
+(for text-box
+  (utility (prefix "leading-" (number value))
+    {leading: (^(* value spacing) px)}))
+
+;; E.g. leading-3px
+(for text-box
+  (utility (circumfix "leading-" (number value) "px")
+    {leading: (^value px)}))
+
+;;
+;; Font family.
+;;
+
+(for text-box
+  (utility (prefix "font-" (one-of fonts font))
+    {^:font}))
+
+;;
+;; Font size utilities.
+;;
+
+;; E.g. font-lg
+(for text-box
+  (utility (prefix "font-" (one-of font-sizes size))
+    {^:size}))
+
+;; E.g. font-14px
+(for text-box
+  (utility (circumfix "font-" (number size) "px")
+    {^:size}))
+
+;; E.g. text-lg -> font-lg leading-lg
+(for text-box
+  (utility (prefix "text-" (and (one-of font-sizes size)
+                                (one-of leading-values-abs leading)))
+    {^:size ^:leading}))
+
+;; E.g. text-sm/6 -> text-sm leading-6, i.e., sets the size and line height at
+;; the same time.
+(for text-box
+  (utility (prefix "text-" (infix (one-of font-sizes size) "/" (number value)))
+    {^:size leading: (^(* value spacing) px)}))
+
+;; E.g. text-14px. We behave similar to font vs text in that text sets leading
+;; whereas font doesn't.
+(for text-box
+  (utility (circumfix "text-" (number size) "px")
+    {^:size leading: 1}))
+
+;;
+;; Font weight utilities.
+;;
+
+;; E.g. font-bold
+(for text-box
+  (utility (prefix "font-" (one-of font-weights weight))
+    {^:weight}))
+
+;;
+;; Italicizing text.
+;;
+
+(for text-box
+  (utility "italic" {italic: true}))
+
+(for text-box
+  (utility "-italic" {italic: false}))
+
+;;
+;; Underline
+;;
+
+;; As in ⏏underline⏏ underline-blue-500
+(for text-box
+  (utility "underline" {underline: true}))
+
+(for text-box
+  (utility "underline-all"
+    {underline-anchor: 0,
+     underline-span: -1}))
+
+(for text-box
+  (utility "-underline" {underline: false}))
+
+;; E.g. underline-blue-500
+(for text-box
+  (utility (prefix "underline-" (one-of colors color))
+    {underline-color: ^color}))
+
+;; E.g. underline-3
+(for text-box
+  (utility (circumfix "underline-" (number thickness) "px")
+    {underline-thickness: ^thickness}))
+
+;; E.g. underline-offset-0.5
+(for text-box
+  (utility (prefix "underline-offset-" (number offset))
+    {underline-offset: ^offset}))
+
+;;
+;; Selection
+;;
+
+;; As in ⏏sel⏏ sel-blue-500
+(for text-box
+  (utility "sel" {selection: true}))
+
+(for text-box
+  (utility "-sel" {selection: false}))
+
+;; E.g. sel-blue-500
+(for text-box
+  (utility (prefix "sel-" (one-of colors fill))
+    {selection-fill: ^fill}))
+
+;; E.g. sel-text-blue-500
+(for text-box
+  (utility (prefix "sel-text-" (one-of colors color))
+    {selection-color: ^color}))
+
+;; E.g. sel-rounded-lg
+(for text-box
+  (utility (prefix "sel-rounded-" (one-of radii radius))
+    {selection-radius: ^radius}))
+
+(alias "sel-rounded" "sel-rounded-md")
+
+;; E.g. cursor-thin
+(for text-box
+  (utility (prefix "cursor-" (one-of cursor-thicknesses thickness))
+    {selection-thickness: ^thickness}))
+
+(for text-box
+  (utility "sel-aim" {selection-aim: true}))
+
+(for text-box
+  (utility "-sel-aim" {selection-aim: false}))
+
+;;
+;; Text transform
+;;
+
+(for text-box
+  (utility "upcase" {case: upcase}))
+
+(for text-box
+  (utility "dncase" {case: dncase}))
+
+(for text-box
+  (utility "title" {case: title}))
+
+(for text-box
+  (utility "capitalize" {transform: upcase-first}))
+
+(for text-box
+  (utility "strip" {transform: strip}))
+
+(for text-box
+  (utility "pretty" {transform: pretty}))
+
+;;
+;; Placeholder
+;;
+
+(for placeholder-rect
+  (utility (prefix "placeholder-" (one-of colors fill))
+    {^:fill}))
+
+(for placeholder-rect
+  (utility (prefix "placeholder-rounded-" (one-of radii radius))
+    {radius-tl: ^radius
+     radius-tr: ^radius
+     radius-bl: ^radius
+     radius-br: ^radius}))
+
+(alias "placeholder-rounded" "placeholder-rounded-md")
+
+(for placeholder-rect
+  (utility (prefix "placeholder-border-" (one-of colors stroke))
+    {^:stroke}))
+
+(for placeholder-rect
+  (utility (circumfix "placeholder-border-" (number thickness) "px")
+    {thickness-l: ^thickness
+     thickness-r: ^thickness
+     thickness-t: ^thickness
+     thickness-b: ^thickness}))
+
+;;
+;; Flow, floating, content (layout-related utilities)
+;;
+
+(for flow-box
+  (utility "flow-none" {node: z-stack}))
+
+(for flow-box
+  (utility "flow-col" {node: y-stack}))
+
+(for flow-box
+  (utility "flow-row" {node: x-stack}))
+
+(for flow-box
+  (utility "flow-wrap" {node: x-wrap}))
+
+(for flow-box
+  (utility "flow-y-wrap" {node: y-wrap}))
+
+;; E.g. flow-row gap-5, flow-wrap gap-x-10, flow-wrap gap-y-10
+(group
+  (for flow-box
+    (utility (prefix "gap-" (number value))
+      {gap: ^(* value spacing)}))
+
+  (for flow-box
+    (utility (prefix "gap-x-" (number value))
+      {gap-x: ^(* value spacing)}))
+
+  (for flow-box
+    (utility (prefix "gap-y-" (number value))
+      {gap-y: ^(* value spacing)})))
+
+;; E.g. flow-row gap-sm, flow-wrap gap-x-lg, flow-wrap gap-y-lg
+(group
+  (for flow-box
+    (utility (prefix "gap-" (one-of gap-sizes size))
+      {gap: ^size}))
+
+  (for flow-box
+    (utility (prefix "gap-x-" (one-of gap-sizes size))
+      {gap-x: ^size}))
+
+  (for flow-box
+    (utility (prefix "gap-y-" (one-of gap-sizes size))
+      {gap-y: ^size})))
+
+;; E.g. fr-1
+(for outermost-box
+  (utility (prefix "fr-" (number value))
+    {fr: ^value}))
+
+;; E.g. content hover:-content-x
+(group
+  (for content-box
+    (utility "-content-x" {x: false}))
+
+  (for content-box
+    (utility "content-x" {x: true}))
+
+  (for content-box
+    (utility "-content-y" {y: false}))
+
+  (for content-box
+    (utility "content-y" {y: true}))
+
+  (for content-box
+    (utility "content"
+      {x: true y: true}))
+
+  (for content-box
+    (utility "-content"
+      {x: false y: false})))
+
+;; E.g. floating hover:-floating-x
+(group
+  (for floating-box
+    (utility "-floating-x" {x: false}))
+
+  (for floating-box
+    (utility "floating-x" {x: true}))
+
+  (for floating-box
+    (utility "-floating-y" {y: false}))
+
+  (for floating-box
+    (utility "floating-y" {y: true}))
+
+  (for floating-box
+    (utility "floating"
+      {x: true
+       y: true}))
+
+  (for floating-box
+    (utility "-floating"
+      {x: false
+       y: false})))
+
+;;
+;; Viewport
+;;
+
+(group
+  (for content-viewport-box
+    (utility "content-clip" {present: true}))
+
+  (for content-viewport-box
+    (utility "-content-clip" {present: false}))
+
+  (for content-viewport-box
+    (utility "content-aim" {aim: true}))
+
+  (for content-viewport-box
+    (utility "-content-aim" {aim: false})))
+
+(group
+  (for viewport-box
+    (utility "clip" {present: true}))
+
+  (for viewport-box
+    (utility "-clip" {present: false}))
+
+  (for viewport-box
+    (utility "clip-aim" {aim: true}))
+
+  (for viewport-box
+    (utility "-clip-aim" {aim: false})))
+
+;;
+;; Transform
+;;
+
+;; E.g. dl-10px, dt-10px, d-10px -> dl-10px dt-10px
+(group
+  (for transform-box
+    (utility (circumfix "dl-" (number value) "px")
+      {dl: ^value}))
+
+  (for transform-box
+    (utility (circumfix "dt-" (number value) "px")
+      {dt: ^value}))
+
+  (for transform-box
+    (utility (circumfix "-dl-" (number value) "px")
+      {dl: ^(* value -1)}))
+
+  (for transform-box
+    (utility (circumfix "-dt-" (number value) "px")
+      {dt: ^(* value -1)}))
+
+  (for transform-box
+    (utility (circumfix "d-" (number value) "px")
+      {dl: ^value
+       dt: ^value})))
+
+;; E.g. dl-3, dt-3
+(group
+  (for transform-box
+    (utility (prefix "dl-" (number value))
+      {dl: ^(* value spacing)}))
+
+  (for transform-box
+    (utility (prefix "dt-" (number value))
+      {dt: ^(* value spacing)}))
+
+  (for transform-box
+    (utility (prefix "d-" (number value))
+      {dl: ^(* value spacing)
+       dt: ^(* value spacing)})))
+
+;; E.g. dl-10%, dt-50%
+(group
+  (for transform-box
+    (utility (circumfix "dl-" (number value) "%")
+      {dl: (^value %)}))
+
+  (for transform-box
+    (utility (circumfix "dt-" (number value) "%")
+      {dt: (^value %)}))
+
+  (for transform-box
+    (utility (circumfix "d-" (number value) "%")
+      {dl: (^value %)
+       dt: (^value %)})))
+
+;;; E.g. origin-center
+(for transform-box
+  (utility (prefix "origin-" (one-of transform-points point))
+    {origin-l: ^(value point l)
+     origin-t: ^(value point t)}))
+
+;; E.g. pivot-center
+(for transform-box
+  (utility (prefix "pivot-" (one-of transform-points point))
+    {pivot-l: ^(value point l)
+     pivot-t: ^(value point t)}))
+
+;; E.g. scale-0.5, scale-3
+(for transform-box
+  (utility (prefix "scale-" (number scale))
+    {^:scale}))
+
+;; E.g. scale-xs, scale-lg
+(for transform-box
+  (utility (prefix "scale-" (one-of transform-scales scale))
+    {^:scale}))
+
+;; E.g. rotate-30
+(for transform-box
+  (utility (prefix "rotate-" (number angle))
+    {^:angle}))
+
+;; E.g. 9-oclock, 5.5-oclock
+(for transform-box
+  (utility (suffix (number value) "-oclock")
+    {angle: ^(* value 30)}))
+
+;;
+;; Align
+;;
+
+;; Itself
+
+;; E.g. left, x-0.3
+(group
+  (for align-box
+    (utility "left" {x: 0}))
+
+  (for align-box
+    (utility "center-x" {x: 0.5}))
+
+  (for align-box
+    (utility "right" {x: 1}))
+
+  (for align-box
+    (utility (prefix "x-" (number value))
+      {x: ^value})))
+
+;; E.g. bottom, y-0.7
+(group
+  (for align-box
+    (utility "top" {y: 0}))
+
+  (for align-box
+    (utility "center-y" {y: 0.5}))
+
+  (for align-box
+    (utility "bottom" {y: 1}))
+
+  (for align-box
+    (utility (prefix "y-" (number value))
+      {y: ^value})))
+
+(for align-box
+  (utility "center" {x: 0.5 y: 0.5}))
+
+;; Content
+
+;; E.g. left, x-0.3
+(group
+  (for content-align-box
+    (utility "content-left" {x: 0}))
+
+  (for content-align-box
+    (utility "content-center-x" {x: 0.5}))
+
+  (for content-align-box
+    (utility "content-right" {x: 1}))
+
+  (for content-align-box
+    (utility (prefix "content-x-" (number value))
+      {x: ^value})))
+
+;; E.g. bottom, y-0.7
+(group
+  (for content-align-box
+    (utility "content-top" {y: 0}))
+
+  (for content-align-box
+    (utility "content-center-y" {y: 0.5}))
+
+  (for content-align-box
+    (utility "content-bottom" {y: 1}))
+
+  (for content-align-box
+    (utility (prefix "content-y-" (number value))
+      {y: ^value})))
+
+(for content-align-box
+  (utility "content-center" {x: 0.5 y: 0.5}))
+
+;;
+;; Limit
+;;
+
+;; E.g. min-w-100px, min-w-30, min-w-lg
+(group
+  (for limit-box
+    (utility (circumfix "min-w-" (number value) "px")
+      {min-w: ^value}))
+
+  (for limit-box
+    (utility (circumfix "min-w-" (number value) "%")
+      {min-w: (^value %)}))
+
+  (for limit-box
+    (utility (prefix "min-w-" (number value))
+      {min-w: ^(* value spacing)}))
+
+  (for limit-box
+    (utility (prefix "min-w-" (one-of limit-widths size))
+      {min-w: ^size}))
+
+  (for limit-box
+    (utility "min-w-none" {min-w: 0})))
+
+;; E.g. min-h-100px, min-h-lg
+(group
+  (for limit-box
+    (utility (circumfix "min-h-" (number value) "px")
+      {min-h: ^value}))
+
+  (for limit-box
+    (utility (circumfix "min-h-" (number value) "%")
+      {min-h: (^value %)}))
+
+  (for limit-box
+    (utility (prefix "min-h-" (number value))
+      {min-h: ^(* value spacing)}))
+
+  (for limit-box
+    (utility (prefix "min-h-" (one-of limit-heights size))
+      {min-h: ^size}))
+
+  (for limit-box
+    (utility "min-h-none" {min-h: 0})))
+
+;; E.g. max-w-100px, max-w-lg
+(group
+  (for limit-box
+    (utility (circumfix "max-w-" (number value) "px")
+      {max-w: ^value}))
+
+  (for limit-box
+    (utility (circumfix "max-w-" (number value) "%")
+      {max-w: (^value %)}))
+
+  (for limit-box
+    (utility (prefix "max-w-" (number value))
+      {max-w: ^(* value spacing)}))
+
+  (for limit-box
+    (utility (prefix "max-w-" (one-of limit-widths size))
+      {max-w: ^size}))
+
+  (for limit-box
+    (utility "max-w-none" {max-w: ∞})))
+
+;; E.g. max-h-100px, max-h-lg
+(group
+  (for limit-box
+    (utility (circumfix "max-h-" (number value) "px")
+      {max-h: ^value}))
+
+  (for limit-box
+    (utility (circumfix "max-h-" (number value) "%")
+      {max-h: (^value %)}))
+
+  (for limit-box
+    (utility (prefix "max-h-" (number value))
+      {max-h: ^(* value spacing)}))
+
+  (for limit-box
+    (utility (prefix "max-h-" (one-of limit-heights size))
+      {max-h: ^size}))
+
+  (for limit-box
+    (utility "max-h-none" {max-h: ∞})))
+
+;; E.g. min-100px, min-lg
+(group
+  (for limit-box
+    (utility (circumfix "min-" (number value) "px")
+      {min-w: ^value
+       min-h: ^value}))
+
+  (for limit-box
+    (utility (circumfix "min-" (number value) "%")
+      {min-w: (^value %)
+       min-h: (^value %)}))
+
+  (for limit-box
+    (utility (prefix "max-" (number value))
+      {min-w: ^(* value spacing),
+       max-h: ^(* value spacing)}))
+
+  (for limit-box
+    (utility (prefix "min-" (and (one-of limit-widths w) (one-of limit-heights h)))
+      {min-w: ^w
+       min-h: ^h}))
+
+  (for limit-box
+    (utility "min-none"
+      {min-w: ∞
+       min-h: ∞})))
+
+;; E.g. max-100px, max-lg
+(group
+  (for limit-box
+    (utility (circumfix "max-" (number value) "px")
+      {max-w: ^value
+       max-h: ^value}))
+
+  (for limit-box
+    (utility (circumfix "max-" (number value) "%")
+      {max-w: (^value %)
+       max-h: (^value %)}))
+
+  (for limit-box
+    (utility (prefix "max-" (number value))
+      {max-w: ^(* value spacing)
+       max-h: ^(* value spacing)}))
+
+  (for limit-box
+    (utility (prefix "max-" (and (one-of limit-widths w) (one-of limit-heights h)))
+      {max-w: ^w
+       max-h: ^h}))
+
+  (for limit-box
+    (utility "max-none"
+      {max-w: ∞
+       max-h: ∞})))
+
+(for limit-box
+  (utility "flip" {flip: true}))
+
+(for limit-box
+  (utility "-flip" {flip: false}))
+
+;;
+;; Opacity
+;;
+
+(for composite-box
+  (utility (circumfix "opacity-" (number value) "%")
+    {opacity: ^(/ value 100)}))
+
+(for composite-box
+  (utility (prefix "opacity-" (number value))
+    {opacity: ^value}))
+
+(for composite-box
+  (utility "opaque" {opacity: 1}))
+
+(for composite-box
+  (utility "transparent" {opacity: 0}))
+
+;;
+;; Aim (aim, -aim)
+;;
+
+(for aim-box
+  (utility "aim" {aim: true}))
+
+(for aim-box
+  (utility "-aim" {aim: false}))
+
+;;
+;; Overlay
+;;
+
+(for overlay-box
+  (utility "overlay" {overlay: true}))
+
+(for overlay-box
+  (utility "-overlay" {overlay: false}))
+
+;;
+;; Cursor
+;;
+
+(for root-box
+  (utility (prefix "cursor-" (one-of cursors cursor))
+    {^:cursor}))
+
+;;
+;; Misc
+;;
+
+(for self-box
+  (utility (prefix "color-" (one-of colors color)) cascade: true
+    {^:color}))
+
+(for self-box
+  (utility (prefix "fill-" (one-of colors fill)) cascade: true
+    {^:fill}))
+
+(for tag-box
+  (utility (prefix "tag-" (symbol name))
+    ^(entry name true)))
+
+(for tag-box
+  (utility (prefix "-tag-" (symbol name))
+    ^(entry name false)))
+
+(for root-box
+  (utility "input" {input: true}))
+
+(for root-box
+  (utility "-input" {input: false}))
+
+(for root-box
+  (utility (prefix "backdrop-" (one-of colors color))
+    {backdrop: ^color}))
+
+;;
+;; Properties
+;;
+
+(for text-box
+  (property selections selection-anchor selection-span))
+
+(for text-box
+  (property underlines underline-anchor underline-span))
+
+(for content-viewport-box
+  (property content-page-x content-page-y content-offset-x content-offset-y))
+
+(for viewport-box
+  (property page-x page-y offset-x offset-y))
+
+(for bg-box
+  (property µ-bg as: fill))
+
+;;
+;; Boxes
+;;
+
+(box-order
+  ;; text-box (native code)
+  placeholder-rect
+  self-box
+  flow-box
+  content-align-box
+  content-viewport-box
+  padding-box
+  bg-box
+  aim-box
+  composite-box
+  margin-box
+  transform-box
+  limit-box
+  align-box
+  content-box
+  viewport-box
+  floating-box
+  overlay-box
+  tag-box        ;; < virtual
+  outermost-box) ;; < virtual
+  ;; ...
+  ;; root-box (native code)
+
+;; Designations that target boxes listed here participate in the cascade,
+;; i.e., are inherited by child boxes of the same type.
+(box-cascade
+  text-box)
+
+;;
+;; Box definitions
+;;
+
+(defn text-box
+  (box ((parent_ caption_string) settings_dict)
+    (^match parent
+      (when [icon _*]
+        (icon name: ^caption ^… settings))
+      (when _
+        (text ^:caption ^… settings)))))
+
+(defn self-box
+  (box (children_dict settings_dict)
+    ^(union children settings)))
+
+(defn placeholder-rect
+  ;; TODO: Use a backmap.
+  (box (children_dict settings_dict)
+    (^each (children as child_)
+      (^match child
+        (when (child-head←(%any text img svg) ¦ child-args_ -placeholder)
+          (^child-head placeholder: (rect ^… settings) ^… child-args))
+        (when _
+          ^child)))))
+
+(defn flow-box
+  (box (children_dict (%layer settings_ {| node_}))
+    ((^node ^*children ^… settings))))
+
+(defn ⸨viewport,content-viewport⸩-box
+  (box (children_dict (%layer settings_ {present: true}))
+    ((viewport ^*children ^… settings))))
+
+(defn padding-box
+  (box (children_dict {¦ pl⋮ 0 pr⋮ 0 pt⋮ 0 pb⋮ 0})
+    ((padding ^*children ^:pl ^:pr ^:pt ^:pb))))
+
+(defn bg-box
+  (box (children_dict settings_dict)
+    ((z-stack
+       (rect
+         fill:
+          (^match settings
+            (when {¦ fill: linear-gradient
+                     gradient-begin-l⋮ 0
+                     gradient-begin-t⋮ 0
+                     gradient-end-l⋮ 1
+                     gradient-end-t⋮ 1}
+              (linear-gradient
+                (^match' (settings {¦ gradient-from_})
+                  (stop 0 ^gradient-from))
+                (^match' (settings {¦ gradient-via_})
+                  (stop 0.5 ^gradient-via))
+                (^match' (settings {¦ gradient-to_})
+                  (stop 1 ^gradient-to))
+                begin-l: ^gradient-begin-l
+                begin-t: ^gradient-begin-t
+                end-l: ^gradient-end-l
+                end-t: ^gradient-end-t))
+           (when {¦ fill_}
+             ^fill))
+        ^… (intersection settings
+             {+ radius-tl radius-tr radius-bl radius-br
+                stroke thickness-l thickness-r thickness-t thickness-b}))
+       (^match settings
+         ;; If we have some thickness, create a padding node around the child
+         ;; for insets.
+         (when (%keytest thickness-l thickness-r thickness-t thickness-b)
+           (^match' (settings {¦ thickness-l⋮ 0 thickness-r⋮ 0 thickness-t⋮ 0 thickness-b⋮ 0})
+             (padding pl: ^thickness-l pr: ^thickness-r pt: ^thickness-t pb: ^thickness-b
+               ^*children)))
+         (when _ ^*children))))))
+
+(defn ⸨aim,overlay⸩-box
+  (box (children_dict {¦ ⸨aim,overlay⸩: true})
+    ((⸨aim,overlay⸩ ^*children))))
+
+(defn composite-box
+  (box (children_dict {¦ opacity_: (%number _ < 1)})
+    ((composite ^*children ^:opacity))))
+
+(defn margin-box
+  (box (children_dict {¦ ml⋮ 0 mr⋮ 0 mt⋮ 0 mb⋮ 0})
+    ((padding ^*children pl: ^ml pr: ^mr pt: ^mt pb: ^mb))))
+
+(defn ⸨transform,align,content-align⸩-box
+  (box (children_dict settings_dict)
+    ((⸨transform,align,align⸩ ^*children ^… settings))))
+
+(defn limit-box
+  (box (children_dict {¦ min-w_⋮ 0 max-w_⋮ ∞ min-h_⋮ 0 max-h_⋮ ∞ flip⋮ false})
+    ((^match flip
+       (when true
+         (limit ^*children min-w: ^min-h min-h: ^min-w max-w: ^max-h max-h: ^max-w))
+       (when false
+         (limit ^*children ^:min-w ^:max-w ^:min-h ^:max-h))))))
+
+(defn ⸨floating,content⸩-box
+  (box (children_dict settings←(%any° {¦ x: true} {¦ y: true}))
+    ((⸨floating,content⸩ ^*children x: false y: false ^… settings))))
+
+(defn tag-box
+  (box (children_dict settings_dict)
+    ^(union children (select-f settings true))))
+
+(defn outermost-box
+  (box (children_dict settings_dict)
+    ^(union children settings)))
+
+
+--- (table limit-widths) ;; _21_:9
+
+"7xs": ^(* 6 rem)
+"6xs": ^(* 11 rem)
+"5xs": ^(* 16 rem)
+"4xs": ^(* 21 rem)
+"3xs": ^(* 28 rem)
+"2xs": ^(* 35 rem)
+"xs": ^(* 42 rem)
+"sm": ^(* 51 rem)
+"md": ^(* 60 rem)
+"lg": ^(* 75 rem)
+"xl": ^(* 84 rem)
+"2xl": ^(* 99 rem)
+"3xl": ^(* 112 rem)
+"4xl": ^(* 131 rem)
+"5xl": ^(* 150 rem)
+"6xl": ^(* 168 rem)
+"7xl": ^(* 187 rem)
+
+
+--- (table limit-heights) ;; 21:_9_
+
+"7xs": ^(* 2.5 rem)
+"6xs": ^(* 5 rem)
+"5xs": ^(* 7 rem)
+"4xs": ^(* 9 rem)
+"3xs": ^(* 12 rem)
+"2xs": ^(* 15 rem)
+"xs": ^(* 18 rem)
+"sm": ^(* 22 rem)
+"md": ^(* 26 rem)
+"lg": ^(* 32 rem)
+"xl": ^(* 36 rem)
+"2xl": ^(* 42 rem)
+"3xl": ^(* 48 rem)
+"4xl": ^(* 56 rem)
+"5xl": ^(* 64 rem)
+"6xl": ^(* 72 rem)
+"7xl": ^(* 80 rem)
+
+
+--- (table radii)
+
+"xs": ^(* 0.125 rem)
+"sm": ^(* 0.25 rem)
+"md": ^(* 0.375 rem)
+"lg": ^(* 0.5 rem)
+"xl": ^(* 0.75 rem)
+"2xl": ^(* 1 rem)
+"3xl": ^(* 1.5 rem)
+"4xl": ^(* 2 rem)
+"full": (* 1)
+
+
+--- (table border-sizes)
+
+"none": 0
+"xs": 1
+"sm": 2
+"md": 3
+"lg": 4
+"xl": 5
+"2xl": 6
+"3xl": 7
+
+
+--- (table fonts)
+
+"mono": "Julia Mono"
+"sans": "IBM Plex Sans"
+"serif": "IBM Plex Serif"
+"condensed": "IBM Plex Sans Condensed"
+"icons": "Material Icons"
+
+
+--- (table font-sizes)
+
+"xs": ^(* 0.75 rem)
+"sm": ^(* 0.875 rem)
+"base": ^(* 1 rem)
+"lg": ^(* 1.125 rem)
+"xl": ^(* 1.25 rem)
+"2xl": ^(* 1.5 rem)
+"3xl": ^(* 1.875 rem)
+"4xl": ^(* 2.25 rem)
+"5xl": ^(* 3 rem)
+"6xl": ^(* 3.75 rem)
+"7xl": ^(* 4.5 rem)
+"8xl": ^(* 6 rem)
+"9xl": ^(* 8 rem)
+
+
+--- (table font-weights)
+
+"thin": 100
+"extralight": 200
+"light": 300
+"normal": 400
+"text": 450
+"medium": 500
+"semibold": 600
+"bold": 700
+"extrabold": 800
+"black": 900
+
+
+--- (table tracking-values)
+
+"tighter": -0.05
+"tight": -0.025
+"normal": 0
+"wide": 0.025
+"wider": 0.05
+"widest": 0.1
+
+
+--- (table leading-values-rel)
+
+"none": 1
+"tight": 1.25
+"snug": 1.375
+"normal": 1.5
+"relaxed": 1.625
+"loose": 2
+
+
+--- (table leading-values-abs)
+
+"xs": 4/3
+"sm": 10/7
+"base": 3/2
+"lg": 14/9
+"xl": 7/5
+"2xl": 7/6
+"3xl": 225/187
+"4xl": 25/22
+"5xl": 1
+"6xl": 1
+"7xl": 1
+"8xl": 1
+"9xl": 1
+
+
+--- (table cursor-thicknesses)
+
+"thin": 1
+"thick": 2
+"thicker": 3
+
+
+--- (table gap-sizes)
+
+"xs": ^(* 0.25 rem)
+"sm": ^(* 0.5 rem)
+"md": ^(* 1 rem)
+"lg": ^(* 1.25 rem)
+"xl": ^(* 1.5 rem)
+"2xl": ^(* 2 rem)
+"3xl": ^(* 2.25 rem)
+"4xl": ^(* 2.5 rem)
+"5xl": ^(* 3 rem)
+"6xl": ^(* 3.5 rem)
+"7xl": ^(* 4 rem)
+"8xl": ^(* 5 rem)
+"9xl": ^(* 7 rem)
+
+
+--- (table transform-points)
+
+"tl": {l: 0, t: 0}
+"tr": {l: 1, t: 0}
+"bl": {l: 0, t: 1}
+"br": {l: 1, t: 1}
+"center": {l: 0.5, t: 0.5}
+"center-l": {l: 0, t: 0.5}
+"center-r": {l: 1, t: 0.5}
+"center-t": {l: 0.5, t: 0}
+"center-b": {l: 0.5, t: 1}
+
+
+--- (table transform-scales)
+
+"xs": 0.25
+"sm": 0.5
+"md": 1
+"lg": 1.25
+"xl": 1.5
+"2xl": 2
+"3xl": 2.25
+"4xl": 2.5
+"5xl": 3
+"6xl": 3.5
+"7xl": 4
+"8xl": 5
+"9xl": 7
+
+
+--- (table cursors)
+
+"none": none
+"arrow": arrow
+"text": text
+"blocked": blocked
+"crosshair": crosshair
+"progress": progress
+"resize-tl-br": resize-tl-br
+"resize-bl-tr": resize-bl-tr
+"resize": resize
+"resize-x": resize-x
+"resize-y": resize-y
+"not-allowed": not-allowed
+"pointer": pointer
+"resize-tl": resize-tl
+"resize-t": resize-t
+"resize-tr": resize-tr
+"resize-r": resize-r
+"resize-br": resize-br
+"resize-b": resize-b
+"resize-bl": resize-bl
+"resize-l": resize-l
+
+
+--- (table gradient-points)
+
+"l": {l: 0, t: 0.5}
+"tl": {l: 0, t: 0}
+"t": {l: 0.5, t: 0}
+"tr": {l: 1, t: 0}
+"br": {l: 1, t: 1}
+"b": {l: 0.5, t: 1}
+"bl": {l: 0, t: 1}
+
+
+--- (table colors)
+
+"red-50": (oklch 0.971 0.013 17.38)
+"red-100": (oklch 0.936 0.032 17.717)
+"red-200": (oklch 0.885 0.062 18.334)
+"red-300": (oklch 0.808 0.114 19.571)
+"red-400": (oklch 0.704 0.191 22.216)
+"red-500": (oklch 0.637 0.237 25.331)
+"red-600": (oklch 0.577 0.245 27.325)
+"red-700": (oklch 0.505 0.213 27.518)
+"red-800": (oklch 0.444 0.177 26.899)
+"red-900": (oklch 0.396 0.141 25.723)
+"red-950": (oklch 0.258 0.092 26.042)
+
+"orange-50": (oklch 0.98 0.016 73.684)
+"orange-100": (oklch 0.954 0.038 75.164)
+"orange-200": (oklch 0.901 0.076 70.697)
+"orange-300": (oklch 0.837 0.128 66.29)
+"orange-400": (oklch 0.75 0.183 55.934)
+"orange-500": (oklch 0.705 0.213 47.604)
+"orange-600": (oklch 0.646 0.222 41.116)
+"orange-700": (oklch 0.553 0.195 38.402)
+"orange-800": (oklch 0.47 0.157 37.304)
+"orange-900": (oklch 0.408 0.123 38.172)
+"orange-950": (oklch 0.266 0.079 36.259)
+
+"amber-50": (oklch 0.987 0.022 95.277)
+"amber-100": (oklch 0.962 0.059 95.617)
+"amber-200": (oklch 0.924 0.12 95.746)
+"amber-300": (oklch 0.879 0.169 91.605)
+"amber-400": (oklch 0.828 0.189 84.429)
+"amber-500": (oklch 0.769 0.188 70.08)
+"amber-600": (oklch 0.666 0.179 58.318)
+"amber-700": (oklch 0.555 0.163 48.998)
+"amber-800": (oklch 0.473 0.137 46.201)
+"amber-900": (oklch 0.414 0.112 45.904)
+"amber-950": (oklch 0.279 0.077 45.635)
+
+"yellow-50": (oklch 0.987 0.026 102.212)
+"yellow-100": (oklch 0.973 0.071 103.193)
+"yellow-200": (oklch 0.945 0.129 101.54)
+"yellow-300": (oklch 0.905 0.182 98.111)
+"yellow-400": (oklch 0.852 0.199 91.936)
+"yellow-500": (oklch 0.795 0.184 86.047)
+"yellow-600": (oklch 0.681 0.162 75.834)
+"yellow-700": (oklch 0.554 0.135 66.442)
+"yellow-800": (oklch 0.476 0.114 61.907)
+"yellow-900": (oklch 0.421 0.095 57.708)
+"yellow-950": (oklch 0.286 0.066 53.813)
+
+"lime-50": (oklch 0.986 0.031 120.757)
+"lime-100": (oklch 0.967 0.067 122.328)
+"lime-200": (oklch 0.938 0.127 124.321)
+"lime-300": (oklch 0.897 0.196 126.665)
+"lime-400": (oklch 0.841 0.238 128.85)
+"lime-500": (oklch 0.768 0.233 130.85)
+"lime-600": (oklch 0.648 0.2 131.684)
+"lime-700": (oklch 0.532 0.157 131.589)
+"lime-800": (oklch 0.453 0.124 130.933)
+"lime-900": (oklch 0.405 0.101 131.063)
+"lime-950": (oklch 0.274 0.072 132.109)
+
+"green-50": (oklch 0.982 0.018 155.826)
+"green-100": (oklch 0.962 0.044 156.743)
+"green-200": (oklch 0.925 0.084 155.995)
+"green-300": (oklch 0.871 0.15 154.449)
+"green-400": (oklch 0.792 0.209 151.711)
+"green-500": (oklch 0.723 0.219 149.579)
+"green-600": (oklch 0.627 0.194 149.214)
+"green-700": (oklch 0.527 0.154 150.069)
+"green-800": (oklch 0.448 0.119 151.328)
+"green-900": (oklch 0.393 0.095 152.535)
+"green-950": (oklch 0.266 0.065 152.934)
+
+"emerald-50": (oklch 0.979 0.021 166.113)
+"emerald-100": (oklch 0.95 0.052 163.051)
+"emerald-200": (oklch 0.905 0.093 164.15)
+"emerald-300": (oklch 0.845 0.143 164.978)
+"emerald-400": (oklch 0.765 0.177 163.223)
+"emerald-500": (oklch 0.696 0.17 162.48)
+"emerald-600": (oklch 0.596 0.145 163.225)
+"emerald-700": (oklch 0.508 0.118 165.612)
+"emerald-800": (oklch 0.432 0.095 166.913)
+"emerald-900": (oklch 0.378 0.077 168.94)
+"emerald-950": (oklch 0.262 0.051 172.552)
+
+"teal-50": (oklch 0.984 0.014 180.72)
+"teal-100": (oklch 0.953 0.051 180.801)
+"teal-200": (oklch 0.91 0.096 180.426)
+"teal-300": (oklch 0.855 0.138 181.071)
+"teal-400": (oklch 0.777 0.152 181.912)
+"teal-500": (oklch 0.704 0.14 182.503)
+"teal-600": (oklch 0.6 0.118 184.704)
+"teal-700": (oklch 0.511 0.096 186.391)
+"teal-800": (oklch 0.437 0.078 188.216)
+"teal-900": (oklch 0.386 0.063 188.416)
+"teal-950": (oklch 0.277 0.046 192.524)
+
+"cyan-50": (oklch 0.984 0.019 200.873)
+"cyan-100": (oklch 0.956 0.045 203.388)
+"cyan-200": (oklch 0.917 0.08 205.041)
+"cyan-300": (oklch 0.865 0.127 207.078)
+"cyan-400": (oklch 0.789 0.154 211.53)
+"cyan-500": (oklch 0.715 0.143 215.221)
+"cyan-600": (oklch 0.609 0.126 221.723)
+"cyan-700": (oklch 0.52 0.105 223.128)
+"cyan-800": (oklch 0.45 0.085 224.283)
+"cyan-900": (oklch 0.398 0.07 227.392)
+"cyan-950": (oklch 0.302 0.056 229.695)
+
+"sky-50": (oklch 0.977 0.013 236.62)
+"sky-100": (oklch 0.951 0.026 236.824)
+"sky-200": (oklch 0.901 0.058 230.902)
+"sky-300": (oklch 0.828 0.111 230.318)
+"sky-400": (oklch 0.746 0.16 232.661)
+"sky-500": (oklch 0.685 0.169 237.323)
+"sky-600": (oklch 0.588 0.158 241.966)
+"sky-700": (oklch 0.5 0.134 242.749)
+"sky-800": (oklch 0.443 0.11 240.79)
+"sky-900": (oklch 0.391 0.09 240.876)
+"sky-950": (oklch 0.293 0.066 243.157)
+
+"blue-50": (oklch 0.97 0.014 254.604)
+"blue-100": (oklch 0.932 0.032 255.585)
+"blue-200": (oklch 0.882 0.059 254.128)
+"blue-300": (oklch 0.809 0.105 251.813)
+"blue-400": (oklch 0.707 0.165 254.624)
+"blue-500": (oklch 0.623 0.214 259.815)
+"blue-600": (oklch 0.546 0.245 262.881)
+"blue-700": (oklch 0.488 0.243 264.376)
+"blue-800": (oklch 0.424 0.199 265.638)
+"blue-900": (oklch 0.379 0.146 265.522)
+"blue-950": (oklch 0.282 0.091 267.935)
+
+"indigo-50": (oklch 0.962 0.018 272.314)
+"indigo-100": (oklch 0.93 0.034 272.788)
+"indigo-200": (oklch 0.87 0.065 274.039)
+"indigo-300": (oklch 0.785 0.115 274.713)
+"indigo-400": (oklch 0.673 0.182 276.935)
+"indigo-500": (oklch 0.585 0.233 277.117)
+"indigo-600": (oklch 0.511 0.262 276.966)
+"indigo-700": (oklch 0.457 0.24 277.023)
+"indigo-800": (oklch 0.398 0.195 277.366)
+"indigo-900": (oklch 0.359 0.144 278.697)
+"indigo-950": (oklch 0.257 0.09 281.288)
+
+"violet-50": (oklch 0.969 0.016 293.756)
+"violet-100": (oklch 0.943 0.029 294.588)
+"violet-200": (oklch 0.894 0.057 293.283)
+"violet-300": (oklch 0.811 0.111 293.571)
+"violet-400": (oklch 0.702 0.183 293.541)
+"violet-500": (oklch 0.606 0.25 292.717)
+"violet-600": (oklch 0.541 0.281 293.009)
+"violet-700": (oklch 0.491 0.27 292.581)
+"violet-800": (oklch 0.432 0.232 292.759)
+"violet-900": (oklch 0.38 0.189 293.745)
+"violet-950": (oklch 0.283 0.141 291.089)
+
+"purple-50": (oklch 0.977 0.014 308.299)
+"purple-100": (oklch 0.946 0.033 307.174)
+"purple-200": (oklch 0.902 0.063 306.703)
+"purple-300": (oklch 0.827 0.119 306.383)
+"purple-400": (oklch 0.714 0.203 305.504)
+"purple-500": (oklch 0.627 0.265 303.9)
+"purple-600": (oklch 0.558 0.288 302.321)
+"purple-700": (oklch 0.496 0.265 301.924)
+"purple-800": (oklch 0.438 0.218 303.724)
+"purple-900": (oklch 0.381 0.176 304.987)
+"purple-950": (oklch 0.291 0.149 302.717)
+
+"fuchsia-50": (oklch 0.977 0.017 320.058)
+"fuchsia-100": (oklch 0.952 0.037 318.852)
+"fuchsia-200": (oklch 0.903 0.076 319.62)
+"fuchsia-300": (oklch 0.833 0.145 321.434)
+"fuchsia-400": (oklch 0.74 0.238 322.16)
+"fuchsia-500": (oklch 0.667 0.295 322.15)
+"fuchsia-600": (oklch 0.591 0.293 322.896)
+"fuchsia-700": (oklch 0.518 0.253 323.949)
+"fuchsia-800": (oklch 0.452 0.211 324.591)
+"fuchsia-900": (oklch 0.401 0.17 325.612)
+"fuchsia-950": (oklch 0.293 0.136 325.661)
+
+"pink-50": (oklch 0.971 0.014 343.198)
+"pink-100": (oklch 0.948 0.028 342.258)
+"pink-200": (oklch 0.899 0.061 343.231)
+"pink-300": (oklch 0.823 0.12 346.018)
+"pink-400": (oklch 0.718 0.202 349.761)
+"pink-500": (oklch 0.656 0.241 354.308)
+"pink-600": (oklch 0.592 0.249 0.584)
+"pink-700": (oklch 0.525 0.223 3.958)
+"pink-800": (oklch 0.459 0.187 3.815)
+"pink-900": (oklch 0.408 0.153 2.432)
+"pink-950": (oklch 0.284 0.109 3.907)
+
+"rose-50": (oklch 0.969 0.015 12.422)
+"rose-100": (oklch 0.941 0.03 12.58)
+"rose-200": (oklch 0.892 0.058 10.001)
+"rose-300": (oklch 0.81 0.117 11.638)
+"rose-400": (oklch 0.712 0.194 13.428)
+"rose-500": (oklch 0.645 0.246 16.439)
+"rose-600": (oklch 0.586 0.253 17.585)
+"rose-700": (oklch 0.514 0.222 16.935)
+"rose-800": (oklch 0.455 0.188 13.697)
+"rose-900": (oklch 0.41 0.159 10.272)
+"rose-950": (oklch 0.271 0.105 12.094)
+
+"slate-50": (oklch 0.984 0.003 247.858)
+"slate-100": (oklch 0.968 0.007 247.896)
+"slate-200": (oklch 0.929 0.013 255.508)
+"slate-300": (oklch 0.869 0.022 252.894)
+"slate-400": (oklch 0.704 0.04 256.788)
+"slate-500": (oklch 0.554 0.046 257.417)
+"slate-600": (oklch 0.446 0.043 257.281)
+"slate-700": (oklch 0.372 0.044 257.287)
+"slate-800": (oklch 0.279 0.041 260.031)
+"slate-900": (oklch 0.208 0.042 265.755)
+"slate-950": (oklch 0.129 0.042 264.695)
+
+"gray-50": (oklch 0.985 0.002 247.839)
+"gray-100": (oklch 0.967 0.003 264.542)
+"gray-200": (oklch 0.928 0.006 264.531)
+"gray-300": (oklch 0.872 0.01 258.338)
+"gray-400": (oklch 0.707 0.022 261.325)
+"gray-500": (oklch 0.551 0.027 264.364)
+"gray-600": (oklch 0.446 0.03 256.802)
+"gray-700": (oklch 0.373 0.034 259.733)
+"gray-800": (oklch 0.278 0.033 256.848)
+"gray-900": (oklch 0.21 0.034 264.665)
+"gray-950": (oklch 0.13 0.028 261.692)
+
+"zinc-50": (oklch 0.985 0 0)
+"zinc-100": (oklch 0.967 0.001 286.375)
+"zinc-200": (oklch 0.92 0.004 286.32)
+"zinc-300": (oklch 0.871 0.006 286.286)
+"zinc-400": (oklch 0.705 0.015 286.067)
+"zinc-500": (oklch 0.552 0.016 285.938)
+"zinc-600": (oklch 0.442 0.017 285.786)
+"zinc-700": (oklch 0.37 0.013 285.805)
+"zinc-800": (oklch 0.274 0.006 286.033)
+"zinc-900": (oklch 0.21 0.006 285.885)
+"zinc-950": (oklch 0.141 0.005 285.823)
+
+"neutral-50": (oklch 0.985 0 0)
+"neutral-100": (oklch 0.97 0 0)
+"neutral-200": (oklch 0.922 0 0)
+"neutral-300": (oklch 0.87 0 0)
+"neutral-400": (oklch 0.708 0 0)
+"neutral-500": (oklch 0.556 0 0)
+"neutral-600": (oklch 0.439 0 0)
+"neutral-700": (oklch 0.371 0 0)
+"neutral-800": (oklch 0.269 0 0)
+"neutral-900": (oklch 0.205 0 0)
+"neutral-950": (oklch 0.145 0 0)
+
+"stone-50": (oklch 0.985 0.001 106.423)
+"stone-100": (oklch 0.97 0.001 106.424)
+"stone-200": (oklch 0.923 0.003 48.717)
+"stone-300": (oklch 0.869 0.005 56.366)
+"stone-400": (oklch 0.709 0.01 56.259)
+"stone-500": (oklch 0.553 0.013 58.071)
+"stone-600": (oklch 0.444 0.011 73.639)
+"stone-700": (oklch 0.374 0.01 67.558)
+"stone-800": (oklch 0.268 0.007 34.298)
+"stone-900": (oklch 0.216 0.006 56.043)
+"stone-950": (oklch 0.147 0.004 49.25)
+
+"black": (oklch 0 0 0)
+"neutral": (oklch 0.5 0 0)
+"white": (oklch 1 0 0)
+"transparent": transparent

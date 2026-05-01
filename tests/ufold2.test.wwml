@@ -1,0 +1,989 @@
+;;
+;; Terms
+;;
+
+(µfold= 100 100)
+(µfold= "hello" "hello")
+(µfold= qux qux)
+(µfold= () ())
+
+;;
+;; Non-Microfold
+;;
+
+(µfold= ("Hello") ("Hello"))
+(µfold= ("A" "B" "C") ("A" "B" "C"))
+(µfold= (qux "A" "B" "C") (qux "A" "B" "C"))
+
+(µfold= ("A" style: "") ("A" style: ""))
+(µfold= ("A" "B" "C" style: "") ("A" "B" "C" style: ""))
+
+;;
+;; Surround
+;;
+
+(µfold= (el) (el))
+(µfold= (el style: "") (el))
+
+(µfold=
+  (el style: "p-1px")
+  (el style: "m-1px")
+  (padding (el) pl: 1 pr: 1 pt: 1 pb: 1))
+
+(µfold=
+  (el style: "bg-white")
+  (z-stack
+    (rect fill: (oklch 1 0 0))
+    (el)))
+
+(µfold=
+  (el style: "p-1px bg-white")
+  (z-stack
+    (rect fill: (oklch 1 0 0))
+    (padding pl: 1 pr: 1 pt: 1 pb: 1
+      (el))))
+
+(µfold=
+  (el style: "m-1px bg-white")
+  (padding pl: 1 pr: 1 pt: 1 pb: 1
+    (z-stack
+      (rect fill: (oklch 1 0 0))
+      (el))))
+
+;;
+;; Text-box
+;;
+
+;; Basic
+
+(µfold=
+  (el "Hello" style: "")
+  (el (text caption: "Hello")))
+
+(µfold=
+  (el "A" "B" "C" style: "")
+  (el
+    (text caption: "A")
+    (text caption: "B")
+    (text caption: "C")))
+
+(µfold=
+  (el "A" style: "text-white")
+  (el (text caption: "A" color: (oklch 1 0 0))))
+
+(µfold=
+  (el "A" "B" "C" style: "text-white")
+  (el
+    (text caption: "A" color: (oklch 1 0 0))
+    (text caption: "B" color: (oklch 1 0 0))
+    (text caption: "C" color: (oklch 1 0 0))))
+
+(µfold=
+  (el "A" style: "" selection-anchor: 0)
+  (el (text caption: "A" selection-anchor: 0)))
+
+(µfold=
+  (el "A" "B" "C" style: "" selection-anchor: 0 selection-span: 0 qux: true)
+  (el qux: true
+    (text caption: "A" selection-anchor: 0 selection-span: 0)
+    (text caption: "B" selection-anchor: 0 selection-span: 0)
+    (text caption: "C" selection-anchor: 0 selection-span: 0)))
+
+(µfold=
+  (el "A" style: "tracking-tight text-white")
+  (el (text caption: "A" tracking: -0.025 color: (oklch 1 0 0))))
+
+(µfold=
+  (el "A" style: "font-sans font-lg")
+  (el (text caption: "A" font: "IBM Plex Sans" size: 18)))
+
+(µfold=
+  (el "A" style: "font-mono font-lg font-14px") ;; override
+  (el (text caption: "A" font: "Julia Mono" size: 14)))
+
+(µfold=
+  (el "A" style: "text-lg")
+  (el (text caption: "A" size: 18 leading: 14/9)))
+
+(µfold=
+  (el "A" style: "text-lg text-xs") ;; override
+  (el (text caption: "A" size: 12 leading: 4/3)))
+
+(µfold=
+  (el "A" style: "text-lg")
+  (el "A" style: "font-lg leading-lg"))
+
+(µfold=
+  (el "A" style: "text-sm/6")
+  (el "A" style: "text-sm leading-6") ;; override
+  (el "A" style: "font-sm leading-sm leading-6") ;; override
+  (el "A" style: "font-sm leading-6"))
+
+(µfold=
+  (el "A" style: "italic")
+  (el (text caption: "A" italic: true)))
+
+(µfold=
+  (el "A" style: "-italic")
+  (el (text caption: "A" italic: false)))
+
+(µfold=
+  (el "A" style: "italic -italic")
+  (el (text caption: "A" italic: false)))
+
+(µfold=
+  (el "A" style: "-italic italic")
+  (el (text caption: "A" italic: true)))
+
+;; Underline
+
+(µfold=
+  (el "A" "B" "C" style: "underline underline-white underline-3px underline-offset-1/2")
+  (el
+    (text
+      caption: "A"
+      underline: true
+      underline-color: (oklch 1 0 0)
+      underline-thickness: 3
+      underline-offset: 1/2)
+    (text
+      caption: "B"
+      underline: true
+      underline-color: (oklch 1 0 0)
+      underline-thickness: 3
+      underline-offset: 1/2)
+    (text
+      caption: "C"
+      underline: true
+      underline-color: (oklch 1 0 0)
+      underline-thickness: 3
+      underline-offset: 1/2)))
+
+(µfold=
+  (el "A" style: "underline -underline")
+  (el (text caption: "A" underline: false)))
+
+;; Selection
+
+(µfold=
+  (el "A" style: "sel sel-white sel-text-black sel-rounded cursor-thick sel-aim")
+  (el
+    (text
+      caption: "A"
+      selection: true
+      selection-fill: (oklch 1 0 0)
+      selection-color: (oklch 0 0 0)
+      selection-radius: 6
+      selection-thickness: 2
+      selection-aim: true)))
+
+;; Text transform
+
+(µfold=
+  (el "A" style: "upcase strip")
+  (el (text caption: "A" case: upcase transform: strip)))
+
+;; Properties
+
+(µfold=
+  (el "A" "B" "C" style: "" selections: (s0 s1 s2) underlines: (u0 u1 u2))
+  (el
+    (text caption: "A" selections: (s0 s1 s2) underlines: (u0 u1 u2))
+    (text caption: "B" selections: (s0 s1 s2) underlines: (u0 u1 u2))
+    (text caption: "C" selections: (s0 s1 s2) underlines: (u0 u1 u2))))
+
+;;
+;; Placeholder
+;;
+
+(µfold=
+  (el style: "placeholder-white placeholder-rounded placeholder-border-black
+              placeholder-border-2.5px"
+    "A" "B")
+  (el
+    (text
+      caption: "A"
+      placeholder:
+        (rect
+          fill: (oklch 1 0 0)
+          stroke: (oklch 0 0 0)
+          thickness-l: 2.5
+          thickness-r: 2.5
+          thickness-t: 2.5
+          thickness-b: 2.5
+          radius-tl: 6
+          radius-tr: 6
+          radius-bl: 6
+          radius-br: 6))
+    (text
+      caption: "B"
+      placeholder:
+        (rect
+          fill: (oklch 1 0 0)
+          stroke: (oklch 0 0 0)
+          thickness-l: 2.5
+          thickness-r: 2.5
+          thickness-t: 2.5
+          thickness-b: 2.5
+          radius-tl: 6
+          radius-tr: 6
+          radius-bl: 6
+          radius-br: 6))))
+
+;;
+;; Flow box
+;;
+
+(µfold=
+  (el "A" "B" "C" style: "flow-none")
+  (el
+    (z-stack
+      (text caption: "A")
+      (text caption: "B")
+      (text caption: "C"))))
+
+(µfold=
+  (el "A" "B" "C" style: "flow-wrap gap-x-5 gap-y-5 font-sans text-black")
+  (el
+    (x-wrap gap-x: 20 gap-y: 20
+      (text caption: "A" font: "IBM Plex Sans" color: (oklch 0 0 0))
+      (text caption: "B" font: "IBM Plex Sans" color: (oklch 0 0 0))
+      (text caption: "C" font: "IBM Plex Sans" color: (oklch 0 0 0)))))
+
+(µfold=
+  (G style: "flow-col gap-5"
+    (el "A" style: "fr-1")
+    (el "B" style: "fr-2")
+    (el "C" style: ""))
+  (G
+    (y-stack gap: 20
+      (el (text caption: "A") fr: 1)
+      (el (text caption: "B") fr: 2)
+      (el (text caption: "C")))))
+
+(µfold=
+  (el "A" fr: 1 style: "fr-2")
+  (el (text caption: "A") fr: 1))
+
+;;
+;; Align
+;;
+
+(µfold=
+  (el "A" style: "bottom right")
+  (el
+    (align x: 1 y: 1
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "right y-0.3")
+  (el
+    (align x: 1 y: 0.3
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" "B" "C" style: "flow-row center bg-white")
+  (el
+    (align x: 0.5 y: 0.5
+      (z-stack
+        (rect fill: (oklch 1 0 0))
+        (x-stack
+          (text caption: "A")
+          (text caption: "B")
+          (text caption: "C"))))))
+
+(µfold=
+  (el "A" "B" "C" style: "flow-row content-center bg-white")
+  (el
+    (z-stack
+      (rect fill: (oklch 1 0 0))
+      (align x: 0.5 y: 0.5
+        (x-stack
+          (text caption: "A")
+          (text caption: "B")
+          (text caption: "C"))))))
+
+(µfold=
+  (el "A" style: "content-x-0.3 content-top")
+  (el
+    (align x: 0.3 y: 0
+      (text caption: "A"))))
+
+;;
+;; Inset
+;;
+
+(µfold=
+  (el "A" style: "p-5 bg-white")
+  (el
+    (z-stack
+      (rect fill: (oklch 1 0 0))
+      (padding (text caption: "A") pl: 20 pr: 20 pt: 20 pb: 20))))
+
+(µfold=
+  (el "A" style: "m-5 bg-white")
+  (el
+    (padding pl: 20 pr: 20 pt: 20 pb: 20
+      (z-stack
+        (rect fill: (oklch 1 0 0))
+        (text caption: "A")))))
+
+(µfold=
+  (el "A" style: "px-0.5px")
+  (el
+    (padding pl: 0.5 pr: 0.5 pt: 0 pb: 0
+      (text caption: "A"))))
+
+;;
+;; Background
+;;
+
+(µfold=
+  (el "A" style: "bg-white rounded border-10px border-r-5px")
+  (el
+    (z-stack
+      (rect
+        fill: (oklch 1 0 0)
+        thickness-l: 10
+        thickness-r: 5
+        thickness-t: 10
+        thickness-b: 10
+        radius-tl: 6
+        radius-tr: 6
+        radius-bl: 6
+        radius-br: 6)
+      (padding pl: 10 pr: 5 pt: 10 pb: 10
+        (text caption: "A")))))
+
+(µfold=
+  (el "A" style: "bg-linear")
+  (el
+    (z-stack
+      (rect
+        fill:
+          (linear-gradient
+            begin-l: 0
+            begin-t: 0
+            end-l: 1
+            end-t: 1))
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "bg-linear from-white")
+  (el
+    (z-stack
+      (rect
+        fill:
+          (linear-gradient
+            (stop 0 (oklch 1 0 0))
+            begin-l: 0
+            begin-t: 0
+            end-l: 1
+            end-t: 1))
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "bg-linear from-white to-black")
+  (el
+    (z-stack
+      (rect
+        fill:
+          (linear-gradient
+            (stop 0 (oklch 1 0 0))
+            (stop 1 (oklch 0 0 0))
+            begin-l: 0
+            begin-t: 0
+            end-l: 1
+            end-t: 1))
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "bg-linear from-white via-neutral to-black")
+  (el
+    (z-stack
+      (rect
+        fill:
+          (linear-gradient
+            (stop 0 (oklch 1 0 0))
+            (stop 0.5 (oklch 0.5 0 0))
+            (stop 1 (oklch 0 0 0))
+            begin-l: 0
+            begin-t: 0
+            end-l: 1
+            end-t: 1))
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "bg-linear linear-from-tr linear-to-b from-white via-neutral to-black")
+  (el
+    (z-stack
+      (rect
+        fill:
+          (linear-gradient
+            (stop 0 (oklch 1 0 0))
+            (stop 0.5 (oklch 0.5 0 0))
+            (stop 1 (oklch 0 0 0))
+            begin-l: 1
+            begin-t: 0
+            end-l: 0.5
+            end-t: 1))
+      (text caption: "A"))))
+
+;;
+;; Transform
+;;
+
+(µfold=
+  (el "A" style: "dl-5 dt-3px origin-center pivot-center scale-0.5 rotate-30")
+  (el
+    (transform dl: 20 dt: 3 origin-l: 0.5 origin-t: 0.5 pivot-l: 0.5 pivot-t: 0.5 scale: 0.5 angle: 30
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "dl-10% 5.5-oclock scale-lg")
+  (el
+    (transform dl: (10 %) angle: 165 scale: 1.25
+      (text caption: "A"))))
+
+;;
+;; Limit
+;;
+
+(µfold=
+  (el "A" style: "max-lg")
+  (el "A" style: "max-w-lg max-h-lg")
+  (el "A" style: "max-w-300 max-h-128")
+  (el "A" style: "max-w-1200px max-h-512px")
+  (el
+    (limit min-w: 0 min-h: 0 max-w: 1200 max-h: 512
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" "B" "C" style: "flow-col min-w-30px min-h-none max-w-50% max-h-none p-5 text-white")
+  (el
+    (limit min-w: 30 min-h: 0 max-w: (50 %) max-h: ∞
+      (padding pl: 20 pr: 20 pt: 20 pb: 20
+        (y-stack
+          (text caption: "A" color: (oklch 1 0 0))
+          (text caption: "B" color: (oklch 1 0 0))
+          (text caption: "C" color: (oklch 1 0 0)))))))
+
+(µfold=
+  (el style: "max-lg flip -flip flip")
+  (limit min-w: 0 min-h: 0 max-w: 512 max-h: 1200
+    (el)))
+
+(µfold=
+  (el style: "max-lg flip -flip")
+  (limit min-w: 0 min-h: 0 max-w: 1200 max-h: 512
+    (el)))
+
+;;
+;; Outermost box
+;;
+
+(µfold=
+  (el style: "tag-qux")
+  (el qux: true))
+
+(µfold=
+  (el style: "tag-foo -tag-foo tag-bar")
+  (el bar: true))
+
+(µfold=
+  (G style: "cue-active has-active:tag-foo has-active:cue-qux"
+    (el style: "in-active:tag-bar is-active")
+    (el style: "tag-alpha in-qux:-tag-alpha in-qux:tag-baz"))
+  (G foo: true
+    (el bar: true)
+    (el baz: true)))
+
+;;
+;; Misc box
+;;
+
+;; Aim
+
+(µfold=
+  (el "A" style: "aim")
+  (el "A" style: "aim -aim aim")
+  (el (aim (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "aim -aim")
+  (el (text caption: "A")))
+
+;; Composite
+
+(µfold=
+  (el "A" style: "opacity-0.5")
+  (el "A" style: "opacity-50%")
+  (el
+    (composite opacity: 0.5
+      (text caption: "A"))))
+
+(µfold=
+  (el "A" style: "opacity-1")
+  (el "A" style: "opacity-100%")
+  (el "A" style: "opaque")
+  (el (text caption: "A")))
+
+(µfold=
+  (el "A" style: "opacity-0")
+  (el "A" style: "opacity-0%")
+  (el "A" style: "transparent")
+  (el
+    (composite opacity: 0
+      (text caption: "A"))))
+
+(µfold=
+  (G style: "flow-col gap-5"
+    (el "A" foo: 1 style: "floating-x content-y")
+    (el "B" bar: 2 style: "floating -floating-x content -content-y"))
+  (G
+    (y-stack gap: 20
+      (el foo: 1
+        (floating x: true y: false
+          (content x: false y: true
+            (text caption: "A"))))
+      (el bar: 2
+        (floating x: false y: true
+          (content x: true y: false
+            (text caption: "B")))))))
+
+;;
+;; Root box
+;;
+
+(µfold=
+  (G
+    (G
+      (el "A" style: "")
+      (el "B" style: "cursor-pointer"))
+    (el "C" style: "input"))
+  (G input: true cursor: pointer
+    (G
+      (el (text caption: "A"))
+      (el (text caption: "B")))
+    (el (text caption: "C"))))
+
+(µfold=
+  (G
+    (el "A" style: "cursor-pointer")
+    (el "B" style: "cursor-text"))
+  (G style: "cursor-text"
+    (el "A" style: "cursor-pointer")
+    (el "B" style: "cursor-blocked"))
+  (G style: "cursor-text"
+    (el "A" style: "")
+    (el "B" style: "")))
+
+;;
+;; Cues
+;;
+
+(µfold=
+  (G style: "cue-active has-foobar:bg-black"
+    (G style: "membrane in-active:cue-active has-foo:is-foobar"
+      (G
+        (el "Item 1" style: "text-white")
+        (el "Item 2"))
+      (G
+        (el "Item 3" style: "is-error")
+        (el "Item 4" style: "is-foo"))
+      (G
+        (el "Kaixo mundua" style: "in-active:text-white")))
+    (el "Hello World" style: "in-error:text-white"))
+  (G
+    (z-stack
+      (rect fill: (oklch 0 0 0))
+      (G
+        (G
+          (el (text caption: "Item 1" color: (oklch 1 0 0)))
+          (el "Item 2"))
+        (G
+          (el (text caption: "Item 3"))
+          (el (text caption: "Item 4")))
+        (G
+          (el (text caption: "Kaixo mundua" color: (oklch 1 0 0)))))
+      (el (text caption: "Hello World")))))
+
+;;
+;; Location filter
+;;
+
+(µfold=
+  (G
+    (el style: "@first:tag-first @last:tag-last")
+    (el style: "@first:tag-first @last:tag-last")
+    (el style: "@first:tag-first @last:tag-last")
+    (el style: "@first:tag-first @last:tag-last"))
+  (G
+    (el first: true)
+    (el)
+    (el)
+    (el last: true)))
+
+(µfold=
+  (G
+    (el style: "-@first:-@last:tag-foo")
+    (el style: "-@first:-@last:tag-foo")
+    (el style: "-@first:-@last:tag-foo")
+    (el style: "-@first:-@last:tag-foo"))
+  (G
+    (el)
+    (el foo: true)
+    (el foo: true)
+    (el)))
+
+(µfold=
+  (G
+    (el style: "@period-2:tag-foo")
+    (el style: "@period-2:tag-foo")
+    (el style: "@period-2:tag-foo")
+    (el style: "@period-2:tag-foo"))
+  (G
+    (el foo: true)
+    (el)
+    (el foo: true)
+    (el)))
+
+(µfold=
+  (G
+    (el style: "-@period-2:tag-foo")
+    (el style: "-@period-2:tag-foo")
+    (el style: "-@period-2:tag-foo")
+    (el style: "-@period-2:tag-foo"))
+  (G
+    (el)
+    (el foo: true)
+    (el)
+    (el foo: true)))
+
+(µfold=
+  (G
+    (el style: "@period-0:tag-foo")
+    (el style: "@period-0:tag-foo"))
+  (G
+    (el)
+    (el)))
+
+(µfold=
+  (G
+    (el style: "-@period-0:tag-foo")
+    (el style: "-@period-0:tag-foo"))
+  (G
+    (el foo: true)
+    (el foo: true)))
+
+(µfold=
+  (G (el style: "@only:tag-foo"))
+  (G (el foo: true)))
+
+(µfold=
+  (G
+    (el style: "@only:tag-foo")
+    (el style: "@only:tag-foo")
+    (el style: "@only:tag-foo"))
+  (G
+    (el)
+    (el)
+    (el)))
+
+(µfold=
+  (G (el style: "-@only:tag-foo"))
+  (G (el)))
+
+(µfold=
+  (G
+    (el style: "-@only:tag-foo")
+    (el style: "-@only:tag-foo")
+    (el style: "-@only:tag-foo"))
+  (G
+    (el foo: true)
+    (el foo: true)
+    (el foo: true)))
+
+;;
+;; Pair present, absent filters
+;;
+
+;; Present
+
+(µfold=
+  (el style: "hover:tag-foo")
+  (el))
+
+(µfold=
+  (el style: "hover:tag-foo" hover: false)
+  (el hover: false))
+
+(µfold=
+  (el style: "hover:tag-foo" hover: true)
+  (el foo: true hover: true))
+
+(µfold=
+  (el style: "hover:tag-foo" hover: 123)
+  (el foo: true hover: 123))
+
+;; Absent
+
+(µfold=
+  (el style: "-hover:tag-foo")
+  (el foo: true))
+
+(µfold=
+  (el style: "-hover:tag-foo" hover: false)
+  (el foo: true hover: false))
+
+(µfold=
+  (el style: "-hover:tag-foo" hover: true)
+  (el hover: true))
+
+(µfold=
+  (el style: "-hover:tag-foo" hover: 123)
+  (el hover: 123))
+
+;; Present keypath
+
+(µfold=
+  (el style: "a.b:tag-foo a.c:tag-bar" a: {b: true, c: false})
+  (el foo: true a: {b: true, c: false}))
+
+;; Present, absent keypath; combine
+
+(µfold=
+  (el style: "a.b.x:tag-foo -a.b.x:a.b.y:a.b.z:tag-bar" a: {b: {+ x y z}})
+  (el foo: true a: {b: {+ x y z}}))
+
+(µfold=
+  (el style: "a.b.x:tag-foo -a.b.x:a.b.y:a.b.z:tag-bar" a: {b: {+ y z}})
+  (el bar: true a: {b: {+ y z}}))
+
+(µfold=
+  (el style: "a.b.x:tag-foo -a.b.x:a.b.y:a.b.z:tag-bar" a: {b: {+ z}})
+  (el a: {b: {+ z}}))
+
+(µfold=
+  (el style: "a.b.x:tag-foo -a.b.x:a.b.y:a.b.z:tag-bar" a: {b: {+ y}})
+  (el a: {b: {+ y}}))
+
+(µfold=
+  (el style: "a.b.x:tag-foo -a.b.x:a.b.y:a.b.z:tag-bar")
+  (el))
+
+;;
+;; Pair eq filters
+;;
+
+;; Eq, not eq
+
+(µfold=
+  (el style: "state/hover:tag-foo state/active:tag-bar")
+  (el))
+
+(µfold=
+  (el style: "state/hover:tag-foo state/active:tag-bar" state: hover)
+  (el foo: true state: hover))
+
+(µfold=
+  (el style: "state/hover:tag-foo state/active:tag-bar" state: active)
+  (el bar: true state: active))
+
+(µfold=
+  (el style: "state/hover:tag-foo state/hover:tag-bar" state: hover)
+  (el foo: true bar: true state: hover))
+
+(µfold=
+  (el style: "tag-foo state/hover:-tag-foo")
+  (el foo: true))
+
+(µfold=
+  (el style: "tag-foo state/hover:-tag-foo" state: hover)
+  (el state: hover))
+
+(µfold=
+  (el style: "-tag-foo -state/hover:tag-foo")
+  (el foo: true))
+
+(µfold=
+  (el style: "-tag-foo -state/hover:tag-foo" state: hover)
+  (el state: hover))
+
+;; Eq, not eq keypath
+
+(µfold=
+  (el style: "a.b.c/x:tag-foo -a.b.c/x:tag-bar" a: {b: {c: x}})
+  (el foo: true a: {b: {c: x}}))
+
+(µfold=
+  (el style: "a.b.c/x:tag-foo -a.b.c/x:tag-bar" a: {b: {c: y}})
+  (el bar: true a: {b: {c: y}}))
+
+;;
+;; Items
+;;
+
+(µfold=
+  (G style: "item-p-5 item-font-sans item-bg-white"
+    (G style: ""
+      (el "A" style: ""))
+    (el "B" style: "")
+    (el "C" style: ""))
+  (G style: ""
+    (G style: "p-5 bg-white"
+      (el "A" style: "font-sans"))
+    (el "B" style: "p-5 font-sans bg-white")
+    (el "C" style: "p-5 font-sans bg-white")))
+
+;;
+;; Presence
+;;
+
+(µfold=
+  (el "A" style: "absent")
+  ())
+
+(µfold=
+  (G
+    (el "A" style: "absent present")
+    (el "B" style: "absent present absent")
+    (el "C" style: "absent")
+    (el "D" style: ""))
+  (G
+    (el "A" style: "")
+    (el "D" style: "")))
+
+;;
+;; Specificity
+;;
+
+(µfold=
+  (el style: "hover:active:-tag-foo hover:active:tag-bar hover:tag-foo -tag-foo")
+  (el))
+
+(µfold=
+  (el style: "hover:active:-tag-foo hover:active:tag-bar hover:tag-foo -tag-foo" hover: true)
+  (el foo: true hover: true))
+
+(µfold=
+  (el style: "hover:active:-tag-foo hover:active:tag-bar hover:tag-foo -tag-foo" active: true hover: true)
+  (el bar: true hover: true active: true))
+
+;;
+;; Integration, cascade, dev tests
+;;
+
+(µfold=
+  (G style: "font-sans font-bold p-5"
+    (el "Item 1" style: "")
+    (el "Item 2" style: "")
+    (el "Item 3" style: ""))
+  (G style: "p-5"
+    (el "Item 1" style: "font-sans font-bold")
+    (el "Item 2" style: "font-sans font-bold")
+    (el "Item 3" style: "font-sans font-bold")))
+
+(µfold=
+  (G style: "font-sans flow-col cue-active item-bg-white" selection-anchor: 0 selection-span: 0
+    (el "A" style: "fr-1")
+    (el "B" style: "cursor-pointer bg-blue-500 p-5 in-active:tag-qux font-mono")
+    (el "C" style: "fr-1"))
+  (G style: "flow-col" cursor: pointer
+    (el fr: 1
+      (z-stack
+        (rect fill: (oklch 1 0 0))
+        (text
+          caption: "A"
+          font: "IBM Plex Sans"
+          selection-anchor: 0
+          selection-span: 0)))
+    (el "B" style: "font-mono bg-blue-500 p-5" qux: true selection-anchor: 0 selection-span: 0)
+    (el "C" style: "font-sans bg-white" fr: 1 selection-anchor: 0 selection-span: 0)))
+
+(µfold=
+  (G style: "flow-col gap-9xl floating font-sans"
+    (el "Item 1" style: "")
+    (el "Item 2" style: "")
+    (el "Item 3" style: ""))
+  (G
+    (floating x: true y: true
+      (y-stack gap: 112
+        (el "Item 1" style: "font-sans")
+        (el "Item 2" style: "font-sans")
+        (el "Item 3" style: "font-sans")))))
+
+(µfold=
+  (el style: "font-serif pl-5px pr-5 m-3 bg-black rounded border-neutral
+              border-md tracking-3px leading-16px text-white"
+    "Kaixo, mundua!")
+  (el style: "pl-5px pr-5 m-3 bg-black rounded border-neutral border-md"
+    (text
+      caption: "Kaixo, mundua!"
+      color: (oklch 1 0 0)
+      font: "IBM Plex Serif"
+      tracking: (3 px)
+      leading: (16 px)))
+  (el style: "m-3"
+    (z-stack
+      (rect
+        fill: (oklch 0 0 0)
+        stroke: (oklch 0.5 0 0)
+        radius-tl: 6
+        radius-tr: 6
+        radius-bl: 6
+        radius-br: 6
+        thickness-l: 3
+        thickness-r: 3
+        thickness-t: 3
+        thickness-b: 3)
+      (padding pl: 3 pr: 3 pt: 3 pb: 3
+        (padding pl: 5 pr: 20 pt: 0 pb: 0
+          (text
+            caption: "Kaixo, mundua!"
+            color: (oklch 1 0 0)
+            font: "IBM Plex Serif"
+            tracking: (3 px)
+            leading: (16 px)))))))
+
+;;
+;; variant
+;;
+
+;;
+;; icon
+;;
+
+(µfold=
+  (icon "account" style: "p-5 text-white")
+  (icon
+    (padding pl: 20 pr: 20 pt: 20 pb: 20
+      (icon
+        name: "account"
+        font: "Material Icons"
+        size: 16
+        color: (oklch 1 0 0)))))
+
+;;
+;; BUGS
+;;
+
+(µfold=
+  ((el "A" style: "tag-a")
+   (el "B" style: "tag-b"))
+  ((el (text caption: "A") a: true)
+   (el (text caption: "B") b: true)))
+
+(µfold=
+  ((G style: "cue-active"
+     (el "A" style: "")
+     (el "B" style: "")))
+  ((G
+     (el (text caption: "A"))
+     (el (text caption: "B")))))
+
+(µfold=
+  (G style: "font-lg"
+    (p "Kaixo"))
+  (G style: ""
+    (p "Kaixo" style: "font-lg")))

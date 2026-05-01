@@ -38,6 +38,7 @@ require "./wirewright/lr"
 require "./wirewright/pigment"
 require "./wirewright/nitrene"
 require "./wirewright/scenery"
+require "./wirewright/microfold_2"
 
 require "./wirewright/dwuir"
 require "./wirewright/soma"

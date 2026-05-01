@@ -1,6 +1,7 @@
 module Testtool
   alias Leaf = AlloyTest |
                MicrofoldTest |
+               Microfold2Test |
                MLeq |
                MLpos |
                MLneg |
@@ -200,6 +201,26 @@ module Testtool
     end
   end
 
+  defrecord Microfold2Test, variants : Array(Term)
+
+  def run(test : Microfold2Test, assets, stat, complaints) : Nil
+    unless codex = assets.mu_codex
+      complaints << complaint("missing Microfold codex (did you run with `--assets-none`?)")
+      return
+    end
+
+    instances = test.variants.map do |variant|
+      measure(stat) { Microfold2.render(codex, variant) }
+    end
+
+    return if instances.all? { |instance| instances[0].unwrap == instance.unwrap } # ok
+
+    complaints << complaint("Microfold render mismatch",
+      instances: Term.of(instances.map(&.unwrap)),
+      diagnostics: Term.of(instances.map(&.diagnostics.inspect)),
+    )
+  end
+
   defrecord EditTest, seed : Term, msgs : Array(Term), result : Term
 
   def run(test : EditTest, assets, stat, complaints) : Nil
@@ -225,15 +246,27 @@ module Testtool
     hit : Term?,
     width : Magnitude,
     height : Magnitude,
-    backdrop : Pigment::RGBA
+    backdrop : Pigment::RGBA,
+    microfold : Bool
 
   def run(test : SceneryTest, assets, stat, complaints) : Nil
     in_ruleset, in_rest = Ruleset.ruleset_and_rest(Ruleset::DEFAULT_SELECTOR, test.in)
     in_instance = Alloy.compose(in_ruleset, Term[], Alloy.template(Term[], Term.of(in_rest)))
 
+    if test.microfold
+      unless codex = assets.mu_codex
+        complaints << complaint("test requires Microfold but Microfold codex is missing")
+        return
+      end
+
+      scenery_in = Microfold2.render(codex, in_instance).unwrap
+    else
+      scenery_in = in_instance
+    end
+
     scene_out, ppm = measure(stat) do
       cache = Scenery::Safe.cache
-      scene_out = Scenery::Safe.scene(cache, in_instance, test.width, test.height)
+      scene_out = Scenery::Safe.scene(cache, scenery_in, test.width, test.height)
       raster = Scenery::Safe.rasterize(cache, scene_out.unwrap, backdrop: test.backdrop)
       {scene_out, raster.to_ppm}
     end

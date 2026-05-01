@@ -7,6 +7,8 @@ microfold: {
   rem: 16,
 }
 
+microfold2: {codex: (codex "ufold"), rem: 16}
+
 ;; Path to editR codex.
 editR: {codex: "../runtime/codices/editR.codex.wwml"}
 
@@ -57,6 +59,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 (scenery "scenery/"
   color: (oklch 0.7 0.1 pink)
   tags: (graphics scenery))
+
+(test "ufold2.test.wwml"
+  color: (oklch 0.7 0.1 teal)
+  tags: (ufold2))
 
 (comparison "DwUIR regressions"
   (dwuir "dwuir.in.wwml" wheel: 0 mouse-x: 0 mouse-y: 0)

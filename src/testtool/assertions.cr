@@ -73,7 +73,7 @@ module Testtool
 
     test_cases.flat_map do |test_case|
       Term.case(test_case[:in]) do
-        matchpi %{{¦ ±width ±height backdrop_}} do
+        matchpi %{{¦ ±width ±height backdrop_ microfold⋮ false}} do
           test = SceneryTest.new(
             path: test_case[:path],
             in: test_case[:in],
@@ -82,6 +82,7 @@ module Testtool
             width: width.to(Magnitude),
             height: height.to(Magnitude),
             backdrop: Pigment.rgba(backdrop),
+            microfold: microfold.to(Bool),
           )
 
           assertions(test).map { |asn| Assertion.new(asn, topic) }
@@ -198,6 +199,13 @@ module Testtool
         end
       end
 
+      matchpi %{[µfold= _*]} do
+        variants = decl.items.move(1)
+        continue if variants.empty?
+
+        test = Microfold2Test.new(variants.to_a)
+        annotated(assertions(test), decl, srcmap)
+      end
       # |@ testtool.decl.ml
       #
       # |@pattern

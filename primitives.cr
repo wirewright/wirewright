@@ -197,6 +197,27 @@ PRIMITIVES = ProcRuleset.build do
     xs.as_d.intersects?(ys.as_d)
   end
 
+  rulepi1 %[(intersection xs_dict mask_dict)] do
+    Term.intersection(xs.as_d, mask.as_d)
+  end
+
+  # FIXME: This shouldn't exist. It's just that our mask stuff is degenerate.
+  # And -f is to fix a heap of bugs related to invalid evaluation order in Alloy.
+  # How the F did we get here? It's not that I don't know how to write interpreters...
+  # We should move to Nitrene. We really should !!
+  rulepi1 %[(select-f xs_dict pattern_)] do
+    xs.transaction do |commit|
+      xs.each_entry do |key, value|
+        unless env = M1.match?(pattern, value)
+          commit.without(key)
+          next
+        end
+
+        commit.with(key, env[:value]? || value)
+      end
+    end
+  end
+
   # multiset union
   rulepi1 %[(mset/union a_dict b_dict)] do
     if a.size < b.size
