@@ -114,7 +114,7 @@ module Ww::Scenery
     desc = Term::Dict.build do |commit|
       commit << :text
       commit.with(:caption, node.caption.to_s)
-      commit.with(:"line-h", node.line_height)
+      commit.with(:"line-h", describe(node.line_height))
 
       if selection = node.selections.first?
         seln = node.caption.select(selection.range)
@@ -135,9 +135,9 @@ module Ww::Scenery
           assert range.exclusive?
 
           info << :line
-          info.with(:dl, x) unless x.approx?(0)
-          info.with(:dt, y) unless y.approx?(0)
-          info.with(:w, line.advance)
+          info.with(:dl, describe(x)) unless x.approx?(0)
+          info.with(:dt, describe(y)) unless y.approx?(0)
+          info.with(:w, describe(line.advance))
           info.with(:anchor, range.begin)
           info.with(:span, range.size)
 
@@ -171,9 +171,9 @@ module Ww::Scenery
             text = node.caption.select(range)
 
             info << :word
-            info.with(:dl, x) unless x.approx?(0)
-            info.with(:dt, y) unless y.approx?(0)
-            info.with(:w, word.advance)
+            info.with(:dl, describe(x)) unless x.approx?(0)
+            info.with(:dt, describe(y)) unless y.approx?(0)
+            info.with(:w, describe(word.advance))
             info.with(:anchor, range.begin)
             info.with(:span, range.size)
 
@@ -348,32 +348,39 @@ module Ww::Scenery
     )
   end
 
+  # Since we never promised to return precise values, let's round to be less
+  # noisy. Ultimately, we can't be precise anyway, it's floats we're
+  # talking about.
+  private def describe(m : Magnitude) : Term
+    Term.of(m.round)
+  end
+
   private def annotate(commit : Term::Dict::Commit, box : OriginBox, tf : Tf) : Nil
     screen_bounds = tf.map(box.bounds)
 
-    commit.with(:"screen-l", screen_bounds.x)
-    commit.with(:"screen-t", screen_bounds.y)
-    commit.with(:"screen-w", screen_bounds.w)
-    commit.with(:"screen-h", screen_bounds.h)
-    commit.with(:"layout-w", box.bounds.w)
-    commit.with(:"layout-h", box.bounds.h)
+    commit.with(:"screen-l", describe(screen_bounds.x))
+    commit.with(:"screen-t", describe(screen_bounds.y))
+    commit.with(:"screen-w", describe(screen_bounds.w))
+    commit.with(:"screen-h", describe(screen_bounds.h))
+    commit.with(:"layout-w", describe(box.bounds.w))
+    commit.with(:"layout-h", describe(box.bounds.h))
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitEmpty) : Nil
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitLeaf | HitGroup) : Nil
-    commit.with(:"hit-dl", hit.part.x)
-    commit.with(:"hit-dt", hit.part.y)
-    commit.with(:"hit-w", hit.part.w)
-    commit.with(:"hit-h", hit.part.h)
+    commit.with(:"hit-dl", describe(hit.part.x))
+    commit.with(:"hit-dt", describe(hit.part.y))
+    commit.with(:"hit-w", describe(hit.part.w))
+    commit.with(:"hit-h", describe(hit.part.h))
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitTextLeaf) : Nil
-    commit.with(:"hit-dl", hit.part.x)
-    commit.with(:"hit-dt", hit.part.y)
-    commit.with(:"hit-w", hit.part.w)
-    commit.with(:"hit-h", hit.part.h)
+    commit.with(:"hit-dl", describe(hit.part.x))
+    commit.with(:"hit-dt", describe(hit.part.y))
+    commit.with(:"hit-w", describe(hit.part.w))
+    commit.with(:"hit-h", describe(hit.part.h))
 
     hit_anchor, hit_span = rel_annotate(hit, hit.seln.expand, hit.seln)
     commit.with(:"hit-anchor", hit_anchor)
