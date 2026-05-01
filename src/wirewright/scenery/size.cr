@@ -414,11 +414,11 @@ module Ww::Scenery
 
   private def size!(cache, node : Content, cst : Cst) : {SizedNode, Size}
     if node.x
-      cst = Cst.new(cst.min_w, Magnitude::INFINITY, cst.min_h, cst.max_h)
+      cst = Cst.new(0, Magnitude::INFINITY, cst.min_h, cst.max_h)
     end
 
     if node.y
-      cst = Cst.new(cst.min_w, cst.max_w, cst.min_h, Magnitude::INFINITY)
+      cst = Cst.new(cst.min_w, cst.max_w, 0, Magnitude::INFINITY)
     end
 
     box_size(cache, node, cst)
