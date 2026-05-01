@@ -135,7 +135,7 @@ module Ww::Scenery
   private def aim!(cache, node : Aim, box : OriginBox) : AimResponse
     aimed_children, foci = aim(cache, node.children, box.children)
 
-    AimResponse.new(ZStack.new(aimed_children), foci: foci.append(box.bounds))
+    AimResponse.new(ZStack.anon(aimed_children), foci: foci.append(box.bounds))
   end
 
   private def aim(cache, node : ElevatedNode, box : OriginBox) : AimResponse

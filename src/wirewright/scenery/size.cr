@@ -449,7 +449,7 @@ module Ww::Scenery
     # isn't a member of the SizedNode union. So box_size wouldn't know how to
     # rewrite it into one. Instead, we convert the Transform temporarily into
     # a ZStack.
-    sized_z_stack, size = size!(cache, ZStack.new(node.children), cst)
+    sized_z_stack, size = size!(cache, ZStack.anon(node.children), cst)
 
     bounds = Rect.new(tl: Point[0, 0], size: size.inner)
 
@@ -725,7 +725,7 @@ module Ww::Scenery
       "max-h": cst.max_h.infinite? ? :∞ : cst.max_h,
     ]
 
-    interior = ZStack.new(node.children)
+    interior = ZStack.anon(node.children)
     _, content_size = size(cache, interior, Cst.content)
     width = content_size.outer.x
     height = content_size.outer.y

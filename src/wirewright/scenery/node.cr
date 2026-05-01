@@ -528,7 +528,17 @@ module Ww::Scenery
   defrecord ContentShare
 
   defcase ZStack(Node),
-    children : Slice(Node)
+    children : Slice(Node),
+    info : ZInfo?
+
+  class ZStack(Node)
+    # Constructs an _anon_ymous z-stack.
+    def self.anon(children : Slice(Node)) : ZStack(Node)
+      ZStack(Node).new(children, info: nil)
+    end
+  end
+
+  defrecord ZInfo, name : Term, pairs : Term::Dict
 
   defcase XYWrap(Node),
     axis : Axis,

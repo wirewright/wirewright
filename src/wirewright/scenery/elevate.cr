@@ -28,7 +28,7 @@ module Ww::Scenery
   # them to the z-stack.
   private def elevate!(cache, node : Page, box : OriginBox) : ElevateResponse
     elevated_children, elevated_boxes, upbound = elevate(cache, node.children, box.children)
-    elevated_node = ZStack.new(elevated_children + upbound.map(&.node.as(ElevatedNode)))
+    elevated_node = ZStack.anon(elevated_children + upbound.map(&.node.as(ElevatedNode)))
     elevated_box = OriginBox.new(box.bounds.size, elevated_boxes + upbound.map(&.box))
 
     ElevateResponse.new(elevated_node, elevated_box, upbound: Slice(ElevateEntry).empty)
@@ -41,7 +41,7 @@ module Ww::Scenery
   private def elevate!(cache, node : Overlay, box : OriginBox) : ElevateResponse
     elevated_children, elevated_boxes, upbound = elevate(cache, node.children, box.children)
 
-    upnode = ZStack.new(elevated_children)
+    upnode = ZStack.anon(elevated_children)
     upbox = Box.new(box.bounds, elevated_boxes)
     upbound = upbound.append(ElevateEntry.new(upnode, upbox))
 

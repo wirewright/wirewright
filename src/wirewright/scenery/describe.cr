@@ -222,24 +222,40 @@ module Ww::Scenery
     describe(node.children, box.children, tf, hit)
   end
 
-  private def describe(node : XYStack | ZStack, box : OriginBox, tf : Tf, hit : HitNode)
+  private def describe(node : XYStack, box : OriginBox, tf : Tf, hit : HitNode)
     upflow = describe(node.children, box.children, tf, hit)
 
     desc = Term::Dict.build do |commit|
-      case node
-      in XYStack
-        case node.axis
-        in .x? then commit << :"x-stack"
-        in .y? then commit << :"y-stack"
-        end
-      in ZStack
-        commit << :"z-stack"
+      case node.axis
+      in .x? then commit << :"x-stack"
+      in .y? then commit << :"y-stack"
       end
 
       commit.concat(upflow.nodes)
 
       annotate(commit, box, tf)
       annotate(commit, hit)
+    end
+
+    DescribeUpflow.new(nodes: Slice[Term.of(desc)], observers: upflow.observers, observing: upflow.observing)
+  end
+
+  private def describe(node : ZStack, box : OriginBox, tf : Tf, hit : HitNode)
+    upflow = describe(node.children, box.children, tf, hit)
+
+    info = node.info || ZInfo.new(Term.of(:"z-stack"), pairs: Term[])
+
+    desc = Term::Dict.build do |commit|
+      commit << info.name
+      commit.concat(upflow.nodes)
+
+      annotate(commit, box, tf)
+      annotate(commit, hit)
+
+      # Prefer client's pairs if annotate() happens to conflict.
+      info.pairs.each_entry do |key, value|
+        commit.with(key, value)
+      end
     end
 
     DescribeUpflow.new(nodes: Slice[Term.of(desc)], observers: upflow.observers, observing: upflow.observing)

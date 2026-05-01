@@ -9,7 +9,7 @@ module Ww::Scenery
         return Root(RecognizedNode).new(Inert.new)
       end
 
-      Root(RecognizedNode).new(ZStack.new(recognize(cache, nodes: dict.items)))
+      Root(RecognizedNode).new(ZStack.anon(recognize(cache, nodes: dict.items)))
     end
   end
 
@@ -1261,7 +1261,7 @@ module Ww::Scenery
           return Inert.new
         end
 
-        Suspense(RecognizedNode).new(ZStack.new(children), placeholder)
+        Suspense(RecognizedNode).new(ZStack.anon(children), placeholder)
       end
 
       # |@ scenery.variant
@@ -1350,11 +1350,15 @@ module Ww::Scenery
       # it groups children is interpreted as a z-stack unless a more specific
       # treatment exists. So for example, `(qux (rect fill: red) (text caption: "A"))`
       # is recognized as a z-stack, and displays as an "A" on top of a red rect.
-      matchpi %{[(%all _symbol (%not inert)) subterms_+]} do
+      matchpi %{[name←(%all _symbol (%not inert)) subterms_+]} do
         children = recognize(cache, nodes: subterms.items)
         return Inert.new if children.all?(Inert)
 
-        ZStack.new(children)
+        unless name == Term.of(:"z-stack")
+          info = ZInfo.new(name, node.pairspart)
+        end
+
+        ZStack.new(children, info)
       end
 
       # |@ scenery.inert
