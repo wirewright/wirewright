@@ -620,14 +620,21 @@ module Ww::Scenery
       end
     end
 
-    node, child_sizes = subsizes(node) do |sized_children, child_sizes|
-      avail = Math.max(avail, Magnitude.new(0))
+    avail = Math.max(avail, Magnitude.new(0))
 
+    node, child_sizes = subsizes(node) do |sized_children, child_sizes|
       node.children.zip(shares) do |child, share|
         case share
-        in Nil        then span = Magnitude::INFINITY
-        in FlexShare  then span = ((share.num/den) * avail + share.min).floor
-        in FixedShare then span = share.span
+        in Nil
+          span = Magnitude::INFINITY
+        in FlexShare
+          if den.zero?
+            span = share.min
+          else
+            span = ((share.num/den) * avail + share.min).floor
+          end
+        in FixedShare
+          span = share.span
         end
 
         case node.axis

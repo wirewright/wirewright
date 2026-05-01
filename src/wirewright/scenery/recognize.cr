@@ -865,15 +865,34 @@ module Ww::Scenery
       # If the stack is content-sized, `fr` is ignored and items size according to
       # their content.
       #
-      # Due to minimum size claims, `fr` may sometimes "misbehave" (in terms of dev expectations,
-      # not semantics), in that it doesn't force an overflow when you might want it to. So
-      # if you e.g. have a y-stack with two children, `{fr: 1} {}`, say, representing
-      # the content and a bottom bar, you may face a situation where content claims a lot
-      # of space for its minimum size, pushing the bar down; even though you'd like it to
-      # overflow. This can be resolved in several fairly intuitive ways, namely using nodes
-      # that handle or otherwise work with overflow: `scenery.viewport`, `scenery.floating`,
-      # and so on. In this case, `scenery.viewport` will do what we want: it'll "cushion"
-      # overflow *and* min-size claims, making the bar go to the bottom as expected.
+      # Due to minimum size claims, `fr` may sometimes behave unintuitively, in that it
+      # may not force overflow when you might want it to. You can debug min-size claims
+      # using `fr-0`, which is reserved to say "size exactly to your min-size on
+      # the main axis".
+      #
+      # For example, if you have a y-stack with two children, `{fr: 1} {}`, representing,
+      # perhaps, some content and a bottom bar, you may face a situation where the content
+      # claims a lot of space for its minimum size, pushing the bar down; even though you'd
+      # like the content to overflow, drawing on top of the bar. This isn't something you'd
+      # want to have in a real UI, but while developing, this is what one's intuition would
+      # expect. This is not the case in Scenery, however; instead, the bar is pushed down.
+      #
+      # An even less intuitive scenario is when you have a list of items. You make the list
+      # `fr-1`. This may cause the list to take much more space than you might have expected.
+      # This happens for the same reason as above: the items of the list claim lots of min
+      # space ahead-of-time. Remember that e.g. for text, min-width is the minimum width
+      # of a word in the text; and min-height is the height of the text wrapped at min-width.
+      # This can claim lots of space when you factor in line height, gaps, between items and
+      # so on.
+      #
+      # Personifying a little bit, stacks really don't want to overflow on the main axis;
+      # so they claim as much space as possible, eagerly. Some items, such as `text`, may
+      # report large values for the main axis.
+      #
+      # To fix this, you need to prove to your stack that the `fr` item won't overflow.
+      # This can be done in several fairly intuitive ways, namely using nodes that handle
+      # or otherwise work with overflow: `scenery.viewport`, `scenery.floating`, and so on.
+      # Most likely you'd want `scenery.viewport`, as it cushions overflow *and* min-size claims.
       matchpi(
         %{(head←x-stack subterms_+ ⍊ gap⋮ 0)},
         %{(head←y-stack subterms_+ ⍊ gap⋮ 0)},
