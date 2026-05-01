@@ -25,7 +25,8 @@ backdrop: (oklch 0.2 0 0)
          src: '⎡<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M31.9346 16C31.9346 24.8365 24.7858 32 15.9672 32C7.14882 32 0 24.8365 0 16C0 7.16344 7.14882 0 15.9672 0C24.7858 0 31.9346 7.16344 31.9346 16Z" fill="#EA2413"/><path fill-rule="evenodd" clip-rule="evenodd" d="M15.9672 30.72C24.0764 30.72 30.6546 24.1321 30.6546 16C30.6546 7.86789 24.0764 1.28 15.9672 1.28C7.8582 1.28 1.28 7.86789 1.28 16C1.28 24.1321 7.8582 30.72 15.9672 30.72ZM15.9672 32C24.7858 32 31.9346 24.8365 31.9346 16C31.9346 7.16344 24.7858 0 15.9672 0C7.14882 0 0 7.16344 0 16C0 24.8365 7.14882 32 15.9672 32Z" fill="#E7EFFC"/><path fill-rule="evenodd" clip-rule="evenodd" d="M5.02709 4.4143C7.89133 1.68303 11.7666 0.0065918 16.0328 0.0065918C24.8512 0.0065918 32 7.17005 32 16.0066C32 20.4116 30.2236 24.4009 27.3493 27.2943C25.5679 27.8976 23.6596 28.2247 21.675 28.2247C11.8945 28.2247 3.96579 20.2798 3.96579 10.4793C3.96579 8.34913 4.34036 6.30662 5.02709 4.4143Z" fill="#0559D2"/><path fill-rule="evenodd" clip-rule="evenodd" d="M6.13002 5.13548C5.5572 6.80954 5.24579 8.60668 5.24579 10.4793C5.24579 19.5754 12.6039 26.9447 21.675 26.9447C23.4116 26.9447 25.083 26.6752 26.6513 26.1763C29.1728 23.5325 30.72 19.952 30.72 16.0066C30.72 7.8745 24.1417 1.28659 16.0328 1.28659C12.2168 1.28659 8.74265 2.74347 6.13002 5.13548ZM27.3493 27.2943C30.2236 24.4009 32 20.4116 32 16.0066C32 7.17005 24.8512 0.0065918 16.0328 0.0065918C11.7666 0.0065918 7.89133 1.68303 5.02709 4.4143C4.34036 6.30662 3.96579 8.34913 3.96579 10.4793C3.96579 20.2798 11.8945 28.2247 21.675 28.2247C23.6596 28.2247 25.5679 27.8976 27.3493 27.2943Z" fill="#E7EFFC"/><path d="M23.9267 14.2388C23.9267 17.575 21.2278 20.2795 17.8984 20.2795C14.5692 20.2795 11.8704 17.575 11.8704 14.2388C11.8704 10.9028 14.5692 8.19836 17.8984 8.19836C21.2278 8.19836 23.9267 10.9028 23.9267 14.2388Z" fill="#E7EFFC"/></svg>⎤
          fit: keep-ratio)
         (align y: 0.5
-          (Text caption: "Ev Regomad per Novoparte" color: (oklch 0.98 0 0) weight: 600 size: 14)))
+          (content x: true
+            (Text caption: "Ev Regomad per Novoparte" color: (oklch 0.98 0 0) weight: 600 size: 14))))
 
 (NpServicePortalText)
   => (x-wrap
@@ -38,7 +39,8 @@ backdrop: (oklch 0.2 0 0)
        (padding pl: 10 pr: 10 pt: 10 pb: 10
          (x-stack gap: 8
            (align y: 0.5
-             (Icon name: "search" size: 18 color: (oklch 0.98 0 0)))
+             (content x: true
+               (Icon name: "search" size: 18 color: (oklch 0.98 0 0))))
            (Text caption: "Sak öl" size: 18 color: (oklch 0.98 0 0)))))
 
 (NpHeroContent)
@@ -63,9 +65,11 @@ backdrop: (oklch 0.2 0 0)
            (align x: 0.5 y: 0.5 fr: 1
              (y-stack gap: 15
                (align x: 0.5
-                 (Icon size: 32 name: ^icon color: (oklch 0.95 0 0)))
+                 (content y: true
+                   (Icon size: 32 name: ^icon color: (oklch 0.95 0 0))))
                (align x: 0.5
-                 (Text size: 18 ^:caption color: (oklch 0.95 0 0)))))
+                 (content y: true
+                   (Text size: 18 ^:caption color: (oklch 0.95 0 0))))))
            (floating y: true
              (limit max-w: (* ^progress) max-h: 8
                (transform dt: -8
@@ -77,9 +81,11 @@ backdrop: (oklch 0.2 0 0)
          (align x: 0.5 y: 0.5 fr: 1
            (y-stack gap: 15
              (align x: 0.5
-               (Icon size: 32 name: ^icon color: (oklch 0.95 0 0)))
+               (content y: true
+                 (Icon size: 32 name: ^icon color: (oklch 0.95 0 0))))
              (align x: 0.5
-               (Text size: 18 ^:caption color: (oklch 0.95 0 0)))))))
+               (content y: true
+                 (Text size: 18 ^:caption color: (oklch 0.95 0 0))))))))
 
 (NpCardList)
   => (x-wrap gap-x: 30 gap-y: 30
@@ -88,10 +94,11 @@ backdrop: (oklch 0.2 0 0)
        (z-stack
          (NpCard icon: "account_balance" caption: "Att")
          (align x: 1
-           (transform dl: 5 dt: -5
-             (Bg fill: (oklch 0.8 0.13 green) radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1)
-               (padding pl: 3 pr: 3 pt: 3 pb: 3
-                 (Icon name: "check" color: (oklch 0.1 0.1 green)))))))
+           (content y: true
+             (transform dl: 5 dt: -5
+               (Bg fill: (oklch 0.8 0.13 green) radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1)
+                 (padding pl: 3 pr: 3 pt: 3 pb: 3
+                   (Icon name: "check" color: (oklch 0.1 0.1 green))))))))
        (NpCard icon: "gavel" caption: "Akes̈")
        (NpCard icon: "card_travel" caption: "Zag")
        (item fr: 1
@@ -103,11 +110,13 @@ backdrop: (oklch 0.2 0 0)
          (x-stack
            (x-stack gap: 10 fr: 1
              (align y: 0.5
-               (Icon size: 20 name: ^icon color: (oklch 0.93 0 0)))
+               (content x: true
+                 (Icon size: 20 name: ^icon color: (oklch 0.93 0 0))))
              (padding pt: 5 pb: 5
                (Text size: 18 ^:caption color: (oklch 0.93 0 0))))
            (align y: 0.5
-             (Icon size: 24 name: "chevron_right" color: (oklch 0.93 0 0))))))
+             (content x: true
+               (Icon size: 24 name: "chevron_right" color: (oklch 0.93 0 0)))))))
 
 (NpServiceList)
   => (y-stack gap: 20
@@ -115,7 +124,8 @@ backdrop: (oklch 0.2 0 0)
          (item fr: 1
            (Text size: 32 caption: "Öl" color: (oklch 0.98 0 0)))
          (align y: 0.5
-           (Text caption: "Aduke" color: (oklch 0.98 0 0) underline: true underline-anchor: 0 underline-span: -1)))
+           (content x: true
+             (Text caption: "Aduke" color: (oklch 0.98 0 0) underline: true underline-anchor: 0 underline-span: -1))))
        (y-stack gap: 10
          (NpServiceItem icon: "spellcheck" caption: "Lagg̈")
          (NpServiceItem icon: "approval" caption: "Ersas̈")
@@ -128,18 +138,22 @@ backdrop: (oklch 0.2 0 0)
          (padding pl: 8 pr: 8 pt: 8 pb: 8
            (y-stack gap: 8
              (align x: 0.5
-               (Icon size: 24 name: ^icon color: (oklch 0.95 0.08 blue)))
+               (content y: true
+                 (Icon size: 24 name: ^icon color: (oklch 0.95 0.08 blue))))
              (align x: 0.5
-               (Text ^:caption color: (oklch 0.95 0.08 blue)))))))
+               (content y: true
+                 (Text ^:caption color: (oklch 0.95 0.08 blue))))))))
 
 (NpMenuButton ⍊ icon_ caption_)
   => (limit min-w: 64
        (padding pl: 8 pr: 8 pt: 8 pb: 8
          (y-stack gap: 8
            (align x: 0.5
-             (Icon size: 24 name: ^icon color: (oklch 0.95 0.08 blue)))
+             (content y: true
+               (Icon size: 24 name: ^icon color: (oklch 0.95 0.08 blue))))
            (align x: 0.5
-             (Text ^:caption color: (oklch 0.95 0.08 blue))))))
+             (content y: true
+               (Text ^:caption color: (oklch 0.95 0.08 blue)))))))
 
 (y-stack
   (NpHero)
@@ -166,8 +180,9 @@ backdrop: (oklch 0.2 0 0)
   (Bg fill: (oklch 0.15 0 0)
     (padding pl: 15 pr: 15 pt: 15 pb: 15
       (align x: 0.5
-        (x-stack gap: 15
-          (NpActiveMenuButton icon: "home" caption: "Isag")
-          (NpMenuButton icon: "apps" caption: "Öl")
-          (NpMenuButton icon: "notifications" caption: "Zön")
-          (NpMenuButton icon: "account_box" caption: "Des̈"))))))
+        (content y: true
+          (x-stack gap: 15
+            (NpActiveMenuButton icon: "home" caption: "Isag")
+            (NpMenuButton icon: "apps" caption: "Öl")
+            (NpMenuButton icon: "notifications" caption: "Zön")
+            (NpMenuButton icon: "account_box" caption: "Des̈")))))))

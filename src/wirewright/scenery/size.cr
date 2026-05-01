@@ -523,7 +523,21 @@ module Ww::Scenery
   end
 
   private def size!(cache, node : Align, cst : Cst) : {SizedNode, Size}
-    sized_node, size = box_size(cache, node, Cst.content)
+    child_cst = Cst.content
+
+    # Keep X constraint if only Y changed.
+    if node.pivot.x.zero?
+      child_cst = Cst.new(cst.min_w, cst.max_w, child_cst.min_h, child_cst.max_h)
+    end
+
+    # Keep Y constraint if only X changed.
+    if node.pivot.y.zero?
+      child_cst = Cst.new(child_cst.min_w, child_cst.max_w, cst.min_h, cst.max_h)
+    end
+
+    # ... so if you do x: 0 y: 0, that's a noop, not content x: true y: true!
+
+    sized_node, size = box_size(cache, node, child_cst)
 
     {sized_node, Size.expand(size.inner, cst, size.children)}
   end
