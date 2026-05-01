@@ -73,7 +73,7 @@ module Ww::Scenery
     end
 
     # Add a 1px margin to conceal any float/rasterization artifacts.
-    dirty_rects = dirty_rects.map(&.snap.margin(1))
+    dirty_rects = dirty_rects.map(&.snap.margin(3))
 
     begin
       dirty_rects.each do |dirty_rect|
