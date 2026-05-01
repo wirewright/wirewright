@@ -81,7 +81,7 @@ module Ww::Microfold2
 
     # Constructs a `Codex` object based on the codex dict *codex*, and *rem*, the base
     # font size (in pixels).
-    def self.build(codex : Term::Dict, rem : Term::Num) : Outcome::Accepted(Codex)
+    def self.compile(codex : Term::Dict, rem : Term::Num) : Outcome::Accepted(Codex)
       globals_section = codex[:globals]?.as_d? || Term[]
       globals_out = globals(globals_section.with(:rem, rem)).at(:globals)
 

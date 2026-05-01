@@ -1,4 +1,4 @@
-# Microfold (µfold) implements the box model and Tailwind-like styling for Wirewright.
+# Microfold (µfold) implements Tailwind-like styling for Wirewright.
 #
 # Microfold is heavily inspired by Tailwind: its design system, the focus on
 # locality, and naming conventions are similar if not outright copied from
@@ -57,8 +57,8 @@
 #   necessary to signal to Microfold that it should administer the node.
 #
 # - *Conditions* can refer to the node's pairspart or its position in the tree
-#   to enable or disable certain styles: `(p style: "text-red-500 hover:text-blue-500" hover: false)`
-#   results in a red text; whereas `(p style: "text-red-500 hover:text-blue-500" hover: true)`
+#   to enable or disable certain styles: `(p "Kaixo" style: "text-red-500 hover:text-blue-500" hover: false)`
+#   results in a red text; whereas `(p "Kaixo" style: "text-red-500 hover:text-blue-500" hover: true)`
 #   results in a blue one.
 #
 # - *Cues* allow UI-related state to flow bidirectionally. Each style may look
@@ -76,7 +76,7 @@
 # - A *box* is a function of children nodes and *settings*. It may wrap the children
 #   (with e.g. `scenery.padding`, `scenery.stack`, etc.); add new children; extend
 #   them; or do any combination of these. Boxes form a kind of "nesting doll"; if
-#   the original node has one or more child, then it appears on top (boxes are nested
+#   the original node has one or more children, then it appears on top (boxes are nested
 #   in it, e.g., `(el 1 2 3) -> (el (box 1 2 3))`); otherwise, it is surrounded
 #   by boxes, e.g., `(el) -> (box (el))`.
 module Ww::Microfold2
@@ -102,8 +102,9 @@ module Ww::Microfold2
   # A lot of things are expressed in rems.
   #
   # The returned codex is accompanied by diagnostsics rooted at *document*.
+  # The diagnostics point at codex compilation errors, if any.
   def codex(document : Term::Dict, *, rem : Term::Num = Term[16]) : Outcome::Accepted(SyncCodex)
-    codex_out = Codex.build(document, rem)
+    codex_out = Codex.compile(document, rem)
     codex_out.map { |codex| SyncCodex.new(codex) }
   end
 
@@ -112,12 +113,12 @@ module Ww::Microfold2
     codex(document.as_d? || Term[], **kwargs)
   end
 
-  # Rewrites *term* using *codex*.
+  # Rewrites *root* using *codex*.
   #
   # This involves processing styles and Microfold properties in *root*, generating
-  # designations, instantiation of boxes and so on, which results in the returned term.
-  # It is accompanied by diagnostics rooted at *root*. Diagnostics are helpful in that
-  # they point to missing utilities and the like.
+  # designations, instantiating boxes and so on; resulting in the returned term.
+  # The term is accompanied by diagnostics rooted at *root*. Diagnostics are helpful
+  # in that they point to missing utilities and the like.
   def render(codex : SyncCodex, root : Term) : Outcome::Accepted(Term)
     unless root_dict = root.as_d?
       return Outcome.ok_despite(root, "root term is not a dict")

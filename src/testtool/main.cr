@@ -164,7 +164,7 @@ module Testtool
     end
   end
 
-  def mu_codex?(index : Term::Dict) : Microfold2::Codex?
+  def mu_codex?(index : Term::Dict) : Microfold2::SyncCodex?
     theme_query = index[:microfold2, :codex]?.try { |query| ResourceService.query?(query) }
     theme_rem = index[:microfold2, :rem]?.as_n?
     return unless theme_query && theme_rem
