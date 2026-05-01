@@ -1,3 +1,12 @@
+struct Nil
+  {% for method in %w[as_n as_s as_sym as_b as_d as_blob] %}
+    # Returns `nil`. This is a shorthand for casting nilable `Ww::Term`s or
+    # `Ww::Term::Any`s, e.g. `dict[:key]?.as_n?`.
+    def {{method.id}}? : Nil
+    end
+  {% end %}
+end
+
 module Ww
   # Lists the possible types of terms.
   enum TermType : UInt8
