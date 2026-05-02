@@ -948,7 +948,7 @@
   (rack
     (frame
       (device (@surface (counter 0))
-        (view (@surface (counter ±n) @view)
+        (extension (@surface (counter ±n) @view)
           ((h1 ^"⸢n⸣")))
         (circuit @view))
       (control @count (counter ±count))
@@ -975,11 +975,11 @@
   (rack
     (frame
       (device (@surface (counter 0))
-        (view (@surface (counter ±n) @view)
+        (extension (@surface (counter ±n) @view)
           ((h1 ^"⸢n⸣")))
         (circuit @view a: true))
       (device (@surface (counter 0))
-        (view (@surface (counter ±n) @view)
+        (extension (@surface (counter ±n) @view)
           ((h1 ^"⸢n⸣")))
         (circuit @view b: true))
       (control @count (counter ±count))
@@ -1001,7 +1001,7 @@
   (rack
     (frame
       (device (@surface (counter "My counter" 0))
-        (view (@surface (counter _ ±n) @view)
+        (extension (@surface (counter _ ±n) @view)
           ((h1 ^"⸢n⸣")))
         (circuit @view))
       (control @count (counter caption_ ±count))
@@ -1024,12 +1024,12 @@
     (frame
       (module {}
         (device (@surface (counter 0))
-          (view (@surface (counter ±n) @view)
+          (extension (@surface (counter ±n) @view)
             ((h1 ^"⸢n⸣")))
           (circuit @view a: true)))
       (module {}
         (device (@surface (counter 0))
-          (view (@surface (counter ±n) @view)
+          (extension (@surface (counter ±n) @view)
             ((h1 ^"⸢n⸣")))
           (circuit @view b: true)))
       (control @count (counter ±count))
@@ -1044,14 +1044,14 @@
     (frame
       (module {}
         (device (@surface (counter 0))
-          (view (@surface (counter ±n) @view)
+          (extension (@surface (counter ±n) @view)
             ((h1 ^"⸢n⸣")))
           (circuit @view a: true))
         (control @count (counter ±count))
         (backsys @count  ±n <> {n: ^(+ n 1)}))
       (module {}
         (device (@surface (counter 100))
-          (view (@surface (counter ±n) @view)
+          (extension (@surface (counter ±n) @view)
             ((h1 ^"⸢n⸣")))
           (circuit @view b: true))
         (control @count (counter ±count))
@@ -1077,7 +1077,7 @@
         => (component
              (surface (@surface (button caption_string actions←(_*)))
                (button ^caption ()))
-             (view (@caption caption_string @view)
+             (extension (@caption caption_string @view)
                (button ^caption clickable: true))
              (node @view)
              (backsys {@:view @:caption @:actions}
@@ -1088,7 +1088,7 @@
         => (component
              (surface (@surface (counter ±n))
                (counter ^initial))
-             (view (@surface (counter ±n) @view)
+             (extension (@surface (counter ±n) @view)
                (h1 ^"Count: ⸢n⸣"))
              (node @view))
 
@@ -2063,11 +2063,11 @@
           (module {}
             (cell @sum 1 output: true)
             (cell @view0 input: true)
-            (view (@view0 v_ @sum) ^(sum v)))
+            (extension (@view0 v_ @sum) ^(sum v)))
           (module {}
             (cell @product 1 output: true)
             (cell @view1 input: true)
-            (view (@view1 v_ @product) ^(product v)))))
+            (extension (@view1 v_ @product) ^(product v)))))
       (backsys (@x)
         ((%all (%leaves (%flat (_ n) ns_) (cell @_ ±n ⍊ output))
                 ⟪(cell @_ (%group dst_ _?) ⍊ input)⟫°))
@@ -2155,8 +2155,8 @@
     (frame
       (circuit @x
         (cell @src 100)
-        (view (@src ±n @voice0) ^(+ n 2))
-        (view (@src ±n @voice1) ^(* n 2))
+        (extension (@src ±n @voice0) ^(+ n 2))
+        (extension (@src ±n @voice1) ^(* n 2))
         (cell @voice0)
         (cell @voice1))
       (backsys @x
@@ -2307,12 +2307,12 @@
       (circuit (@snd (fst_ snd_ _*))
         1 2 3 4 5 6)
       (cell @x qux)
-      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     (frame
       (circuit (@snd (fst_ snd_ _*))
         1 (seen qux ^fst ^snd) 3 4 5 6)
       (cell @x qux)
-      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     end)
 
   ;; Basic
@@ -2452,11 +2452,11 @@
     (frame
       (cell (@snd (fst_ snd_ _*)) (1 2 3 4 5 6))
       (cell @x qux)
-      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     (frame
       (cell (@snd (fst_ snd_ _*)) (1 (seen qux ^fst ^snd) 3 4 5 6))
       (cell @x qux)
-      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     end))
 
 ;; Frag
@@ -2522,7 +2522,7 @@
       (cell @b 100))
     end))
 
-;; View
+;; extension
 (group
   ;; Many sources, dst pattern `_`
   (rack
@@ -2530,25 +2530,25 @@
       (cell @x 1)
       (queue (@y @y') (2 3 4))
       (discard @y)
-      (view ((@x @y) (x_ y_) @s _) ^(+ x y))
+      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
       (cell @s 0))
     (frame
       (cell @x 1)
       (queue (@y @y') (3 4))
       (discard @y)
-      (view ((@x @y) (x_ y_) @s _) ^(+ x y))
+      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
       (cell @s 3))
     (frame
       (cell @x 1)
       (queue (@y @y') (4))
       (discard @y)
-      (view ((@x @y) (x_ y_) @s _) ^(+ x y))
+      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
       (cell @s 4))
     (frame
       (cell @x 1)
       (queue (@y @y') ())
       (discard @y)
-      (view ((@x @y) (x_ y_) @s _) ^(+ x y))
+      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
       (cell @s 5))
     end)
 
@@ -2558,13 +2558,13 @@
       (cell @x 1)
       (cell @y 2)
       (discard @y)
-      (view ((@x @y) (x_ y_) @s _) ^(+ x y))
+      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
       (cell @s))
     (frame
       (cell @x 1)
       (cell @y)
       (discard @y)
-      (view ((@x @y) (x_ y_) @s _) ^(+ x y))
+      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
       (cell @s))
     end)
 
@@ -2573,7 +2573,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (2 3 4))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s)
       (feed (@s @y) (@y' @trash))
       (cell @trash)
@@ -2581,7 +2581,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (2 3 4))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s 4)
       (feed (@s @y) (@y' @trash))
       (cell @trash)
@@ -2589,7 +2589,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (3 4 4))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s)
       (feed (@s @y) (@y' @trash))
       (cell @trash 2)
@@ -2597,7 +2597,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (3 4 4))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s 6)
       (feed (@s @y) (@y' @trash))
       (cell @trash)
@@ -2605,7 +2605,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (4 4 6))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s)
       (feed (@s @y) (@y' @trash))
       (cell @trash 3)
@@ -2613,7 +2613,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (4 4 6))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s 8)
       (feed (@s @y) (@y' @trash))
       (cell @trash)
@@ -2621,7 +2621,7 @@
     (frame
       (cell @x 2)
       (queue (@y @y') (4 6 8))
-      (view ((@x @y) (x_ y_) @s) ^(* x y))
+      (extension ((@x @y) (x_ y_) @s) ^(* x y))
       (cell @s)
       (feed (@s @y) (@y' @trash))
       (cell @trash 4)
@@ -2633,27 +2633,27 @@
     (frame
       (queue (@x @x') (1 2 3))
       (discard @x)
-      (view (@x x_ @y) ^(* x 2))
+      (extension (@x x_ @y) ^(* x 2))
       (cell @y))
     (frame
       (queue (@x @x') (2 3))
       (discard @x)
-      (view (@x x_ @y) ^(* x 2))
+      (extension (@x x_ @y) ^(* x 2))
       (cell @y 2))
     (frame
       (queue (@x @x') (3))
       (discard @x)
-      (view (@x x_ @y) ^(* x 2))
+      (extension (@x x_ @y) ^(* x 2))
       (cell @y 4))
     (frame
       (queue (@x @x') ())
       (discard @x)
-      (view (@x x_ @y) ^(* x 2))
+      (extension (@x x_ @y) ^(* x 2))
       (cell @y 6))
     (frame
       (queue (@x @x') ())
       (discard @x)
-      (view (@x x_ @y) ^(* x 2))
+      (extension (@x x_ @y) ^(* x 2))
       (cell @y))
     end)
 
@@ -2662,20 +2662,20 @@
     (frame
       (module {}
         (cell @x x)
-        (view (@x k_ @y (%value k v_string)) ^v)
+        (extension (@x k_ @y (%value k v_string)) ^v)
         (cell @y {x: 10, a: "John", b: "Samantha", z: "David"}))
       (module {}
         (cell @x b)
-        (view (@x k_ @y (%value k v_string)) ^v)
+        (extension (@x k_ @y (%value k v_string)) ^v)
         (cell @y {x: 10, a: "John", b: "Samantha", z: "David"})))
     (frame
       (module {}
         (cell @x x)
-        (view (@x k_ @y (%value k v_string)) ^v)
+        (extension (@x k_ @y (%value k v_string)) ^v)
         (cell @y {x: 10, a: "John", b: "Samantha", z: "David"}))
       (module {}
         (cell @x b)
-        (view (@x k_ @y (%value k v_string)) ^v)
+        (extension (@x k_ @y (%value k v_string)) ^v)
         (cell @y "Samantha")))
     end)
 
@@ -2683,19 +2683,19 @@
   (rack
     (frame
       (cell @x "hi")
-      (view (@x x_string @view)
+      (extension (@x x_string @view)
         (foo ^x flag: true))
       (cell @view)
       (backsys @view  {¦ flag -seen_} <> {seen: true}))
     (frame
       (cell @x "hi")
-      (view (@x x_string @view)
+      (extension (@x x_string @view)
         (foo ^x flag: true))
       (cell @view (foo "hi" flag: true))
       (backsys @view  {¦ flag -seen_} <> {seen: true}))
     (frame
       (cell @x "hi")
-      (view (@x x_string @view)
+      (extension (@x x_string @view)
         (foo ^x flag: true))
       (cell @view (foo "hi" flag: true seen: true))
       (backsys @view  {¦ flag -seen_} <> {seen: true}))
@@ -3239,7 +3239,7 @@
         (cell @v))
       (delay 2 (cell @foo "Hello World"))
       (appearance local @foo)
-      (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
       (cell @n))
     (frame
       (circuit @f
@@ -3247,7 +3247,7 @@
         (cell @v))
       (delay 1 (cell @foo "Hello World"))
       (appearance local @foo)
-      (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
       (cell @n (cell @v)))
     (frame
       (circuit @f
@@ -3255,7 +3255,7 @@
         (cell @v))
       (cell @foo "Hello World")
       (appearance local @foo)
-      (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
       (cell @n (cell @v)))
     (frame
       (circuit @f
@@ -3263,7 +3263,7 @@
         (cell @v "Hello World"))
       (cell @foo)
       (appearance local @foo)
-      (view (@f ⟨node←(cell @v _*)⟩ @n) ^node)
+      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
       (cell @n (cell @v "Hello World")))
     end)
 
@@ -3562,37 +3562,37 @@
       ((appearance cell) (local @z)))
     end)
 
-  ;; View of N cells (ok)
+  ;; Extension of N cells (ok)
   (rack
     (frame
       (cell @x 100)
       (cell @y 200)
-      (view ((@x @y) values_ @z) ^values)
+      (extension ((@x @y) values_ @z) ^values)
       (cell @z))
     (frame
       (cell @x 100)
       (cell @y 200)
-      (view ((@x @y) values_ @z) ^values)
+      (extension ((@x @y) values_ @z) ^values)
       (cell @z (100 200)))
     end)
 
-  ;; View of N cells (missing)
+  ;; Extension of N cells (missing)
   (rack
     (frame
       (cell @x 100)
       (cell @y)
-      (view ((@x @y) values_ @z) ^values)
+      (extension ((@x @y) values_ @z) ^values)
       (cell @z))
     end)
 
-  ;; View of N cells (delay, queue, mismatch)
+  ;; Extension of N cells (delay, queue, mismatch)
   (rack
     (frame
       (queue (@command @back) (greet welcome greet))
       (delay 2 (discard @command))
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output))
     (frame
@@ -3600,7 +3600,7 @@
       (delay 1 (discard @command))
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output "Hi, Mary of age 26!"))
     (frame
@@ -3608,7 +3608,7 @@
       (discard @command)
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output "Hi, Mary of age 26!"))
     (frame
@@ -3616,7 +3616,7 @@
       (discard @command)
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output "Hi, Mary of age 26!"))
     (frame
@@ -3624,7 +3624,7 @@
       (discard @command)
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output))
     (frame
@@ -3632,7 +3632,7 @@
       (discard @command)
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output "Hi, Mary of age 26!"))
     (frame
@@ -3640,7 +3640,7 @@
       (discard @command)
       (cell @name "Mary")
       (cell @age 26)
-      (view ((@command @name @age) (greet name_ age_) @output)
+      (extension ((@command @name @age) (greet name_ age_) @output)
         ^"Hi, ⸢name⸣ of age ⸢age⸣!")
       (cell @output))
     end))
@@ -4826,7 +4826,7 @@
       ⟨& (cell @x ((+ "1" (I "2")) (node (seq (token "1") "+" (cursor (token "2"))))))⟩)
     end)
 
-  ;; View
+  ;; Extension
   (rack
     (frame
       (cell @in ((x y) z))

@@ -191,16 +191,16 @@ module Ww::Rack
         D7.patch(dev, {1, n - 1})
       end
 
-      # View without dst pattern. It requires an existing dst cell. The dst
+      # Extension without dst pattern. It requires an existing dst cell. The dst
       # cell may be empty.
       rule(<<-WWML) do |dev, src, dst|
-      [view (srcs←((%past @_ min: 1)) pattern_ @dst_) template_] dev
+      [extension (srcs←((%past @_ min: 1)) pattern_ @dst_) template_] dev
         -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
         -> (one dst) [cell @dst_ _?] {name: dst}
       WWML
         src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
         if src.size < src_edges.size
-          # Less edges than we require. This means the view is invalid now
+          # Less edges than we require. This means the extension is invalid now
           # now since some source cells have disappeared. So we empty the dst cell.
           next D7.patch(dst, {2, nil})
         end
@@ -218,7 +218,7 @@ module Ww::Rack
 
         matchee = Term.of(src_terms)
         unless env = M1.match?(pattern, matchee)
-          # Pattern mismatch. Clear the dst cell: the view is invalid.
+          # Pattern mismatch. Clear the dst cell: the extension is invalid.
           next D7.patch(dst, {2, nil})
         end
 
@@ -229,26 +229,27 @@ module Ww::Rack
 
         # instance : Term?
         dst_term = D7.part?(dst, 2)
+
         next if instance && dst_term && Term.extension?(dst_term, of: instance)
 
         D7.patch(dst, {2, instance})
       end
 
-      # View with dst pattern. It requires an existing nonempty dst cell.
+      # Extension with dst pattern. It requires an existing nonempty dst cell.
       rule(<<-WWML) do |dev, src, dst|
-      [view (srcs←((%past @_ min: 1)) src-pattern_ @dst_ dst-pattern_) template_] dev
+      [extension (srcs←((%past @_ min: 1)) src-pattern_ @dst_ dst-pattern_) template_] dev
         -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
         -> (one dst) [cell @dst_ term_] {name: dst}
       WWML
         src_edges, src_pattern, dst_pattern, template = D7.fetch(dev, :srcs, :"src-pattern", :"dst-pattern", :template)
 
-        # NOTE: As opposed to the dst pattern-less view variant above, this one simply
+        # NOTE: As opposed to the dst pattern-less extension variant above, this one simply
         # abstains if the pattern does not match or if too few edges. This seems reasonable
-        # to me: a view with a dst pattern looks like an "observer", and only commits
+        # to me: an extension with a dst pattern looks like an "observer", and only commits
         # if it's absolutely sure. The way it looks to me, it does not necessarily "own"
-        # the view all the time. You can consider the pattern as a kind of "password"
+        # the extension all the time. You can consider the pattern as a kind of "password"
         # that takes into account both the inputs and the output of the node. Only if
-        # all checks out is the view free to modify the dst cell arbitrarily.
+        # all checks out is the extension free to modify the dst cell arbitrarily.
 
         next if src.size < src_edges.size
 
