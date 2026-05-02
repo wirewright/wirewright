@@ -599,8 +599,20 @@ module Ww
       end
 
       def handle(event : SDL::KeyboardKeyDown, entity : Term) : Nil
-        before_tick_handle(event) do |_, session|
-          session.keyboard = session.keyboard.add(entity)
+        session(event) do |session_key, session|
+          if event.repeat
+            # Release
+            session.keyboard = session.keyboard.delete(entity)
+            tick(session_key, session)
+
+            # Press
+            session.keyboard = session.keyboard.add(entity)
+            tick(session_key, session)
+          else
+            # Press
+            session.keyboard = session.keyboard.add(entity)
+            tick(session_key, session)
+          end
         end
       end
 

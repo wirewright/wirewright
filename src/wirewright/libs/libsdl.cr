@@ -216,7 +216,7 @@ module Ww
     alias KeyboardKeyEvent = KeyboardKeyDown | KeyboardKeyUp
     alias TextEvent = TextEntered
 
-    defrecord KeyboardKeyDown, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode
+    defrecord KeyboardKeyDown, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode, repeat : Bool
     defrecord KeyboardKeyUp, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode
     defrecord TextEntered, window_id : WindowId, rune : String
 
@@ -290,6 +290,7 @@ module Ww
         KeyboardKeyDown.new(event.key.window_id,
           keyboard_id: event.key.which,
           scancode: Scancode.new(event.key.scancode),
+          repeat: event.key.repeat == TRUE,
         )
       else
         UnknownEvent.new
