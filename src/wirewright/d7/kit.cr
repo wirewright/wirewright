@@ -186,7 +186,7 @@ module Ww::D7
   #
   # See also `Term.morph`.
   def patch(object : Node, *morphseq) : Patch
-    Pf::Map.assoc(object.id, Term.morph(object.term, *morphseq))
+    Patch.assoc(object.id, Term.morph(object.term, *morphseq))
   end
 
   # :ditto:
