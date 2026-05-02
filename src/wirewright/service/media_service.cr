@@ -982,43 +982,19 @@ module Ww
 
     # :nodoc:
     def broadcast(session_key : Term, description : WindowDescription?)
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << WindowDescriptionChanged.new(session_key, description)
-        end
-      end
+      broadcast(WindowDescriptionChanged.new(session_key, description))
     end
 
-    @@listener_queue_lock = Sync::Mutex.new
-    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
-
-    # Taps the block into the stream of notifications broadcast by the service.
-    # The calling fiber blocks while waiting for notifications.
-    def listen(& : Notification ->) : Nil
-      queue = BlockingQueue(Notification).new
-
-      @@listener_queue_lock.synchronize do
-        @@listener_queues << queue
-      end
-
-      begin
-        loop do
-          notification = queue.shift
-          yield notification
-        end
-      ensure
-        @@listener_queue_lock.synchronize do
-          @@listener_queues.delete(queue)
-        end
-      end
-    end
+    include ServiceBroadcast(Notification)
 
     # Blocks the calling fiber until *all* windows referred to by *session keys*
     # are closed.
-    def wait_until_all_closed(session_keys : Set(Term)) : Nil
+    #
+    # *args* are forwarded to `listen`.
+    def wait_until_all_closed(session_keys : Set(Term), *args) : Nil
       open = session_keys.dup
 
-      listen do |notification|
+      listen(*args) do |notification|
         next unless notification.is_a?(MediaService::WindowDescriptionChanged)
         next unless notification.session_key.in?(session_keys)
 

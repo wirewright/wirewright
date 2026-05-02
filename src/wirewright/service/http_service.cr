@@ -275,11 +275,7 @@ module Ww
         @@workspace.delete(uri)
       end
 
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << ResponseReady.new(uri)
-        end
-      end
+      broadcast(ResponseReady.new(uri))
     end
 
     # Returns the `Response` for *uri*.
@@ -329,28 +325,6 @@ module Ww
       @@lock.synchronize { @@cache.delete(uri) }
     end
 
-    @@listener_queue_lock = Sync::Mutex.new
-    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
-
-    # Taps the block into the stream of notifications broadcast by the service.
-    # The calling fiber blocks while waiting for notifications.
-    def listen(& : Notification ->) : Nil
-      queue = BlockingQueue(Notification).new
-
-      @@listener_queue_lock.synchronize do
-        @@listener_queues << queue
-      end
-
-      begin
-        loop do
-          notification = queue.shift
-          yield notification
-        end
-      ensure
-        @@listener_queue_lock.synchronize do
-          @@listener_queues.delete(queue)
-        end
-      end
-    end
+    include ServiceBroadcast(Notification)
   end
 end

@@ -387,7 +387,10 @@ module Ww
         @@report_workspace[path]?
       end
 
-      return unless result # ?!
+      unless result
+        Log.debug { "Report promise is missing (?!)" }
+        return
+      end
 
       result.set(report)
 
@@ -395,11 +398,7 @@ module Ww
         @@report_workspace.delete(path)
       end
 
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << ReportReady.new(path)
-        end
-      end
+      broadcast(ReportReady.new(path))
     end
 
     # :nodoc:
@@ -409,7 +408,10 @@ module Ww
         @@read_workspace[path]?
       end
 
-      return unless result # ?!
+      unless result
+        Log.debug { "Reading promise is missing (?!)" }
+        return
+      end
 
       result.set(reading)
 
@@ -417,15 +419,8 @@ module Ww
         @@read_workspace.delete(path)
       end
 
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << ReadingReady.new(path)
-        end
-      end
+      broadcast(ReadingReady.new(path))
     end
-
-    @@listener_queue_lock = Sync::Mutex.new
-    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
 
     # :nodoc:
     def invalidate(path : Path, cls : Report.class) : Nil
@@ -433,11 +428,7 @@ module Ww
         @@report_cache.delete(path)
       end
 
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << ReportInvalid.new(path)
-        end
-      end
+      broadcast(ReportInvalid.new(path))
     end
 
     # :nodoc:
@@ -446,11 +437,7 @@ module Ww
         @@read_cache.delete(path)
       end
 
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << ReadingInvalid.new(path)
-        end
-      end
+      broadcast(ReadingInvalid.new(path))
     end
 
     # Returns the report for *path*. If not cached, produces the report on
@@ -591,31 +578,14 @@ module Ww
       invalidate(path, Reading)
     end
 
-    # Taps the block into the stream of notifications broadcast by the service.
-    # The calling fiber blocks while waiting for notifications.
-    def listen(& : Notification ->) : Nil
-      queue = BlockingQueue(Notification).new
-
-      @@listener_queue_lock.synchronize do
-        @@listener_queues << queue
-      end
-
-      begin
-        loop do
-          notification = queue.shift
-          yield notification
-        end
-      ensure
-        @@listener_queue_lock.synchronize do
-          @@listener_queues.delete(queue)
-        end
-      end
-    end
+    include ServiceBroadcast(Notification)
 
     # Blocks the calling fiber until a notification mentions any path from
     # the given set of *paths*.
-    def wait(paths : Set(Path))
-      listen do |notification|
+    #
+    # *args* are forwarded to `listen`.
+    def wait(paths : Set(Path), *args) : Nil
+      listen(*args) do |notification|
         next unless notification.path.in?(paths)
         break
       end
@@ -623,8 +593,10 @@ module Ww
 
     # Blocks the calling fiber until a notification whose class is in *mask*
     # mentions any path from the given set of *paths*.
-    def wait(paths : Set(Path), mask : Enumerable(Notification.class)) : Nil
-      listen do |notification|
+    #
+    # *args* are forwarded to `listen`.
+    def wait(paths : Set(Path), mask : Enumerable(Notification.class), *args) : Nil
+      listen(*args) do |notification|
         next unless notification.class.in?(mask)
         next unless notification.path.in?(paths)
         break

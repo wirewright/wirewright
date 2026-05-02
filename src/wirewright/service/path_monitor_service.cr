@@ -229,48 +229,14 @@ module Ww
       end
     end
 
-    @@listener_queue_lock = Sync::Mutex.new
-    @@listener_queues = Set(BlockingQueue(Notification)).new.compare_by_identity
-
-    # :nodoc:
-    def broadcast(notification : Notification) : Nil
-      @@listener_queue_lock.synchronize do
-        @@listener_queues.each do |queue|
-          queue << notification
-        end
-      end
-    end
-
-    # Taps the block into the stream of notifications broadcast by the service.
-    # The calling fiber blocks while waiting for notifications.
-    def listen(& : Notification ->)
-      queue = BlockingQueue(Notification).new
-
-      @@listener_queue_lock.synchronize do
-        @@listener_queues << queue
-      end
-
-      begin
-        loop do
-          notification = queue.shift
-          yield notification
-        end
-      ensure
-        @@listener_queue_lock.synchronize do
-          @@listener_queues.delete(queue)
-        end
-      end
-    end
-
-    # Blocks the calling fiber until a notification is emitted.
-    def wait : Nil
-      listen { break }
-    end
+    include ServiceBroadcast(Notification)
 
     # Blocks the calling fiber until a notification mentions any path from
     # the given set of *paths*.
-    def wait(paths : Set(Path)) : Nil
-      listen do |notification|
+    #
+    # *args* are forwarded to `listen`.
+    def wait(paths : Set(Path), *args) : Nil
+      listen(*args) do |notification|
         next unless notification.path.in?(paths)
         break
       end
@@ -278,8 +244,10 @@ module Ww
 
     # Blocks the calling fiber until a notification whose class is in *mask*
     # mentions any path from the given set of *paths*.
-    def wait(paths : Set(Path), mask : Enumerable(Notification.class)) : Nil
-      listen do |notification|
+    #
+    # *args* are forwarded to `listen`.
+    def wait(paths : Set(Path), mask : Enumerable(Notification.class), *args) : Nil
+      listen(*args) do |notification|
         next unless notification.class.in?(mask)
         next unless notification.path.in?(paths)
         break
