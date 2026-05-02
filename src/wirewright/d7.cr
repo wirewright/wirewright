@@ -212,7 +212,7 @@ module Ww::D7
 
     {{@type}}.step(%clf, {{circuit}}) do |%hg|
       {% if decorator %}
-      {{decorator}}(%hg) do |%hg|
+      {{decorator}}.call(%hg) do |%hg|
       {% end %}
         %regime.solve(%hg) do |%match_table, %index|
           case %index

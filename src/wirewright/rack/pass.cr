@@ -1,22 +1,20 @@
 module Ww::Rack
   # Returns the main Rack pass.
-  def pass : D7::Pass
-    D7::Pass.new { |clf, circuit| step(clf, circuit) }
+  def pass(prepass = Prepass) : D7::Pass
+    D7::Pass.new { |clf, circuit| step(clf, circuit, prepass) }
   end
 
-  # :nodoc:
-  #
-  # *Prepass* is Rack's decorator over the general hypergraph solving process.
-  # The most important thing it does is it walks the `part` subtree of root
-  # cells and constructs child `cell`s with appropriate values, if possible; and
-  # then after *fn* runs, it absorbs & merges child cells back into the root.
-  def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
-    ControlSpace.prepass(hg) do |hg|
-      Part.prepass(hg, &fn)
+  module Prepass
+    extend self
+
+    def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+      ControlSpace.prepass(hg) do |hg|
+        Part.prepass(hg, &fn)
+      end
     end
   end
 
-  def step(clf : D7::Classifier, circuit : Term) : Slice(Term)
+  def step(clf : D7::Classifier, circuit : Term, prepass) : Slice(Term)
     D7.case(clf, circuit, decorator: prepass) do
       rule(<<-WWML) do |tgt|
       [discard @u_] dev
