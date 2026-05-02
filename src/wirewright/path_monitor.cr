@@ -12,33 +12,33 @@ module Ww
   # ```
   # epoch = 0u64
   #
-  # pp PathMonitor.status(Path["/tmp/a"]) # => PathMonitor::Wait()
+  # pp PathMonitor.status(NormalPath["/tmp/a"]) # => PathMonitor::Wait()
   #
   # # You can use wait to wait for the next status change if you don't want
   # # to poll; but it's as coarse as it gets. We expect event or rewrite
   # # loops to call wait() on fixpoint and resume polling for status() afterwards.
   # epoch = PathMonitor.wait(epoch)
   #
-  # pp PathMonitor.status(Path["/tmp/a"]) # => PathMonitor::Absent()
+  # pp PathMonitor.status(NormalPath["/tmp/a"]) # => PathMonitor::Absent()
   #
   # spawn do
   #   sleep 3.seconds
   #
-  #   File.write(Path["/tmp/a"], "Hello World")
+  #   File.write(NormalPath["/tmp/a"], "Hello World")
   #
   #   sleep 3.seconds
   #
-  #   File.write(Path["/tmp/a"], "Bye World")
+  #   File.write(NormalPath["/tmp/a"], "Bye World")
   # end
   #
   # epoch = PathMonitor.wait(epoch)
   #
-  # pp PathMonitor.status(Path["/tmp/a"])
+  # pp PathMonitor.status(NormalPath["/tmp/a"])
   # # => PathMonitor::Present(@version=0) [due to create with "Hello World"]
   #
   # epoch = PathMonitor.wait(epoch)
   #
-  # pp PathMonitor.status(Path["/tmp/a"])
+  # pp PathMonitor.status(NormalPath["/tmp/a"])
   # # => PathMonitor::Present(@version=1) [due to update with "Bye World"]
   # ```
   #
@@ -72,10 +72,10 @@ module Ww
 
     @@lock = Sync::Mutex.new
     @@clock = 0u64
-    @@paths = Set(Path).new
-    @@statuses = {} of Path => Status | Garbage
-    @@ages = {} of Path => Int32
-    @@finalizers = [] of (Array(Path) ->)
+    @@paths = Set(NormalPath).new
+    @@statuses = {} of NormalPath => Status | Garbage
+    @@ages = {} of NormalPath => Int32
+    @@finalizers = [] of (Array(NormalPath) ->)
 
     @@changed = BlockingSignal.new
 
@@ -111,9 +111,9 @@ module Ww
     alias Msg = PathAdded | PathsRemoved | Heartbeat | Notification
 
     # :nodoc:
-    defrecord PathAdded, path : Path
+    defrecord PathAdded, path : NormalPath
     # :nodoc:
-    defrecord PathsRemoved, paths : Array(Path)
+    defrecord PathsRemoved, paths : Array(NormalPath)
     # :nodoc:
     defrecord Heartbeat, ack : WaitGroup
     # :nodoc:
@@ -124,9 +124,9 @@ module Ww
     # :nodoc:
     defcase MsgState,
       ictx : Inotify::Context,
-      polling = Set(Path).new,
-      polling_modified_at = {} of Path => Time,
-      watching = Bimap(Path, Inotify::WatchRef).new,
+      polling = Set(NormalPath).new,
+      polling_modified_at = {} of NormalPath => Time,
+      watching = Bimap(NormalPath, Inotify::WatchRef).new,
       mutation: true
 
     # :nodoc:
@@ -135,9 +135,9 @@ module Ww
     # :nodoc:
     defrecord Prune
     # :nodoc:
-    defrecord SetAbsent, path : Path
+    defrecord SetAbsent, path : NormalPath
     # :nodoc:
-    defrecord SetPresent, path : Path
+    defrecord SetPresent, path : NormalPath
 
     private def msgloop(ictx : Inotify::Context) : Nil
       spawn(name: "PathMonitor inotify read loop") { irloop(ictx) }
@@ -210,7 +210,7 @@ module Ww
       return if msg.path.in?(state.watching) || msg.path.in?(state.polling)
 
       begin
-        ref = Inotify.watch(state.ictx, msg.path, mask: INOTIFY_MASK)
+        ref = Inotify.watch(state.ictx, msg.path.unwrap, mask: INOTIFY_MASK)
       rescue e : Inotify::Error
         Log.debug { "inotify->poll: transfer #{msg.path}" }
 
@@ -289,7 +289,7 @@ module Ww
 
       state.polling.select! do |path|
         begin
-          ref = Inotify.watch(state.ictx, path, mask: INOTIFY_MASK)
+          ref = Inotify.watch(state.ictx, path.unwrap, mask: INOTIFY_MASK)
 
           Log.debug { "poll->inotify: transfer #{path}" }
 
@@ -306,7 +306,7 @@ module Ww
         end
 
         begin
-          info = File.info(path)
+          info = File.info(path.unwrap)
         rescue e : File::Error
           Log.debug(exception: e) { "poll: error while stat()ting a file" }
 
@@ -374,7 +374,7 @@ module Ww
 
     private def execute?(command : Prune) : Bool
       notify = false
-      pruned = [] of Path
+      pruned = [] of NormalPath
 
       @@ages.each do |path, age|
         unless age.zero?
@@ -423,10 +423,8 @@ module Ww
     # the past. `PathMonitor` makes such snapshots in response to changes on
     # the disk. The returned status is thus *eventually consistent*. It is not
     # guaranteed to reflect the instantaneous state of the file system.
-    def status(path : Path) : Status | Wait
+    def status(path : NormalPath) : Status | Wait
       ensure_server_running!
-
-      path = Ww.normalize(path)
 
       @@lock.synchronize do
         @@ages[path] = Math.max(@@ages[path]? || 0, MAX_AGE_HBS)
@@ -456,7 +454,7 @@ module Ww
     # snapshot of its status in memory up-to-date. Use this parameter carefully,
     # as you are basically creating a resource that cannot be freed other than
     # by terminating the application.
-    def keepalive!(path : Path) : Nil
+    def keepalive!(path : NormalPath) : Nil
       @@lock.synchronize do
         @@ages[path] = Int32::MAX
       end
@@ -487,7 +485,7 @@ module Ww
     end
 
     # :nodoc:
-    def paths_finalize(&fn : Array(Path) ->) : ->
+    def paths_finalize(&fn : Array(NormalPath) ->) : ->
       @@lock.synchronize { @@finalizers << fn }
 
       -> do

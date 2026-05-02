@@ -91,7 +91,7 @@ module Ww::DwUIR
   # - *leading* specifies the line height (named after Tailwind).
   # - *tracking* specifies the letter spacing (named after Tailwind).
   record PencilRequest,
-    font : Path,
+    font : NormalPath,
     size : Float32,
     leading : Magn = Magn.rel(1.0),
     tracking : Magn = Magn.rel(0.0)

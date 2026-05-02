@@ -89,7 +89,7 @@ module Ww::DwUIR
   class PvgFontFace
     @face : PlutoVG::FontFace
 
-    def initialize(path : Path)
+    def initialize(path : NormalPath)
       unless path.absolute?
         raise ArgumentError.new("expected an absolute path")
       end
@@ -143,7 +143,7 @@ module Ww::DwUIR
     getter pencils : PencilServer
 
     def initialize
-      @faces = {} of Path => PvgFontFace
+      @faces = {} of NormalPath => PvgFontFace
       @pencils = ->(request : PencilRequest) do
         face = face(request.font)
         face.pencil(request.size, request.leading, request.tracking).as(IPencil)
@@ -151,7 +151,7 @@ module Ww::DwUIR
     end
 
     # Returns the cached `PvgFontFace` for *font*; or loads it from disk.
-    def face(font : Path) : PvgFontFace
+    def face(font : NormalPath) : PvgFontFace
       @faces.put_if_absent(font) { PvgFontFace.new(font) }
     end
   end

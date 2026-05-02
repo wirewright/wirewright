@@ -34,7 +34,7 @@ module Ww::DwUIR
   end
 
   # Specifies where to start searching for fonts.
-  FONTS_FOLDER = Ww.roots.runtime.not_nil! / "fonts"
+  FONTS_FOLDER = NormalPath[Ww.roots.runtime.not_nil! / "fonts"]
 
   # Font entry parser can parse candidate font or font-related paths into
   # `FontEntry` objects.
@@ -43,7 +43,7 @@ module Ww::DwUIR
 
     Log = ::Log.for(self)
 
-    record FontEntry, kind : Kind, path : Path, family : String, weight : FontWeight, italic : Bool do
+    record FontEntry, kind : Kind, path : NormalPath, family : String, weight : FontWeight, italic : Bool do
       enum Kind : UInt8
         Font
         Codepoints
@@ -65,7 +65,7 @@ module Ww::DwUIR
     FONT_EXTENSIONS = {".otf", ".ttf"}
 
     # Attempts to parse *path* into a font entry. Returns `nil` if parsing failed.
-    def font_entry?(path : Path) : FontEntry?
+    def font_entry?(path : NormalPath) : FontEntry?
       case path.extension
       when .in?(FONT_EXTENSIONS)
         kind = FontEntry::Kind::Font
@@ -134,7 +134,7 @@ module Ww::DwUIR
     record FontQuery, family : String, weight : FontWeight, italic : Bool
 
     # :nodoc:
-    record FontResponse, path : Path, codepoints : CodepointMap
+    record FontResponse, path : NormalPath, codepoints : CodepointMap
 
     # :nodoc:
     alias FontIndex = Hash(FontQuery, FontResponse)
@@ -142,9 +142,9 @@ module Ww::DwUIR
     # :nodoc:
     #
     # Constructs a font index based on fonts on the disk.
-    def index(root : Path) : FontIndex
+    def index(root : NormalPath) : FontIndex
       leaves = Dir[root / "**/*.*", match: :none]
-      entries = leaves.compact_map { |file| FontEntryParser.font_entry?(Path[file]) }
+      entries = leaves.compact_map { |file| FontEntryParser.font_entry?(NormalPath[file]) }
       index = FontIndex.new(initial_capacity: entries.size)
 
       entries.each do |entry|
@@ -169,7 +169,7 @@ module Ww::DwUIR
           next
         end
 
-        File.open(entry.path) do |io|
+        File.open(entry.path.unwrap) do |io|
           io.each_line do |line|
             name, codepoint_hex = line.split(' ', limit: 2)
 
@@ -214,7 +214,7 @@ module Ww::DwUIR
     #   to find an italic variant that satisfies *family* and *weight*, if possible; for
     #   non-italic queries, similarly tries to find an italic variant.
     # - If still nothing, returns `nil`.
-    def path_to?(family : String, weight : FontWeight = FontWeight::Regular, *, italic : Bool = false) : Path?
+    def path_to?(family : String, weight : FontWeight = FontWeight::Regular, *, italic : Bool = false) : NormalPath?
       each_possible_query(family, weight, italic) do |query|
         next unless response = @@lock.read { @@index[query]? }
         return response.path

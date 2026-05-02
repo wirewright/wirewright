@@ -8,14 +8,14 @@ module Testtool
   alias Topic = Test | SceneryGroup | Comparison
 
   defcase Test,
-    path : Path,
+    path : NormalPath,
     document : Term,
     srcmap : ML::SrcMap,
     color : Pigment::RGBA,
     ref : String
 
   defcase SceneryGroup,
-    path : Path,
+    path : NormalPath,
     color : Pigment::RGBA,
     ref : String,
     term : Term

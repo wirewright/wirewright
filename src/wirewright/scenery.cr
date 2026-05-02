@@ -280,7 +280,7 @@ module Ww::Scenery
     # WWML
     #
     # picture = Scenery::Safe.rasterize(document, 450, 900, Pigment.white)
-    # write_result = PathService.write(Path["/tmp/hello.out.ppm"], picture.unwrap.to_ppm)
+    # write_result = PathService.write(NormalPath["/tmp/hello.out.ppm"], picture.unwrap.to_ppm)
     # write_result.wait # => PathService::Present
     # ```
     #

@@ -38,6 +38,10 @@ module Ww
       Path[@value]
     end
 
+    def to?(type : NormalPath.class) : NormalPath
+      NormalPath[@value]
+    end
+
     # Returns the number of characters in this string.
     @[Dncast]
     def charcount : Int32

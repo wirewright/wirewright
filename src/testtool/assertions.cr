@@ -27,9 +27,9 @@ module Testtool
       next unless entry.is_a?(PathService::DirEntry)
 
       {entry.path,
-       {in:  PathService.read(entry.path / "in.wwml"),
-        out: PathService.read(entry.path / "out.ppm"),
-        hit: PathService.read(entry.path / "hit.wwml")}}
+       {in:  PathService.read(NormalPath[entry.path / "in.wwml"]),
+        out: PathService.read(NormalPath[entry.path / "out.ppm"]),
+        hit: PathService.read(NormalPath[entry.path / "hit.wwml"])}}
     end
 
     # Wait for all reads to finish.
@@ -64,7 +64,7 @@ module Testtool
           hit_doc = ML.document(hit_blob.to_string, filename: "hit.wwml")
         end
       rescue e : ML::SyntaxError
-        warn("Skipping file due to syntax error: #{e.inline}", path / (e.filename? || ""))
+        warn("Skipping file due to syntax error: #{e.inline}", NormalPath[path / (e.filename? || "")])
         next
       end
 
@@ -107,7 +107,7 @@ module Testtool
     [asn] of AssertionNode
   end
 
-  defrecord Top, path : Path, term : Term
+  defrecord Top, path : NormalPath, term : Term
 
   def assertions(production : Top, srcmap : ML::SrcMap) : Array(AssertionNode)
     top = production.term
@@ -136,7 +136,7 @@ module Testtool
     end
   end
 
-  defrecord Decl, path : Path, term : Term
+  defrecord Decl, path : NormalPath, term : Term
 
   def assertions(production : Decl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -443,7 +443,7 @@ module Testtool
     end
   end
 
-  defrecord MLdecl, path : Path, term : Term
+  defrecord MLdecl, path : NormalPath, term : Term
 
   def assertions(production : MLdecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -532,7 +532,7 @@ module Testtool
     {% end %}
   end
 
-  defrecord PatternDecl, path : Path, pattern : Term, term : Term
+  defrecord PatternDecl, path : NormalPath, pattern : Term, term : Term
 
   def assertions(production : PatternDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     pattern, decl = production.pattern, production.term
@@ -639,7 +639,7 @@ module Testtool
     end
   end
 
-  defrecord BackmapDecl, path : Path, pattern : Term, backspec : Term, term : Term
+  defrecord BackmapDecl, path : NormalPath, pattern : Term, backspec : Term, term : Term
 
   def assertions(production : BackmapDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl, pattern, backspec = production.term, production.pattern, production.backspec
@@ -683,7 +683,7 @@ module Testtool
     end
   end
 
-  defrecord BacksysDecl, path : Path, backsys : Array({Term, Term}), term : Term
+  defrecord BacksysDecl, path : NormalPath, backsys : Array({Term, Term}), term : Term
 
   def assertions(production : BacksysDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl, backsys = production.term, production.backsys
@@ -712,7 +712,7 @@ module Testtool
     end
   end
 
-  defrecord HeadDecl, path : Path, term : Term
+  defrecord HeadDecl, path : NormalPath, term : Term
 
   def assertions(production : HeadDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -757,7 +757,7 @@ module Testtool
     end
   end
 
-  defrecord BoundsDecl, path : Path, term : Term
+  defrecord BoundsDecl, path : NormalPath, term : Term
 
   def assertions(production : BoundsDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -794,7 +794,7 @@ module Testtool
     end
   end
 
-  defrecord DepthDecl, path : Path, term : Term
+  defrecord DepthDecl, path : NormalPath, term : Term
 
   def assertions(production : DepthDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term
@@ -831,7 +831,7 @@ module Testtool
     end
   end
 
-  defrecord CapturesDecl, path : Path, term : Term
+  defrecord CapturesDecl, path : NormalPath, term : Term
 
   def assertions(production : CapturesDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
     decl = production.term

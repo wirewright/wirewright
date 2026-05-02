@@ -10,17 +10,17 @@ module Ww
                   HTTPQuery |
                   IdQuery
 
-    defrecord RuntimeQuery, path : Path
+    defrecord RuntimeQuery, member : String
     defrecord CodexQuery, name : String
-    defrecord FileQuery, path : Path
+    defrecord FileQuery, path : NormalPath
     defrecord FontQuery, family : String, weight : Int32, italic : Bool
     defrecord CodepointsQuery, family : String
     defrecord HTTPQuery, uri : URI
     defrecord IdQuery, content : Term::Blob
 
     # Shorthand for constructing `RuntimeQuery`.
-    def runtime(path : Path) : RuntimeQuery
-      RuntimeQuery.new(path)
+    def runtime(member : String) : RuntimeQuery
+      RuntimeQuery.new(member)
     end
 
     # Shorthand for constructing `CodexQuery`.
@@ -29,13 +29,13 @@ module Ww
     end
 
     # Shorthand for constructing `FileQuery`.
-    def file(path : Path) : FileQuery
+    def file(path : NormalPath) : FileQuery
       FileQuery.new(path)
     end
 
     # :ditto:
     def file(path : String) : FileQuery
-      file(Path[path])
+      file(NormalPath[path])
     end
 
     # Shorthand for constructing `FontQuery`.
@@ -107,7 +107,7 @@ module Ww
     end
 
     # :nodoc:
-    defrecord FontEntry, path : Path, weight : FontWeight, italic : Bool
+    defrecord FontEntry, path : NormalPath, weight : FontWeight, italic : Bool
 
     # :nodoc:
     FONT_ENTRIES_CACHE = SyncLRU(PathService::DirListing, Slice(FontEntry)).new(capacity: 32)
@@ -139,7 +139,9 @@ module Ww
     alias ResolvedQuery = FileQuery | HTTPQuery | IdQuery
 
     private def resolve(query : CodexQuery) : Promise(Resn)
-      resolve(RuntimeQuery.new(Path["codices"] / (query.name + ".codex.wwml")))
+      member = "codices/#{query.name}.codex.wwml"
+
+      resolve(RuntimeQuery.new(member))
     end
 
     private def resolve(query : RuntimeQuery) : Promise(Resn)
@@ -147,7 +149,7 @@ module Ww
         return Promise(Resn).resolved(Absent.new("Wirewright runtime directory does not exist"))
       end
 
-      resolve(FileQuery.new(runtime / query.path))
+      resolve(FileQuery.new(NormalPath[runtime / query.member]))
     end
 
     private def resolve(query : ResolvedQuery) : Promise(Resn)
@@ -159,7 +161,7 @@ module Ww
         return Promise(Resn).resolved(Absent.new("Wirewright runtime directory does not exist"))
       end
 
-      PathService.listing(runtime / "fonts" / query.family).map do |listing|
+      PathService.listing(NormalPath[runtime / "fonts" / query.family]).map do |listing|
         case listing
         in PathService::Absent
           Promise(Resn).accepted(Absent.new("font family not found in font database"))
@@ -195,7 +197,7 @@ module Ww
         return Promise(Resn).resolved(Absent.new("Wirewright runtime directory does not exist"))
       end
 
-      PathService.listing(runtime / "fonts" / query.family).map do |listing|
+      PathService.listing(NormalPath[runtime / "fonts" / query.family]).map do |listing|
         case listing
         in PathService::Absent
           Promise(Resn).accepted(Absent.new("font family not found in font database"))
@@ -319,11 +321,11 @@ module Ww
           codex(name)
         end
 
-        matchpi %{(runtime path_string)}, path: Path do
-          runtime(path)
+        matchpi %{(runtime member_string)}, member: String do
+          runtime(member)
         end
 
-        matchpi %{(file path_string)}, path: Path do
+        matchpi %{(file path_string)}, path: NormalPath do
           file(path)
         end
 

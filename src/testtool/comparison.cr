@@ -17,30 +17,30 @@ module Testtool
   #
   # May raise `ResourceService::Error`.
   # May raise `ArgumentError`.
-  def comparand(base : Path, term : Term) : Comparand
+  def comparand(base : NormalPath, term : Term) : Comparand
     Term.case(term, engine: M0) do
       matchpi %{(ml path_string)}, path: Path do
-        MLdoc.new(pipe(base / path, ResourceService.file, ResourceService.read_string))
+        MLdoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_string))
       end
 
       matchpi %{(lr.gz path_string)}, path: Path do
-        LRdoc.new(pipe(base / path, ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress))
+        LRdoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress))
       end
 
       matchpi %{(dwuir path_string ¦ vars_)}, path: Path, vars: Term::Dict do
-        DwDoc.new(pipe(base / path, ResourceService.file, ResourceService.read_string), vars, temp: "dwuir")
+        DwDoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_string), vars, temp: "dwuir")
       end
 
       matchpi %{(uir path_string ¦ globals_)}, path: Path, globals: Term::Dict do
-        UIRdoc.new(pipe(base / path, ResourceService.file, ResourceService.read_string), globals, temp: "uir")
+        UIRdoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_string), globals, temp: "uir")
       end
 
       matchpi %{(ppm path_string)}, path: Path do
-        Ppm.new(pipe(base / path, ResourceService.file, ResourceService.read_blob).to_slice)
+        Ppm.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_blob).to_slice)
       end
 
       matchpi %{(ppm.gz path_string)}, path: Path do
-        Ppm.new(pipe(base / path, ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress))
+        Ppm.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress))
       end
     end
   end

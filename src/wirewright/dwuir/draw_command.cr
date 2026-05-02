@@ -171,7 +171,7 @@ module Ww::DwUIR
   #   any `Paint`, including solid color, image, and gradient paint.
   defcase FragShape,
     string : String,
-    font : Path,
+    font : NormalPath,
     size : Float32,
     tracking : Magn,
     underline : UnderlineSpec?,

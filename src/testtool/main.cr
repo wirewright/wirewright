@@ -2,10 +2,10 @@ module Testtool
   alias ArgParse = ArgConf | ArgErr | ArgHelp
 
   defcase ArgConf,
-    index_path : Path,
+    index_path : NormalPath,
     focused : Set(Term),
     ignored : Set(Term),
-    stats_path : Path?,
+    stats_path : NormalPath?,
     interactive : Bool,
     display_assertion : Bool,
     assets : Bool
@@ -74,7 +74,7 @@ module Testtool
 
   # Parses testtool command-line arguments provided in *argv*.
   def argparse(argv : Array(String)) : ArgParse
-    index_path = Path["tests/index.wwml"]
+    index_path = NormalPath["tests/index.wwml"]
     stats_path = nil
     focused = Set(Term).new
     ignored = Set(Term).new
@@ -96,18 +96,18 @@ module Testtool
           return ArgErr.new("expected a path after --index")
         end
         cursor += 1
-        index_path = Path[successor]
+        index_path = NormalPath[successor]
         next
       end
 
       if arg == "--stats"
         if (successor = argv[cursor]?).nil? || successor.starts_with?('-')
           # nil, -, or --, doesn't matter, it's not for us, but --stats is there.
-          stats_path = Path[Dir.tempdir] / Path["ww-testtool.stats.csv"]
+          stats_path = NormalPath[Path[Dir.tempdir] / Path["ww-testtool.stats.csv"]]
           next
         end
         cursor += 1
-        stats_path = Path[successor]
+        stats_path = NormalPath[successor]
         next
       end
 
@@ -141,7 +141,7 @@ module Testtool
   end
 
   # Constructs a Microfold theme based on definitions from *index*, if any.
-  def theme?(index : Term::Dict, base : Path) : Microfold::Theme?
+  def theme?(index : Term::Dict, base : NormalPath) : Microfold::Theme?
     theme_path = index[:microfold, :theme]?.try(&.to?(Path))
     theme_rem = index[:microfold, :rem]?.try(&.as_n?)
     return unless theme_path && theme_rem
@@ -150,7 +150,7 @@ module Testtool
 
     begin
       pipe(
-        base / theme_path,
+        NormalPath[base / theme_path],
         ResourceService.file,
         ResourceService.read_string,
         ML.document,
@@ -179,12 +179,14 @@ module Testtool
   end
 
   # Constructs an editR rewriter based on definitions from *index*, if any.
-  def editR?(index : Term::Dict, base : Path) : Rewriter?
+  def editR?(index : Term::Dict, base : NormalPath) : Rewriter?
     return unless path = index[:editR, :codex]?.try(&.to?(Path))
 
-    log("Loading editR codex at #{(base / path).normalize}")
+    path = NormalPath[base / path]
 
-    codex = pipe(base / path,
+    log("Loading editR codex at #{path}")
+
+    codex = pipe(path,
       ResourceService.file,
       ResourceService.read_string,
       ML.document,
@@ -194,12 +196,14 @@ module Testtool
   end
 
   # Constructs a (graphics) uiR rewriter based on definitions from *index*, if any.
-  def uiR?(index : Term::Dict, dw : Channel(DwUIR::Request), base : Path) : Rewriter?
+  def uiR?(index : Term::Dict, dw : Channel(DwUIR::Request), base : NormalPath) : Rewriter?
     return unless path = index[:uiR, :codex]?.try(&.to?(Path))
 
-    log("Loading uiR codex at #{(base / path).normalize}")
+    path = NormalPath[base / path]
 
-    ruleset = pipe(base / path,
+    log("Loading uiR codex at #{path}")
+
+    ruleset = pipe(path,
       ResourceService.file,
       ResourceService.read_string,
       ML.document,
@@ -426,13 +430,13 @@ module Testtool
       ref = "#{conf.index_path}:#{line}:#{col}"
 
       Term.case(item, engine: M0) do
-        matchpi %{[test path_string]}, path: Path do |path|
+        matchpi %{[test member_string]}, member: String do
           M0.schema(item) do |s|
             color = s.key(:color, value: Term, default: Term.of(:white))
             tags = s.key(:tags, value: Term::Dict, default: Term[])
             next unless enabled?(conf, tags)
 
-            path = path.expand(conf.tests_path, expand_base: false)
+            path = NormalPath[conf.tests_path / member]
 
             log("Reading #{path}")
 
@@ -457,13 +461,13 @@ module Testtool
           end
         end
 
-        matchpi %{[scenery path_string]}, path: Path do |path|
+        matchpi %{[scenery member_string]}, member: String do
           M0.schema(item) do |s|
             color = s.key(:color, value: Term, default: Term.of(:white))
             tags = s.key(:tags, value: Term::Dict, default: Term[])
             next unless enabled?(conf, tags)
 
-            path = path.expand(conf.tests_path, expand_base: false)
+            path = NormalPath[conf.tests_path / member]
             rgba = Pigment.rgba(color, fallback: Pigment.named("white"))
             outline << SceneryGroup.new(path, rgba, ref, term: item)
           end
@@ -528,7 +532,7 @@ module Testtool
   end
 
   # Writes statistics for *tests* and their *results* to *path*.
-  def wstat(path : Path, tests, results : Array(AssertionResult)) : Nil
+  def wstat(path : NormalPath, tests, results : Array(AssertionResult)) : Nil
     log("Writing stats CSV to #{path}")
 
     # Sort by measurement score.

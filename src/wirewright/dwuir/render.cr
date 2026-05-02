@@ -24,7 +24,7 @@ module Ww::DwUIR
 
   class TextSpec
     # Tries to find the font referenced in this text spec using `FontIndex`.
-    getter? font : Path? do
+    getter? font : NormalPath? do
       FontIndex.path_to?(family, weight, italic: italic)
     end
 

@@ -19,10 +19,10 @@ module Ww
   # ```
   # # You are recommended to watch the parent directory of a file for more
   # # stability on atomic writes.
-  # PathMonitorService.add(Path["/tmp"])
+  # PathMonitorService.add(NormalPath["/tmp"])
   #
   # loop do
-  #   pp PathService.read(Path["/tmp/a"]).wait
+  #   pp PathService.read(NormalPath["/tmp/a"]).wait
   #   sleep 1.second
   # end
   #
@@ -36,7 +36,7 @@ module Ww
   # # ...
   #
   # loop do
-  #   pp PathService.read(Path["/tmp/a"]).wait
+  #   pp PathService.read(NormalPath["/tmp/a"]).wait
   # end
   #
   # # Prints the *up-to-date* content of /tmp/a really quickly. The runtime of
@@ -47,8 +47,8 @@ module Ww
   #
   # ```
   # loop do
-  #   PathService.invalidate(Path["/tmp/a"])
-  #   pp PathService.read(Path["/tmp/a"]).wait
+  #   PathService.invalidate(NormalPath["/tmp/a"])
+  #   pp PathService.read(NormalPath["/tmp/a"]).wait
   #   sleep 1.second
   # end
   #
@@ -124,8 +124,8 @@ module Ww
 
     alias DirListingEntry = FileEntry | DirEntry
 
-    defrecord FileEntry, path : Path
-    defrecord DirEntry, path : Path
+    defrecord FileEntry, path : NormalPath
+    defrecord DirEntry, path : NormalPath
 
     alias WriteResult = Present | Absent
 
@@ -140,24 +140,24 @@ module Ww
     alias Notification = ReportInvalid | ReadingInvalid | ReportReady | ReadingReady
 
     # Signals that the `Report` for *path* was invalidated.
-    defrecord ReportInvalid, path : Path
+    defrecord ReportInvalid, path : NormalPath
 
     # Signals that the `Reading` for *path* was invalidated.
-    defrecord ReadingInvalid, path : Path
+    defrecord ReadingInvalid, path : NormalPath
 
     # Signals that a `Report` for *path* is ready; *path*'s corresponding promise was
     # fulfilled and discarded.
-    defrecord ReportReady, path : Path
+    defrecord ReportReady, path : NormalPath
 
     # Signals that a `Reading` for *path* is ready; *path*'s corresponding promise was
     # fulfilled and discarded.
-    defrecord ReadingReady, path : Path
+    defrecord ReadingReady, path : NormalPath
 
     alias Msg = ReportWanted | ReadingWanted | Write | PathMonitorService::Notification
 
-    defrecord ReportWanted, path : Path
-    defrecord ReadingWanted, path : Path
-    defrecord Write, path : Path, content : Term::Blob, result : Sync::Future(WriteResult)
+    defrecord ReportWanted, path : NormalPath
+    defrecord ReadingWanted, path : NormalPath
+    defrecord Write, path : NormalPath, content : Term::Blob, result : Sync::Future(WriteResult)
 
     @@msgs = BlockingQueue(Msg).new
     @@running = Atomic(Bool).new(false)
@@ -216,7 +216,7 @@ module Ww
         end
       end
 
-      def self.report(path : Path) : Report
+      def self.report(path : NormalPath) : Report
         Log.debug { "open() #{path}" }
 
         begin
@@ -233,7 +233,7 @@ module Ww
         end
       end
 
-      private def self.report(path : Path, descriptor : IO::FileDescriptor)
+      private def self.report(path : NormalPath, descriptor : IO::FileDescriptor)
         info = descriptor.info
 
         if info.file?
@@ -245,33 +245,33 @@ module Ww
         end
       end
 
-      private def self.report_file(path : Path, descriptor : IO::FileDescriptor, info : File::Info)
+      private def self.report_file(path : NormalPath, descriptor : IO::FileDescriptor, info : File::Info)
         assert info.file?
 
         FileListing.new(info.modification_time, info.size)
       end
 
-      private def self.report_dir(path : Path, descriptor : IO::FileDescriptor, info : File::Info)
+      private def self.report_dir(path : NormalPath, descriptor : IO::FileDescriptor, info : File::Info)
         assert info.directory?
 
         Log.debug { "opendir() #{path}" }
 
         unless dir = LibC.fdopendir(descriptor.fd)
-          raise File::Error.from_errno("Error opening directory", file: path)
+          raise File::Error.from_errno("Error opening directory", file: path.unwrap)
         end
 
         entries = Pf::Kit.stack_array(DirListingEntry)
 
-        while entry = Crystal::System::Dir.next_entry(dir, path)
+        while entry = Crystal::System::Dir.next_entry(dir, path.unwrap)
           next if entry.name.in?(".", "..")
 
           is_dir = entry.dir?
           next if is_dir.nil? # unknown
 
           if is_dir
-            entries << DirEntry.new(path / entry.name)
+            entries << DirEntry.new(NormalPath[path / entry.name])
           else
-            entries << FileEntry.new(path / entry.name)
+            entries << FileEntry.new(NormalPath[path / entry.name])
           end
         end
 
@@ -280,10 +280,10 @@ module Ww
         DirListing.new(info.modification_time, entries.to_unsafe_readonly_slice!)
       end
 
-      def self.read(path : Path) : Reading
+      def self.read(path : NormalPath) : Reading
         Log.trace { "read(#{path})" }
 
-        File.open(path, mode: "rb") do |file|
+        File.open(path.unwrap, mode: "rb") do |file|
           info = file.info
 
           if info.size < MAX_CONTENT_BYTESIZE
@@ -315,8 +315,8 @@ module Ww
         DigestReading.new(digest.final, info.size)
       end
 
-      private def write(path : Path, blob : Term::Blob) : WriteResult
-        tmp_file = File.tempfile(@rng, tempdir: path.parent)
+      private def write(path : NormalPath, blob : Term::Blob) : WriteResult
+        tmp_file = File.tempfile(@rng, tempdir: path.parent.unwrap)
         tmp_path = tmp_file.path
 
         begin
@@ -326,7 +326,7 @@ module Ww
           tmp_file.close
         end
 
-        File.rename(tmp_path, path)
+        File.rename(tmp_path, path.unwrap)
 
         Present.new
       rescue e : IO::Error
@@ -335,11 +335,11 @@ module Ww
     end
 
     @@report_lock = Sync::Mutex.new
-    @@report_workspace = {} of Path => Sync::Future(Report)
-    @@report_cache = LRU(Path, Report).new(REPORT_CACHE_CAPACITY)
+    @@report_workspace = {} of NormalPath => Sync::Future(Report)
+    @@report_cache = LRU(NormalPath, Report).new(REPORT_CACHE_CAPACITY)
 
     @@read_lock = Sync::Mutex.new
-    @@read_workspace = {} of Path => Sync::Future(Reading)
+    @@read_workspace = {} of NormalPath => Sync::Future(Reading)
     @@read_cache = ReadingCache.new
 
     private class ReadingCache
@@ -355,25 +355,25 @@ module Ww
       end
 
       def initialize
-        @lru = ThresholdLRU(Path, ReadingRef).new(
+        @lru = ThresholdLRU(NormalPath, ReadingRef).new(
           READING_CACHE_CAPACITY,
           READING_CACHE_THRESHOLD_BYTES,
         )
       end
 
-      def get?(path : Path) : Reading?
+      def get?(path : NormalPath) : Reading?
         return unless reading_ref = @lru.get?(path)
 
         reading_ref.reading
       end
 
-      def put(path : Path, reading : Reading) : Reading
+      def put(path : NormalPath, reading : Reading) : Reading
         @lru.put(path, ReadingRef.new(reading))
 
         reading
       end
 
-      def delete(path : Path) : Reading?
+      def delete(path : NormalPath) : Reading?
         return unless reading_ref = @lru.delete(path)
 
         reading_ref.reading
@@ -381,7 +381,7 @@ module Ww
     end
 
     # :nodoc:
-    def broadcast(path : Path, report : Report, *, as cls : Report.class) : Nil
+    def broadcast(path : NormalPath, report : Report, *, as cls : Report.class) : Nil
       result = @@report_lock.synchronize do
         @@report_cache.put(path, report)
         @@report_workspace[path]?
@@ -402,7 +402,7 @@ module Ww
     end
 
     # :nodoc:
-    def broadcast(path : Path, reading : Reading, *, as cls : Reading.class) : Nil
+    def broadcast(path : NormalPath, reading : Reading, *, as cls : Reading.class) : Nil
       result = @@read_lock.synchronize do
         @@read_cache.put(path, reading)
         @@read_workspace[path]?
@@ -423,7 +423,7 @@ module Ww
     end
 
     # :nodoc:
-    def invalidate(path : Path, cls : Report.class) : Nil
+    def invalidate(path : NormalPath, cls : Report.class) : Nil
       @@report_lock.synchronize do
         @@report_cache.delete(path)
       end
@@ -432,7 +432,7 @@ module Ww
     end
 
     # :nodoc:
-    def invalidate(path : Path, cls : Reading.class) : Nil
+    def invalidate(path : NormalPath, cls : Reading.class) : Nil
       @@read_lock.synchronize do
         @@read_cache.delete(path)
       end
@@ -452,21 +452,19 @@ module Ww
     # before waiting on them:
     #
     # ```
-    # PathService.write(Path["/tmp/a"], Term::Blob.new("John Doe")).wait
-    # PathService.write(Path["/tmp/b"], Term::Blob.new("Samantha Doe")).wait
+    # PathService.write(NormalPath["/tmp/a"], Term::Blob.new("John Doe")).wait
+    # PathService.write(NormalPath["/tmp/b"], Term::Blob.new("Samantha Doe")).wait
     #
     # promises = [
-    #   PathService.report(Path["/tmp/a"]),
-    #   PathService.report(Path["/tmp/b"]),
+    #   PathService.report(NormalPath["/tmp/a"]),
+    #   PathService.report(NormalPath["/tmp/b"]),
     # ]
     #
     # readings = promises.map(&.wait.unwrap)
     # pp! readings # => [FileListing(@bytesize=8, ...), FileListing(@bytesize=12, ...)]
     # ```
-    def report(path : Path) : Promise(Report)
+    def report(path : NormalPath) : Promise(Report)
       ensure_running!
-
-      path = Ww.normalize(path)
 
       @@report_lock.synchronize do
         if report = @@report_cache.get?(path)
@@ -485,7 +483,7 @@ module Ww
     # Returns the listing for *path*. Absence is rejected.
     #
     # See also: `report`.
-    def listing(path : Path) : Promise(Listing)
+    def listing(path : NormalPath) : Promise(Listing)
       report(path).map do |report|
         case report
         in Listing then Promise(Listing).accepted(report)
@@ -506,21 +504,19 @@ module Ww
     # before waiting on them:
     #
     # ```
-    # PathService.write(Path["/tmp/a"], Term::Blob.new("John Doe")).wait
-    # PathService.write(Path["/tmp/b"], Term::Blob.new("Samantha Doe")).wait
+    # PathService.write(NormalPath["/tmp/a"], Term::Blob.new("John Doe")).wait
+    # PathService.write(NormalPath["/tmp/b"], Term::Blob.new("Samantha Doe")).wait
     #
     # promises = [
-    #   PathService.read_blob(Path["/tmp/a"]),
-    #   PathService.read_blob(Path["/tmp/b"]),
+    #   PathService.read_blob(NormalPath["/tmp/a"]),
+    #   PathService.read_blob(NormalPath["/tmp/b"]),
     # ]
     #
     # readings = promises.map(&.wait.unwrap.to_string)
     # pp! readings # => ["John Doe", "Samantha Doe"]
     # ```
-    def read(path : Path) : Promise(Reading)
+    def read(path : NormalPath) : Promise(Reading)
       ensure_running!
-
-      path = Ww.normalize(path)
 
       @@read_lock.synchronize do
         if reading = @@read_cache.get?(path)
@@ -540,7 +536,7 @@ module Ww
     # is not too large (see `MAX_CONTENT_BYTESIZE`). Rejects otherwise.
     #
     # See also: `read`.
-    def read_blob(path : Path) : Promise(Term::Blob)
+    def read_blob(path : NormalPath) : Promise(Term::Blob)
       read(path).map do |reading|
         case reading
         in ContentReading
@@ -558,7 +554,7 @@ module Ww
 
     # Same as `read_blob`, but converts the resulting blob to a `String`
     # for convenience. Raises `Error` in case of an error.
-    def read_string(path : Path) : String
+    def read_string(path : NormalPath) : String
       result = read_blob(path).wait
       if result.is_a?(Promise::Rejected)
         raise Error.new(result.detail)
@@ -571,9 +567,7 @@ module Ww
 
     # Invalidates readings and reports for *path*, so that calling `read` and
     # `report` on it will result in a cache miss.
-    def invalidate(path : Path) : Nil
-      path = Ww.normalize(path)
-
+    def invalidate(path : NormalPath) : Nil
       invalidate(path, Report)
       invalidate(path, Reading)
     end
@@ -584,7 +578,7 @@ module Ww
     # the given set of *paths*.
     #
     # *args* are forwarded to `listen`.
-    def wait(paths : Set(Path), *args) : Nil
+    def wait(paths : Set(NormalPath), *args) : Nil
       listen(*args) do |notification|
         next unless notification.path.in?(paths)
         break
@@ -595,7 +589,7 @@ module Ww
     # mentions any path from the given set of *paths*.
     #
     # *args* are forwarded to `listen`.
-    def wait(paths : Set(Path), mask : Enumerable(Notification.class), *args) : Nil
+    def wait(paths : Set(NormalPath), mask : Enumerable(Notification.class), *args) : Nil
       listen(*args) do |notification|
         next unless notification.class.in?(mask)
         next unless notification.path.in?(paths)
@@ -611,10 +605,9 @@ module Ww
     # It does not "cushion" your calls in any way. If you call it a million times,
     # it will schedule a million writes, and the message loop will faithfully
     # execute each one of them.
-    def write(path : Path, blob : Term::Blob) : Promise(WriteResult)
+    def write(path : NormalPath, blob : Term::Blob) : Promise(WriteResult)
       ensure_running!
 
-      path = Ww.normalize(path)
       result = Sync::Future(WriteResult).new
       @@msgs << Write.new(path, blob, result)
 

@@ -20,15 +20,15 @@ module Ww
 
     alias Query = FileQuery | CodexQuery | RuntimeQuery | FontQuery | CodepointsQuery | URIQuery | IdQuery
 
-    defrecord RuntimeQuery, path : Path
+    defrecord RuntimeQuery, path : NormalPath
     defrecord CodexQuery, name : String
-    defrecord FileQuery, path : Path
+    defrecord FileQuery, path : NormalPath
     defrecord FontQuery, family : String, weight : Int32, italic : Bool
     defrecord CodepointsQuery, family : String
     defrecord URIQuery, uri : URI
     defrecord IdQuery, content : Term::Blob
 
-    def runtime(path : Path) : RuntimeQuery
+    def runtime(path : NormalPath) : RuntimeQuery
       RuntimeQuery.new(path)
     end
 
@@ -36,7 +36,7 @@ module Ww
       CodexQuery.new(name)
     end
 
-    def file(path : Path) : FileQuery
+    def file(path : NormalPath) : FileQuery
       FileQuery.new(path)
     end
 
@@ -59,7 +59,7 @@ module Ww
     defrecord Wait
 
     private def get_impl(query : CodexQuery) : Response
-      get_impl(RuntimeQuery.new(Path["codices"] / (query.name + ".codex.wwml")))
+      get_impl(RuntimeQuery.new(NormalPath["codices"] / (query.name + ".codex.wwml")))
     end
 
     private def get_impl(query : RuntimeQuery) : Response
@@ -116,7 +116,7 @@ module Ww
     end
 
     # :nodoc:
-    defrecord FontEntry, path : Path, weight : FontWeight, italic : Bool
+    defrecord FontEntry, path : NormalPath, weight : FontWeight, italic : Bool
 
     # The supported font extensions.
     FONT_EXTENSIONS = {".otf", ".ttf"}
@@ -149,7 +149,7 @@ module Ww
         return Absent.new(detail: "Wirewright runtime directory does not exist")
       end
 
-      case view = PathServer.view(runtime / "fonts" / query.family)
+      case view = PathServer.view(NormalPath[runtime / "fonts" / query.family])
       in PathServer::Wait
         Wait.new
       in PathServer::Absent
@@ -185,7 +185,7 @@ module Ww
         return Absent.new(detail: "Wirewright runtime directory does not exist")
       end
 
-      case view = PathServer.view(runtime / "fonts" / query.family)
+      case view = PathServer.view(NormalPath[runtime / "fonts" / query.family])
       in PathServer::Wait
         Wait.new
       in PathServer::Absent
@@ -292,7 +292,7 @@ module Ww
     # Parses *term* into a query.
     def query?(term : Term) : Query?
       Term.case(term) do
-        matchpi %{(file path_string)}, path: Path do
+        matchpi %{(file path_string)}, path: NormalPath do
           FileQuery.new(path)
         end
 

@@ -70,8 +70,8 @@ module Ww
 
     alias DirListingEntry = FileEntry | DirEntry
 
-    defrecord FileEntry, path : Path, timestamp : Time
-    defrecord DirEntry, path : Path, timestamp : Time
+    defrecord FileEntry, path : NormalPath, timestamp : Time
+    defrecord DirEntry, path : NormalPath, timestamp : Time
 
     # Returns `true` if two facts *a* and *b* contradict each other.
     private def contradicts?(a : Fact, b : Fact) : Bool
@@ -147,9 +147,9 @@ module Ww
     end
 
     @@r_lock = Sync::Mutex.new
-    @@r_submissions = Pf::Set(Path).new
-    @@r_demand = Pf::Set(Path).new
-    @@r_supply = Pf::Map(Path, Supply).new
+    @@r_submissions = Pf::Set(NormalPath).new
+    @@r_demand = Pf::Set(NormalPath).new
+    @@r_supply = Pf::Map(NormalPath, Supply).new
 
     @@r_world_changed = BlockingSignal.new
     @@r_waiters_signal = BlockingSignal.new
@@ -183,12 +183,12 @@ module Ww
         # read from it, that's it. More discrete modifications are not ours.
         demand, supply0 = @@r_lock.synchronize do
           @@r_demand = @@r_demand.concat(@@r_submissions)
-          @@r_submissions = Pf::Set(Path).new
+          @@r_submissions = Pf::Set(NormalPath).new
           {@@r_demand, @@r_supply}
         end
 
         # Process demands.
-        supply1 = Pf::Map(Path, Supply).transaction do |txn|
+        supply1 = Pf::Map(NormalPath, Supply).transaction do |txn|
           demand.each do |path|
             state = supply0[path]?
 
@@ -211,7 +211,7 @@ module Ww
 
             begin
               # If the version number changed, request metadata from disk.
-              info0 = File.info(path)
+              info0 = File.info(path.unwrap)
 
               # If timestamps changed, proceed. If they haven't, we had some sort of
               # spurious version change which we ignore.
@@ -227,15 +227,15 @@ module Ww
 
                 Log.info { "inspecting directory entries at #{path}" }
 
-                Dir.each_child(path) do |entry|
+                Dir.each_child(path.unwrap) do |entry|
                   entry_path = path / entry
 
                   begin
                     entry_info = File.info(entry_path)
                     if entry_info.file?
-                      entries << FileEntry.new(entry_path, entry_info.modification_time)
+                      entries << FileEntry.new(NormalPath[entry_path], entry_info.modification_time)
                     elsif entry_info.directory?
-                      entries << DirEntry.new(entry_path, entry_info.modification_time)
+                      entries << DirEntry.new(NormalPath[entry_path], entry_info.modification_time)
                     end
                   rescue e : File::Error
                     Log.trace(exception: e) { "file error while inspecting directory entry #{entry_path}" }
@@ -252,7 +252,7 @@ module Ww
                 if info0.size > SAFE_FILE_BYTESIZE
                   Log.info { "computing digest for large file at #{path}" }
 
-                  digest = File.open(path, "rb") do |src|
+                  digest = File.open(path.unwrap, "rb") do |src|
                     Term::Blob::DIGEST_ALGORITHM.digest do |dst|
                       loop do
                         size = src.read(buffer)
@@ -267,7 +267,7 @@ module Ww
                 else
                   Log.info { "reading file at #{path}" }
 
-                  content = File.open(path, "rb") do |src|
+                  content = File.open(path.unwrap, "rb") do |src|
                     Term::Blob.build(classify: true) do |dst|
                       loop do
                         blksize = src.read(buffer)
@@ -287,7 +287,7 @@ module Ww
                   # the second, someone writes right afterwards, we do this check, we think
                   # it wasn't modified, but it was...)
                   modified = pass do
-                    info1 = File.info(path)
+                    info1 = File.info(path.unwrap)
                     next true unless info0.size == info1.size
                     next true unless info0.modification_time == info1.modification_time
 
@@ -330,13 +330,13 @@ module Ww
     end
 
     @@w_supply_changed = BlockingSignal.new
-    @@w_supply = Pf::Map(Path, Pf::Set(Fact)).new
+    @@w_supply = Pf::Map(NormalPath, Pf::Set(Fact)).new
     @@w_supply_lock = Sync::Mutex.new
 
     # These @@vars are only accessed in unify() which is called exclusively
     # by wloop so they don't need any protection.
     @@w_rng = Random::PCG32.new
-    @@w_model = {} of Path => Bytes
+    @@w_model = {} of NormalPath => Bytes
     @@w_model_lock = Sync::Mutex.new
 
     # Write loop
@@ -353,7 +353,7 @@ module Ww
         # Atomically read and clear the supply.
         supply0 = @@w_supply_lock.synchronize do
           supply = @@w_supply
-          @@w_supply = Pf::Map(Path, Pf::Set(Fact)).new
+          @@w_supply = Pf::Map(NormalPath, Pf::Set(Fact)).new
           supply
         end
 
@@ -373,7 +373,7 @@ module Ww
       end
     end
 
-    private def unify(path : Path, fact : IsFile) : Nil
+    private def unify(path : NormalPath, fact : IsFile) : Nil
       case status = PathMonitor.status(path)
       in PathMonitor::Wait
         @@w_model.delete(path)
@@ -394,7 +394,7 @@ module Ww
 
       Log.debug { "wloop: begin atomic write to #{path}" }
 
-      tmp_file = File.tempfile(@@w_rng, tempdir: path.parent)
+      tmp_file = File.tempfile(@@w_rng, tempdir: path.parent.unwrap)
       tmp_path = tmp_file.path
 
       begin
@@ -404,7 +404,7 @@ module Ww
         tmp_file.close
       end
 
-      File.rename(tmp_path, path)
+      File.rename(tmp_path, path.unwrap)
 
       @@w_model[path] = fact.content.digest
 
@@ -413,14 +413,14 @@ module Ww
       Log.debug(exception: e) { "wloop: error while writing to #{path}" }
     end
 
-    private def unify(path : Path, fact : IsDir) : Nil
+    private def unify(path : NormalPath, fact : IsDir) : Nil
       case PathMonitor.status(path)
       in PathMonitor::Wait
       in PathMonitor::Absent
         Log.info { "wloop: creating directory #{path}" }
 
         begin
-          Dir.mkdir(path)
+          Dir.mkdir(path.unwrap)
         rescue e : File::Error
           Log.debug(exception: e) { "wloop: error while creating directory #{path}" }
         end
@@ -428,10 +428,10 @@ module Ww
       end
     end
 
-    private def unify(path : Path, fact : FilePresent) : Nil
+    private def unify(path : NormalPath, fact : FilePresent) : Nil
       entry_path = path / fact.name
 
-      case PathMonitor.status(entry_path)
+      case PathMonitor.status(NormalPath[entry_path])
       in PathMonitor::Wait
       in PathMonitor::Absent
         Log.info { "wloop: creating file #{entry_path}" }
@@ -445,10 +445,10 @@ module Ww
       end
     end
 
-    private def unify(path : Path, fact : FileAbsent) : Nil
+    private def unify(path : NormalPath, fact : FileAbsent) : Nil
       entry_path = path / fact.name
 
-      case PathMonitor.status(entry_path)
+      case PathMonitor.status(NormalPath[entry_path])
       in PathMonitor::Wait
       in PathMonitor::Absent
       in PathMonitor::Present
@@ -462,10 +462,10 @@ module Ww
       end
     end
 
-    private def unify(path : Path, fact : DirPresent) : Nil
+    private def unify(path : NormalPath, fact : DirPresent) : Nil
       entry_path = path / fact.name
 
-      case PathMonitor.status(entry_path)
+      case PathMonitor.status(NormalPath[entry_path])
       in PathMonitor::Wait
       in PathMonitor::Absent
         Log.info { "wloop: creating directory #{entry_path}" }
@@ -479,10 +479,10 @@ module Ww
       end
     end
 
-    private def unify(path : Path, fact : DirAbsent) : Nil
+    private def unify(path : NormalPath, fact : DirAbsent) : Nil
       entry_path = path / fact.name
 
-      case PathMonitor.status(entry_path)
+      case PathMonitor.status(NormalPath[entry_path])
       in PathMonitor::Wait
       in PathMonitor::Absent
       in PathMonitor::Present
@@ -505,9 +505,7 @@ module Ww
     # Returns a view of *path*. The returned view is a snapshot of the file
     # system at some unspecified point in time. The view is *eventually consistent*:
     # it may not reflect the instantaneous state of the file system.
-    def view(path : Path) : View | Wait
-      path = Ww.normalize(path)
-
+    def view(path : NormalPath) : View | Wait
       ensure_server_running!
 
       @@r_lock.synchronize do
@@ -558,9 +556,7 @@ module Ww
     # involved (esp. in having to read and keep files in memory). We believe the trade-offs
     # are in favor in the kilobyte to megabyte file range. You are expected to use a different
     # subsystem for handling large files.
-    def converge(path : Path, facts facts1 : Pf::Set(Fact)) : Nil
-      path = Ww.normalize(path)
-
+    def converge(path : NormalPath, facts facts1 : Pf::Set(Fact)) : Nil
       ensure_server_running!
 
       @@w_supply_lock.synchronize do
@@ -575,7 +571,7 @@ module Ww
 
     # A shorthand for when you know all facts ahead-of-time and don't want to
     # construct the set of facts manually.
-    def converge(path : Path, *facts : Fact) : Nil
+    def converge(path : NormalPath, *facts : Fact) : Nil
       converge(path, facts.map(&.as(Fact)).to_pf_set)
     end
 
@@ -593,7 +589,7 @@ module Ww
     # cheap polling use view() and converge(), which are, effectively, cushions around
     # read(), write(), and delete().
 
-    def listing(path : Path) : Listing | Absent
+    def listing(path : NormalPath) : Listing | Absent
       epoch = 0u64
 
       loop do
@@ -609,7 +605,7 @@ module Ww
 
     # Loads the file at *path* into memory and returns its content, as a slice
     # of bytes. Raises `Error` if the file cannot be read.
-    def read(path : Path) : Term::Blob
+    def read(path : NormalPath) : Term::Blob
       case listing = listing(path)
       in FileListing
         listing.content
@@ -625,7 +621,7 @@ module Ww
     # Returns the content of the file at *path* as a `String`.
     #
     # Raises `Error` if the file cannot be read.
-    def read_string(path : Path, **kwargs) : String
+    def read_string(path : NormalPath, **kwargs) : String
       read(path, **kwargs).to_string
     end
 
@@ -633,7 +629,7 @@ module Ww
     #
     # NOTE: This function may block for an indefinite amount of time, since it
     # waits for the proof that the file really was written to disk.
-    def write(path : Path, content : Term::Blob) : Nil
+    def write(path : NormalPath, content : Term::Blob) : Nil
       epoch = 0u64
 
       loop do
@@ -656,7 +652,7 @@ module Ww
     end
 
     # :ditto:
-    def write(path : Path, content : String, **kwargs)
+    def write(path : NormalPath, content : String, **kwargs)
       write(path, content.to_slice, **kwargs)
     end
 
@@ -666,7 +662,7 @@ module Ww
     #
     # NOTE: This function may block for an indefinite amount of time, since it
     # waits for the proof that the file really was removed.
-    def delete(path : Path) : Nil
+    def delete(path : NormalPath) : Nil
       loop do
         converge(path.parent, FileAbsent.new(path.basename))
 

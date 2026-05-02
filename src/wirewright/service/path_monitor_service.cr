@@ -13,9 +13,9 @@ module Ww
     alias Msg = PathAdded | PathRemoved | Heartbeat | Inotify::Event
 
     # :nodoc:
-    defrecord PathAdded, path : Path
+    defrecord PathAdded, path : NormalPath
     # :nodoc:
-    defrecord PathRemoved, path : Path
+    defrecord PathRemoved, path : NormalPath
     # :nodoc:
     defrecord Heartbeat, wg : WaitGroup
 
@@ -23,26 +23,26 @@ module Ww
     alias Notification = EntryCreated | EntryChanged | EntryRemoved | FileModified | FileCommitted
 
     # The file system entry at *path* was created.
-    defrecord EntryCreated, path : Path
+    defrecord EntryCreated, path : NormalPath
 
     # The file system entry at *path* was changed (e.g. timestamp, permissions).
-    defrecord EntryChanged, path : Path
+    defrecord EntryChanged, path : NormalPath
 
     # The file system entry at *path* was removed.
-    defrecord EntryRemoved, path : Path
+    defrecord EntryRemoved, path : NormalPath
 
     # The file at *path* was modified. It is possible that the file is
     # being modified at the moment.
     #
     # See also: `FileCommitted`.
-    defrecord FileModified, path : Path
+    defrecord FileModified, path : NormalPath
 
     # The file at *path* was closed after writing.
-    defrecord FileCommitted, path : Path
+    defrecord FileCommitted, path : NormalPath
 
     @@lock = Sync::Mutex.new
     @@msgs = BlockingQueue(Msg).new
-    @@watchtab = {} of Path => Int32
+    @@watchtab = {} of NormalPath => Int32
     @@running = false
 
     # WARNING: Assumes `@@lock` is taken.
@@ -85,8 +85,8 @@ module Ww
     # :nodoc:
     class Msgloop
       def initialize(@ctx : Inotify::Context)
-        @watching = Bimap(Path, Inotify::WatchRef).new
-        @polling = Set(Path).new
+        @watching = Bimap(NormalPath, Inotify::WatchRef).new
+        @polling = Set(NormalPath).new
       end
 
       def receive(msg : Msg) : Nil
@@ -105,7 +105,7 @@ module Ww
 
       private def handle(msg : Heartbeat) : Nil
         polling = @polling
-        @polling = Set(Path).new
+        @polling = Set(NormalPath).new
 
         polling.each do |path|
           # This will either transfer path to @watching, or back to @polling.
@@ -121,9 +121,10 @@ module Ww
       private def handle(msg : Inotify::Event) : Nil
         return unless path = @watching[msg.ref]?
 
-        member = path
-        unless msg.name.empty?
-          member /= msg.name
+        if msg.name.empty?
+          member = path
+        else
+          member = NormalPath[path / msg.name]
         end
 
         if msg.mask.create? || msg.mask.moved_to?
@@ -166,11 +167,11 @@ module Ww
                    LibInotify::Mask::MoveSelf |
                    LibInotify::Mask::DeleteSelf
 
-      private def watch(path : Path) : Nil
+      private def watch(path : NormalPath) : Nil
         return if path.in?(@watching) || path.in?(@polling)
 
         begin
-          ref = Inotify.watch(@ctx, path, mask: WATCH_MASK)
+          ref = Inotify.watch(@ctx, path.unwrap, mask: WATCH_MASK)
           @watching[path] = ref
           Log.trace { "watching #{path} #{ref}" }
         rescue e : Inotify::Error
@@ -179,7 +180,7 @@ module Ww
         end
       end
 
-      private def unwatch(path : Path) : Nil
+      private def unwatch(path : NormalPath) : Nil
         if ref = @watching.delete(path)
           Log.trace { "stop watching #{path} #{ref}" }
           Inotify.unwatch(@ctx, ref)
@@ -197,7 +198,7 @@ module Ww
 
     # Creates a watch for *path* if one does not exist. Increments its
     # reference count.
-    def add(path : Path) : Nil
+    def add(path : NormalPath) : Nil
       @@lock.synchronize do
         ensure_running!
 
@@ -213,7 +214,7 @@ module Ww
 
     # Decrements the reference count for the watch associated with *path*. Removes
     # the watch when its reference count reaches zero.
-    def delete(path : Path) : Nil
+    def delete(path : NormalPath) : Nil
       @@lock.synchronize do
         ensure_running!
 
@@ -235,7 +236,7 @@ module Ww
     # the given set of *paths*.
     #
     # *args* are forwarded to `listen`.
-    def wait(paths : Set(Path), *args) : Nil
+    def wait(paths : Set(NormalPath), *args) : Nil
       listen(*args) do |notification|
         next unless notification.path.in?(paths)
         break
@@ -246,7 +247,7 @@ module Ww
     # mentions any path from the given set of *paths*.
     #
     # *args* are forwarded to `listen`.
-    def wait(paths : Set(Path), mask : Enumerable(Notification.class), *args) : Nil
+    def wait(paths : Set(NormalPath), mask : Enumerable(Notification.class), *args) : Nil
       listen(*args) do |notification|
         next unless notification.class.in?(mask)
         next unless notification.path.in?(paths)

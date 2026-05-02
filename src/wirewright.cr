@@ -96,12 +96,12 @@ module Ww
   #   be determined, it is set to `nil`. Note that due to races and TOCTOU type
   #   of stuff, the fact that *runtime* is not nil does not mean it exists at
   #   the current moment; it only means that it existed at the time of check.
-  defrecord RootSet, cwd : Path, home : Path, runtime : Path?
+  defrecord RootPathSet, cwd : Path, home : Path, runtime : Path?
 
   # Returns the root path set of Wirewright.
   #
-  # See `RootSet` for more info.
-  class_getter roots : RootSet do
+  # See `RootPathSet` for more info.
+  class_getter roots : RootPathSet do
     cwd = pass do
       if setting = ENV["WW_CWD"]?
         next Path[setting]
@@ -133,19 +133,6 @@ module Ww
       end
     end
 
-    RootSet.new(cwd, home, runtime)
-  end
-
-  # Normalizes the given *path* with respect to Wirewright's root path set `roots`.
-  def self.normalize(path : Path) : Path
-    unless path.normal?
-      path = path.normalize
-    end
-
-    unless path.absolute?
-      path = path.expand(base: roots.cwd, home: roots.home, expand_base: false)
-    end
-
-    path
+    RootPathSet.new(cwd, home, runtime)
   end
 end

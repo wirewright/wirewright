@@ -240,7 +240,7 @@ module Testtool
   end
 
   defrecord SceneryTest,
-    path : Path,
+    path : NormalPath,
     in : Term,
     out_ppm : Term::Blob,
     hit : Term?,
@@ -272,7 +272,7 @@ module Testtool
     end
 
     unless ppm == test.out_ppm
-      fail_path = Path["/tmp/scenery.#{test.path.stem}.fail.ppm"]
+      fail_path = NormalPath["/tmp/scenery.#{test.path.stem}.fail.ppm"]
       complaints << complaint("in.wwml does not match out.ppm (writing to #{fail_path})")
       scene_out.diagnostics.each do |diagnostic|
         complaints << complaint("diagnostic: #{diagnostic.inspect}")
@@ -636,7 +636,7 @@ module Testtool
 
       warn("Oops, images are different. Writing artifact to #{tempdst}")
 
-      PathService.write(tempdst, Term::Blob.new(ppm)).wait
+      PathService.write(NormalPath[tempdst], Term::Blob.new(ppm)).wait
     end
 
     complaints << complaint("Images are different")
