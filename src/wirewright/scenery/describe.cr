@@ -268,7 +268,7 @@ module Ww::Scenery
       Rect.union(memo, child.bounds)
     end
 
-    total = Point.max(box.bounds.size, content_box.size)
+    total = Point.max(box.bounds.size, content_box.size, Point[1, 1])
 
     desc = Term::Dict.build do |commit|
       commit << :clip
