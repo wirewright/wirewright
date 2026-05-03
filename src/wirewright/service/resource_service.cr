@@ -67,7 +67,7 @@ module Ww
 
     # Signals that a response is present and was loaded into memory successfully
     # as *content*.
-    defrecord Present, content : Term::Blob
+    defrecord Present, query : ResolvedQuery, content : Term::Blob
 
     # Signals that a response is absent and/or was not loaded into memory. *detail*
     # may provide further explanation.
@@ -186,7 +186,7 @@ module Ww
           if best
             Promise(Resn).accepted(FileQuery.new(best.path))
           else
-            Promise(Resn).accepted(Absent.new(detail: "could not find matching font in family"))
+            Promise(Resn).accepted(Absent.new("could not find matching font in family"))
           end
         end
       end
@@ -218,7 +218,7 @@ module Ww
       PathService.read(query.path).map do |reading|
         case reading
         in PathService::ContentReading
-          response = Present.new(reading.blob)
+          response = Present.new(query, reading.blob)
         in PathService::DigestReading
           response = Absent.new("resource too large to load into memory")
         in PathService::Absent
@@ -233,7 +233,7 @@ module Ww
       HTTPService.get(query.uri).map do |response|
         case response
         in HTTPService::Present
-          Promise(Response).accepted(Present.new(response.body))
+          Promise(Response).accepted(Present.new(query, response.body))
         in HTTPService::Absent, HTTPService::Aborted
           Promise(Response).accepted(Absent.new(response.detail))
         end
@@ -241,7 +241,7 @@ module Ww
     end
 
     private def get!(query : IdQuery) : Promise(Response)
-      Promise(Response).resolved(Present.new(query.content))
+      Promise(Response).resolved(Present.new(query, query.content))
     end
 
     # Returns the response to *query*. The returned response is based on a snapshot
