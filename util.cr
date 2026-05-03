@@ -1464,6 +1464,13 @@ struct StringView
     starts_with?(ch) ? skip(ch.bytesize) : nil
   end
 
+  def thru(& : Char -> T) : {T?, StringView} forall T
+    return nil, self unless first = first_char?
+    return nil, self unless object = yield first
+
+    {object, rest}
+  end
+
   def subview(char_start : Int32, char_end : Int32) : StringView
     if ascii_only?
       return byte_subview(char_start, char_end)

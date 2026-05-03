@@ -165,24 +165,24 @@ module Ww::CSSColor
     NAMED[name]?
   end
 
-  private def hexcolor?(r : Rtk::R)
-    Rtk.skip(r, " ")
-    return unless Rtk.ahead?(r, "#")
+  # :nodoc:
+  def hexcolor?(seln : StringView) : {UInt8, UInt8, UInt8, UInt8}?
+    seln = seln.lstrip(" ")
+    return unless seln = seln.lchop?('#')
 
-    Rtk.forward(r)
+    # Read through RRGGBBAA.
+    d0, seln = seln.thru(&.to_i?(base: 16))
+    d1, seln = seln.thru(&.to_i?(base: 16)) if d0
+    d2, seln = seln.thru(&.to_i?(base: 16)) if d1
+    d3, seln = seln.thru(&.to_i?(base: 16)) if d2
+    d4, seln = seln.thru(&.to_i?(base: 16)) if d3
+    d5, seln = seln.thru(&.to_i?(base: 16)) if d4
+    d6, seln = seln.thru(&.to_i?(base: 16)) if d5
+    d7, seln = seln.thru(&.to_i?(base: 16)) if d6
 
-    # Try to read all the way up to RRGGBBAA.
-    d0 = Rtk.hexdigit?(r)
-    d1 = d0 && Rtk.hexdigit?(r)
-    d2 = d1 && Rtk.hexdigit?(r)
-    d3 = d2 && Rtk.hexdigit?(r)
-    d4 = d3 && Rtk.hexdigit?(r)
-    d5 = d4 && Rtk.hexdigit?(r)
-    d6 = d5 && Rtk.hexdigit?(r)
-    d7 = d6 && Rtk.hexdigit?(r)
+    seln = seln.lstrip(" ")
 
-    Rtk.skip(r, " ")
-    return unless Rtk.at_end?(r)
+    return unless seln.empty?
 
     if d0 && d1 && d2 && d4.nil?
       r = (d0 << 4 | d0).to_u8
@@ -211,8 +211,6 @@ module Ww::CSSColor
   # In theory, the reference is: https://drafts.csswg.org/css-color/#hex-notation.
   # In practice, I don't know how much we (need to) adhere to it here.
   def hexcolor?(string : String) : {UInt8, UInt8, UInt8, UInt8}?
-    reader = Char::Reader.new(string)
-
-    hexcolor?(pointerof(reader))
+    hexcolor?(string.view)
   end
 end
