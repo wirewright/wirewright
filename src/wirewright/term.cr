@@ -725,8 +725,11 @@ module Ww
       end
     end
 
-    {% for spec in { {:UUID, "UUID"}, {:H256, "256-bit term hash"},
-                    {:Path, "path"}, {:NormalPath, "normal path"} } %}
+    {% for spec in { {:UUID, "UUID"},
+                    {:H256, "256-bit term hash"},
+                    {:Path, "path"},
+                    {:NormalPath, "normal path"},
+                    {:URI, "URI"} } %}
       {% type, name = spec %}
 
       # Constructs a string term representing the given {{name.id}} *object*.
