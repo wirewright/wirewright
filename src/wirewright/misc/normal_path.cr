@@ -7,16 +7,23 @@ module Ww
     protected def initialize(*, __path @path : Path)
     end
 
+    # The normalization process is pure & purely lexical, so we can cache it.
+    # Ww.roots are computed once and stay the same for the lifetime of
+    # the process.
+    @@cache = SyncLRU(Path, NormalPath).new(128)
+
     def self.new(path : Path)
-      unless path.normal?
-        path = path.normalize
-      end
+      @@cache.put_if_absent(path) do
+        unless path.normal?
+          path = path.normalize
+        end
 
-      unless path.absolute?
-        path = path.expand(base: Ww.roots.cwd, home: Ww.roots.home, expand_base: false)
-      end
+        unless path.absolute?
+          path = path.expand(base: Ww.roots.cwd, home: Ww.roots.home, expand_base: false)
+        end
 
-      new(__path: path)
+        new(__path: path)
+      end
     end
 
     def self.[](*parts : String)
@@ -38,6 +45,10 @@ module Ww
     def parent : NormalPath
       # If @path is normal, then @path.parent is normal.
       NormalPath.new(__path: @path.parent)
+    end
+
+    def basename : String
+      @path.basename
     end
 
     def stem : String
