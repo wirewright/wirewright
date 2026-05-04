@@ -58,16 +58,13 @@ module Ww::ML
     # the transaction is committed, and the block's result is returned.
     private def txn(&)
       state = @cursor.state
+      restore = true
 
       begin
         result = yield
-
-        case result
-        when Err
-          @cursor.restore(state)
-        end
+        restore = result.is_a?(Err)
       ensure
-        if result.nil?
+        if restore
           @cursor.restore(state)
         end
       end
@@ -151,6 +148,14 @@ module Ww::ML
 
     private def failure(detail : String, text : StringView, **kwargs)
       Failure.new(detail, text, **kwargs)
+    end
+
+    private def bind(result, &)
+      yield result
+    end
+
+    private def bind(result : Err, &)
+      result
     end
 
     # Transaction: chooses the first successful parseout-returning branch
@@ -859,7 +864,18 @@ module Ww::ML
       # If `(¦ a⏏: b c)`, then residue = (), pairspattern = (a: b c)
       head = residue = nil
 
-      case π = txn { selector }
+      π = txn do
+        bind(selector) do |tree|
+          # HACK: hard-code `(¦ x⏏←_)` and the like to count as residue.
+          if ahead?(:arrow_left)
+            next refusal("invalid selector", ahead.text.before_begin)
+          end
+
+          tree
+        end
+      end
+
+      case π
       when Refusal
         residue = value!(slot, expect: "expected a residue expression")
       when Failure

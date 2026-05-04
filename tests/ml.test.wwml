@@ -1108,3 +1108,8 @@
   (- ⎡⟬de ⏏q⏏ux⟭⎤ ⎡expected hex digit(s) or `⟭` to end the blob⎤)
   (- ⎡⟬d⏏q⏏ead⟭⎤ ⎡expected hex digit(s) or `⟭` to end the blob⎤)
   (- ⎡⟬dead⏏q⏏⟭⎤ ⎡expected hex digit(s) or `⟭` to end the blob⎤))
+
+;; BUG: x←_ must parse as residue after ¦
+(ml
+  (= ⎡(_* ¦ x←_)⎤ ⎡(_* ¦ (%let x _))⎤)
+  (= ⎡(¦ x←_)⎤ ⎡(¦ (%let x _))⎤))
