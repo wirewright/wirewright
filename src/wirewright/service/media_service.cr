@@ -250,8 +250,22 @@ module Ww
     # :nodoc:
     defrecord WindowClosed, session_key : Term, wg : WaitGroup
 
+    # :nodoc:
+    alias SpecState = PendingSpec | ReadySpec | WithdrawnSpec
+
+    # :nodoc:
+    defrecord PendingSpec, spec : WindowSpec, wg : WaitGroup
+    # :nodoc:
+    defrecord ReadySpec, spec : WindowSpec
+    # :nodoc:
+    defrecord WithdrawnSpec, spec : WindowSpec, wg : WaitGroup
+
     @@lock = Sync::Mutex.new
-    @@workspace = {} of Term => WindowSpec
+
+    @@workspace = {} of Term => SpecState
+    @@workspace_dirty = false
+    @@workspace_signal = BlockingSignal.new
+
     @@msgs = BlockingQueue(Msg).new
     @@buffer = BlockingQueue(Msg).new
 
@@ -303,7 +317,71 @@ module Ww
           msg = @@msgs.shift
           Log.trace { "relay #{msg}" }
           @@buffer << msg
-          SDL.push(SDL::Deq.new)
+          SDL.push(SDL::Trigger.new)
+        end
+      end
+
+      spawn(name: "MediaService workspace reaper") do
+        epoch = 0u64
+
+        opened = Set(Term).new
+        ready = [] of {Term, ReadySpec}
+        closed = [] of Term
+        waiting = [] of WaitGroup
+
+        loop do
+          epoch = @@workspace_signal.wait(epoch)
+
+          Log.trace { "workspace reap" }
+
+          begin
+            @@lock.synchronize do
+              @@workspace.each do |key, state|
+                case state
+                in PendingSpec
+                  if opened.add?(key)
+                    @@msgs << WindowOpened.new(key, state.spec, state.wg)
+                  else
+                    @@msgs << WindowUpdated.new(key, state.spec, state.wg)
+                  end
+
+                  ready << {key, ReadySpec.new(state.spec)}
+                  waiting << state.wg
+                in ReadySpec # Handled
+                in WithdrawnSpec
+                  next unless opened.delete(key)
+
+                  @@msgs << WindowClosed.new(key, state.wg)
+                  closed << key
+                  waiting << state.wg
+                end
+              end
+
+              ready.each do |key, spec|
+                @@workspace[key] = spec
+              end
+
+              closed.each do |key|
+                @@workspace.delete(key)
+              end
+
+              @@workspace_dirty = false
+            end
+
+            # The reaper must ultimately be bound by SDL, otherwise, we'd overwhelm SDL,
+            # because Crystal runtime lets us get here 100k+ times per second, which is
+            # good for us & of the Crystal runtime, but bad for SDL. Anyway, while we're
+            # waiting here, @@workspace will absorb further changes, and set the dirty flag
+            # if necessary.
+            Log.trace { "reap: waiting for #{waiting.size} WaitGroup(s)" }
+            waiting.each &.wait
+
+            Log.trace { "reap: #{ready.size} spec(s) ->ready, #{closed.size} spec(s) withdrawn" }
+          ensure
+            ready.clear
+            closed.clear
+            waiting.clear
+          end
         end
       end
 
@@ -452,7 +530,7 @@ module Ww
         end
       end
 
-      def handle(event : SDL::Deq) : Nil
+      def handle(event : SDL::Trigger) : Nil
         msg = @buffer.shift
         receive(msg)
       end
@@ -931,45 +1009,120 @@ module Ww
 
     # Creates or updates an association between *key* and a window *spec*. Returns
     # a wait group so that callers can wait for completion (but this is not necessary).
+    #
+    # This function is poll-friendly: you can call it massively, and on modern hardware,
+    # it is expected to run in 100k+ calls per second or more.
     def publish(session_key : Term, spec : WindowSpec) : WaitGroup
-      wg = WaitGroup.new(1)
-
       @@lock.synchronize do
         ensure_running!
 
-        unless spec0 = @@workspace[session_key]?
-          @@workspace[session_key] = spec
-          @@msgs << WindowOpened.new(session_key, spec, wg)
-          next
-        end
+        state = @@workspace[session_key]?
 
-        if spec0 == spec
-          wg.done
-          next
-        end
+        case state
+        in Nil
+          wg = WaitGroup.new(1)
+          @@workspace[session_key] = PendingSpec.new(spec, wg)
+          unless @@workspace_dirty
+            @@workspace_dirty = true
+            @@workspace_signal.call
+          end
 
-        @@workspace[session_key] = spec
-        @@msgs << WindowUpdated.new(session_key, spec, wg)
+          wg
+        in PendingSpec
+          if state.spec == spec
+            return state.wg
+          end
+
+          # Notify PendingSpec clients of completion. We're overwriting their spec
+          # but pretend it was handled.
+          state.wg.done
+
+          wg = WaitGroup.new(1)
+          @@workspace[session_key] = PendingSpec.new(spec, wg)
+          # Since it's PendingSpec, somebody already did @@workspace_signal.call.
+
+          wg
+        in ReadySpec
+          wg = WaitGroup.new(1)
+
+          if state.spec == spec
+            wg.done
+            return wg
+          end
+
+          @@workspace[session_key] = PendingSpec.new(spec, wg)
+          unless @@workspace_dirty
+            @@workspace_dirty = true
+            @@workspace_signal.call
+          end
+
+          wg
+        in WithdrawnSpec
+          # Notify clients who requested withdraw() that their withdraw is "finished".
+          state.wg.done
+
+          wg = WaitGroup.new(1)
+
+          # Demote back into ReadySpec.
+          if state.spec == spec
+            @@workspace[session_key] = ReadySpec.new(spec)
+            unless @@workspace_dirty
+              @@workspace_dirty = true
+              @@workspace_signal.call
+            end
+            wg.done
+            return wg
+          end
+
+          # Replace with PendingSpec.
+          @@workspace[session_key] = PendingSpec.new(spec, wg)
+          unless @@workspace_dirty
+            @@workspace_dirty = true
+            @@workspace_signal.call
+          end
+
+          wg
+        end
       end
-
-      wg
     end
 
     # Withdraws the window spec associated with *session_key*. Returns a wait
     # group so that callers can wait for completion (but this is not necessary).
+    #
+    # This function is poll-friendly: you can call it massively, and on modern hardware,
+    # it is expected to run in 100k+ calls per second or more.
     def withdraw(session_key : Term, cls : WindowSpec.class) : WaitGroup
-      wg = WaitGroup.new(1)
-
       @@lock.synchronize do
-        unless @@workspace.delete(session_key)
+        state = @@workspace[session_key]?
+
+        case state
+        in Nil
+          wg = WaitGroup.new(1)
           wg.done
-          next
+          return wg
+        in PendingSpec
+          # Notify PendingSpec clients of completion. We're withdrawing their spec
+          # but pretend it was handled.
+          state.wg.done
+
+          wg = WaitGroup.new(1)
+          @@workspace[session_key] = WithdrawnSpec.new(state.spec, wg)
+          # Since it's PendingSpec, somebody already did @@workspace_signal.call.
+
+          wg
+        in ReadySpec
+          wg = WaitGroup.new(1)
+          @@workspace[session_key] = WithdrawnSpec.new(state.spec, wg)
+          unless @@workspace_dirty
+            @@workspace_dirty = true
+            @@workspace_signal.call
+          end
+
+          wg
+        in WithdrawnSpec
+          state.wg
         end
-
-        @@msgs << WindowClosed.new(session_key, wg)
       end
-
-      wg
     end
 
     alias Notification = WindowDescriptionChanged

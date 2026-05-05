@@ -9,6 +9,8 @@ module Ww
   module SDL
     extend self
 
+    Log = ::Log.for(self)
+
     FALSE = 0u8
     TRUE  = 1u8
 
@@ -16,7 +18,7 @@ module Ww
       assert({{call}} == {{@type}}::TRUE)
     end
 
-    @@deq : UInt32 = 0
+    @@trigger : UInt32 = 0
 
     def init : Nil
       assert_true LibSDL.set_hint(LibSDL::HINT_NO_SIGNAL_HANDLERS, "1")
@@ -26,7 +28,7 @@ module Ww
       first_event_code = LibSDL.register_events(1)
       assert first_event_code > 0, "LibSDL.register_events(1)"
 
-      @@deq = first_event_code
+      @@trigger = first_event_code
     end
 
     # WARNING: Callers are responsible for destroying cursors using `destroy`.
@@ -48,6 +50,10 @@ module Ww
 
     def make(cls : {Window.class, Renderer.class}, title : String, width : Int32, height : Int32, flags = WindowFlags::None) : {Window, Renderer}
       assert_true LibSDL.create_window_and_renderer(title, width, height, flags, out window, out renderer)
+
+      if LibSDL.set_render_vsync(renderer, LibSDL::RENDERER_VSYNC_ADAPTIVE) == FALSE
+        Log.notice { "setting Vsync to ADAPTIVE failed, continuing with SDL defaults..." }
+      end
 
       {window, renderer}
     end
@@ -155,10 +161,10 @@ module Ww
       assert_true LibSDL.hide_window(window)
     end
 
-    def push(event : Deq)
-      assert @@deq > 0
+    def push(event : Trigger)
+      assert @@trigger > 0
 
-      raw_event = LibSDL::Event.new(type: @@deq)
+      raw_event = LibSDL::Event.new(type: @@trigger)
       assert_true LibSDL.push_event(pointerof(raw_event))
     end
 
@@ -186,9 +192,9 @@ module Ww
       X2     = 5
     end
 
-    alias Event = Deq | WindowEvent | MouseEvent | KeyboardEvent | TextEvent | UnknownEvent
+    alias Event = Trigger | WindowEvent | MouseEvent | KeyboardEvent | TextEvent | UnknownEvent
 
-    defrecord Deq
+    defrecord Trigger
 
     alias WindowEvent = WindowMouseFocusGained | WindowMouseFocusLost | WindowExposed |
                         WindowResized | WindowClosed | WindowFocusGained | WindowFocusLost |
@@ -223,8 +229,8 @@ module Ww
     defrecord UnknownEvent
 
     private def transcribe(event : LibSDL::Event) : Event
-      if event.type == @@deq
-        return Deq.new
+      if event.type == @@trigger
+        return Trigger.new
       end
 
       case type = LibSDL::EventType.new(event.type.to_i)
