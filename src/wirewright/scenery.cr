@@ -136,7 +136,7 @@ module Ww::Scenery
 
     # Compiles a *document* into a scene.
     #
-    # - *cache* is the cache set to use (see `cache_set`).
+    # - *cache* is the cache set to use (see `cache`).
     # - *width* is the width to use for layout at the top-level (e.g., screen or
     #   window width).
     # - *height* is the height to use for layout at the top-level (e.g., screen or
@@ -185,7 +185,7 @@ module Ww::Scenery
     # Converts a compiled *scene* to a tree of draw commands. The draw commands can
     # in turn be rasterized.
     #
-    # *cache* is the cache set to use (see `cache_set`).
+    # *cache* is the cache set to use (see `cache`).
     def depict(cache : CacheSet, scene : Scene) : DrawCommand
       @@lock.synchronize do
         Scenery.depict(cache, scene.root, scene.box)
@@ -241,7 +241,7 @@ module Ww::Scenery
     # The width and height of the resulting pixel rect are the width and height
     # of the scene (see `scene`).
     #
-    # *cache* is the cache set to use (see `cache_set`).
+    # *cache* is the cache set to use (see `cache`).
     #
     # NOTE: If you've already constructed a `screen`, do not use this function;
     # use `rasterize(PixelRect, DrawCommand, Pigment::RGBA)` instead. This function is meant for
@@ -288,7 +288,7 @@ module Ww::Scenery
     # graphics, you almost certainly want to have a dedicated `scene` -> `depict` -> `diff` ->
     # `rasterize` (into an existing screen) pipeline, with its own cache, for performance.
     def rasterize(document : Term, width : Magnitude, height : Magnitude, backdrop : Pigment::RGBA) : Outcome::Accepted(PixelRect)
-      cache = cache_set
+      cache = self.cache
 
       scene(cache, document, width, height).map do |scene|
         rasterize(cache, scene, backdrop)
