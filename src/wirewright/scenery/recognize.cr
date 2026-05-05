@@ -1,4 +1,58 @@
 module Ww::Scenery
+  # The Scenery KnowledgeBase provides answers to questions related to Scenery,
+  # Scenery nodes, descriptions of Scenery nodes, etc.
+  module KnowledgeBase
+    extend self
+
+    # TODO: Is there a way to generate this automatically. I'm afraid it's going
+    # to be rather inconvenient to maintain this and recognize() in sync...
+
+    # :nodoc:
+    LEAF_HEADS = Set{
+      Term.of(:rect),
+      Term.of(:text),
+      Term.of(:icon),
+      Term.of(:svg),
+      Term.of(:img),
+    }
+
+    # :nodoc:
+    PARENT_HEADS = Set{
+      Term.of(:"floating"),
+      Term.of(:"content"),
+      Term.of(:"limit"),
+      Term.of(:"padding"),
+      Term.of(:"align"),
+      Term.of(:"x-stack"),
+      Term.of(:"y-stack"),
+      Term.of(:"z-stack"),
+      Term.of(:"x-wrap"),
+      Term.of(:"y-wrap"),
+      Term.of(:"composite"),
+      Term.of(:"transform"),
+      Term.of(:"viewport"),
+      Term.of(:"aim"),
+      Term.of(:"page"),
+      Term.of(:"overlay"),
+      Term.of(:"suspense"),
+      Term.of(:"variant"),
+      Term.of(:"observable"),
+      Term.of(:"gate"),
+    }
+
+    # Returns `true` if *head* is the head (e.g. `p` in `(p "hello")`) of
+    # a description of a Scenery parent node (head is followed by children).
+    def parent_head?(head : Term) : Bool
+      head.in?(PARENT_HEADS)
+    end
+
+    # Returns `true` if *head* is the head (e.g. `p` in `(p "hello")`) of
+    # a description of a Scenery leaf node (has no children).
+    def leaf_head?(head : Term) : Bool
+      head.in?(LEAF_HEADS)
+    end
+  end
+
   # Builds a tree of `RecognizedNode`s based on *document*. Returns the root query node.
   #
   # - If the document is not a dict, this is simply `Inert`.
