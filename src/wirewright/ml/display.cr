@@ -1,10 +1,8 @@
 @[Flags]
-enum Ww::ML::Style : UInt8
-  Indent2
-
-  def indent
-    indent2? ? 2 : 1
-  end
+enum Ww::ML::Style
+  # The pretty-printer is allowed to make syntax errors and omissions for
+  # clarity, brevity, etc.
+  Brief
 end
 
 module Ww::ML::Formatter
@@ -52,7 +50,7 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(%'%item seq_+)] do
-        pp.group(style.indent, "⟨", "⟩") do
+        pp.group(1, "⟨", "⟩") do
           seq.items.each_with_index do |item, i|
             pp.breakable if i > 0
             format(pp, item, style)
@@ -61,7 +59,7 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(%'%item° seq_+)] do
-        pp.group(style.indent, "⟨", "⟩°") do
+        pp.group(1, "⟨", "⟩°") do
           seq.items.each_with_index do |item, i|
             pp.breakable if i > 0
             format(pp, item, style)
@@ -70,14 +68,14 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(%'%layer %'_ side_dict)] do
-        pp.group(style.indent, "{¦ ", "}") do
+        pp.group(3, "{¦ ", "}") do
           index = 0
 
           side.each_entry(in: Term::Dict.entries_ord) do |k, v|
             pp.breakable if index > 0
             format(pp, k, style)
             pp.text(":")
-            pp.group(style.indent) do
+            pp.group(2) do
               pp.breakable
               format(pp, v, style)
             end
@@ -91,13 +89,13 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(¦ _)] do
-        pp.group(style.indent, "{", "}") do
+        pp.group(1, "{", "}") do
           index = 0
           term.each_entry(in: Term::Dict.entries_ord) do |k, v|
             pp.comma if index > 0
             format(pp, k, style)
             pp.text(":")
-            pp.group(style.indent) do
+            pp.group(2) do
               pp.breakable
               format(pp, v, style)
             end
@@ -107,7 +105,12 @@ module Ww::ML::Formatter
       end
 
       matchpi %[(_* ¦)] do
-        pp.group(style.indent, "(", ")") do
+        indent = 1
+        if (head = term.items.first?) && head.type.symbol?
+          indent = 2
+        end
+
+        pp.group(indent, "(", ")") do
           term.items.each_with_index do |item, index|
             pp.breakable if index > 0
             format(pp, item, style)
@@ -116,7 +119,12 @@ module Ww::ML::Formatter
       end
 
       matchpi %[_dict] do
-        pp.group(style.indent, "(", ")") do
+        indent = 1
+        if (head = term.items.first?) && head.type.symbol?
+          indent = 2
+        end
+
+        pp.group(indent, "(", ")") do
           term.items.each_with_index do |item, index|
             pp.breakable if index > 0
             format(pp, item, style)
@@ -125,12 +133,28 @@ module Ww::ML::Formatter
             pp.breakable
             format(pp, k, style)
             pp.text(":")
-            pp.group(style.indent) do
+            pp.group(2) do
               pp.breakable
               format(pp, v, style)
             end
           end
         end
+      end
+
+      matchpi %{_blob} do
+        continue unless style.brief?
+
+        blob = term.as_blob
+        width = 0
+        if blob.ubytesize64 > 0
+          width = blob.ubytesize64//2 # Each byte is two hex digits
+          width += (width - 1)*1      # Also one whitespace between digits
+          width += 2                  # Also a pair of brackets
+        end
+
+        continue if width < 80
+
+        pp.text("⟬… #{blob.ubytesize64.humanize_bytes} / #{blob.digest.trim(4).hexstring} …⟭")
       end
 
       otherwise do
