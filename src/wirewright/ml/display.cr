@@ -147,9 +147,9 @@ module Ww::ML::Formatter
         blob = term.as_blob
         width = 0
         if blob.ubytesize64 > 0
-          width = blob.ubytesize64//2 # Each byte is two hex digits
-          width += (width - 1)*1      # Also one whitespace between digits
-          width += 2                  # Also a pair of brackets
+          width = blob.ubytesize64*2 # Each byte is two hex digits
+          width += (width - 1)*1     # Also one whitespace between digits
+          width += 2                 # Also a pair of brackets
         end
 
         continue if width < 80
