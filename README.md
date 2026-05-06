@@ -54,20 +54,6 @@ Wirewright explores the idea of having entire *worlds* as first-class objects. W
 
 See [the wiki](https://github.com/wirewright/wirewright/wiki/First%E2%80%90class-worlds) to read more about Wirewright. I don't want to scare people off with a wall of text.
 
-## Gallery
-
-### Frontend: soma6
-
-NOTE: this frontend is no longer supported on this branch. See kappa.
-
-https://github.com/user-attachments/assets/e86cb81d-67d7-45b8-8a68-7399e4fe367e
-
-### Frontend: Wirewright Rack
-
-NOTE: this frontend is no longer supported on this branch. See kappa.
-
-<img width="1804" height="961" alt="Screenshot showing Wirewright Rack terminal UI atop UIR tests" src="https://github.com/user-attachments/assets/975fd033-b2d0-4745-827e-cb30ffd5a6f3" />
-
 ## References
 
 ### Inspiration
@@ -86,7 +72,6 @@ Wirewright's Microfold is heavily inspired by [Tailwind CSS](https://tailwindcss
 Microfold includes colors from several themes.
 
 - [Rose Pine](https://rosepinetheme.com)
-
 
 ## Building
 
@@ -121,12 +106,33 @@ Wirewright vendors the following libraries (see the vendor/ directory):
 - [Unibreak](https://github.com/adah1972/libunibreak/)
 - [XXhash](https://github.com/Cyan4973/xxHash)
 
+> [!NOTE]
+> Wirewright vendors `.a` files that I built on my machine. I didn't set anything
+> while building them so they should run fine as long as you're on x86-64.
+
+However, if the linker or something else explodes with weird errors, this probably
+means `.a`s shipped with Wirewright are junk for your machine, for whatever reason --
+modern tech is complicated enough, I suppose. So you may need to build them yourself.
+
+Each package in vendor/ is structured reasonably well (... I guess?) to answer
+any questions you might have, such as which version of the package to build. Some
+packages have the patched code there (for transparency, I include a PATCHES file
+as well). Others don't: you'll have to find their code and clone it yourself,
+according to the VERSION file. Afterwards, simply replace the `.a`s shipped
+with Wirewright with your ones.
+
+### Installing shards
+
+```console
+$ shards install
+```
+
 ### Building the dev tool
 
 Wirewright uses a custom dev tool to manage the various subprojects inside the repo. You can build
 the dev tool with:
 
-```text
+```console
 $ crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context 
 ```
 
@@ -134,27 +140,27 @@ $ crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context
 
 After running the dev tool build command you should be able to run the `dev` executable:
 
-```text
+```console
 $ ./dev
 # Shows help for the dev tool ...
 ```
 
 There are several *presets* available. You can print them with:
 
-```text
+```console
 $ ./dev g
 # Prints available presets ...
 ```
 
 Right now, the only interesting preset is `tests`. Switch to it using:
 
-```text
+```console
 $ ./dev g tests
 ```
 
 And build it with:
 
-```
+```console
 $ ./dev b
 ```
 
