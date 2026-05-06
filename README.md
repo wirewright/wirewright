@@ -68,14 +68,25 @@ NOTE: this frontend is no longer supported on this branch. See kappa.
 
 <img width="1804" height="961" alt="Screenshot showing Wirewright Rack terminal UI atop UIR tests" src="https://github.com/user-attachments/assets/975fd033-b2d0-4745-827e-cb30ffd5a6f3" />
 
-## Influenced by
+## References
 
-Wirewright is influenced by various ideas from these amazing people: Francisco Varela, Humberto Maturana,
-Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow, as there
-are many more of them!)
+### Inspiration
 
-Since the project is in active development right now, it is very early to pinpoint exactly
-which ideas were inspired by (or taken from!) whom. Hopefully, this would be possible later.
+Wirewright is inspired by various ideas from these amazing people: Francisco Varela, Humberto Maturana,
+Stephen Wolfram, Niklas Luhmann, Michael Levin, Bret Victor, ... (this list will grow, there are many
+more of them, and I keep finding more!)
+
+Since the project is in active development right now, it is very early to attribute things
+precisely. Hopefully, this would be possible later.
+
+### Microfold
+
+Wirewright's Microfold is heavily inspired by [Tailwind CSS](https://tailwindcss.com/)
+
+Microfold includes colors from several themes.
+
+- [Rose Pine](https://rosepinetheme.com)
+
 
 ## Building
 
