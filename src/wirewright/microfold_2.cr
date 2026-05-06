@@ -94,6 +94,12 @@ module Ww::Microfold2
     def synchronize(&)
       @lock.synchronize { yield @codex }
     end
+
+    # Returns `true` if *head* (e.g. `p` in `(p "hello")` is associated with
+    # a Microfold style preset).
+    def preset?(head : Term) : Bool
+      synchronize { !!@codex.preset?(head) }
+    end
   end
 
   # Constructs a Microfold codex from *document* and *rem*.
