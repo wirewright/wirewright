@@ -1783,9 +1783,9 @@ module Ww
       subst(root, keypath) { rep }
     end
 
-    # Replaces entry values in *root*'s *part* using the block.
+    # Replaces entry values in *dict*'s *part* using the block.
     #
-    # Yields each key and value in *root*'s *part* to the block. The replacement
+    # Yields each key and value in *dict*'s *part* to the block. The replacement
     # returned by the block is used to replace the value.
     #
     # See also `Dict#each_entry` overloads for info on *part*.
@@ -1796,7 +1796,7 @@ module Ww
     #
     # In pairspart, replacement with zero signifies the removal of the pair; with one,
     # its replacement; with many, its replacement with a list of offspring.
-    def self.flatten(root dict : Dict, *, part = Dict.itemspart, & : Term, Term -> Rep) : Dict
+    def self.flatten(dict : Dict, *, part = Dict.itemspart, & : Term, Term -> Rep) : Dict
       changes = Pf::Kit.stack_array({Term, Term, Rep}, 8)
 
       dict.each_entry(in: part) do |key, value|
@@ -1836,12 +1836,12 @@ module Ww
       dict
     end
 
-    # Replaces entry values in *root* using the block.
+    # Replaces entry values in *term* using the block.
     #
-    # Passthrough if *root* is not a dictionary.
+    # Passthrough if *term* is not a dictionary.
     #
     # See `flatten(Dict, **kwargs, &)` for more info.
-    def self.flatten(root term : Term, **kwargs, &) : Term
+    def self.flatten(term : Term, **kwargs, &) : Term
       unless dict = term.as_d?
         return term
       end
@@ -1868,6 +1868,43 @@ module Ww
       return rep unless changed
 
       rep(sink)
+    end
+
+    # Compares itemsparts of *dict0* and *dict1* recursively (i.e., item dict
+    # itemsparts and so on). If any itemspart changed, returns `true`.
+    def self.item_changed?(dict0 : Dict, dict1 : Dict) : Bool
+      if dict0.same?(dict1)
+        return false # not changed
+      end
+
+      unless dict0.itemsize == dict1.itemsize
+        return true # changed
+      end
+
+      # I doubt we can be smarter than the following at this point... Let's
+      # just hope stuff is path-copied and at least accidentally "hash-consed".
+
+      dict0.items.zip(dict1.items) do |item0, item1|
+        return true if item_changed?(item0, item1)
+      end
+
+      false # not changed
+    end
+
+    # Compares itemsparts of *term0* and *term1* recursively (i.e., item dict
+    # itemsparts and so on). If any itemspart changed, returns `true`. For
+    # non-dict terms, this is the same as `Term#!=`.
+    def self.item_changed?(term0 : Term, term1 : Term) : Bool
+      unless term0.type == term1.type
+        return true # changed
+      end
+
+      if (dict0 = term0.as_d?)
+        dict1 = term1.as_d
+        return item_changed?(dict0, dict1)
+      end
+
+      term0 != term1
     end
   end
 

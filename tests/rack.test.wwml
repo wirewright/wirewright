@@ -4826,6 +4826,24 @@
       ⟨& (cell @x ((+ "1" (I "2")) (node (seq (token "1") "+" (cursor (token "2"))))))⟩)
     end)
 
+  ;; waveR elementary
+  (rack
+    (frame
+      (cell @in
+        ((x (a 1) (b 2))
+         (c)))
+      (rewriter (@in -> waveR -> @out)
+        (x (a n_) (b m_) ⍊ -sum_) <> {sum: ^(+ n m)}
+        (a _ ⍊ -seen_) <> {seen: true}
+        (b _ ⍊ -seen_) <> {seen: true}
+        (c) => ((c)))
+      (cell @out))
+    (frame pattern: true
+      ⟨(cell @out
+         ((x (a 1 seen: true) (b 2 seen: true) sum: 3)
+          ((c))))⟩)
+    end)
+
   ;; Extension
   (rack
     (frame

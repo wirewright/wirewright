@@ -4,8 +4,15 @@ module Ww
   module Rho
     extend self
 
+    alias RewriterId = UInt64
+    alias IRewriteCache = ICache({RewriterId, Term}, Term::Rep)
+
+    defrecord RewriteAttachments, id : RewriterId, cache : IRewriteCache
+
+    # Represents a Rho rewriter.
     struct Rewriter
-      alias Fn = Term -> Term::Rep
+      # :nodoc:
+      alias Fn = RewriteAttachments, Term -> Term::Rep
 
       # Returns `true` if this rewriter is *finite*.
       #
@@ -15,112 +22,119 @@ module Ww
       # infinite. Nothing smart is done here.
       getter? finite : Bool
 
+      @@ids = Atomic(UInt64).new(0u64)
+
+      # Returns the process-unique id of this rewriter.
+      getter id : RewriterId
+
       # :nodoc:
       def initialize(@fn : Fn, @finite)
+        @id = @@ids.add(1, :relaxed)
       end
 
-      def flat_map(& : Fn -> Rewriter) : Rewriter
-        element = yield @fn
-
-        Rewriter.new(element.@fn, @finite && element.@finite)
-      end
-
-      def call(input : Term) : Term::Rep
-        @fn.call(input)
+      # Rewrites the given input term using this rewriter.
+      #
+      # Some rewriters support caching. This is why *cache* must be passed.
+      #
+      # NOTE: This is mostly for internal use, or if you want a `Term::Rep`; prefer
+      # `Rho.rewrite` otherwise.
+      def call(input : Term, cache : IRewriteCache) : Term::Rep
+        @fn.call(RewriteAttachments.new(@id, cache), input)
       end
     end
 
-    private def finite(fn)
+    private def finite(&fn : Rewriter::Fn)
+      finite(fn)
+    end
+
+    private def finite(fn : Rewriter::Fn)
       Rewriter.new(fn, finite: true)
     end
 
-    private def infinite(fn)
+    private def infinite(&fn : Rewriter::Fn)
+      infinite(fn)
+    end
+
+    private def infinite(fn : Rewriter::Fn)
       Rewriter.new(fn, finite: false)
     end
 
+    # *Noop rewriter*. See `rho.noR`.
     def noR : Rewriter
-      finite(->(input : Term) { Term.rep(input) })
+      finite { |_, input| Term.rep(input) }
     end
 
+    # *Constant rewriter*. See `rho.constR`.
     def constR(rep : Term::Rep) : Rewriter
-      finite(->(input : Term) { rep })
+      finite { rep }
     end
 
-    # - Outside of *exh*austive mode, applies the most specific matching rule.
-    # - In *exh*austive mode, every rule is given an opportunity to match and
-    #   transform the workspace. Rules are sorted by specificity; the most specific
-    #   rule is preferred. Rules are *expended*, meaning a rule can only run once.
-    #   This means that exhaustive rulesetR is guaranteed to terminate, since at
-    #   some point we'll exhaust the entire ruleset.
+    # *Ruleset rewriter*. See `rho.rulesetR`.
     def rulesetR(ruleset : Ruleset, exh : Bool = false) : Rewriter
       if exh
-        finite(exh_rulesetR(ruleset))
+        finite { |_, input| exh_rulesetR(ruleset, input) }
       else
-        finite(first_rulesetR(ruleset))
+        finite { |_, input| first_rulesetR(ruleset, input) }
       end
     end
 
-    private def first_rulesetR(ruleset : Ruleset)
-      ->(input : Term) do
-        ruleset.each_candidate(input) do |pattern, rule|
-          case rule
-          in Rule::Template
-            next unless env = M1.match?(Term[], pattern, input)
+    private def first_rulesetR(ruleset : Ruleset, input : Term) : Term::Rep
+      ruleset.each_candidate(input) do |pattern, rule|
+        case rule
+        in Rule::Template
+          next unless env = M1.match?(Term[], pattern, input)
 
-            rep, _ = Alloy.render0(env, rule.body, severity: :quiet)
-          in Rule::Backmap
-            next unless rep = M1.backmapR?(pattern, rule.backspec, input)
-          end
-
-          if Term.changes?(input, after: rep)
-            return rep
-          end
+          rep, _ = Alloy.render0(env, rule.body, severity: :quiet)
+        in Rule::Backmap
+          next unless rep = M1.backmapR?(pattern, rule.backspec, input)
         end
 
-        Term.rep(input)
+        if Term.changes?(input, after: rep)
+          return rep
+        end
       end
+
+      Term.rep(input)
     end
 
-    private def exh_rulesetR(ruleset : Ruleset) : Rewriter::Fn
-      ->(input : Term) do
-        seen = Pf::USet32.new
-        workspace = Term.rep(input)
+    private def exh_rulesetR(ruleset : Ruleset, input : Term) : Term::Rep
+      seen = Pf::USet32.new
+      workspace = Term.rep(input)
 
-        running = true
-        loop do
-          running = false
+      running = true
+      loop do
+        running = false
 
-          workspace = Term.flatten(workspace) do |offspring|
-            result = nil
+        workspace = Term.flatten(workspace) do |offspring|
+          result = nil
 
-            ruleset.each_candidate_with_id(offspring) do |(pattern, rule), id|
-              next if seen.includes?(id)
+          ruleset.each_candidate_with_id(offspring) do |(pattern, rule), id|
+            next if seen.includes?(id)
 
-              case rule
-              in Rule::Template
-                next unless env = M1.match?(Term[], pattern, offspring)
+            case rule
+            in Rule::Template
+              next unless env = M1.match?(Term[], pattern, offspring)
 
-                rep, _ = Alloy.render0(env, rule.body, severity: :quiet)
-              in Rule::Backmap
-                next unless rep = M1.backmapR?(pattern, rule.backspec, offspring)
-              end
-
-              next unless Term.changes?(offspring, after: rep)
-
-              result = rep
-              running = true
-              seen = seen.add(id)
-              break
+              rep, _ = Alloy.render0(env, rule.body, severity: :quiet)
+            in Rule::Backmap
+              next unless rep = M1.backmapR?(pattern, rule.backspec, offspring)
             end
 
-            result || Term.rep(offspring)
+            next unless Term.changes?(offspring, after: rep)
+
+            result = rep
+            running = true
+            seen = seen.add(id)
+            break
           end
 
-          break unless running
+          result || Term.rep(offspring)
         end
 
-        workspace
+        break unless running
       end
+
+      workspace
     end
 
     private def leaf?(passable, impassable, input : Term) : Bool
@@ -132,97 +146,165 @@ module Ww
       false
     end
 
-    # *Descending rewriter*: pre-order depth-first rewrite of a dictionary *part*.
-    def descR(
-      successor : Rewriter,
-      part : Term::Dict::Part::Any = Term::Dict.itemspart,
-      passable : M1::PatternSet(_)? = nil,
-      impassable : M1::PatternSet(_)? = nil,
-    ) : Rewriter
-      finite(->(input : Term) { descR(successor, part, passable, impassable, input) })
+    # :nodoc:
+    defrecord LeafPredicate(T),
+      passable : M1::PatternSet(T)?,
+      impassable : M1::PatternSet(T)?
+
+    private def leaf?(predicate : LeafPredicate, input : Term) : Bool
+      leaf?(predicate.passable, predicate.impassable, input)
     end
 
-    private def descR(successor, part, passable, impassable, input : Term)
-      if leaf?(passable, impassable, input)
-        return successor.call(input)
+    alias Part = Term::Dict::Part::Any
+
+    # *Descending rewriter*. See `rho.descR`.
+    def descR(successor : Rewriter, part : Part, leafp : LeafPredicate) : Rewriter
+      finite do |attachments, input|
+        descR(successor, part, leafp, attachments, input)
+      end
+    end
+
+    private def descR(successor, part, leafp, attachments, input : Term)
+      if rep = attachments.cache.get?({attachments.id, input})
+        return rep
       end
 
-      rep = successor.call(input)
+      if leaf?(leafp, input)
+        return successor.call(input, attachments.cache)
+      end
+
+      rep = successor.call(input, attachments.cache)
       if Term.changes?(input, after: rep)
         return rep
       end
 
       output = Term.flatten(input, part: part) do |_, value|
-        descR(successor, part, passable, impassable, value)
+        descR(successor, part, leafp, attachments, value)
       end
+
+      attachments.cache.put({attachments.id, input}, rep)
 
       Term.rep(output)
     end
 
-    # *Ascending rewriter*: post-order depth-first rewrite of a dictionary *part*.
-    def ascR(
-      successor : Rewriter,
-      part : Term::Dict::Part::Any = Term::Dict.itemspart,
-      passable : M1::PatternSet(_)? = nil,
-      impassable : M1::PatternSet(_)? = nil,
-    ) : Rewriter
-      finite(->(input : Term) { ascR(successor, part, passable, impassable, input) })
+    # *Ascending rewriter*. See `rho.ascR`.
+    def ascR(successor : Rewriter, part : Part, leafp : LeafPredicate) : Rewriter
+      finite do |attachments, input|
+        ascR(successor, part, leafp, attachments, input)
+      end
     end
 
-    private def ascR(successor, part, passable, impassable, input : Term)
-      if leaf?(passable, impassable, input)
-        return successor.call(input)
+    private def ascR(successor, part, leafp, attachments, input : Term)
+      if rep = attachments.cache.get?({attachments.id, input})
+        return rep
+      end
+
+      if leaf?(leafp, input)
+        return successor.call(input, attachments.cache)
       end
 
       output = Term.flatten(input, part: part) do |_, value|
-        ascR(successor, part, passable, impassable, value)
+        ascR(successor, part, leafp, attachments, value)
       end
 
-      successor.call(output)
-    end
+      rep = successor.call(output, attachments.cache)
 
-    # *Bidirectional rewriter*: first, attempts a pre-order rewrite with
-    # *successor*; if no change, then applies recursively to *part*, if
-    # possible; if the rewritten version changed, attempts to apply
-    # *successor* again.
-    def bidiR(
-      successor : Rewriter,
-      part : Term::Dict::Part::Any = Term::Dict.itemspart,
-      passable : M1::PatternSet(_)? = nil,
-      impassable : M1::PatternSet(_)? = nil,
-    ) : Rewriter
-      finite(->(input : Term) { bidiR(successor, part, passable, impassable, input) })
-    end
-
-    private def bidiR(successor, part, passable, impassable, input : Term)
-      if leaf?(passable, impassable, input)
-        return successor.call(input)
-      end
-
-      rep = successor.call(input)
       if Term.changes?(input, after: rep)
+        attachments.cache.put({attachments.id, input}, rep)
+      end
+
+      rep
+    end
+
+    # *Bidirectional rewriter*. See `rho.bidiR`.
+    def bidiR(successor : Rewriter, part : Part, leafp : LeafPredicate) : Rewriter
+      finite do |attachments, input|
+        bidiR(successor, part, leafp, attachments, input)
+      end
+    end
+
+    private def bidiR(successor, part, leafp, attachments, input : Term)
+      if rep = attachments.cache.get?({attachments.id, input})
+        return rep
+      end
+
+      rep = successor.call(input, attachments.cache)
+
+      if leaf?(leafp, input)
+        return rep
+      end
+
+      if Term.changes?(input, after: rep)
+        attachments.cache.put({attachments.id, input}, rep)
         return rep
       end
 
       output = Term.flatten(input, part: part) do |_, value|
-        bidiR(successor, part, passable, impassable, value)
+        bidiR(successor, part, leafp, attachments, value)
       end
 
       if input == output
         return Term.rep(input)
       end
 
-      successor.call(output)
+      rep = successor.call(output, attachments.cache)
+      attachments.cache.put({attachments.id, input}, rep)
+
+      rep
     end
 
-    # *Exhaustive rewriter*: rewrite until no change. May not terminate.
+    # *Wave rewriter*. See `rho.waveR`.
+    def waveR(successor : Rewriter, leafp : LeafPredicate) : Rewriter
+      finite do |attachments, input|
+        waveR(successor, leafp, attachments, input)
+      end
+    end
+
+    private def waveR(successor, leafp, attachments, input : Term) : Term::Rep
+      if rep = attachments.cache.get?({attachments.id, input})
+        return rep
+      end
+
+      if leaf?(leafp, input)
+        return successor.call(input, attachments.cache)
+      end
+
+      assert dict0 = input.as_d?
+
+      rep0 = successor.call(input, attachments.cache)
+      rep1 = Term.flatten(rep0) do |offspring|
+        unless dict1 = offspring.as_d?
+          next Term.rep(offspring)
+        end
+
+        if Term.item_changed?(dict0, dict1)
+          next Term.rep(offspring)
+        end
+
+        output = Term.flatten(offspring, part: Term::Dict.itemspart) do |_, value|
+          waveR(successor, leafp, attachments, value)
+        end
+
+        Term.rep(output)
+      end
+
+      if Term.changes?(input, after: rep1)
+        attachments.cache.put({attachments.id, input}, rep1)
+      end
+
+      rep1
+    end
+
+    # *Exhaustive rewriter*. See `rho.exhR`.
     def exhR(successor : Rewriter) : Rewriter
-      infinite(->(input : Term) { exhR(input, successor) })
+      infinite do |attachments, input|
+        exhR(successor, attachments, input)
+      end
     end
 
-    private def exhR(input : Term, successor)
+    private def exhR(successor, attachments, input : Term)
       loop do
-        rep = successor.call(input)
+        rep = successor.call(input, attachments.cache)
         if rep.empty?
           return rep
         end
@@ -236,17 +318,21 @@ module Ww
           next
         end
 
-        return Term.flatten(rep) { |offspring| exhR(offspring, successor) }
+        output = Term.flatten(rep) do |offspring|
+          exhR(successor, attachments, offspring)
+        end
+
+        return output
       end
     end
 
-    # *Chain rewriter*: rewrites with *a* and the result of that with *b*.
+    # *Chain rewriter*: see `rho.chainR`.
     def chainR(a : Rewriter, b : Rewriter) : Rewriter
-      fn = ->(input : Term) do
-        rep = a.call(input)
+      fn = Rewriter::Fn.new do |attachments, input|
+        rep = a.call(input, attachments.cache)
 
         Term.flatten(rep) do |offspring|
-          b.call(offspring)
+          b.call(offspring, attachments.cache)
         end
       end
 
@@ -274,6 +360,13 @@ module Ww
       impassable: [impassable pattern_])
     WWML
 
+    # :nodoc:
+    SHORTHAND_WAVER = ML.term(<<-WWML)
+    (waveR (rulesetR exh: true)
+      passable: [passable pattern_]
+      impassable: [impassable pattern_])
+    WWML
+
     private def dirR(spec : Term, data : Term, &) : Rewriter
       Term.matchpi(spec, %{[_ successor_]}) do
         if passable = spec[:passable]?
@@ -284,28 +377,43 @@ module Ww
           impassable_set = M1::PatternSet(Term).select(impassable, data)
         end
 
-        yield rewriter(successor, data), passable_set, impassable_set
+        case spec[:part]?
+        when Term.of(:items)
+          part = Term::Dict.itemspart
+        when Term.of(:pairs)
+          part = Term::Dict.pairspart
+        when Term.of(:entries)
+          part = Term::Dict.entries
+        else
+          part = Term::Dict.itemspart # default
+        end
+
+        leafp = LeafPredicate.new(passable_set, impassable_set)
+
+        yield rewriter(successor, data), part, leafp
       end
     end
 
-    def rewriter!(spec : Term, data : Term) : Rewriter
+    private def rewriter!(spec : Term, data : Term) : Rewriter
       Term.case(spec) do
+        # |@ rho.noR
+        #
+        # |@pattern
+        # noR
+        #
+        # |@block
+        # Noop (identity) rewriter: keeps the input term as-is.
         matchpi %{noR} do
           noR
         end
 
-        matchpi %{ascR} do
-          rewriter(SHORTHAND_ASCR, data)
-        end
-
-        matchpi %{descR} do
-          rewriter(SHORTHAND_DESCR, data)
-        end
-
-        matchpi %{bidiR} do
-          rewriter(SHORTHAND_BIDIR, data)
-        end
-
+        # |@ rho.constR
+        #
+        # |@pattern
+        # [constR offspring_*]
+        #
+        # |@block
+        # Replaces the input term with zero or more constant *offspring* terms.
         matchpi %{[constR offspring_*]} do
           constR(Term.rep(offspring.items))
         end
@@ -345,10 +453,219 @@ module Ww
         # term. This is most useful in Rack's `rack.rewriter` node, which only allows you
         # to specify one rulebase.
         #
-        # |@key section
-        # Defines the section of the rulebase where the ruleset must search for rules.
-        # Sections are most useful with standalone rewriters that are defined as parts
-        # of a document. Consider, for instance, the following ML document:
+        # |@key exh
+        # Outside of exhaustive mode (`false`), applies the most specific matching rule.
+        #
+        # In exhaustive mode (`true`), every rule is given an opportunity to match and
+        # transform the input term. Rules are sorted by specificity; the most specific
+        # rule is preferred. A rule is *expended* if it changes the input term, meaning
+        # a rule can only change the input term once. Thus, even though the rewrite is
+        # exhaustive, it is guaranteed to terminate (versus, say, `rho.exhR`). That is,
+        # at some point you will necessarily run out of rules, since the number of rules
+        # is finite.
+        #
+        # |@block
+        # Constructs a *ruleset rewriter*: a rewriter that finds and applies rules
+        # from a *rulebase* to input terms.
+        matchpi %{(rulesetR ⍊ exh⋮ false)} do
+          selector = spec[:selector]? || Ruleset::DEFAULT_SELECTOR
+
+          discriminator = spec[:discriminator]?
+          rulebase = data
+
+          rulesetR(Ruleset.select(selector, rulebase, discriminator: discriminator), exh: exh.true?)
+        end
+
+        # |@ rho.exhR
+        #
+        # |@pattern
+        # [exhR successor_]
+        #
+        # |@key successor rho
+        #
+        # |@block
+        # Converts a finite or infinite rewriter to an infinite rewriter: rewrites
+        # using *successor* until fixed point.
+        matchpi %{[exhR successor_]} do
+          exhR(rewriter(successor, data))
+        end
+
+        # |@ rho.ascR
+        #
+        # |@pattern
+        # ascR
+        matchpi %{ascR} do
+          rewriter(SHORTHAND_ASCR, data)
+        end
+
+        # |@ rho.ascR
+        #
+        # |@pattern
+        # (ascR successor_ ⍊ part⋮ items ⋮passable ⋮impassable)
+        #
+        # |@key successor rho
+        #
+        # |@key part
+        # Can be `items` (default, fallback; descend only into itemsparts),
+        # `pairs` (only into pairsparts), or `entries` (descend into both).
+        #
+        # |@key passable m1.operator
+        # |@key impassable m1.operator
+        #
+        # |@block
+        # *Ascending rewriter*: post-order depth-first rewrite of a dictionary *part*.
+        matchpi %{[ascR _]} do
+          dirR(spec, data) do |successorR, part, leafp|
+            ascR(successorR, part, leafp)
+          end
+        end
+
+        # |@ rho.descR
+        #
+        # |@pattern
+        # descR
+        matchpi %{descR} do
+          rewriter(SHORTHAND_DESCR, data)
+        end
+
+        # |@ rho.descR
+        #
+        # |@pattern
+        # (descR successor_ ⍊ part⋮ items ⋮passable ⋮impassable)
+        #
+        # |@key successor rho
+        #
+        # |@key part
+        # Can be `items` (default, fallback; descend only into itemsparts),
+        # `pairs` (only into pairsparts), or `entries` (descend into both).
+        #
+        # |@key passable m1.operator
+        # |@key impassable m1.operator
+        #
+        # |@block
+        # *Descending rewriter*: pre-order depth-first rewrite of a dictionary *part*.
+        matchpi %{[descR _]} do
+          dirR(spec, data) do |successorR, part, leafp|
+            descR(successorR, part, leafp)
+          end
+        end
+
+        # |@ rho.bidiR
+        #
+        # |@pattern
+        # bidiR
+        matchpi %{bidiR} do
+          rewriter(SHORTHAND_BIDIR, data)
+        end
+
+        # |@ rho.bidiR
+        #
+        # |@pattern
+        # (bidiR successor_ ⍊ part⋮ items ⋮passable ⋮impassable)
+        #
+        # |@key successor rho
+        #
+        # |@key part
+        # Can be `items` (default, fallback; descend only into itemsparts),
+        # `pairs` (only into pairsparts), or `entries` (descend into both).
+        #
+        # |@key passable m1.operator
+        # |@key impassable m1.operator
+        #
+        # |@block
+        # *Bidirectional rewriter*: first, attempts a pre-order rewrite with
+        # *successor*; if no change, then applies recursively to *part*, if
+        # possible; if the rewritten version changed, attempts to apply
+        # *successor* again.
+        matchpi %{[bidiR _]} do
+          dirR(spec, data) do |successorR, part, leafp|
+            bidiR(successorR, part, leafp)
+          end
+        end
+
+        # |@ rho.waveR
+        #
+        # |@pattern
+        # waveR
+        matchpi %{waveR} do
+          rewriter(SHORTHAND_WAVER, data)
+        end
+
+        # |@ rho.waveR
+        #
+        # |@pattern
+        # (waveR successor_ ⍊ ⋮passable ⋮impassable)
+        #
+        # |@key successor rho
+        #
+        # |@key passable m1.operator
+        # |@key impassable m1.operator
+        #
+        # |@block
+        # The *wave rewriter* lets you recurse down the itemspart tree, proceeding
+        # if you modify the pairspart of the current node, or do not modify anything;
+        # but stopping if you modify its itemspart.
+        #
+        # In other words, you must not modify anything "in front of" the rewriter,
+        # anything the rewriter will soon visit.
+        #
+        # Imagine a train laying tracks in front of itself. If there's an infinite
+        # amount of tracks onboard, this process will never terminate as long as
+        # there's enough space to lay tracks. Imagine yourself throwing data off
+        # the side of the train as it moves; notice how this doesn't affect
+        # the train's course, nor whether it'll stop.
+        #
+        # In this analogy, the rewriter is the train, and paths through itemsparts
+        # are tracks. To keep `waveR` finite, it will simply refuse to go along a
+        # track if you modify anything in front (even if you *remove* tracks ahead).
+        # On the other hand, you are allowed to modify data on the "sides" --
+        # the pairsparts of nodes the rewriter recurses through are orthogonal to
+        # tracks, and so, waveR is happy with you changing them.
+        #
+        # Thus, `waveR` is invincible from infinite regress in degenerate cases
+        # such as `(x_) => ((^x))`, whereas something like `(exhR descR)` isn't.
+        # This is the reason `waveR` is guaranteed to terminate, as its depth is
+        # always bounded by the deepest unchanged item.
+        matchpi %{[waveR _]} do
+          dirR(spec, data) do |successorR, _, leafp|
+            waveR(successorR, leafp)
+          end
+        end
+
+        # |@ rho.chainR
+        #
+        # |@pattern
+        # [chainR successors_+]
+        #
+        # |@key successors rho
+        #
+        # |@block
+        # Rewrites the input term with each *successor* in turn. If one successor
+        # doesn't terminate the rest of them won't be reached. Use limited `exhR`
+        # if you want to guarantee termination.
+        matchpi %{[chainR head_ successors_*]} do
+          successors.items.reduce(rewriter(head, data)) do |memoR, successor|
+            chainR(memoR, rewriter(successor, data))
+          end
+        end
+
+        # |@ rho.section
+        #
+        # |@pattern
+        # [section name_ successor_]
+        #
+        # |@key name
+        # Name of the section to use.
+        #
+        # |@key successor rho
+        #
+        # |@block
+        # Defines the section of the rulebase where rulesets in *successor* must
+        # search for rules.
+        #
+        # Sections are most useful for standalone rewriters (or passes) that are
+        # defined as parts of a single document. Consider, for instance, the
+        # following document:
         #
         # ```
         # --- main
@@ -360,17 +677,17 @@ module Ww
         #
         # --- rewriter
         # (chainR
-        #   (rulesetR section: main)
-        #   (rulesetR section: calculate))
+        #   (section main (rulesetR))
+        #   (section calculate (rulesetR)))
         # ```
         #
-        # Notice how we use *section* to refer to sections of the same document
+        # Notice how we use `section` to refer to sections of the same document
         # the rewriter is in. By convention, Rho front-ends search for the `rewriter`
         # section in any dict they receive. When found, a front-end passes the entire
         # document to the rewriter. Thus, for instance, a rewriter may access itself.
-        # Writing `(rulesetR section: rewriter)` in the above makes perfect sense;
-        # there is no need to separate the rules from the rewriter provided the overall
-        # scheme makes sense:
+        # Writing `(section rewriter (rulesetR))` in the above makes perfect sense;
+        # there is no need to separate the rules from the rewriter provided the general
+        # arrangement makes sense:
         #
         # ```
         # --- rewriter
@@ -378,68 +695,16 @@ module Ww
         # b => 200
         # (±a ±b) => ^(+ a b)
         #
-        # (ascR (rulesetR section: rewriter))
+        # (ascR (section rewriter (rulesetR)))
         # ```
         #
-        # IMPORTANT: The rewriter spec must be located at the very end of the `rewriter`
+        # NOTE: The rewriter spec must be located at the very end of the `rewriter`
         # section for the above to work.
-        #
-        # |@key exh
-        # Enables or disables *exhaustive rule application semantics*. That is,
-        # normally, at rewrite-time, the ruleset receives a term. It finds the most
-        # specific rule that matches the term, and rewrites the term using that rule.
-        # If the rule changed nothing, the ruleset resumes search until it had
-        # seen all rules. If the rule changed the term, the ruleset stops. That's
-        # with *exh* set to `false`. If *exh* is set to `true`, the ruleset will
-        # restart its search after a change. Importantly, the ruleset will ignore
-        # all rules it has matched before. Thus, even though the rewrite is exhaustive,
-        # it is guaranteed to terminate (versus, say, `rho.exhR`). That is, at
-        # some point you will run out of rules.
-        #
-        # |@block
-        # Constructs a *ruleset rewriter*: a rewriter that finds and applies rules
-        # from a *rulebase* to input terms.
-        matchpi %{(rulesetR ⍊ exh⋮ false)} do
-          selector = spec[:selector]? || Ruleset::DEFAULT_SELECTOR
+        matchpi %{[section name_ successor_]} do
+          continue unless ruledoc = data.as_d?
+          continue unless rulebase = ruledoc[name]?
 
-          discriminator = spec[:discriminator]?
-
-          if section = spec[:section]?
-            continue unless ruledoc = data.as_d?
-            continue unless rulebase = ruledoc[section]?
-          else
-            rulebase = data
-          end
-
-          rulesetR(Ruleset.select(selector, rulebase, discriminator: discriminator), exh: exh.true?)
-        end
-
-        matchpi %{[exhR successor_]} do
-          exhR(rewriter(successor, data))
-        end
-
-        matchpi %{[ascR _]} do
-          dirR(spec, data) do |successorR, passable_set, impassable_set|
-            ascR(successorR, passable: passable_set, impassable: impassable_set)
-          end
-        end
-
-        matchpi %{[descR _]} do
-          dirR(spec, data) do |successorR, passable_set, impassable_set|
-            descR(successorR, passable: passable_set, impassable: impassable_set)
-          end
-        end
-
-        matchpi %{[bidiR _]} do
-          dirR(spec, data) do |successorR, passable_set, impassable_set|
-            bidiR(successorR, passable: passable_set, impassable: impassable_set)
-          end
-        end
-
-        matchpi %{[chainR head_ successors_*]} do
-          successors.items.reduce(rewriter(head, data)) do |memoR, successor|
-            chainR(memoR, rewriter(successor, data))
-          end
+          rewriter(successor, rulebase)
         end
 
         otherwise do
@@ -448,6 +713,7 @@ module Ww
       end
     end
 
+    # :nodoc:
     REWRITER_CACHE = SyncLRU({Term, Term}, Rewriter).new(capacity: 32)
 
     def rewriter(spec : Term, data : Term) : Rewriter
@@ -456,13 +722,28 @@ module Ww
       end
     end
 
-    # TODO: add support for rules / rewriter definitions.
+    # TODO: add support for rules / rewriter definitions (to define recursive
+    # rewriters etc.)
     def rewriter(document : Term) : Rewriter
       return noR unless dict = document.as_d?
       return noR unless section = dict[:rewriter]?
       return noR unless spec = section.items.last?
 
       rewriter(spec, document)
+    end
+
+    # Rewrites the *input* term using *rewriter*.
+    #
+    # Some rewriters support caching. You can pass a *cache* object for them to use.
+    # By default, `Uncached` is used, which means that for such rewriters, caching
+    # will be disabled.
+    #
+    # ```
+    # ```
+    def rewrite(rewriter : Rewriter, input : Term, *, cache : IRewriteCache = Uncached({RewriterId, Term}, Term::Rep).new) : Term
+      rep = rewriter.call(input, cache)
+
+      Term.collapse(rep)
     end
   end
 end
