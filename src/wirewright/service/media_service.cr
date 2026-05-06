@@ -1007,6 +1007,15 @@ module Ww
       end
     end
 
+    # WARNING: Assumes `@@lock` is taken!
+    private def unsafe_publish_spec(key : Term, spec : SpecState) : Nil
+      @@workspace[key] = spec
+      return if @@workspace_dirty
+
+      @@workspace_dirty = true
+      @@workspace_signal.call
+    end
+
     # Creates or updates an association between *key* and a window *spec*. Returns
     # a wait group so that callers can wait for completion (but this is not necessary).
     #
@@ -1021,12 +1030,7 @@ module Ww
         case state
         in Nil
           wg = WaitGroup.new(1)
-          @@workspace[session_key] = PendingSpec.new(spec, wg)
-          unless @@workspace_dirty
-            @@workspace_dirty = true
-            @@workspace_signal.call
-          end
-
+          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
           wg
         in PendingSpec
           if state.spec == spec
@@ -1038,9 +1042,7 @@ module Ww
           state.wg.done
 
           wg = WaitGroup.new(1)
-          @@workspace[session_key] = PendingSpec.new(spec, wg)
-          # Since it's PendingSpec, somebody already did @@workspace_signal.call.
-
+          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
           wg
         in ReadySpec
           wg = WaitGroup.new(1)
@@ -1050,11 +1052,7 @@ module Ww
             return wg
           end
 
-          @@workspace[session_key] = PendingSpec.new(spec, wg)
-          unless @@workspace_dirty
-            @@workspace_dirty = true
-            @@workspace_signal.call
-          end
+          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
 
           wg
         in WithdrawnSpec
@@ -1065,21 +1063,12 @@ module Ww
 
           # Demote back into ReadySpec.
           if state.spec == spec
-            @@workspace[session_key] = ReadySpec.new(spec)
-            unless @@workspace_dirty
-              @@workspace_dirty = true
-              @@workspace_signal.call
-            end
+            unsafe_publish_spec(session_key, ReadySpec.new(spec))
             wg.done
             return wg
           end
 
-          # Replace with PendingSpec.
-          @@workspace[session_key] = PendingSpec.new(spec, wg)
-          unless @@workspace_dirty
-            @@workspace_dirty = true
-            @@workspace_signal.call
-          end
+          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
 
           wg
         end
@@ -1106,18 +1095,11 @@ module Ww
           state.wg.done
 
           wg = WaitGroup.new(1)
-          @@workspace[session_key] = WithdrawnSpec.new(state.spec, wg)
-          # Since it's PendingSpec, somebody already did @@workspace_signal.call.
-
+          unsafe_publish_spec(session_key, WithdrawnSpec.new(state.spec, wg))
           wg
         in ReadySpec
           wg = WaitGroup.new(1)
-          @@workspace[session_key] = WithdrawnSpec.new(state.spec, wg)
-          unless @@workspace_dirty
-            @@workspace_dirty = true
-            @@workspace_signal.call
-          end
-
+          unsafe_publish_spec(session_key, WithdrawnSpec.new(state.spec, wg))
           wg
         in WithdrawnSpec
           state.wg
