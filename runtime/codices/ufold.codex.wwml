@@ -779,6 +779,25 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
   (utility (prefix "rotate-" (number angle))
     {^:angle}))
 
+;; E.g. -rotate-30
+(for transform-box
+  (utility (prefix "-rotate-" (number angle))
+    {angle: ^(- angle)}))
+
+;; E.g. rotate-xs
+(for transform-box
+  (utility (prefix "rotate-" (one-of transform-angles angle))
+    {^:angle,
+     pivot-l: 0.5,
+     pivot-r: 0.5}))
+
+;; E.g. -rotate-xs
+(for transform-box
+  (utility (prefix "-rotate-" (one-of transform-angles angle))
+    {angle: ^(- angle),
+     pivot-l: 0.5,
+     pivot-r: 0.5}))
+
 ;; E.g. 9-oclock, 5.5-oclock
 (for transform-box
   (utility (suffix (number value) "-oclock")
@@ -1441,6 +1460,17 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 "7xl": 4
 "8xl": 5
 "9xl": 7
+
+
+--- (table transform-angles)
+
+"xs": 5
+"sm": 10
+"md": 20
+"lg": 35
+"xl": 50
+"2xl": 70
+"3xl": 90
 
 
 --- (table cursors)
