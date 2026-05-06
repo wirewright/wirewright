@@ -243,6 +243,10 @@
       (text caption: "C"))))
 
 (µfold=
+  (el "A" style: "flow-none")
+  (el (text caption: "A")))
+
+(µfold=
   (el "A" "B" "C" style: "flow-wrap gap-x-5 gap-y-5 font-sans text-black")
   (el
     (x-wrap gap-x: 20 gap-y: 20

@@ -1181,7 +1181,9 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 
 (defn flow-box
   (box (children_dict (%layer settings_ {| node_}))
-    ((^node ^*children ^… settings))))
+    (^match (node children)
+      (when (z-stack (_)) ^(union children settings))
+      (when _ ((^node ^*children ^… settings))))))
 
 (defn ⸨viewport,content-viewport⸩-box
   (box (children_dict (%layer settings_ {present: true}))
