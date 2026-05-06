@@ -78,14 +78,6 @@ module Ww::Soma
     uiR(metricsR, ruleset)
   end
 
-  def editR(ruleset : Ruleset)
-    exhR(absR(alloy_rulesetR(ruleset)))
-  end
-
-  def editR(rulebase : Term)
-    editR(Ruleset.select(Ruleset::DEFAULT_SELECTOR, rulebase))
-  end
-
   def dispatch(state : Term, msg : Term)
     Term.each_keypath_and_node(state) do |keypath, node|
       Term.case(node) do

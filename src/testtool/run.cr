@@ -231,7 +231,7 @@ module Testtool
 
     state = test.seed
     test.msgs.each do |msg|
-      state = measure(stat) { rewrite(Soma.dispatch(state, msg), editR) }
+      state = measure(stat) { Rho.rewrite(editR, Soma.dispatch(state, msg)) }
     end
 
     return if state == test.result # ok

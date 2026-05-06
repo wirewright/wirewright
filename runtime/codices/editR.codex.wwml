@@ -38,23 +38,19 @@
 ;; M1 somewhat.
 ;;
 ;; The biggest concern with this implementation (and most of my previous attempts) is that
-;; it requires absR, which is extremely inefficient. Each successful rule application leads
-;; to a re-visit of the entire tree. No, not only the rule-relevant tree -- the *entire* tree.
-;; The search process has to start from scratch, from point zero, from root. This is *extremely*
-;; expensive, even if one's brute performance is high, and ours isn't at the moment. This can
-;; be mitigated somewhat with relR, which sets a ceiling for absR, but the problem is it's
-;; hard to compute that ceiling automatically, and setting it by hand seems too hacky and
-;; error-prone.
+;; it requires exhR descR, which is rather inefficient. Each batch of successful rule applications
+;; leads to a re-visit of the entire tree from the root, in search of new rule application
+;; sites. This is pretty expensive, even if one's brute performance is high, and ours isn't
+;; at the moment.
 ;;
 ;; It would be nice, for a better implementation, to "ride along" with the search process somehow.
 ;; Right now, we have `⟨...⟩` (sometimes nested!) on lots of rules. For a search process, this only
 ;; means proceed with a "depth assertion" (i.e., "am I deep enough for this rule to apply?").
-;; For M1, however, this means a full pass over the underlying matchee -- if it's a dict -- which
-;; doesn't play nicely with absR, which is already inefficient. It's surprising all of this runs
-;; on the millisecond to second timescale at all. Of course the problem is not worth the time spent
-;; on it at the moment -- all these things should take well below 100µs. In the long run, we should
-;; be able to compete with imperative code; otherwise, all of this makes very little sense, aside
-;; from arguable purity.
+;; For M1, however, this means a full pass over the underlying matchee, if one forgets about summary-
+;; guided descent for a moment; which is, as one would expect, also pretty inefficient. It's surprising
+;; all of this runs on the millisecond-to-second timescale at all. Of course the problem is not
+;; worth the time the machine spends on it. In the long run, we should be able to compete with
+;; imperative code; otherwise, all of this makes very little sense, aside from arguable purity.
 ;;
 ;; KERNEL FLAGS
 ;; -----------
@@ -980,3 +976,8 @@ C←[(I M←[place] _* ⍊ sack: (%entry D_ _)) _*]
 ;; rule that changed the matchee otherwise? Humph.
 [I M←(goto history ⸨left,right⸩ ⍊ fb_) _*]
   <> {M: ^fb}
+
+--- rewriter
+
+(section default ;; i.e., the section above
+  (exhR (descR (rulesetR) part: entries)))

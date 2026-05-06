@@ -179,20 +179,19 @@ module Testtool
   end
 
   # Constructs an editR rewriter based on definitions from *index*, if any.
-  def editR?(index : Term::Dict, base : NormalPath) : Rewriter?
+  def editR?(index : Term::Dict, base : NormalPath) : Rho::Rewriter?
     return unless path = index[:editR, :codex]?.try(&.to?(Path))
 
     path = NormalPath[base / path]
 
     log("Loading editR codex at #{path}")
 
-    codex = pipe(path,
+    pipe(path,
       ResourceService.file,
       ResourceService.read_string,
       ML.document,
+      Rho.rewriter,
     )
-
-    Soma.editR(codex)
   end
 
   # Constructs a (graphics) uiR rewriter based on definitions from *index*, if any.
