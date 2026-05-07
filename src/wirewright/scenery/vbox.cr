@@ -23,7 +23,7 @@ module Ww::Scenery
     VBox.new(box.bounds, vbox.children)
   end
 
-  private def vbox!(cache, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : OriginBox) : VBox
+  private def vbox!(cache, node : Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : OriginBox) : VBox
     vbox(cache, node.children, box.children)
   end
 

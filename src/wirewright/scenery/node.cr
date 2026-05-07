@@ -105,9 +105,6 @@ module Ww::Scenery
                     Svg(Asset::PvgSvgImage) |
                     IconGlyph |
                     ShapedText |
-                    Content(SizedNode) |
-                    Floating(SizedNode) |
-                    Limit(SizedNode) |
                     Padding(SizedNode) |
                     Align(SizedNode) |
                     XYStack(SizedNode) |
@@ -133,9 +130,6 @@ module Ww::Scenery
                        Svg(Asset::PvgSvgImage) |
                        IconGlyph |
                        ShapedText |
-                       Content(ElevatedNode) |
-                       Floating(ElevatedNode) |
-                       Limit(ElevatedNode) |
                        Padding(ElevatedNode) |
                        Align(ElevatedNode) |
                        XYStack(ElevatedNode) |
@@ -164,9 +158,6 @@ module Ww::Scenery
                     Svg(Asset::PvgSvgImage) |
                     IconGlyph |
                     ShapedText |
-                    Content(AimedNode) |
-                    Floating(AimedNode) |
-                    Limit(AimedNode) |
                     Padding(AimedNode) |
                     Align(AimedNode) |
                     XYStack(AimedNode) |

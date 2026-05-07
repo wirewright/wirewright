@@ -53,7 +53,7 @@ module Ww::Scenery
     AimResponse.new(node, foci.to_unsafe_readonly_slice!)
   end
 
-  private def aim!(cache, node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : OriginBox) : AimResponse
+  private def aim!(cache, node : Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : OriginBox) : AimResponse
     aimed_children, foci = aim(cache, node.children, box.children)
     aimed_node = node.copy_with(children: aimed_children)
 

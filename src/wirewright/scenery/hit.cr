@@ -223,7 +223,7 @@ module Ww::Scenery
     box_hit(node, box, vbox, tf, Tf[tf, Tf.translate(-node.offset)], query)
   end
 
-  private def hit(node : Content | Floating | Limit | Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, tf, query)
   end
 

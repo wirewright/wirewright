@@ -218,7 +218,7 @@ module Ww::Scenery
     describe(node.children, box.children, Tf[tf, node.tf], hit)
   end
 
-  private def describe(node : Floating | Limit | Content | Padding | Align | Composite | TransformMatrix, box : OriginBox, tf : Tf, hit : HitNode)
+  private def describe(node : Padding | Align | Composite | TransformMatrix, box : OriginBox, tf : Tf, hit : HitNode)
     describe(node.children, box.children, tf, hit)
   end
 

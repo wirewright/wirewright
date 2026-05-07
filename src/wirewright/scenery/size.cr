@@ -421,11 +421,11 @@ module Ww::Scenery
       cst = Cst.new(cst.min_w, cst.max_w, 0, Magnitude::INFINITY)
     end
 
-    box_size(cache, node, cst)
+    box_size(cache, ZStack.new(node.children, info: nil), cst)
   end
 
   private def size!(cache, node : Floating, cst : Cst) : {SizedNode, Size}
-    node, size = box_size(cache, node, cst)
+    z_out, size = box_size(cache, ZStack.new(node.children, info: nil), cst)
 
     if node.x
       size = size.copy_with(outer: Point[0, size.outer.y])
@@ -435,7 +435,7 @@ module Ww::Scenery
       size = size.copy_with(outer: Point[size.outer.x, 0])
     end
 
-    {node, size}
+    {z_out, size}
   end
 
   private def size!(cache, node : Overlay, cst : Cst) : {SizedNode, Size}
@@ -504,7 +504,7 @@ module Ww::Scenery
 
     child_cst = Cst.new(child_min_w, child_max_w, child_min_h, child_max_h)
 
-    box_size(cache, node, child_cst)
+    box_size(cache, ZStack.new(node.children, info: nil), child_cst)
   end
 
   private def size!(cache, node : Padding, cst : Cst) : {SizedNode, Size}
