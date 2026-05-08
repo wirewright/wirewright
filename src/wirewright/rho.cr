@@ -148,10 +148,21 @@ module Ww
 
     # :nodoc:
     defrecord LeafPredicate(T),
+      symbol_sketch : Term::Dict::Sketch,
+      value_sketch : Term::Dict::Sketch,
       passable : M1::PatternSet(T)?,
       impassable : M1::PatternSet(T)?
 
     private def leaf?(predicate : LeafPredicate, input : Term) : Bool
+      return true unless dict = input.as_d?
+
+      if predicate.symbol_sketch.present? || predicate.value_sketch.present?
+        summary = dict.summary
+
+        return true unless predicate.symbol_sketch.subset_of?(summary.symbol_sketch)
+        return true unless predicate.value_sketch.subset_of?(summary.value_sketch)
+      end
+
       leaf?(predicate.passable, predicate.impassable, input)
     end
 
@@ -388,7 +399,21 @@ module Ww
           part = Term::Dict.itemspart # default
         end
 
-        leafp = LeafPredicate.new(passable_set, impassable_set)
+        symbol_sketch = Term::Dict::Sketch.empty
+        value_sketch = Term::Dict::Sketch.empty
+
+        pass do
+          next unless cues = spec[:cues]?
+          next unless cue_list = cues.as_d?
+
+          cue_list.items.each do |item|
+            hashcode = Term.hashcode(item)
+            symbol_sketch = Term::Dict::Sketch.union(symbol_sketch, Term::Dict::Sketch.symbol(item, hashcode))
+            value_sketch = Term::Dict::Sketch.union(value_sketch, Term::Dict::Sketch.value(item, hashcode))
+          end
+        end
+
+        leafp = LeafPredicate.new(symbol_sketch, value_sketch, passable_set, impassable_set)
 
         yield rewriter(successor, data), part, leafp
       end
@@ -501,7 +526,7 @@ module Ww
         # |@ rho.ascR
         #
         # |@pattern
-        # (ascR successor_ ⍊ part⋮ items ⋮passable ⋮impassable)
+        # (ascR successor_ ⍊ part⋮ items ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
         #
@@ -511,6 +536,13 @@ module Ww
         #
         # |@key passable m1.operator
         # |@key impassable m1.operator
+        #
+        # |@key cues
+        # A list of cue terms. This can be used to optimize rewriters that guarantee
+        # the presence of some "structural token". For example, in editR, we use this
+        # property to only descend into terms which probably have `I` in them, since
+        # `I` (picked for its resemblance to the I-beam) is the definitive sign that
+        # editR should be interested in the term.
         #
         # |@block
         # *Ascending rewriter*: post-order depth-first rewrite of a dictionary *part*.
@@ -531,16 +563,18 @@ module Ww
         # |@ rho.descR
         #
         # |@pattern
-        # (descR successor_ ⍊ part⋮ items ⋮passable ⋮impassable)
+        # (descR successor_ ⍊ part⋮ items ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
         #
         # |@key part
-        # Can be `items` (default, fallback; descend only into itemsparts),
-        # `pairs` (only into pairsparts), or `entries` (descend into both).
+        # See `rho.ascR`.
         #
         # |@key passable m1.operator
         # |@key impassable m1.operator
+        #
+        # |@key cues
+        # See `rho.ascR`.
         #
         # |@block
         # *Descending rewriter*: pre-order depth-first rewrite of a dictionary *part*.
@@ -561,16 +595,18 @@ module Ww
         # |@ rho.bidiR
         #
         # |@pattern
-        # (bidiR successor_ ⍊ part⋮ items ⋮passable ⋮impassable)
+        # (bidiR successor_ ⍊ part⋮ items ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
         #
         # |@key part
-        # Can be `items` (default, fallback; descend only into itemsparts),
-        # `pairs` (only into pairsparts), or `entries` (descend into both).
+        # See `rho.ascR`.
         #
         # |@key passable m1.operator
         # |@key impassable m1.operator
+        #
+        # |@key cues
+        # See `rho.ascR`.
         #
         # |@block
         # *Bidirectional rewriter*: first, attempts a pre-order rewrite with
@@ -594,12 +630,15 @@ module Ww
         # |@ rho.waveR
         #
         # |@pattern
-        # (waveR successor_ ⍊ ⋮passable ⋮impassable)
+        # (waveR successor_ ⍊ ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
         #
         # |@key passable m1.operator
         # |@key impassable m1.operator
+        #
+        # |@key cues
+        # See `rho.ascR`.
         #
         # |@block
         # The *wave rewriter* lets you recurse down the itemspart tree, proceeding

@@ -980,4 +980,4 @@ C←[(I M←[place] _* ⍊ sack: (%entry D_ _)) _*]
 --- rewriter
 
 (section default ;; i.e., the section above
-  (exhR (descR (rulesetR) part: entries)))
+  (exhR (descR (rulesetR) cues: (I) part: entries)))

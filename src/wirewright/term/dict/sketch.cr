@@ -99,6 +99,11 @@ class Ww::Term::Dict
       self == Sketch.empty
     end
 
+    # Shorthand for `!empty?`.
+    def present? : Bool
+      !empty?
+    end
+
     # Returns `true` if all elements of this sketch are contained in *other*.
     def subset_of?(other : Sketch) : Bool
       (other.bits & bits) == bits
