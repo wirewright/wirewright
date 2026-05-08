@@ -287,7 +287,7 @@ module Ww::Scenery
     Point[0, 0]
   end
 
-  private def min_size!(cache, node : Limit) : Point
+  private def min_size!(cache, node : Limit | Clamp) : Point
     Point.max(min_size(cache, node.children), Point[node.min_w.resolve(0), node.min_h.resolve(0)])
   end
 
@@ -505,6 +505,40 @@ module Ww::Scenery
     child_cst = Cst.new(child_min_w, child_max_w, child_min_h, child_max_h)
 
     box_size(cache, ZStack.new(node.children, info: nil), child_cst)
+  end
+
+  private def size!(cache, node : Clamp, cst : Cst) : {SizedNode, Size}
+    z_in = ZStack.new(node.children, info: nil)
+    z_out, size = box_size(cache, z_in, cst)
+
+    w = size.outer.x
+    h = size.outer.y
+
+    min_w = node.min_w.resolve(w)
+    min_h = node.min_h.resolve(h)
+
+    max_w = node.max_w.try(&.resolve(w)) || Magnitude::INFINITY
+    max_h = node.max_h.try(&.resolve(h)) || Magnitude::INFINITY
+
+    clamped_w = Math.min(max_w, Math.max(min_w, w))
+    clamped_h = Math.min(max_h, Math.max(min_h, h))
+
+    # If we did not change the size, just return the original size.
+    if {clamped_w, clamped_h} == {w, h}
+      return z_out, size
+    end
+
+    clamp_cst = cst
+
+    unless clamped_w == w # Changed w
+      clamp_cst = Cst.new(min_w, max_w, clamp_cst.min_h, clamp_cst.max_h)
+    end
+
+    unless clamped_h == h # Changed h
+      clamp_cst = Cst.new(clamp_cst.min_w, clamp_cst.max_w, min_h, max_h)
+    end
+
+    box_size(cache, z_in, clamp_cst)
   end
 
   private def size!(cache, node : Padding, cst : Cst) : {SizedNode, Size}

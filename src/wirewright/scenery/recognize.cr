@@ -814,12 +814,19 @@ module Ww::Scenery
       # values are resolved in terms of the downbound maximum height.
       #
       # |@block
-      # Modifies the downbound and upbound sizes for a z-stack of *children* to fit
-      # in the range defined by min-w, max-w (inclusive), and min-h, max-h (inclusive).
+      # Modifies the downbound sizes for a z-stack of *children* to fit in the range
+      # defined by min-w, max-w (inclusive), and min-h, max-h (inclusive).
       #
       # NOTE: Setting max-w/h to `∞` is not the same as using `scenery.content`; the former
       # is advisory, the latter is forced. In other words, the children will be content-sized
-      # only if no further restrictions are placed upstream of this `limit`.
+      # only if no further restrictions are placed above or below this `limit`.
+      #
+      # NOTE: Limit is top-down. Most Scenery nodes have the behavior of filling all
+      # available space. So if you set `max-w`, chances are, the children will size
+      # themselves to `max-w`. If you want to set a bottom-up limit instead, use
+      # `scenery.clamp`. Child sizes will interact with `clamp`, which will, in turn,
+      # report the resulting clamped size to the parent, affecting its sizing decisions.
+      # This is a slightly different flow from `scenery.limit`.
       matchpi(<<-WWML) do
       (limit subterms_+ ⍊
         min-w_⋮ 0
@@ -837,6 +844,25 @@ module Ww::Scenery
         u_max_h = max_h == Term.of(:∞) ? nil : Unit.px(max_h, fallback: Unit.px(0))
 
         Limit.new(children, u_min_w, u_max_w, u_min_h, u_max_h)
+      end
+
+      matchpi(<<-WWML) do
+      (clamp subterms_+ ⍊
+        min-w_⋮ 0
+        min-h_⋮ 0
+        max-w_⋮ ∞
+        max-h_⋮ ∞)
+      WWML
+        children = recognize(cache, nodes: subterms.items)
+        return Inert.new if children.all?(Inert)
+
+        u_min_w = Unit.px(min_w, fallback: Unit.px(0))
+        u_min_h = Unit.px(min_h, fallback: Unit.px(0))
+
+        u_max_w = max_w == Term.of(:∞) ? nil : Unit.px(max_w, fallback: Unit.px(0))
+        u_max_h = max_h == Term.of(:∞) ? nil : Unit.px(max_h, fallback: Unit.px(0))
+
+        Clamp.new(children, u_min_w, u_max_w, u_min_h, u_max_h)
       end
 
       # |@ scenery.padding

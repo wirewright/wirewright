@@ -15,6 +15,7 @@ module Ww::Scenery
                          Content(RecognizedNode) |
                          Floating(RecognizedNode) |
                          Limit(RecognizedNode) |
+                         Clamp(RecognizedNode) |
                          Padding(RecognizedNode) |
                          Align(RecognizedNode) |
                          XYStack(RecognizedNode) |
@@ -46,6 +47,7 @@ module Ww::Scenery
                     Content(AssetNode) |
                     Floating(AssetNode) |
                     Limit(AssetNode) |
+                    Clamp(AssetNode) |
                     Padding(AssetNode) |
                     Align(AssetNode) |
                     XYStack(AssetNode) |
@@ -79,6 +81,7 @@ module Ww::Scenery
                      Content(ShapedNode) |
                      Floating(ShapedNode) |
                      Limit(ShapedNode) |
+                     Clamp(ShapedNode) |
                      Padding(ShapedNode) |
                      Align(ShapedNode) |
                      XYStack(ShapedNode) |
@@ -424,6 +427,14 @@ module Ww::Scenery
     caches_hash: true
 
   defcase Limit(Node),
+    children : Slice(Node),
+    min_w : Unit,
+    max_w : Unit?,
+    min_h : Unit,
+    max_h : Unit?,
+    caches_hash: true
+
+  defcase Clamp(Node),
     children : Slice(Node),
     min_w : Unit,
     max_w : Unit?,
