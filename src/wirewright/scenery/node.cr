@@ -191,11 +191,22 @@ module Ww::Scenery
 
   class RectShape
     def resolve(bounds : Rect)
+      resolved_l = @thickness.l.resolve(bounds.w)
+      resolved_r = @thickness.r.resolve(bounds.w)
+      resolved_t = @thickness.t.resolve(bounds.h)
+      resolved_b = @thickness.b.resolve(bounds.h)
+
+      resolved_x = resolved_l + resolved_r
+      resolved_y = resolved_t + resolved_b
+
+      w_factor = resolved_x > bounds.w ? (bounds.w / resolved_x) : Magnitude.new(1)
+      h_factor = resolved_y > bounds.h ? (bounds.h / resolved_y) : Magnitude.new(1)
+
       thickness = {
-        l: @thickness.l.resolve(bounds.w/4).clamp(Magnitude.new(0)..bounds.w/4),
-        r: @thickness.r.resolve(bounds.w/4).clamp(Magnitude.new(0)..bounds.w/4),
-        t: @thickness.t.resolve(bounds.h/4).clamp(Magnitude.new(0)..bounds.h/4),
-        b: @thickness.b.resolve(bounds.h/4).clamp(Magnitude.new(0)..bounds.h/4),
+        l: Math.max(0, resolved_l * w_factor),
+        r: Math.max(0, resolved_r * w_factor),
+        t: Math.max(0, resolved_t * h_factor),
+        b: Math.max(0, resolved_b * h_factor),
       }
 
       {thickness, RoundedRect.new(bounds, @radii)}

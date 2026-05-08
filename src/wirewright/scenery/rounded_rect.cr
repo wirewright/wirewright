@@ -13,21 +13,50 @@ module Ww::Scenery
     end
 
     def self.new(bounds : Rect, radius : Magnitude) : RoundedRect
-      max_radius = Math.min(bounds.size.x, bounds.size.y)/2
-      radius = radius.clamp(Magnitude.new(0)..max_radius)
-      radii = {tl: radius, tr: radius, bl: radius, br: radius}
-
-      new(bounds, radii)
+      new(bounds,
+        RectRadii.new(
+          tl: Unit.px(radius),
+          tr: Unit.px(radius),
+          bl: Unit.px(radius),
+          br: Unit.px(radius),
+        )
+      )
     end
 
     def self.new(bounds : Rect, radii : RectRadii) : RoundedRect
-      max_radius = Math.min(bounds.size.x, bounds.size.y)/2
-      radii = {tl: radii.tl.resolve(max_radius).clamp(Magnitude.new(0)..max_radius),
-               tr: radii.tr.resolve(max_radius).clamp(Magnitude.new(0)..max_radius),
-               bl: radii.bl.resolve(max_radius).clamp(Magnitude.new(0)..max_radius),
-               br: radii.br.resolve(max_radius).clamp(Magnitude.new(0)..max_radius)}
+      w, h = bounds.size.x, bounds.size.y
 
-      new(bounds, radii)
+      radius_limit = Math.min(w, h)
+
+      if radius_limit <= 0
+        return new(bounds,
+          {tl: Magnitude.new(0),
+           tr: Magnitude.new(0),
+           bl: Magnitude.new(0),
+           br: Magnitude.new(0)}
+        )
+      end
+
+      tl = radii.tl.resolve(radius_limit)
+      tr = radii.tr.resolve(radius_limit)
+      bl = radii.bl.resolve(radius_limit)
+      br = radii.br.resolve(radius_limit)
+
+      top_factor = (tl + tr) > w ? (w / (tl + tr)) : Magnitude.new(1)
+      bottom_factor = (bl + br) > w ? (w / (bl + br)) : Magnitude.new(1)
+      left_factor = (tl + bl) > h ? (h / (tl + bl)) : Magnitude.new(1)
+      right_factor = (tr + br) > h ? (h / (tr + br)) : Magnitude.new(1)
+
+      factor = {top_factor, bottom_factor, left_factor, right_factor}.min
+
+      clamped_radii = {
+        tl: tl * factor,
+        tr: tr * factor,
+        bl: bl * factor,
+        br: br * factor,
+      }
+
+      new(bounds, clamped_radii)
     end
 
     # Snaps this rounded rect's bounds to pixel coordinates.

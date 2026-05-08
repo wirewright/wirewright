@@ -261,10 +261,10 @@ backdrop: (oklch 0.2 0 0)
     (rect
       fill: gray
       stroke: (linear-gradient (stop 0 yellow) (stop 1 red) begin-l: 0 end-l: 1)
-      thickness-l: (* 0.5)
-      thickness-r: (* 1)
-      thickness-t: (* 0.8)
-      thickness-b: (* 1)))
+      thickness-l: (* 0.6)
+      thickness-r: 3
+      thickness-t: (* 0.6)
+      thickness-b: 3))
 
   ;; Radius
   (x-wrap gap-x: 10 gap-y: 10
@@ -320,6 +320,8 @@ backdrop: (oklch 0.2 0 0)
       (rect fill: gray radius-tr: (* 1))
       (rect fill: gray radius-bl: (* 1))
       (rect fill: gray radius-br: (* 1))
+      (rect fill: gray radius-bl: (* 1) radius-tr: (* 1))
+      (rect fill: gray radius-tl: (* 1) radius-br: (* 1))
       (rect fill: gray radius-tl: (* 1) radius-tr: (* 1) radius-bl: (* 1) radius-br: (* 1))))
 
   ;; Make sure that if fill: transparent and stroke is opaque,

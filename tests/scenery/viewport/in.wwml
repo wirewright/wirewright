@@ -191,7 +191,7 @@ height: 900
                     (aim (text color: lightgreen caption: "Be happy")))))))))))
 
   (y-stack
-    (text caption: "no aim (1,1) -> tf, aim -> tf, aim loses to aim: false" color: gray)
+    (text caption: "no aim (1,1) -> tf, aim -> tf, aim loses to aim: off" color: gray)
     (x-stack gap: 10
       (limit max-w: 50 max-h: 50
         (BoundedBox stroke: yellow
@@ -215,7 +215,7 @@ height: 900
                   (aim (text color: lightgreen caption: "Be happy"))))))))
       (limit max-w: 50 max-h: 50
         (BoundedBox stroke: yellow
-          (viewport page-x: (* 0.5) page-y: (* 0.5) aim: false ;; aim loses now
+          (viewport page-x: (* 0.5) page-y: (* 0.5) aim: off ;; aim loses now
             (content x: true y: true
               (y-stack
                 (text color: white caption: "Buy apples")

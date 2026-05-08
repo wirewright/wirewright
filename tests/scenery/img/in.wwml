@@ -145,8 +145,6 @@ height: 900
           (img
             src: (uri "http://127.0.0.1:9812/avatar-female1-32.jpg")
             radius-tl: (* 0.5)
-            radius-tr: (* 0.5)
-            radius-bl: (* 0.5)
             radius-br: (* 0.5))))
 
       (y-stack

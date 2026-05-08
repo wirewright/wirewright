@@ -4,7 +4,14 @@ backdrop: (oklch 0.2 0 0)
 
 (BoundedText ¦ props_)
   => (z-stack
-       (rect stroke: red thickness-l: 1 thickness-r: 1 thickness-t: 1 thickness-b: 1)
+       (rect
+         stroke: red
+         thickness-l: 1
+         thickness-r: 1
+         thickness-t: 1
+         thickness-b: 1
+         min-w: 3
+         min-h: 3)
        (padding pl: 1 pr: 1 pt: 1 pb: 1
          (text ^… props)))
 
@@ -331,4 +338,11 @@ backdrop: (oklch 0.2 0 0)
     selection-radius: 5
     selection-endl: true
     selection-anchor: 0
-    selection-span: -1))
+    selection-span: -1)
+  (content x: true y: true
+    (BoundedText
+      caption: ""
+      selection: true
+      selection-fill: (oklch 0.7 0.2 blue)
+      selection-anchor: 0
+      selection-span: 0)))
