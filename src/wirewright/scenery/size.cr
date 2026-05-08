@@ -244,7 +244,7 @@ module Ww::Scenery
   end
 
   private def min_size!(cache, node : RectShape) : Point
-    Point[1, 1]
+    node.min_size
   end
 
   private def min_size!(cache, node : IconGlyph) : Point
@@ -355,7 +355,7 @@ module Ww::Scenery
   # either, we'll use some hard-coded default size to show *something* to
   # the user. But this isn't a good situation to be in, generally.
   private def size!(cache, node : RectShape, cst : Cst) : {SizedNode, Size}
-    {node, Size.expand(Point[16, 16], cst)}
+    {node, Size.expand(node.min_size, cst)}
   end
 
   # :nodoc:

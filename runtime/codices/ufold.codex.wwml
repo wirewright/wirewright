@@ -179,6 +179,10 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 ;; Background utilities.
 ;;
 
+(for bg-box
+  (utility "bg-min-none"
+    {min-w: 0, min-h: 0}))
+
 ;; Solid paint.
 (for bg-box
   (utility (prefix "bg-" (one-of colors fill))

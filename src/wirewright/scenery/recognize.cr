@@ -82,7 +82,9 @@ module Ww::Scenery
       #   radius-tl_⋮ 0
       #   radius-tr_⋮ 0
       #   radius-bl_⋮ 0
-      #   radius-br_⋮ 0)
+      #   radius-br_⋮ 0
+      #   min-w⋮ 0
+      #   min-h⋮ 0)
       #
       # |@key fill scenery.paint
       # The paint with which to fill the rectangle.
@@ -122,6 +124,12 @@ module Ww::Scenery
       # Radius of the _b_ottom-_r_ight corner (pixels). Relative values are resolved
       # using the maximum corner radius for the rect.
       #
+      # |@key min-w
+      # Minimum width of the rectangle, in pixels.
+      #
+      # |@key min-h
+      # Minimum height of the rectangle, in pixels.
+      #
       # |@block
       # Displays a rectangle with optional borders, corner radii, stroke, and fill.
       # Additionally, by setting all corner radii to `(* 1)` (i.e., 100%, max), you
@@ -151,7 +159,9 @@ module Ww::Scenery
          radius-tl_⋮ 0
          radius-tr_⋮ 0
          radius-bl_⋮ 0
-         radius-br_⋮ 0)
+         radius-br_⋮ 0
+         min-w⋮ 16
+         min-h⋮ 16)
       WWML
         RectShape.new(
           thickness: RectThickness.new(
@@ -168,6 +178,7 @@ module Ww::Scenery
           ),
           fill: Paint.recognize(fill),
           stroke: Paint.recognize(stroke),
+          min_size: Point[min_w.to(Magnitude), min_h.to(Magnitude)]
         )
       end
 

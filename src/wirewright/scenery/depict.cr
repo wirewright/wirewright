@@ -216,6 +216,7 @@ module Ww::Scenery
       radii: RectRadii.new(tl: Unit.px(15.0), tr: Unit.px(15.0), bl: Unit.px(15.0), br: Unit.px(15.0)),
       fill: Paint::Solid.new(Pigment::RGBA.new(0.125, 0.125, 0.125, 1.0)),
       stroke: Paint::Solid.new(Pigment::RGBA.new(0.0, 0.0, 0.0, 0.0)),
+      min_size: Point[16, 16],
     )
 
     unless blame.is_a?(Text)

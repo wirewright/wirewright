@@ -183,6 +183,7 @@ module Ww::Scenery
     radii : RectRadii,
     fill : Paint::Any,
     stroke : Paint::Any,
+    min_size : Point,
     caches_hash: true
 
   class RectShape
