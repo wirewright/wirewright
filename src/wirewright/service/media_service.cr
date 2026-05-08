@@ -1018,7 +1018,7 @@ module Ww
     end
 
     # WARNING: Assumes `@@lock` is taken!
-    private def unsafe_publish_spec(key : Term, spec : SpecState) : Nil
+    private def publish_spec(key : Term, spec : SpecState) : Nil
       @@workspace[key] = spec
       return if @@workspace_dirty
 
@@ -1040,7 +1040,7 @@ module Ww
         case state
         in Nil
           wg = WaitGroup.new(1)
-          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
+          publish_spec(session_key, PendingSpec.new(spec, wg))
           wg
         in PendingSpec
           if state.spec == spec
@@ -1052,7 +1052,7 @@ module Ww
           state.wg.done
 
           wg = WaitGroup.new(1)
-          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
+          publish_spec(session_key, PendingSpec.new(spec, wg))
           wg
         in ReadySpec
           wg = WaitGroup.new(1)
@@ -1062,7 +1062,7 @@ module Ww
             return wg
           end
 
-          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
+          publish_spec(session_key, PendingSpec.new(spec, wg))
 
           wg
         in WithdrawnSpec
@@ -1073,12 +1073,12 @@ module Ww
 
           # Demote back into ReadySpec.
           if state.spec == spec
-            unsafe_publish_spec(session_key, ReadySpec.new(spec))
+            publish_spec(session_key, ReadySpec.new(spec))
             wg.done
             return wg
           end
 
-          unsafe_publish_spec(session_key, PendingSpec.new(spec, wg))
+          publish_spec(session_key, PendingSpec.new(spec, wg))
 
           wg
         end
@@ -1105,11 +1105,11 @@ module Ww
           state.wg.done
 
           wg = WaitGroup.new(1)
-          unsafe_publish_spec(session_key, WithdrawnSpec.new(state.spec, wg))
+          publish_spec(session_key, WithdrawnSpec.new(state.spec, wg))
           wg
         in ReadySpec
           wg = WaitGroup.new(1)
-          unsafe_publish_spec(session_key, WithdrawnSpec.new(state.spec, wg))
+          publish_spec(session_key, WithdrawnSpec.new(state.spec, wg))
           wg
         in WithdrawnSpec
           state.wg
