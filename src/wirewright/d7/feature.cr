@@ -74,8 +74,7 @@ module Ww::D7
     Mixture.new(node, Term.of(defn), mix)
   end
 
-  # Represents a lexical scope binding. Attaches bindings to a continuation
-  # feature *cont*.
+  # Wraps a continuation feature *cont* in a lexical scope qualified by *scope*.
   defcase Scope, scope : NodeScope::Any, cont : Ready
 
   # Constructs a scope feature.
