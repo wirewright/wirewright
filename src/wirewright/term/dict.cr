@@ -393,26 +393,31 @@ module Ww
       Term[index32?(term)]
     end
 
-    # Near constant-time Nth entry in `each_entry`-order (items unordered, pairs unordered).
+    # Near constant-time Nth entry in `each_entry`-order.
     @[Dncast]
-    def nth?(index : Int32) : {Term, Term}?
-      nth?(index.to_u32)
+    def nth?(n : Int32) : {Term, Term}?
+      nth?(n.to_u32)
     end
 
-    def nth?(index : UInt32) : {Term, Term}?
-      if 0 <= index < UTermTrie32.summary(@utrie).size
-        value = UTermTrie32.at?(@utrie, index) || raise IndexError.new
+    # :ditto:
+    def nth?(n : UInt32) : {Term, Term}?
+      if entry = UTermTrie32.nth?(@utrie, n)
+        index, value = entry
         return Term.of(index), value
       end
 
-      index -= UTermTrie32.summary(@utrie).size
+      # Note that this isn't the same as seqsize! Up to @utrie's seqsize,
+      # *n* refers to items; past that, it refers to pairs stored in
+      # the @utrie. Past that, it refers to @ttrie. This is the same
+      # order as in `each_entry`.
+      n -= UTermTrie32.summary(@utrie).size
 
-      TermTrie.nth?(@ttrie, index)
+      TermTrie.nth?(@ttrie, n)
     end
 
     @[Dncast]
-    def nth(index : Int32)
-      nth?(index) || raise IndexError.new
+    def nth(n : Int32) : {Term, Term}
+      nth?(n) || raise IndexError.new
     end
 
     # Near constant-time Nth entry in `items` followed by `Part::PairsOrd`-order.

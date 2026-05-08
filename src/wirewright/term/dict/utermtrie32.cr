@@ -38,27 +38,27 @@ class Ww::Term::Dict
   # This means that now, compared to the prior impl, we don't have to split anything
   # or move entries between the itemspart and the pairspart, *provided we have
   # an efficient way to separate entries whose key is before mex, and entries
-  # whose key is after, in the trie*. Thanks to *presence* and *full* bitmaps,
-  # and opposed to finger trees, we indeed can do this very quickly with UTermTrie32.
-  # For instance, running `seqpart` on tries with hundreds of thousands
-  # of entries completes in less than a microsecond on my machine.
+  # whose key is after, in the trie*. Thanks to some bitmaps, and opposed to finger
+  # trees, we indeed can do this very quickly with UTermTrie32. For instance, running
+  # `seqpart` on tries with hundreds of thousands of entries completes in less
+  # than a microsecond on my machine -- not that this tells much, of course...
   #
   # An important fast path when retrieving the itemspart of a dict is supported.
   # Namely, if the UTermTrie of the dict is a sequence, meaning there are no
   # entries past its mex, the entire trie is the itemspart and no work is needed.
   # The question -- about whether there are entries past the mex of the trie -- is
   # answered by the comparison `seqsize == size` (see `seq_only?`). With UTermTrie32,
-  # it is effectively two fetches and a compare. That is, we cache enough to make
-  # this comparison have negligible cost, both on assoc- and dissoc-side, and on
-  # the comparison side; and thus, the fast path has a fast guard, which is nice.
-  # The guard fires almost always: very rarely in practice do we have entries
-  # with keys past the mex.
+  # it is effectively two fetches and a compare. That is, we cache enough to make the cost
+  # of this comparison negligible, on assoc- and dissoc-side, and during comparison itself;
+  # and thus, the fast path has a fast guard, which is nice. The guard fires almost
+  # always: very rarely in practice do we have entries with keys past the mex.
   #
   # Public API:
   #
   # - `empty : R`
   # - `summary(root : R) : Summary`
   # - `at?(root : R, key : UInt32) : Term?``
+  # - `nth?(root : R, n : UInt32) : {Term, Term}?``
   # - `each(root : R, & : UInt32, Term ->) : Nil`
   # - `seqsize(root : R) : UInt32`
   # - `assoc(root : R, key : UInt32, value : Term, *, cookie : Cookie = Cookie.none) : R`
@@ -457,6 +457,23 @@ class Ww::Term::Dict
 
     def at?(node : Leaf | Node, key : UInt32) : Term?
       at?(node, decompose(key))
+    end
+
+    def nth?(node : Leaf, n : UInt32) : {UInt32, Term}?
+      return unless item = node.children.ix[n]?
+
+      {item.key, item.term}
+    end
+
+    def nth?(node : Node, n : UInt32) : {UInt32, Term}?
+      node.children.each_entry do |_, child|
+        size = child.summary.size
+        if n < size
+          return nth?(child, n)
+        end
+
+        n -= size
+      end
     end
 
     private def each(prefix : UInt32, node : Leaf, & : UInt32, Term ->) : Nil
