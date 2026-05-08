@@ -661,8 +661,8 @@ module Ww
       end
 
       def handle(event : SDL::KeyboardKeyEvent) : Nil
-        unless name = key_name?(event.scancode)
-          Log.debug { "unhandled SDL scancode #{event.scancode}" }
+        unless name = key_name?(event.scancode) || key_name?(event.keycode)
+          Log.debug { "unhandled SDL scancode #{event.scancode} (#{event.keycode})" }
           return
         end
 
@@ -1004,6 +1004,16 @@ module Ww
           when .ralt?         then Term.of(:alt, :right)
           end
         {% end %}
+      end
+
+      # This overload is here primarily to support CapsLock->Escape mapping,
+      # which is my muscle memory; I rely on it very much. Notice how we don't
+      # handle the CapsLock scancode. So if CapsLock=Escape, scancode is left
+      # unhandled, but we pick up the keycode.
+      def key_name?(code : SDL::Keycode) : Term?
+        case code
+        when .escape? then Term.of(:escape)
+        end
       end
     end
 

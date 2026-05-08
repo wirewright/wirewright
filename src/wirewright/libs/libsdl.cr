@@ -183,6 +183,7 @@ module Ww
     alias MouseId = LibSDL::MouseID
     alias KeyboardId = LibSDL::KeyboardID
     alias Scancode = LibSDL::Scancode
+    alias Keycode = LibSDL::Keycode
 
     enum MouseButton : UInt8
       Left   = 1
@@ -222,8 +223,19 @@ module Ww
     alias KeyboardKeyEvent = KeyboardKeyDown | KeyboardKeyUp
     alias TextEvent = TextEntered
 
-    defrecord KeyboardKeyDown, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode, repeat : Bool
-    defrecord KeyboardKeyUp, window_id : WindowId, keyboard_id : KeyboardId, scancode : Scancode
+    defrecord KeyboardKeyDown,
+      window_id : WindowId,
+      keyboard_id : KeyboardId,
+      scancode : Scancode,
+      keycode : Keycode,
+      repeat : Bool
+
+    defrecord KeyboardKeyUp,
+      window_id : WindowId,
+      keyboard_id : KeyboardId,
+      scancode : Scancode,
+      keycode : Keycode
+
     defrecord TextEntered, window_id : WindowId, rune : String
 
     defrecord UnknownEvent
@@ -291,11 +303,13 @@ module Ww
         KeyboardKeyUp.new(event.key.window_id,
           keyboard_id: event.key.which,
           scancode: Scancode.new(event.key.scancode),
+          keycode: Keycode.new(event.key.key),
         )
       when .key_down?
         KeyboardKeyDown.new(event.key.window_id,
           keyboard_id: event.key.which,
           scancode: Scancode.new(event.key.scancode),
+          keycode: Keycode.new(event.key.key),
           repeat: event.key.repeat == TRUE,
         )
       else
