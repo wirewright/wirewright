@@ -585,13 +585,20 @@ module Ww::Scenery
 
   defcase Viewport(Node),
     children : Slice(Node),
-    aim : Bool,
+    aim : ViewportAim,
     page_x : Unit,
     page_y : Unit,
     offset_x : Unit,
     offset_y : Unit,
     radii : RectRadii,
     caches_hash: true
+
+  enum ViewportAim
+    Off
+    OffThrough
+    On
+    OnThrough
+  end
 
   defcase Clip(Node),
     children : Slice(Node),

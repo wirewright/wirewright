@@ -92,7 +92,10 @@ module Ww::Scenery
     aimed_children, foci = aim(cache, node.children, box.children)
 
     aim_rect = nil
-    if node.aim
+
+    case node.aim
+    in .off?, .off_through?
+    in .on?, .on_through?
       foci.each do |focus|
         aim_rect = aim_rect.nil? ? focus : Rect.union(aim_rect, focus)
       end
@@ -129,7 +132,16 @@ module Ww::Scenery
 
     aimed_node = Clip.new(aimed_children, offset: Point[x, y], radii: node.radii)
 
-    AimResponse.new(aimed_node, foci: Slice(Rect).empty)
+    case node.aim
+    in .on?, .off?
+      foci = Slice(Rect).empty
+    in .on_through?, .off_through?
+      foci = foci.map do |focus|
+        focus.translate(-Point[x, y])
+      end
+    end
+
+    AimResponse.new(aimed_node, foci)
   end
 
   private def aim!(cache, node : Aim, box : OriginBox) : AimResponse

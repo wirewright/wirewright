@@ -1171,7 +1171,7 @@ module Ww::Scenery
       #
       # |@pattern
       # (viewport children_+ ⍊
-      #   aim⋮ true
+      #   aim⋮ on
       #   page-x_⋮ 0
       #   page-y_⋮ 0
       #   offset-x_⋮ 0
@@ -1184,8 +1184,15 @@ module Ww::Scenery
       # |@key children scenery
       #
       # |@key aim
-      # Whether to track nested `aim` nodes and `selection-aim` selections. If
-      # enabled, aims are preferred over *page-x* and *page-y*.
+      # Specifies how the viewport will handle nested `aim` nodes and
+      # `selection-aim` selections.
+      #
+      # - `on`: absorbs aim rects while adjusting the viewport (default, fallback).
+      # - `on-through`: passes aim rects through while adjusting the viewport.
+      # - `off`: absorbs aim rects without adjusting the viewport.
+      # - `off-through`: passes aim rects through without adjusting the viewport.
+      #
+      # If aiming is enabled, it is preferred over *page-x* and *page-y*.
       #
       # |@key page-x scenery.unit
       # TODO: How to describe this?
@@ -1222,14 +1229,9 @@ module Ww::Scenery
       #
       # In other words, a viewport can act as a "camera" that follows nested `aim` nodes
       # and anchors of `selection-aim: true` selections (I-beams).
-      #
-      # Aiming can be disabled by setting `aim: false`.
-      #
-      # A viewport absorbs all nested aims regardless of whether its `aim: true` or
-      # `aim: false`.
       matchpi(<<-WWML) do
       (viewport subterms_+ ⍊
-        aim⋮ true
+        aim⋮ on
         page-x_⋮ 0
         page-y_⋮ 0
         offset-x_⋮ 0
@@ -1242,8 +1244,18 @@ module Ww::Scenery
         children = recognize(cache, nodes: subterms.items)
         return Inert.new if children.all?(Inert)
 
-        Viewport.new(children,
-          aim: aim.to(Bool),
+        case aim
+        when Term.of(:"on-through")
+          aim = ViewportAim::OnThrough
+        when Term.of(:off)
+          aim = ViewportAim::Off
+        when Term.of(:"off-through")
+          aim = ViewportAim::OffThrough
+        else # Term.of(:on)
+          aim = ViewportAim::On
+        end
+
+        Viewport.new(children, aim,
           page_x: Unit.rel(page_x, fallback: Unit.rel(0)),
           page_y: Unit.rel(page_y, fallback: Unit.rel(0)),
           offset_x: Unit.rel(offset_x, fallback: Unit.rel(0)),
