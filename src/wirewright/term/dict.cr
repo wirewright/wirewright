@@ -644,10 +644,17 @@ module Ww
       other.subset_of?(self)
     end
 
-    @[Dncast]
+    # Returns `true` if this dictionary probably includes *symbol*, or `false`
+    # if it definitely does not include *symbol*.
     def probably_includes?(symbol : Term::Sym) : Bool
       sketch = Sketch.symbol(symbol, hashcode: Term.hashcode(symbol))
       sketch.subset_of?(summary.symbol_sketch)
+    end
+
+    # Returns `true` if this dictionary probably includes *all of* *symbol*
+    # and *symbols*, or `false` if it definitely does not include some of them.
+    def probably_includes?(symbol : Term::Sym, *symbols : Term::Sym) : Bool
+      probably_includes?(symbol) && probably_includes?(*symbols)
     end
 
     # Returns a copy of this dictionary extended with an association between
