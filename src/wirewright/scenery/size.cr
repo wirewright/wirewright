@@ -254,7 +254,7 @@ module Ww::Scenery
   end
 
   private def min_size!(cache, node : ShapedText) : Point
-    min_width = Magnitude.new(0)
+    min_width = node.selections.max_of?(&.thickness) || Magnitude.new(0)
     min_height = Magnitude.new(0)
 
     each_word(node) do |word|
@@ -392,7 +392,7 @@ module Ww::Scenery
   end
 
   private def size!(cache, node : ShapedText, cst : Cst) : {SizedNode, Size}
-    width = Magnitude.new(0)
+    width = node.selections.max_of?(&.thickness) || Magnitude.new(0)
     height = Magnitude.new(0)
 
     line_wrap(node, at: cst.max_w) do |line|
