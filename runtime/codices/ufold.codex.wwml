@@ -493,6 +493,10 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 (for text-box
   (utility "-sel" {selection: false}))
 
+(for text-box
+  (utility (prefix "sel-clearance-" (number value))
+    {selection-clearance: ^(* value spacing)}))
+
 ;; E.g. sel-blue-500
 (for text-box
   (utility (prefix "sel-" (one-of colors fill))
@@ -681,10 +685,25 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
     (utility "-content-clip" {present: false}))
 
   (for content-viewport-box
-    (utility "content-aim" {aim: true}))
+    (utility "content-aim" {aim: on}))
 
   (for content-viewport-box
-    (utility "-content-aim" {aim: false})))
+    (utility "content-aim-off" {aim: off}))
+
+  (for content-viewport-box
+    (utility "content-aim-through"
+      {aim: on-through}))
+
+  (for content-viewport-box
+    (utility "content-aim-off-through"
+      {aim: off-through}))
+
+  (for content-viewport-box
+    (utility (prefix "content-clip-rounded-" (one-of radii radius))
+      {radius-tl: ^radius,
+       radius-tr: ^radius,
+       radius-bl: ^radius,
+       radius-br: ^radius})))
 
 (group
   (for viewport-box
@@ -694,10 +713,16 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
     (utility "-clip" {present: false}))
 
   (for viewport-box
-    (utility "clip-aim" {aim: true}))
+    (utility "clip-aim" {aim: on}))
 
   (for viewport-box
-    (utility "-clip-aim" {aim: false})))
+    (utility "clip-aim-off" {aim: off}))
+
+  (for viewport-box
+    (utility "clip-aim-through" {aim: on-through}))
+
+  (for viewport-box
+    (utility "clip-aim-off-through" {aim: off-through})))
 
 ;;
 ;; Transform
@@ -884,6 +909,14 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 ;;
 ;; Limit
 ;;
+
+(for limit-box
+  (utility "clamp"
+    {node: clamp}))
+
+(for limit-box
+  (utility "limit"
+    {node: limit}))
 
 ;; E.g. min-w-100px, min-w-30, min-w-lg
 (group
@@ -1223,7 +1256,8 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
              ^fill))
         ^… (intersection settings
              {+ radius-tl radius-tr radius-bl radius-br
-                stroke thickness-l thickness-r thickness-t thickness-b}))
+                stroke thickness-l thickness-r thickness-t thickness-b
+                min-w min-h}))
        (^match settings
          ;; If we have some thickness, create a padding node around the child
          ;; for insets.
@@ -1250,12 +1284,12 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
     ((⸨transform,align,align⸩ ^*children ^… settings))))
 
 (defn limit-box
-  (box (children_dict {¦ min-w_⋮ 0 max-w_⋮ ∞ min-h_⋮ 0 max-h_⋮ ∞ flip⋮ false})
+  (box (children_dict {¦ min-w_⋮ 0 max-w_⋮ ∞ min-h_⋮ 0 max-h_⋮ ∞ flip⋮ false node⋮ limit})
     ((^match flip
        (when true
-         (limit ^*children min-w: ^min-h min-h: ^min-w max-w: ^max-h max-h: ^max-w))
+         (^node ^*children min-w: ^min-h min-h: ^min-w max-w: ^max-h max-h: ^max-w))
        (when false
-         (limit ^*children ^:min-w ^:max-w ^:min-h ^:max-h))))))
+         (^node ^*children ^:min-w ^:max-w ^:min-h ^:max-h))))))
 
 (defn ⸨floating,content⸩-box
   (box (children_dict settings←(%any° {¦ x: true} {¦ y: true}))
