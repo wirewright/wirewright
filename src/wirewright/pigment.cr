@@ -59,6 +59,10 @@ module Ww::Pigment
       a.approx?(0.0)
     end
 
+    def translucent? : Bool
+      a < 255.0
+    end
+
     def inspect(io)
       io << "rgba("
       io << r << ", " << g << ", " << b << ", " << a

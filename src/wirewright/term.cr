@@ -738,6 +738,16 @@ module Ww
       end
     {% end %}
 
+    # Converts a Pigment color *object* to its Pigment description.
+    def self.[](object : Pigment::RGBA) : Term
+      unless object.translucent?
+        return Term.of(:translucent, {:lrgb, object.r, object.g, object.b}, object.a)
+      end
+
+      # opaque
+      Term.of(:lrgb, object.r, object.g, object.b)
+    end
+
     # Constructs an indexed dictionary representing the given enumerable *object*.
     # Elements of *object* receive successive keys 0, 1, 2, etc.
     #
