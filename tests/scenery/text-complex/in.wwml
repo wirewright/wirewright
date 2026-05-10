@@ -186,6 +186,7 @@ backdrop: (oklch 0.2 0 0)
       color: white
       caption:
         "Hello החוקרים חלוקים בשאלה זו World ▢ ◇ चूंकि के सभी सदस्योंbye"
+      weight: 450
       font:
         (list
           (font "IBM Plex Sans")
@@ -200,6 +201,7 @@ backdrop: (oklch 0.2 0 0)
         color: white
         caption:
           "Hello החוקרים חלוקים בשאלה זו World ▢ ◇ चूंकि के सभी सदस्योंbye"
+        weight: 450
         font:
           (list
             (font "IBM Plex Sans")

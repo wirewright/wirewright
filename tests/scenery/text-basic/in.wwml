@@ -139,6 +139,7 @@ height: 1000
       caption:
         "(limit _ ⍊ up-w⫽h: (arg ±λ ⍊ -◇_) ±⟦min,max⟧-w⫽h)\n  \
            <> {λ: ^(⟦max,min⟧ ⟦min,max⟧-w⫽h λ), ◇: true}"
+      weight: 450
       font:
         (list
           (font "IBM Plex Mono"))))
@@ -151,6 +152,6 @@ height: 1000
            <> {λ: ^(⟦max,min⟧ ⟦min,max⟧-w⫽h λ), ◇: true}"
       font:
         (list
-          (font "IBM Plex Mono")
-          (font "Julia Mono")))))
+          (font "IBM Plex Mono" weight: 450)
+          (font "Julia Mono" weight: 450)))))
 

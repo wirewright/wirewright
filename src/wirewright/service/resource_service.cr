@@ -329,7 +329,7 @@ module Ww
           file(path)
         end
 
-        matchpi %{(font family_string ¦ weight_: (%optional 450 (%number +i32)) italic⋮ false)}, family: String, weight: Int32, italic: Bool do
+        matchpi %{(font family_string ¦ weight_: (%optional 400 (%number +i32)) italic⋮ false)}, family: String, weight: Int32, italic: Bool do
           font(family, weight, italic)
         end
 
