@@ -247,18 +247,41 @@ module Ww::Scenery
           # |@ scenery.text.font
           #
           # |@pattern
-          # (text ⍊ font: (list prefs_*))
+          # (text ⍊
+          #   font: (list prefs_*)
+          #   weight_: (%optional 400 (%number +i32))
+          #   italic⋮ false)
           #
           # |@key prefs resource
-          # A list of resource queries in the order of preference.
+          # A list of resource queries in the order of preference. Font queries lacking
+          # an explicit font weight will use the text's *weight*, similarly for *italic*.
           #
           # |@block
           # Set `font` to a list of font queries to enable font stacking.
-          matchpi %{{¦ font: (list prefs_*)}} do
-            prefs.items.to_compact_readonly_slice do |term|
-              next unless pref = ResourceService.query?(term)
+          matchpi(<<-WWML) do
+          {¦ font: (list prefs_*),
+             weight_: (%optional 400 (%number +i32))
+             italic⋮ false}
+          WWML
+            prefs.items.to_compact_readonly_slice do |pref|
+              # Use text's weight if weight is not given
+              Term.matchpi?(pref, %{[font _string]}) do
+                pref = pref.as_d
 
-              Asset::FontQuery.new(pref)
+                unless pref.includes?(:weight)
+                  pref = pref.with(:weight, weight)
+                end
+
+                unless pref.includes?(:italic)
+                  pref = pref.with(:italic, italic)
+                end
+
+                pref = Term.of(pref)
+              end
+
+              next unless resource_query = ResourceService.query?(pref)
+
+              Asset::FontQuery.new(resource_query)
             end
           end
 
