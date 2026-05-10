@@ -1245,25 +1245,25 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
     ((z-stack
        (rect
          fill:
-          (^match settings
-            (when {¦ fill: linear-gradient
-                     gradient-begin-l⋮ 0
-                     gradient-begin-t⋮ 0
-                     gradient-end-l⋮ 1
-                     gradient-end-t⋮ 1}
-              (linear-gradient
-                (^match' (settings {¦ gradient-from_})
-                  (stop 0 ^gradient-from))
-                (^match' (settings {¦ gradient-via_})
-                  (stop 0.5 ^gradient-via))
-                (^match' (settings {¦ gradient-to_})
-                  (stop 1 ^gradient-to))
-                begin-l: ^gradient-begin-l
-                begin-t: ^gradient-begin-t
-                end-l: ^gradient-end-l
-                end-t: ^gradient-end-t))
-           (when {¦ fill_}
-             ^fill))
+           (^match settings
+             (when {¦ fill: linear-gradient
+                      gradient-begin-l⋮ 0
+                      gradient-begin-t⋮ 0
+                      gradient-end-l⋮ 1
+                      gradient-end-t⋮ 1}
+               (linear-gradient
+                 (^match' (settings {¦ gradient-from_})
+                   (stop 0 ^gradient-from))
+                 (^match' (settings {¦ gradient-via_})
+                   (stop 0.5 ^gradient-via))
+                 (^match' (settings {¦ gradient-to_})
+                   (stop 1 ^gradient-to))
+                 begin-l: ^gradient-begin-l
+                 begin-t: ^gradient-begin-t
+                 end-l: ^gradient-end-l
+                 end-t: ^gradient-end-t))
+            (when {¦ fill_}
+              ^fill))
         ^… (intersection settings
              {+ radius-tl radius-tr radius-bl radius-br
                 stroke thickness-l thickness-r thickness-t thickness-b
