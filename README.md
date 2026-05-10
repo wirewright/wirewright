@@ -65,11 +65,11 @@ more of them, and I keep finding more!)
 Since the project is in active development right now, it is very early to attribute things
 precisely. Hopefully, this would be possible later.
 
-### Microfold
+### Misc
 
 Wirewright's Microfold is heavily inspired by [Tailwind CSS](https://tailwindcss.com/)
 
-Microfold includes colors from several themes.
+Wirewright includes colors from the following themes.
 
 - [Rose Pine](https://rosepinetheme.com)
 

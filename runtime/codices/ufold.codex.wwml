@@ -1831,22 +1831,3 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 "neutral": (oklch 0.5 0 0)
 "white": (oklch 1 0 0)
 "transparent": transparent
-
-;; [Rose Pine](https://rosepinetheme.com)
-
-;; Rose Pine Main
-"rose-main-base": "#191724"
-"rose-main-surface": "#1f1d2e"
-"rose-main-overlay": "#26233a"
-"rose-main-muted": "#6e6a86"
-"rose-main-subtle": "#908caa"
-"rose-main-text": "#e0def4"
-"rose-main-love": "#eb6f92"
-"rose-main-gold": "#f6c177"
-"rose-main-rose": "#ebbcba"
-"rose-main-pine": "#31748f"
-"rose-main-foam": "#9ccfd8"
-"rose-main-iris": "#c4a7e7"
-"rose-main-highlight-low": "#21202e"
-"rose-main-highlight-med": "#403d52"
-"rose-main-highlight-high": "#524f67"
