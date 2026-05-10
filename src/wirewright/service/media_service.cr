@@ -95,6 +95,33 @@ module Ww
       ResizeB
       ResizeBl
       ResizeL
+
+      # The inverse of `MediaService.cursor`.
+      def to_term : Term
+        case self
+        in None       then Term.of(:none)
+        in Arrow      then Term.of(:arrow)
+        in Text       then Term.of(:text)
+        in Blocked    then Term.of(:blocked)
+        in Crosshair  then Term.of(:crosshair)
+        in Progress   then Term.of(:progress)
+        in ResizeTlBr then Term.of(:"resize-tl-br")
+        in ResizeBlTr then Term.of(:"resize-bl-tr")
+        in ResizeX    then Term.of(:"resize-x")
+        in ResizeY    then Term.of(:"resize-y")
+        in Resize     then Term.of(:resize)
+        in NotAllowed then Term.of(:"not-allowed")
+        in Pointer    then Term.of(:pointer)
+        in ResizeTl   then Term.of(:"resize-tl")
+        in ResizeT    then Term.of(:"resize-t")
+        in ResizeTr   then Term.of(:"resize-tr")
+        in ResizeR    then Term.of(:"resize-r")
+        in ResizeBr   then Term.of(:"resize-br")
+        in ResizeB    then Term.of(:"resize-b")
+        in ResizeBl   then Term.of(:"resize-bl")
+        in ResizeL    then Term.of(:"resize-l")
+        end
+      end
     end
 
     # Parses a cursor's symbol term representation *term* into the corresponding
