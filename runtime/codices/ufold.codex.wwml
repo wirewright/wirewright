@@ -1164,6 +1164,9 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 (for bg-box
   (property µ-bg as: fill))
 
+(for root-box
+  (property µ-cursor as: cursor))
+
 ;;
 ;; Boxes
 ;;
