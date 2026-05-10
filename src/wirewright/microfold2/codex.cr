@@ -79,6 +79,28 @@ module Ww::Microfold2
       @instantiate_cache = GenerationalCache({Term::Dict, DirectedDesignationNode, Slice(DownboundDesignation)}, {Outcome::Accepted(Term), Slice(UpboundDesignation)}).new
     end
 
+    # *Forks* this codex.
+    #
+    # Microfold codices are used for caching. Sometimes, you will need to
+    # have multiple copies of the same underlying codex to apply them in different
+    # places where you want cache boundaries to exist.
+    #
+    # One way to do this would be to call `compile` multiple times, but
+    # this is expensive.
+    #
+    # `clone` is also rather expensive, and it is also intrusive, and it
+    # will clone the caches, too.
+    #
+    # Instead, you should use `fork`. Since everything except the caches
+    # in a codex is immutable, `fork` is vastly cheaper, as it only has
+    # to copy some references and allocate clean caches.
+    def fork : Codex
+      Codex.new(
+        @globals, @presets, @tables, @utilities, @utilities_by_name,
+        @aliases, @properties, @boxes, @order, @cascade,
+      )
+    end
+
     # Constructs a `Codex` object based on the codex dict *codex*, and *rem*, the base
     # font size (in pixels).
     def self.compile(codex : Term::Dict, rem : Term::Num) : Outcome::Accepted(Codex)

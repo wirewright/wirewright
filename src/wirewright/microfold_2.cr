@@ -98,7 +98,14 @@ module Ww::Microfold2
     # Returns `true` if *head* (e.g. `p` in `(p "hello")` is associated with
     # a Microfold style preset).
     def preset?(head : Term) : Bool
-      synchronize { !!@codex.preset?(head) }
+      synchronize { |codex| !!codex.preset?(head) }
+    end
+
+    # Forks this codex. See `Codex#fork` for more info.
+    def fork : SyncCodex
+      fork = synchronize(&.fork)
+
+      SyncCodex.new(fork)
     end
   end
 
