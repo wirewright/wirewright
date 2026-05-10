@@ -103,12 +103,19 @@ module Ww::Microfold2
         properties ||= Set(Term).new
         properties << defn.dst
 
-        designation = Designation.new(defn.box, Term[].with(defn.dst, value), :style)
+        settings = Term[].with(defn.dst, value)
+
         if codex.cascade?(defn.box)
-          received_designations = received_designations.append(CascadingDesignation.new(designation))
+          designation = Designation.new(defn.box, settings, :style)
+          directed_designation = CascadingDesignation.new(designation)
+        elsif defn.box == SYM_ROOT_BOX
+          directed_designation = RootDesignation.new(settings)
         else
-          received_designations = received_designations.append(SelfDesignation.new(designation))
+          designation = Designation.new(defn.box, settings, :style)
+          directed_designation = SelfDesignation.new(designation)
         end
+
+        received_designations = received_designations.append(directed_designation)
       end
 
       {selfbound: selfbound(dnflow, received_designations),
