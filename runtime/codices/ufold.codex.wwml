@@ -722,7 +722,14 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
     (utility "clip-aim-through" {aim: on-through}))
 
   (for viewport-box
-    (utility "clip-aim-off-through" {aim: off-through})))
+    (utility "clip-aim-off-through" {aim: off-through}))
+
+  (for viewport-box
+    (utility (prefix "clip-rounded-" (one-of radii radius))
+      {radius-tl: ^radius,
+       radius-tr: ^radius,
+       radius-bl: ^radius,
+       radius-br: ^radius})))
 
 ;;
 ;; Transform
