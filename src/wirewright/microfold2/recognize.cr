@@ -247,6 +247,7 @@ module Ww::Microfold2
 
   private def recognize_node!(codex : Codex, node : Term::Dict) : Outcome::Accepted(StyleThunk)
     Outcome.accumulate do |acc|
+      leaf = false
       offset = 0
       children = Pf::Kit.stack_array(StyleNode, 8)
 
@@ -269,22 +270,28 @@ module Ww::Microfold2
 
         style_features = acc.unwrap(features(codex, :style, style.to(String)))
 
+        if style_features.leaf?
+          leaf = true
+        end
+
         preset_features ? preset_features + style_features : style_features
       end
 
-      # Recognize children recursively.
-      fanout = node.items.move(offset)
-      fanout.each_with_index(offset) do |item, ref|
-        next unless item_node = item.as_d?
+      unless leaf
+        # Recognize children recursively.
+        fanout = node.items.move(offset)
+        fanout.each_with_index(offset) do |item, ref|
+          next unless item_node = item.as_d?
 
-        # First we ask them for their thunk...
-        thunk = acc.unwrap(recognize_node(codex, item_node).at(ref))
+          # First we ask them for their thunk...
+          thunk = acc.unwrap(recognize_node(codex, item_node).at(ref))
 
-        # Then we evaluate the thunk; this converts it to a StyledNode, which we
-        # are allowed to have as a child.
-        location = Location.new(index: ref - offset, total: fanout.size)
-        child = eval(codex, thunk, location, item_node.pairspart)
-        children << child
+          # Then we evaluate the thunk; this converts it to a StyledNode, which we
+          # are allowed to have as a child.
+          location = Location.new(index: ref - offset, total: fanout.size)
+          child = eval(codex, thunk, location, item_node.pairspart)
+          children << child
+        end
       end
 
       if children.all?(UncuedStyleNode)

@@ -165,6 +165,8 @@ module Ww::Microfold2
             next
           end
 
+          next if mu.children.empty? # leaf
+
           # Instantiate all other children.
           mu_child = mu.children[mu_index]
           mu_index += 1

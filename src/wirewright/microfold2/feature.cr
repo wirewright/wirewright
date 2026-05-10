@@ -322,14 +322,17 @@ module Ww::Microfold2
     # of the node (e.g., `@first`, `@period-3`).
     getter? refers_to_location : Bool
 
-    # Returns `true` if this feature set is a cue membrane (i.e., `style: "... membrane ..."`).
+    # Returns `true` if this feature set contains the `membrane` utility.
     getter? cue_membrane : Bool
 
+    # Returns `true` if this feature set contains the `leaf` utility.
+    getter? leaf : Bool
+
     # :nodoc:
-    def initialize(@content, @referred_keys, @refers_to_location, @cue_membrane)
+    def initialize(@content, @referred_keys, @refers_to_location, @cue_membrane, @leaf)
     end
 
-    def self.new(content : Slice(Feature), cue_membrane : Bool) : FeatureSeq
+    def self.new(content : Slice(Feature), cue_membrane : Bool, leaf : Bool) : FeatureSeq
       referred_keys = Pf::Kit.stack_array(Term::Sym, 4)
       refers_to_location = false
 
@@ -344,7 +347,7 @@ module Ww::Microfold2
         end
       end
 
-      new(content, referred_keys.to_pf_set, refers_to_location, cue_membrane)
+      new(content, referred_keys.to_pf_set, refers_to_location, cue_membrane, leaf)
     end
 
     private def self.walk(feature : Utility | Present | Absent | UpCue | DnCue, &fn : Feature | Filter ->)
@@ -377,6 +380,7 @@ module Ww::Microfold2
         referred_keys + other.referred_keys,
         refers_to_location? || other.refers_to_location?,
         cue_membrane? || other.cue_membrane?,
+        leaf? || other.leaf?,
       )
     end
   end
@@ -385,15 +389,19 @@ module Ww::Microfold2
     Outcome.accumulate do |acc|
       content = Pf::Kit.stack_array(Feature)
       cue_membrane = false
+      leaf = false
 
       each_feature_view(style) do |seln|
-        # Membranes are a huge special case, so they're hard coded here. We
-        # don't want them to participate in conditionals and so on. You can't say
-        # e.g. `hover:membrane` because then you'd be able to say `in-error:membrane`
-        # which would in turn make membrane-ness depend on the order in which cues
-        # arrive to the node, which is implementation-defined.
-        if seln == "membrane"
+        case seln
+        when "membrane"
+          # You can't say e.g. `hover:membrane` because then you'd be able to
+          # say `in-error:membrane` which would in turn make membrane-ness
+          # depend on the order in which cues  arrive to the node, which
+          # is implementation-defined.
           cue_membrane = true
+          next
+        when "leaf"
+          leaf = true
           next
         end
 
@@ -407,7 +415,7 @@ module Ww::Microfold2
       # the same specificity.
       content.sort_by! { |feature| specificity(feature) }
 
-      feature_seq = FeatureSeq.new(content.to_unsafe_readonly_slice!, cue_membrane)
+      feature_seq = FeatureSeq.new(content.to_unsafe_readonly_slice!, cue_membrane, leaf)
       Outcome.ok(feature_seq)
     end
   end
