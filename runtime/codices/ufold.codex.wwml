@@ -1141,7 +1141,7 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 (for root-box
   (utility "-input" {input: false}))
 
-(for root-box
+(for self-box
   (utility (prefix "backdrop-" (one-of colors color))
     {backdrop: ^color}))
 
