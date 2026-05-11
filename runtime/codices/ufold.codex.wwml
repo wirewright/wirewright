@@ -470,7 +470,7 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
 ;; E.g. underline-blue-500
 (for text-box
   (utility (prefix "underline-" (one-of colors color))
-    {underline-color: ^color}))
+    {underline-fill: ^color}))
 
 ;; E.g. underline-3
 (for text-box
@@ -539,7 +539,7 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
   (utility "title" {case: title}))
 
 (for text-box
-  (utility "capitalize" {transform: upcase-first}))
+  (utility "capitalize" {case: upcase-first}))
 
 (for text-box
   (utility "strip" {transform: strip}))
@@ -1156,7 +1156,10 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
   (property underlines underline-anchor underline-span))
 
 (for content-viewport-box
-  (property content-page-x content-page-y content-offset-x content-offset-y))
+  (property content-page-x as: page-x)
+  (property content-page-y as: page-y)
+  (property content-offset-x as: offset-x)
+  (property content-offset-y as: offset-y))
 
 (for viewport-box
   (property page-x page-y offset-x offset-y))
