@@ -143,19 +143,19 @@
     (text
       caption: "A"
       underline: true
-      underline-color: (oklch 1 0 0)
+      underline-fill: (oklch 1 0 0)
       underline-thickness: 3
       underline-offset: 1/2)
     (text
       caption: "B"
       underline: true
-      underline-color: (oklch 1 0 0)
+      underline-fill: (oklch 1 0 0)
       underline-thickness: 3
       underline-offset: 1/2)
     (text
       caption: "C"
       underline: true
-      underline-color: (oklch 1 0 0)
+      underline-fill: (oklch 1 0 0)
       underline-thickness: 3
       underline-offset: 1/2)))
 
