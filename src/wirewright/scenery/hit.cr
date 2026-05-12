@@ -97,8 +97,9 @@ module Ww::Scenery
 
   # A leaf was hit by the hit query (e.g., a rectangle).
   #
-  # *part* is the part of the leaf's visual bounds that was hit.
-  defrecord HitLeaf, part : Rect, copying: true
+  # - *hover* tells whether the hit query's focus is currently over the leaf.
+  # - *part* is the part of the leaf's visual bounds that was hit.
+  defrecord HitLeaf, hover : Bool, part : Rect, copying: true
 
   # A text node was hit by the hit query.
   #
@@ -107,13 +108,18 @@ module Ww::Scenery
     anchor : Int32,
     focus : Int32,
     seln : Pf::GraphemeSeln,
+    hover : Bool,
     part : Rect,
     copying: true
 
   # Multiple children of the current node were hit by the hit query.
   #
   # *part* is the part of the current node's visual bounds that was hit.
-  defrecord HitGroup, children : Slice(HitNode), part : Rect, copying: true
+  defrecord HitGroup,
+    children : Slice(HitNode),
+    hover : Bool,
+    part : Rect,
+    copying: true
 
   # Returns a tree of hit nodes which represents the union of two hit nodes.
   # The hit nodes must come from the same node tree.
@@ -127,9 +133,12 @@ module Ww::Scenery
     in {HitTextLeaf, HitTextLeaf} then a # ?!
     in {_, HitTextLeaf}           then b # ?!
     in {HitTextLeaf, _}           then a # ?!
-    in {HitLeaf, HitLeaf}         then HitLeaf.new(Rect.union(a.part, b.part))
-    in {HitLeaf, HitGroup}        then b.copy_with(part: Rect.union(a.part, b.part))
-    in {HitGroup, HitLeaf}        then a.copy_with(part: Rect.union(a.part, b.part))
+    in {HitLeaf, HitLeaf}
+      HitLeaf.new(a.hover || b.hover, Rect.union(a.part, b.part))
+    in {HitLeaf, HitGroup}
+      HitGroup.new(b.children, a.hover || b.hover, Rect.union(a.part, b.part))
+    in {HitGroup, HitLeaf}
+      HitGroup.new(a.children, a.hover || b.hover, Rect.union(a.part, b.part))
     in {HitGroup, HitGroup}
       assert a.children.size == b.children.size
 
@@ -138,13 +147,24 @@ module Ww::Scenery
         children << union(a_child, b_child)
       end
 
-      HitGroup.new(children.to_unsafe_readonly_slice!, part: Rect.union(a.part, b.part))
+      HitGroup.new(children.to_unsafe_readonly_slice!,
+        hover: a.hover || b.hover,
+        part: Rect.union(a.part, b.part),
+      )
     end
   end
 
   private def hit(node : Inert | RectShape | Pending | Img | Svg | IconGlyph, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
-    part = Rect.intersection(vbox.bounds, tf.inverse.map(query.rect))
-    part.negative? ? HitEmpty.new : HitLeaf.new(part)
+    itf = tf.inverse
+
+    part = Rect.intersection(vbox.bounds, itf.map(query.rect))
+    if part.negative?
+      return HitEmpty.new
+    end
+
+    hover = vbox.bounds.includes?(itf.map(query.focus))
+
+    HitLeaf.new(hover, part)
   end
 
   private def hit_index(node : ShapedText, box : Box, point : Point) : Int32
@@ -203,6 +223,8 @@ module Ww::Scenery
       return HitEmpty.new
     end
 
+    hover = vbox.bounds.includes?(itf.map(query.focus))
+
     anchor_index = hit_index(node, box, itf.map(query.anchor)).clamp(0..node.caption.size)
     focus_index = hit_index(node, box, itf.map(query.focus)).clamp(0..node.caption.size)
 
@@ -211,7 +233,7 @@ module Ww::Scenery
 
     seln = node.caption.select(from, to)
 
-    HitTextLeaf.new(anchor_index, focus_index, seln, part)
+    HitTextLeaf.new(anchor_index, focus_index, seln, hover, part)
   end
 
   private def hit(node : TransformMatrix, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
@@ -230,10 +252,14 @@ module Ww::Scenery
   # NOTE: We're using *box* for its width only; so we won't bother doing coordinate
   # system translation here.
   private def box_hit(node : AimedNode, box : Box, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
-    part = Rect.intersection(vbox.bounds, tf.inverse.map(query.rect))
+    itf = tf.inverse
+
+    part = Rect.intersection(vbox.bounds, itf.map(query.rect))
     if part.negative?
       return HitEmpty.new
     end
+
+    hover = vbox.bounds.includes?(itf.map(query.focus))
 
     hits = Pf::Kit.stack_array(HitNode)
     present = false
@@ -263,7 +289,7 @@ module Ww::Scenery
 
     hits.reverse!
 
-    HitGroup.new(hits.to_unsafe_readonly_slice!, part)
+    HitGroup.new(hits.to_unsafe_readonly_slice!, hover, part)
   end
 
   # Constructs a hit tree for *root*, *box*, and *vbox* according to *query*.

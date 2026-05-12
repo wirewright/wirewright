@@ -386,7 +386,10 @@ module Ww::Scenery
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitLeaf | HitGroup) : Nil
-    commit.with(:hit, true)
+    if hit.hover
+      commit.with(:"hit-hover", true)
+    end
+
     commit.with(:"hit-dl", describe(hit.part.x))
     commit.with(:"hit-dt", describe(hit.part.y))
     commit.with(:"hit-w", describe(hit.part.w))
@@ -394,7 +397,10 @@ module Ww::Scenery
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitTextLeaf) : Nil
-    commit.with(:hit, true)
+    if hit.hover
+      commit.with(:"hit-hover", true)
+    end
+
     commit.with(:"hit-dl", describe(hit.part.x))
     commit.with(:"hit-dt", describe(hit.part.y))
     commit.with(:"hit-w", describe(hit.part.w))
