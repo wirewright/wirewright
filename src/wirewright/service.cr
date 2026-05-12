@@ -9,7 +9,7 @@ module Ww
 
     # Broadcasts *notification* to all listeners.
     def broadcast(notification : Notification) : Nil
-      Log.trace { "broadcast(#{notification})" }
+      Log.trace { "broadcast(#{notification.class})" }
 
       @@listener_queue_lock.synchronize do
         @@listener_queues.each do |queue|

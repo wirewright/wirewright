@@ -342,7 +342,7 @@ module Ww
       spawn(name: "MediaService-SDL relay") do
         loop do
           msg = @@msgs.shift
-          Log.trace { "relay #{msg}" }
+          Log.trace { "relay #{msg.class}" }
           @@buffer << msg
           SDL.push(SDL::Trigger.new)
         end
@@ -548,7 +548,7 @@ module Ww
       end
 
       def receive(msg) : Nil
-        Log.trace { msg }
+        Log.trace { msg.class }
 
         begin
           handle(msg)
