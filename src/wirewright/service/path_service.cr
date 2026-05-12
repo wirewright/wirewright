@@ -210,7 +210,11 @@ module Ww
       end
 
       private def handle(msg : PathMonitorService::Notification) : Nil
+        # For directories.
         PathService.invalidate(msg.path, Report)
+        # For directory entry events.
+        PathService.invalidate(msg.path.parent, Report)
+
         if msg.is_a?(PathMonitorService::FileCommitted)
           PathService.invalidate(msg.path, Reading)
         end
