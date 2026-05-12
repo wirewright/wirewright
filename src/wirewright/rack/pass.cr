@@ -300,7 +300,7 @@ module Ww::Rack
         rewriter = Rho.rewriter(spec_term, rules)
         next unless rewriter.finite?
 
-        out_term = Term.collapse(rewriter.call(src_term))
+        out_term = Rho.rewrite(rewriter, src_term)
 
         D7.patches(
           D7.patch(src, {2, nil}),
@@ -326,7 +326,7 @@ module Ww::Rack
         rewriter = Rho.rewriter(spec_term, rules)
         next unless rewriter.finite?
 
-        out_term = Term.collapse(rewriter.call(src_term))
+        out_term = Rho.rewrite(rewriter, src_term)
 
         dst_term = D7.part?(dst, 2)
         next if dst_term && Term.extension?(dst_term, of: out_term)
