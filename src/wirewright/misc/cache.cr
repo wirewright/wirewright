@@ -482,17 +482,17 @@ module Ww
     end
 
     def get?(key : K) : V?
-      if value = @active.delete(key)
-        @surviving[key] = value
+      if value = @surviving[key]?
         return value
       end
 
-      @surviving[key]?
+      return unless value = @active[key]?
+
+      @surviving[key] = value
     end
 
     # Sets the cached value of *key* to *value*. Returns *value*.
     def put(key : K, value : V) : V
-      @active.delete(key)
       @surviving[key] = value
     end
 
@@ -510,7 +510,7 @@ module Ww
     def epoch(&)
       yield
     ensure
-      @active.clear
+      @active = {} of K => V
       @active, @surviving = @surviving, @active
     end
   end
