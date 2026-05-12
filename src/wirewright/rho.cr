@@ -763,9 +763,9 @@ module Ww
 
     # TODO: add support for rules / rewriter definitions (to define recursive
     # rewriters etc.)
-    def rewriter(document : Term) : Rewriter
+    def rewriter(document : Term, *, section : Term = Term.of(:rewriter)) : Rewriter
       return noR unless dict = document.as_d?
-      return noR unless section = dict[:rewriter]?
+      return noR unless section = dict[section]?
       return noR unless spec = section.items.last?
 
       rewriter(spec, document)
