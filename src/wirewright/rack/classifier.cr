@@ -334,6 +334,18 @@ module Ww::Rack
         end
       end
 
+      matchpi %{[view (@src_ src-pattern_ @dst_) template_]} do
+        D7.gnd(node, src, dst, defn: Term.of(:view, { {src}, {src_pattern}, dst }, template))
+      end
+
+      matchpi %{[view (srcs←((%past @_ min: 1)) _ @dst_) _]} do
+        edges = [] of Term
+        edges.concat(srcs.items)
+        edges << dst
+
+        D7.gnd(node, edges)
+      end
+
       matchpi %{[extension (@src_ src-pattern_ @dst_) template_]} do
         D7.gnd(node, src, dst, defn: Term.of(:extension, { {src}, {src_pattern}, dst }, template))
       end

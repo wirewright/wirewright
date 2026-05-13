@@ -189,6 +189,43 @@ module Ww::Rack
         D7.patch(dev, {1, n - 1})
       end
 
+      rule(<<-WWML) do |dev, src, dst|
+      [view (srcs←((%past @_ min: 1)) pattern_ @dst_) template_] dev
+        -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
+        -> (one dst) [cell @dst_ _?] {name: dst}
+      WWML
+        src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
+        if src.size < src_edges.size
+          # Less edges than we require. This means the view is invalid now
+          # since some source cells have disappeared. So we empty the dst cell.
+          next D7.patch(dst, {2, nil})
+        end
+
+        assert src.size == src_edges.size
+
+        # Fetch src values.
+        permutation = D7.permutation(src, :src, goal: src_edges.items)
+
+        src_terms = Term::Dict.build do |commit|
+          permutation.each do |index|
+            commit << D7.fetch(src[index], :term)
+          end
+        end
+
+        matchee = Term.of(src_terms)
+        unless env = M1.match?(pattern, matchee)
+          # Pattern mismatch. Clear the dst cell: the view is invalid.
+          next D7.patch(dst, {2, nil})
+        end
+
+        expansion, _ = Alloy.render0(env, template, severity: :quiet)
+        unless expansion.empty?
+          instance = Term.collapse(expansion)
+        end
+
+        D7.patch(dst, {2, instance})
+      end
+
       # Extension without dst pattern. It requires an existing dst cell. The dst
       # cell may be empty.
       rule(<<-WWML) do |dev, src, dst|
