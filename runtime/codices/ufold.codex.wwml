@@ -6,7 +6,7 @@
 ;; the naming conventions, and so on, goes to the Tailwind folks
 ;; (see https://tailwindcss.com).
 ;;
-;; NOTE: Tailwind seems to have changed somewhat since I've last looked at it
+;; NOTE: Tailwind seems to have changed somewhat since I last looked at it
 ;; (and that was a long time ago!) So some things may be inconsistent. Consistency
 ;; is not the goal, however. Microfold is not an implementation of Tailwind
 ;; in any sensible way. The situation is close to Crystal vs. Ruby -- Crystal
@@ -765,8 +765,16 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
       {dl: ^(* value spacing)}))
 
   (for transform-box
+    (utility (prefix "-dl-" (number value))
+      {dl: ^(* value -spacing)}))
+
+  (for transform-box
     (utility (prefix "dt-" (number value))
       {dt: ^(* value spacing)}))
+
+  (for transform-box
+    (utility (prefix "-dt-" (number value))
+      {dt: ^(* value -spacing)}))
 
   (for transform-box
     (utility (prefix "d-" (number value))
