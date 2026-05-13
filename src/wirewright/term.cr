@@ -1747,18 +1747,18 @@ module Ww
         if offspring == value # No change
           return dict
         end
-        return dict.with(key, rep)
+        return dict.with(key, offspring)
       end
 
       if index = dict.index32?(key)
         return dict.replace(index, rep)
       end
 
-      # We're in a pair, as in:
+      # We are in a pair, as in:
       #
       #   x: (^* (1 2 3))
       #
-      # There are only two possible states for a pair if it is treated like
+      # There are only two possible states for a pair if we treat it like
       # a container:
       #
       #   zero terms -- the pair does not exist
@@ -1776,7 +1776,7 @@ module Ww
 
       assert rep.size > 1
 
-      dict.with(key, rep)
+      dict.with(key, rep) # key: (offspring0 offspring1 ...)
     end
 
     # Replaces the value at *keypath* using *fn*. Noop if could not
