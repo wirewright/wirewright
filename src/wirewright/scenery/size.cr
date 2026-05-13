@@ -520,22 +520,22 @@ module Ww::Scenery
     max_w = node.max_w.try(&.resolve(w)) || Magnitude::INFINITY
     max_h = node.max_h.try(&.resolve(h)) || Magnitude::INFINITY
 
-    clamped_w = Math.min(max_w, Math.max(min_w, w))
-    clamped_h = Math.min(max_h, Math.max(min_h, h))
-
-    # If we did not change the size, just return the original size.
-    if {clamped_w, clamped_h} == {w, h}
-      return z_out, size
-    end
-
     clamp_cst = cst
 
-    unless clamped_w == w # Changed w
-      clamp_cst = Cst.new(min_w, max_w, clamp_cst.min_h, clamp_cst.max_h)
+    if w < min_w
+      clamp_cst = Cst.new(min_w, min_w, clamp_cst.min_h, clamp_cst.max_h)
+    elsif w > max_w
+      clamp_cst = Cst.new(max_w, max_w, clamp_cst.min_h, clamp_cst.max_h)
     end
 
-    unless clamped_h == h # Changed h
-      clamp_cst = Cst.new(clamp_cst.min_w, clamp_cst.max_w, min_h, max_h)
+    if h < min_h
+      clamp_cst = Cst.new(clamp_cst.min_w, clamp_cst.max_w, min_h, min_h)
+    elsif h > max_h
+      clamp_cst = Cst.new(clamp_cst.min_w, clamp_cst.max_w, max_h, max_h)
+    end
+
+    if cst == clamp_cst
+      return z_out, size
     end
 
     box_size(cache, z_in, clamp_cst)

@@ -1,0 +1,31 @@
+width: 300
+height: 200
+backdrop: (oklch 0.2 0 0)
+
+(y-stack gap: 20
+  (y-stack
+    (text color: gray caption: "_ < min-w")
+    (content x: true y: true
+      (clamp min-w: 100 max-w: 200
+        (z-stack
+          (rect fill: (oklch 0.4 0 0) min-h: 25)
+          (content x: true y: true
+            (rect fill: (oklch 0.4 0.2 violet)))))))
+
+  (y-stack
+    (text color: gray caption: "min-w <= _ <= max-w")
+    (content x: true y: true
+      (clamp min-w: 100 max-w: 200
+        (z-stack
+          (rect fill: (oklch 0.4 0 0) min-h: 25)
+          (content x: true y: true
+            (rect fill: (oklch 0.4 0.2 violet) min-w: 150))))))
+
+  (y-stack
+    (text color: gray caption: "_ > max-w")
+    (content x: true y: true
+      (clamp min-w: 100 max-w: 200
+        (z-stack
+          (rect fill: (oklch 0.4 0 0) min-h: 25)
+          (content x: true y: true
+            (rect fill: (oklch 0.4 0.2 violet) min-w: 250)))))))
