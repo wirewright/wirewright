@@ -1,7 +1,7 @@
 module Ww::Rack
   # Returns the main Rack pass.
-  def pass(prepass = Prepass) : D7::Pass
-    D7::Pass.new { |clf, circuit| step(clf, circuit, prepass) }
+  def pass(clf : D7::Classifier, prepass = Prepass) : D7::Pass
+    D7::Pass.new { |circuit| step(clf, circuit, prepass) }
   end
 
   module Prepass

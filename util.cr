@@ -2379,6 +2379,40 @@ macro pipe(object, call, *calls)
 end
 
 abstract struct Enum
+  def self.with(symbols : Tuple() | Enumerable(Symbol)) : self
+    {% begin %}
+      {% unless @type.annotation(Flags) %}
+        {% raise "expected a Flags enum" %}
+      {% end %}
+
+      state = {{@type}}::None
+
+      symbols.each do |symbol|
+        case symbol
+        {% for member in @type.constants %}
+          {% name = member.underscore.symbolize %}
+          {% unless name == :none || name == :all %}
+          when {{name}}
+            state |= {{@type}}::{{member}}
+          {% end %}
+        {% end %}
+        else
+          raise ArgumentError.new("no member corresponds to #{symbol}")
+        end
+      end
+
+      state
+    {% end %}
+  end
+
+  def -(other : self) : self
+    {% unless @type.annotation(Flags) %}
+      {% raise "expected a Flags enum" %}
+    {% end %}
+
+    self & ~other
+  end
+
   def symbolize : Symbol
     {% begin %}
       case self

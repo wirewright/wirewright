@@ -18,7 +18,6 @@ module Testtool
                SpecificityTest |
                CapturesEq |
                RackTest |
-               RackInstantiateTest |
                EditTest |
                SceneryTest |
                TermComparison |
@@ -41,6 +40,10 @@ module Testtool
         RackComparisonResult.new(content == actual)
       end
 
+      matchpi %{(frame/tail content_*)} do
+        RackComparisonResult.new(actual.items.ends_with?(content.items))
+      end
+
       matchpi %{(frame pattern_ ¦ () pattern)} do
         RackComparisonResult.new(M1.probe?(pattern, actual))
       end
@@ -53,10 +56,8 @@ module Testtool
         RackComparisonResult::More
       end
 
-      matchpi %{(visually content_*)} do
-        visual = Rack.visualize(actual)
-
-        RackComparisonResult.new(content == visual)
+      matchpi %{terminates} do
+        RackComparisonResult::More
       end
 
       matchpi %{end} do
@@ -67,13 +68,19 @@ module Testtool
 
   # :ditto:
   def rack_compare(frame : Term, actual : Iterator::Stop)
-    RackComparisonResult.new(frame == Term.of(:end))
+    RackComparisonResult.new(frame.in?(Term.of(:end), Term.of(:terminates)))
   end
 
   defrecord RackTest, seed : Term, frames : Array(Term)
 
   def run(test : RackTest, assets, stat, complaints) : Nil
-    frames = D7.coarse_frames(Rack.clf, Rack.instantiate(test.seed), Rack::Tspace.pass, Rack.pass)
+    assembler_state = Rack::Assembler.state(Rack.clf)
+
+    frames = D7.coarse_frames(Rack.clf, test.seed,
+      Rack::Tspace.pass(Rack.clf),
+      Rack::Assembler.pass(assembler_state),
+      Rack.pass(Rack.clf),
+    )
 
     # Skip through seed.
     before = frames.next
@@ -103,33 +110,6 @@ module Testtool
         end
       end
     end
-  end
-
-  defrecord RackInstantiateTest, seed : Term, instance : Term
-
-  def run(test : RackInstantiateTest, assets, stat, complaints) : Nil
-    actual = measure(stat) { Rack.instantiate(test.seed) }
-
-    # Convenience: ignore rules.
-    if dict = actual.as_d?
-      (0...dict.itemsize).reverse_each do |index|
-        item = dict[index]
-
-        Term.matchpi?(item, %{[rule _ _]}) do
-          dict = dict.replace(index, Term.rep)
-        end
-      end
-
-      actual = Term.of(dict)
-    end
-
-    return if test.instance == actual
-
-    complaints << complaint("Rack instance mismatch",
-      before: test.seed,
-      after: test.instance,
-      got: actual,
-    )
   end
 
   defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term, issues : Term::Dict

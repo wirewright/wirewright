@@ -383,30 +383,6 @@ module Testtool
         annotated(assertions(test), decl, srcmap)
       end
 
-      # |@ testtool.decl.rack/instantiate
-      #
-      # |@pattern
-      # (rack (seed seed_*) (frame frame_*))
-      #
-      # |@key seed rack.circuit
-      # Circuit before instantiation takes place. It must include the rules
-      # for instantiation.
-      #
-      # |@key frame rack.circuit
-      # Circuit after instantiation. For convenience, we omit rules from
-      # the instance. This means you don't need to copy rules from *seed*
-      # into *frame*.
-      #
-      # |@block
-      # Use `rack/instantiate` to introduce a Rack component instantiation test.
-      matchpi %{(rack/instantiate (seed _*) (frame _*))} do
-        seed = Term.of(decl[1].items.move(1))
-        instance = Term.of(decl[2].items.move(1))
-
-        test = RackInstantiateTest.new(seed, instance)
-        annotated(assertions(test), decl, srcmap)
-      end
-
       # |@ testtool.decl.edit
       #
       # |@pattern

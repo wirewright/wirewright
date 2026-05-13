@@ -225,58 +225,85 @@ module Ww::D7
   # Performs *subframe fusion*.
   #
   # *Subframe fusion* is a fancy way of saying "If the next frame has all
-  # changes of the current one, then we don't need to show the current frame
+  # changes of the current one, then we don't need to show the current one
   # to the user; they'll see the changes in the next frame anyway". In other
-  # words, if the next frame subsumes the current one, the current one is skipped.
+  # words, if the next frame *subsumes* the current one, the current one is skipped.
   #
-  # Yields frames to show to the user.
+  # Calls *fn* with frames to show to the user.
   #
   # This method may yield duplicate consecutive frames, and it is the caller's
-  # responsibility to filter them out. We do not do it here because the caller is likely
-  # to do that at frame-level anyway, so there is no need to do the work on subframes.
+  # responsibility to filter them out. We do not filter here because the caller
+  # is likely to filter at frame-level anyway, so there is no need to do
+  # the work on subframe-level.
   #
-  # *seen* must be the last frame seen by the user. Usually this would be the last
-  # frame yielded by this method. Otherwise it would be the very first circuit,
-  # which the caller itself should show to the user as the first frame. This method
-  # will never yield *seen* (unless as a duplicate).
-  def fuse(clf : Classifier, seen : Term, subframes : Indexable(Term), &) : Nil
-    return if subframes.empty?
-
-    changed = Set(NodeAddr).new
-
-    ahead = Deque(Term).new
-    ahead.concat(subframes)
-
-    a = seen
-    ns = node_map(clf, seen, split: false)
-
-    while b = ahead.shift?
-      ms = node_map(clf, b, split: false)
-
-      # Cut if:
-      # - New nodes were added or removed in the next subframe.
-      # - A node that was already modified was modified in the next subframe.
-      unless ns.size == ms.size && ns.all? { |addr, _| ms.has_key?(addr) } && ms.all? { |addr, m| !addr.in?(changed) || ns[addr] == m }
-        yield a
-        a = b
-        ns = ms
-        changed.clear
-        next
-      end
-
-      # Changes are disjoint. We can skip showing A because B has all
-      # the same changes.
-      ms.each do |addr, m|
-        n = ns[addr]?
-        next if n == m
-
-        changed << addr
-      end
-
-      a = b
-      ns = ms
+  # *ancestor* is the last frame seen by the user. Usually this would be the last
+  # frame produced by this method. Otherwise it would be the very first circuit,
+  # which the caller itself should show to the user as the first frame.
+  def fuse(clf : Classifier, ancestor : Term, subframes : Slice(Term), &fn : Term ->) : Nil
+    if subframes.empty?
+      fn.call(ancestor)
+      return
     end
 
-    yield a
+    ancestor_nodes = node_map(clf, ancestor, split: false)
+    fuse(clf, ancestor, ancestor_nodes, subframes, &fn)
+  end
+
+  private def fuse(clf : Classifier, ancestor : Term, ancestor_nodes : Hash(NodeAddr, Term), subframes : Slice(Term), &fn : Term ->) : Nil
+    if subframes.empty? # Base case
+      fn.call(ancestor)
+      return
+    end
+
+    # Notice that this is an iterator.
+    assessments = subframes.each.map do |subframe|
+      nodes = node_map(clf, subframe, split: false)
+
+      {subframe: subframe,
+       nodes:    nodes,
+       changes:  fuse_changeset(ancestor_nodes, nodes)}
+    end
+
+    acc = Set(NodeAddr).new
+
+    assessments.each_with_index do |assessment, index|
+      if acc.intersects?(assessment[:changes]) # This one is not disjoint wrt. acc, cut!
+        assert index > 0
+
+        fn.call(subframes[index - 1])
+
+        # This leaves a hole for assessment[:subframe], which is now the new
+        # ancestor. In case there are no more subframes past it, it is emitted
+        # (see the base case below). If there are more subframes, they are either
+        # accumulated, or if there is a cut immediately, the line above will emit
+        # assessment[:subframe].
+
+        return fuse(clf, assessment[:subframe], assessment[:nodes], subframes + index + 1, &fn)
+      end
+
+      # Changes are disjoint wrt. acc.
+      acc.concat(assessment[:changes])
+    end
+
+    fn.call(subframes.last)
+  end
+
+  private def fuse_changeset(pred, succ) : Set(NodeAddr)
+    changed = Set(NodeAddr).new
+
+    pred.each do |addr, node|
+      next if succ.has_key?(addr)
+
+      changed << addr # Removed
+    end
+
+    succ.each do |addr, node|
+      ancestor_node = pred[addr]?
+      next if ancestor_node == node
+
+      changed << addr # Added or updated
+    end
+
+    changed
   end
 end

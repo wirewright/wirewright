@@ -244,15 +244,15 @@ module Ww::D7
     end
   end
 
-  # A D7 pass takes a classifier and a circuit term (the previous *frame*),
-  # and returns some number of *substeps*. The last substep is the next *frame*.
+  # A D7 pass takes a circuit term (the previous *frame*), and returns some
+  # number of *substeps*. The last substep is the next *frame*.
   #
   # See `D7` for general explanation & terminology.
   #
   # - The resulting slice is read-only.
   # - The resulting slice is guaranteed to contain at least one subframe.
   # - Substeps may repeat. Thus, the next frame may be equal to the previous frame.
-  alias Pass = Classifier, Term -> Slice(Term)
+  alias Pass = Term -> Slice(Term)
 
   private class CoarseFrameIterator
     include Iterator(Term)
@@ -269,8 +269,8 @@ module Ww::D7
 
       state = @circuit
 
-      subframes = @passes.map do |pass|
-        substeps = pass.call(@clf, state)
+      subframes = @passes.to_readonly_slice do |pass|
+        substeps = pass.call(state)
         state = substeps.last # Coarse
       end
 

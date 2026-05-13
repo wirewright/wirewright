@@ -1064,80 +1064,8 @@
        (circuit @view (h1 "102") b: true)⟫)
     (frame pattern: true
       ⟪(circuit @view (h1 "3") a: true)
-       (circuit @view (h1 "103") b: true)⟫))
+       (circuit @view (h1 "103") b: true)⟫)))
     ;; ...
-
-  ;; Now let's say we have a button and a counter. The button can emit signals
-  ;; and the counter shows a count. We want the button to increment the count.
-  ;; To make this a classic (albeit symbolic, at least *here*) counter example
-  ;; let's say we'll also have another button which decrements the count.
-  (rack
-    (frame
-      (Button caption_string)
-        => (component
-             (surface (@surface (button caption_string actions←(_*)))
-               (button ^caption ()))
-             (extension (@caption caption_string @view)
-               (button ^caption clickable: true))
-             (node @view)
-             (backsys {@:view @:caption @:actions}
-              {¦ view: {¦ clicked_} caption_ actions: (_* `back)}
-                <> {(clicked): (), back: ^caption}))
-
-      (Counter ±initial)
-        => (component
-             (surface (@surface (counter ±n))
-               (counter ^initial))
-             (extension (@surface (counter ±n) @view)
-               (h1 ^"Count: ⸢n⸣"))
-             (node @view))
-
-      (circuit @app
-        (Counter 0)
-        (Button "Increment")
-        (Button "Decrement")
-        (control @count (counter ±count))
-        (control @msg (button _ (msg_ _*)))
-        (backsys {@:count @:msg}
-          {¦ ±count msg_: "Increment"} <> {(msg): (), count: ^(+ count 1)}
-          {¦ ±count msg_: "Decrement"} <> {(msg): (), count: ^(- count 1)}))
-
-      (backsys @app
-        ⟪(node @view (h1 (%any "Count: 0" "Count: 1") ⍊ -seen_))
-         (node @view (button "Increment" ⍊ clickable -clicked_))⟫
-          <> {clicked: true, seen: true}
-        ⟪(node @view (h1 "Count: 2" ⍊ -seen_))
-         (node @view (button "Decrement" ⍊ clickable -clicked_))⟫
-          <> {clicked: true, seen: true}))
-  (visually
-    (h1 "Count: 0")
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))
-  (visually
-    (h1 "Count: 0" seen: true)
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))
-  (visually
-    (h1 "Count: 1")
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))
-  (visually
-    (h1 "Count: 1" seen: true)
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))
-  (visually
-    (h1 "Count: 2")
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))
-  (visually
-    (h1 "Count: 2" seen: true)
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))
-  (visually
-    (h1 "Count: 1")
-    (button "Increment" clickable: true)
-    (button "Decrement" clickable: true))))
-  ;; ...
 
 ;; Queue
 (group
@@ -2413,8 +2341,10 @@
     (cell @foo)
     (feed @foo @view)
     (node @view (delay 1 (p "Hi"))))
-  (visually
-    (p "Hi"))
+  (frame
+    (cell @foo)
+    (feed @foo @view)
+    (node @view (p "Hi")))
   end)
 
 ;; Filtered cell
@@ -3022,6 +2952,14 @@
         (queue (@front @back) (2 3 4 5))
         (appearance local @front))
       (module {}
+        (delay 3 (discard @front))
+        (queue (@front @back) (1))
+        (sensor (local ±n @back) ^n)))
+    (frame
+      (module {}
+        (queue (@front @back) (2 3 4 5))
+        (appearance local @front))
+      (module {}
         (delay 2 (discard @front))
         (queue (@front @back) (1))
         (sensor (local ±n @back) ^n)))
@@ -3030,8 +2968,24 @@
         (queue (@front @back) (3 4 5))
         (appearance local @front))
       (module {}
+        (delay 2 (discard @front))
+        (queue (@front @back) (1 2))
+        (sensor (local ±n @back) ^n)))
+    (frame
+      (module {}
+        (queue (@front @back) (3 4 5))
+        (appearance local @front))
+      (module {}
         (delay 1 (discard @front))
         (queue (@front @back) (1 2))
+        (sensor (local ±n @back) ^n)))
+    (frame
+      (module {}
+        (queue (@front @back) (4 5))
+        (appearance local @front))
+      (module {}
+        (delay 1 (discard @front))
+        (queue (@front @back) (1 2 3))
         (sensor (local ±n @back) ^n)))
     (frame
       (module {}
@@ -3114,8 +3068,24 @@
         (queue (@front @back) (2 3 4 5 6))
         (appearance local @front))
       (module {}
+        (delay 5 (discard @front))
+        (queue (@front @back max: 2) (1))
+        (sensor (local ±n @back) ^n)))
+    (frame
+      (module {}
+        (queue (@front @back) (2 3 4 5 6))
+        (appearance local @front))
+      (module {}
         (delay 4 (discard @front))
         (queue (@front @back max: 2) (1))
+        (sensor (local ±n @back) ^n)))
+    (frame
+      (module {}
+        (queue (@front @back) (3 4 5 6))
+        (appearance local @front))
+      (module {}
+        (delay 4 (discard @front))
+        (queue (@front @back max: 2) (1 2))
         (sensor (local ±n @back) ^n)))
     (frame
       (module {}
@@ -3234,37 +3204,45 @@
   ;; Sensor-appearance timing with circuits.
   (rack
     (frame
-      (circuit @f
-        (sensor (local x_ @v) ^x)
-        (cell @v))
-      (delay 2 (cell @foo "Hello World"))
-      (appearance local @foo)
-      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
-      (cell @n))
+      (circuit @nested
+        (sensor (local percept_ @percept) ^percept)
+        (cell @percept))
+      (delay 2 (cell @stimulus "Hello World"))
+      (appearance local @stimulus)
+      (extension (@nested ⟨node←(cell @percept _*)⟩ @percept-view) ^node)
+      (cell @percept-view))
     (frame
-      (circuit @f
-        (sensor (local x_ @v) ^x)
-        (cell @v))
-      (delay 1 (cell @foo "Hello World"))
-      (appearance local @foo)
-      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
-      (cell @n (cell @v)))
+      (circuit @nested
+        (sensor (local percept_ @percept) ^percept)
+        (cell @percept))
+      (delay 1 (cell @stimulus "Hello World"))
+      (appearance local @stimulus)
+      (extension (@nested ⟨node←(cell @percept _*)⟩ @percept-view) ^node)
+      (cell @percept-view (cell @percept)))
     (frame
-      (circuit @f
-        (sensor (local x_ @v) ^x)
-        (cell @v))
-      (cell @foo "Hello World")
-      (appearance local @foo)
-      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
-      (cell @n (cell @v)))
+      (circuit @nested
+        (sensor (local percept_ @percept) ^percept)
+        (cell @percept))
+      (cell @stimulus "Hello World")
+      (appearance local @stimulus)
+      (extension (@nested ⟨node←(cell @percept _*)⟩ @percept-view) ^node)
+      (cell @percept-view (cell @percept)))
     (frame
-      (circuit @f
-        (sensor (local x_ @v) ^x)
-        (cell @v "Hello World"))
-      (cell @foo)
-      (appearance local @foo)
-      (extension (@f ⟨node←(cell @v _*)⟩ @n) ^node)
-      (cell @n (cell @v "Hello World")))
+      (circuit @nested
+        (sensor (local percept_ @percept) ^percept)
+        (cell @percept "Hello World"))
+      (cell @stimulus)
+      (appearance local @stimulus)
+      (extension (@nested ⟨node←(cell @percept _*)⟩ @percept-view) ^node)
+      (cell @percept-view (cell @percept)))
+    (frame
+      (circuit @nested
+        (sensor (local percept_ @percept) ^percept)
+        (cell @percept "Hello World"))
+      (cell @stimulus)
+      (appearance local @stimulus)
+      (extension (@nested ⟨node←(cell @percept _*)⟩ @percept-view) ^node)
+      (cell @percept-view (cell @percept "Hello World")))
     end)
 
   ;; Fused chan sensor-cell and appearance-cell
@@ -3287,6 +3265,14 @@
       (delay 3 (discard @b))
       (sensor* (local x_ @x) ^x)
       (cell @x))
+    (frame
+      ((appearance cell) (local @a) 100)
+      ((appearance cell) (local @b) 200)
+      ((appearance cell) (local @c) 200)
+      ((appearance cell) (local @d) 300)
+      (delay 3 (discard @b))
+      (sensor* (local x_ @x) ^x)
+      (cell @x (100 200 200 300)))
     (frame
       ((appearance cell) (local @a) 100)
       ((appearance cell) (local @b) 200)
@@ -3343,6 +3329,13 @@
       ((appearance cell) (local @b) 200)
       ((appearance cell) (local @c) 200)
       ((appearance cell) (local @d) 300)
+      (delay 3 (discard @b))
+      ((sensor* cell) (local x_ @x) (100 200 200 300)))
+    (frame
+      ((appearance cell) (local @a) 100)
+      ((appearance cell) (local @b) 200)
+      ((appearance cell) (local @c) 200)
+      ((appearance cell) (local @d) 300)
       (delay 2 (discard @b))
       ((sensor* cell) (local x_ @x) (100 200 200 300)))
     (frame
@@ -3379,6 +3372,16 @@
   (rack
     (frame
       ((sensor* cell) (local x_ @x))
+      ((appearance cell) (local @a) 100)
+      ((appearance cell) (local @b) 200)
+      ((appearance cell) (local @c) 300)
+      (delay 2
+        (group
+          (discard @a)
+          (discard @b)
+          (discard @c))))
+    (frame
+      ((sensor* cell) (local x_ @x) (100 200 300))
       ((appearance cell) (local @a) 100)
       ((appearance cell) (local @b) 200)
       ((appearance cell) (local @c) 300)
@@ -3453,33 +3456,36 @@
       (backsys @x  ±n <> {n: ^(+ n 1)})
       (backsys @y  ±n <> {n: ^(+ n 1)})
       (backsys @z  ±n <> {n: ^(+ n 1)}))
-    (frame
-      ((sensor* cell) (local even←(%pipe (mod 2) 0) @even) (100 300))
-      ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd) (201))
-      ((appearance cell) (local @x) 101)
-      ((appearance cell) (local @y) 202)
-      ((appearance cell) (local @z) 301)
-      (backsys @x  ±n <> {n: ^(+ n 1)})
-      (backsys @y  ±n <> {n: ^(+ n 1)})
-      (backsys @z  ±n <> {n: ^(+ n 1)}))
-    (frame
-      ((sensor* cell) (local even←(%pipe (mod 2) 0) @even) (202))
-      ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd) (101 301))
-      ((appearance cell) (local @x) 102)
-      ((appearance cell) (local @y) 203)
-      ((appearance cell) (local @z) 302)
-      (backsys @x  ±n <> {n: ^(+ n 1)})
-      (backsys @y  ±n <> {n: ^(+ n 1)})
-      (backsys @z  ±n <> {n: ^(+ n 1)}))
-    (frame
-      ((sensor* cell) (local even←(%pipe (mod 2) 0) @even) (102 302))
-      ((sensor* cell) (local odd←(%pipe (mod 2) (%not 0)) @odd) (203))
-      ((appearance cell) (local @x) 103)
-      ((appearance cell) (local @y) 204)
-      ((appearance cell) (local @z) 303)
-      (backsys @x  ±n <> {n: ^(+ n 1)})
-      (backsys @y  ±n <> {n: ^(+ n 1)})
-      (backsys @z  ±n <> {n: ^(+ n 1)})))
+    (frame pattern: true
+      ⟨(_ (local _ @even) (100 300))
+       (_ (local _ @odd) (201))
+       (_ (local @x) 100)
+       (_ (local @y) 201)
+       (_ (local @z) 300)⟩)
+    (frame pattern: true
+      ⟨(_ (local _ @even) (100 300))
+       (_ (local _ @odd) (201))
+       (_ (local @x) 101)
+       (_ (local @y) 202)
+       (_ (local @z) 301)⟩)
+    (frame pattern: true
+      ⟨(_ (local _ @even) (202))
+       (_ (local _ @odd) (101 301))
+       (_ (local @x) 101)
+       (_ (local @y) 202)
+       (_ (local @z) 301)⟩)
+    (frame pattern: true
+      ⟨(_ (local _ @even) (202))
+       (_ (local _ @odd) (101 301))
+       (_ (local @x) 102)
+       (_ (local @y) 203)
+       (_ (local @z) 302)⟩)
+    (frame pattern: true
+      ⟨(_ (local _ @even) (102 302))
+       (_ (local _ @odd) (203))
+       (_ (local @x) 102)
+       (_ (local @y) 203)
+       (_ (local @z) 302)⟩))
     ;; ...
 
   ;; Independent sensors and appearances
@@ -4581,20 +4587,21 @@
       (appearance local @x)
       (sensor* (local x_ @view) ^x)
       (cell @view))
-    (frame
-      (cell @expr (+ 2 2))
-      (part (@expr @x) (+ x_ _))
-      (backsys @x  ±n <> {n: ^(+ n 1)})
-      (appearance local @x)
-      (sensor* (local x_ @view) ^x)
-      (cell @view (1)))
-    (frame
-      (cell @expr (+ 3 2))
-      (part (@expr @x) (+ x_ _))
-      (backsys @x  ±n <> {n: ^(+ n 1)})
-      (appearance local @x)
-      (sensor* (local x_ @view) ^x)
-      (cell @view (2))))
+    (frame pattern: true
+      ⟨& (cell @expr (+ 1 2))
+         (cell @view (1))⟩)
+    (frame pattern: true
+      ⟨& (cell @expr (+ 2 2))
+         (cell @view (1))⟩)
+    (frame pattern: true
+      ⟨& (cell @expr (+ 2 2))
+         (cell @view (2))⟩)
+    (frame pattern: true
+      ⟨& (cell @expr (+ 3 2))
+         (cell @view (2))⟩)
+    (frame pattern: true
+      ⟨& (cell @expr (+ 3 2))
+         (cell @view (3))⟩))
     ;; ...
 
   ;; Integration with `device`: queue
@@ -4941,122 +4948,126 @@
          (cell @out (300 c))⟩)
     end))
 
-;; Component instantiation
+;; Instantiation
 (group
   ;; Components are instantiated
-  (rack/instantiate
-    (seed
-      (Foo) => (Bar 0)
-      (node @x (Foo)))
+  (rack
     (frame
-      (node @x (Bar 0))))
+      (Foo) => (Bar 0)
+      (slot (Foo)))
+    (frame/tail
+      (slot (Foo) (Bar 0)))
+    end)
 
   ;; Nested components are instantiated
-  (rack/instantiate
-    (seed
-      (Foo) => (Bar 0)
-      (Bar ±n) => (Qux ^(+ n 1))
-      (Qux n_) => (p ^"Hello World, ⸢n⸣")
-      (node @x (Foo)))
+  (rack
     (frame
-      (node @x (p "Hello World, 1"))))
-
-  ;; Components are not instantiated recursively
-  (rack/instantiate
-    (seed
-      (Foo) => (Bar 0)
-      (Bar ±n) => (Bar ^(+ n 1))
-      (node @x (Foo)))
-    (frame
-      (node @x (Bar 1))))
+      (Foo) => (slot (Bar 0))
+      (Bar ±n) => (slot (Qux ^(+ n 1)))
+      (Qux n_) => (p ^"Hello, ⸢n⸣")
+      (slot (Foo)))
+    (frame/tail
+      (slot (Foo)
+        (slot (Bar 0))))
+    (frame/tail
+      (slot (Foo)
+        (slot (Bar 0)
+          (slot (Qux 1)))))
+    (frame/tail
+      (slot (Foo)
+        (slot (Bar 0)
+          (slot (Qux 1)
+            (p "Hello, 1")))))
+    end)
 
   ;; Specificity is taken into account
-  (rack/instantiate
-    (seed
+  (rack
+    (frame
       (Foo ±a) => (cell @x ^a)
       (Foo a_) => (cell @y ^a)
-      (Foo 100)
-      (Foo qux))
-    (frame
-      (cell @x 100)
-      (cell @y qux)))
-  (rack/instantiate
-    (seed
-      (Foo a_) => (cell @y ^a)
-      (Foo ±a) => (cell @x ^a)
-      (Foo 100)
-      (Foo qux))
-    (frame
-      (cell @x 100)
-      (cell @y qux)))
+      (Bar a_) => (cell @a ^a)
+      (Bar ±a) => (cell @b ^a)
+      (slot (Foo 100))
+      (slot (Foo qux))
+      (slot (Bar 100))
+      (slot (Bar qux)))
+    (frame/tail
+      (slot (Foo 100) (cell @x 100))
+      (slot (Foo qux) (cell @y qux))
+      (slot (Bar 100) (cell @b 100))
+      (slot (Bar qux) (cell @a qux)))
+    end)
 
   ;; Nested components are instantiated in device component body
-  (rack/instantiate
-    (seed
+  (rack
+    (frame
       (Foo a_)
         => (component
-             (template (Bar ^a))
-             (Baz)
-             (Boo))
+             (template (slot (Bar ^a)))
+             (slot (Baz))
+             (slot (Boo)))
       (Bar ±n) => (cell @x ^n)
       (Baz) => (feed @x @y)
       (Boo) => (cell @y)
 
-      (Foo 123))
+      (slot (Foo 123)))
+
+    (frame/tail
+      (slot (Foo 123)
+        (module {}
+          (slot (Bar 123))
+          (slot (Baz))
+          (slot (Boo)))))
+
+    (frame/tail
+      (slot (Foo 123)
+        (module {}
+          (slot (Bar 123)
+            (cell @x 123))
+          (slot (Baz)
+            (feed @x @y))
+          (slot (Boo)
+            (cell @y)))))
+
+    (frame/tail
+      (slot (Foo 123)
+        (module {}
+          (slot (Bar 123)
+            (cell @x))
+          (slot (Baz)
+            (feed @x @y))
+          (slot (Boo)
+            (cell @y 123)))))
+
+    end)
+
+  ;; `template` can be used in passable spots.
+  (rack
     (frame
-      (module {}
-        (cell @x 123)
-        (feed @x @y)
-        (cell @y))))
-
-  ;; Only inert nodes are considered
-  (rack/instantiate
-    (seed
-      (cell @_ _) => "BOOM"
-      (cell @x 0))
-    (frame
-      (cell @x 0)))
-
-  ;; Only inert nodes are considered in device component body
-  (rack/instantiate
-    (seed
-      (cell @_ _) => "BOOM"
-      (Foo a_)
-        => (component
-             (template
-               (cell @x ^a))
-             (cell @y ^a))
-
-      (Foo 100))
-    (frame
-      (module {}
-        (cell @x 100)
-        (cell @y ^a))))
-
-  ;; Template can be used anywhere passable.
-  (rack/instantiate
-    (seed
       (Counter value_)
         => (component
-             (cell @picture
+             (cell @foo
                (template ^value))
-             (picture @picture
+             (node @bar
                (group style: "bg-blue-500"
                  (node @view
                    (template (p ^\value))))))
-      (Counter 100))
-    (frame
-      (module {}
-        (cell @picture
-          (template ^value))
-        (picture @picture
-          (group style: "bg-blue-500"
-            (node @view
-              (p "100")))))))
+      (slot (Counter 100)))
+
+    (frame/tail
+      (slot (Counter 100)
+        (module {}
+          (cell @foo (template ^value)) ;; impassable
+          (node @bar
+            (group style: "bg-blue-500"
+              (node @view
+                (p "100"))))))) ;; passable
+
+    end)
 
   ;; Templates with multiple children are instantiated as groups
-  (rack/instantiate
-    (seed
+  (rack
+    (frame
       (Foo value_)
         => (component
              (template
@@ -5065,53 +5076,83 @@
                (cell @c ^(+ value 2)))
              (discard @a)
              (discard @b))
-      (Foo 100))
-    (frame
-      (module {}
-        (group
-          (cell @a 100)
-          (cell @b 101)
-          (cell @c 102))
-        (discard @a)
-        (discard @b))))
+      (slot (Foo 100)))
 
-  ;; Surface in component
-  (rack/instantiate
-    (seed
+    (frame/tail
+      (slot (Foo 100)
+        (module {}
+          (group
+            (cell @a 100)
+            (cell @b 101)
+            (cell @c 102))
+          (discard @a)
+          (discard @b))))
+
+    (frame/tail
+      (slot (Foo 100)
+        (module {}
+          (group
+            (cell @a)
+            (cell @b)
+            (cell @c 102))
+          (discard @a)
+          (discard @b))))
+
+    end)
+
+  ;; Surface essentials
+  (rack
+    (frame
       (Counter ±initial)
         => (component
-             (surface (@surface (counter ±count))
-               (counter ^initial))
+             (surface (@surface (#Counter ±count))
+               (#Counter ^initial))
              (backsys @count
                ±n <> {n: ^(+ n 1)}))
-      (Counter 123))
-    (frame
-      (device (@surface (counter 123))
-        (part (@surface @count) (counter ±count))
-        (backsys @count
-          ±n <> {n: ^(+ n 1)}))))
+      (slot (Counter 123)))
+
+    (frame/tail
+      (slot (Counter 123)
+        (device (@surface (#Counter 123))
+          (part (@surface @count) (#Counter ±count))
+          (backsys @count
+            ±n <> {n: ^(+ n 1)}))))
+
+    (frame pattern: true
+      ⟪(#Counter 124)⟫)
+
+    (frame pattern: true
+      ⟪(#Counter 125)⟫)
+
+    (frame pattern: true
+      ⟪(#Counter 126)⟫))
+    ;; ...
 
   ;; Surfaces with multiple parts group those parts
-  (rack/instantiate
-    (seed
+  (rack
+    (frame
       (Button caption_ action_)
         => (component
-             (surface (@surface (button action_ actions←(_*)))
-               (button ^action ()))
+             (surface (@surface (#Button action_ actions←(_*)))
+               (#Button ^action ()))
              (node @view
                (template (p ^caption))))
-      (Button "Increment" inc))
-    (frame
-      (device (@surface (button inc ()))
-        (group
-          (part (@surface @action) (button action_ actions←(_*)))
-          (part (@surface @actions) (button action_ actions←(_*))))
-        (node @view
-          (p "Increment")))))
+      (slot (Button "Increment" inc)))
+
+    (frame/tail
+      (slot (Button "Increment" inc)
+        (device (@surface (#Button inc ()))
+          (group
+            (part (@surface @action) (#Button action_ actions←(_*)))
+            (part (@surface @actions) (#Button action_ actions←(_*))))
+          (node @view
+            (p "Increment")))))
+
+    end)
 
   ;; If component has multiple surfaces, that is treated as no surfaces
-  (rack/instantiate
-    (seed
+  (rack
+    (frame
       (Foo)
         => (component
              (surface (@first (foo a_))
@@ -5120,32 +5161,466 @@
                (bar 200))
              (discard @a)
              (discard @b))
-      (Foo))
-    (frame
-      (module {}
-       ;; they're simply ignored
-       (surface (@first (foo a_))
-         (foo 100))
-       (surface (@second (bar b_))
-         (bar 200))
-        (discard @a)
-        (discard @b))))
+      (slot (Foo)))
 
-  ;; If surface has no captures, we handle that gracefully
-  (rack/instantiate
-    (seed
+    (frame/tail
+      (slot (Foo)
+        (module {}
+         ;; The two surfaces are simply ignored.
+         (surface (@first (foo a_))
+           (foo 100))
+         (surface (@second (bar b_))
+           (bar 200))
+          (discard @a)
+          (discard @b))))
+
+    end)
+
+  ;; If surface has no captures, we handle the situation gracefully.
+  (rack
+    (frame
       (Foo)
         => (component
              (cell @x 100)
-             (surface (@surface (button))
-               (button))
+             (surface (@surface foobar)
+               foobar)
              (discard @x))
-      (Foo))
+      (slot (Foo)))
+
+    (frame/tail
+      (slot (Foo)
+        (device (@surface foobar)
+          (cell @x 100)
+          (group) ;; No parts
+          (discard @x))))
+
+    (frame/tail
+      (slot (Foo)
+        (device (@surface foobar)
+          (cell @x)
+          (group) ;; No parts
+          (discard @x))))
+
+    end)
+
+  ;; Infinite recursion ends at some point due to SAFE_SLOT_DEPTH.
+  (rack
     (frame
-      (device (@surface (button))
-        (cell @x 100)
-        (group) ;; No parts
-        (discard @x)))))
+      (Infinite x_) => (slot (Infinite ^(+ x 1)))
+      (slot (Infinite 0)))
+    terminates)
+
+  ;; Rule addition invalidates associated slots.
+  (rack
+    (frame
+      (cell @a (Foo x_) => (cell @count0 ^x))
+      (feed @a @b)
+      (node @b)
+
+      (delay 5
+        (cell @x (Bar x_) => (cell @count1 ^x)))
+      (feed @x @y)
+      (node @y)
+
+      (slot (Foo 100))
+      (slot (Bar 200))
+
+      (backsys {@:count0 @:count1}
+        {¦ ±count0} <> {count0: ^(+ count0 1)}
+        {¦ ±count1} <> {count1: ^(+ count1 1)}))
+
+    (frame pattern: true
+      ⟨& (cell @a)
+         (node @b (%literal (Foo x_) => (cell @count0 ^x)))
+         (delay 4 _)⟩)
+
+    (frame pattern: true
+      ⟨& (delay 4 _)
+         (slot (Foo 100) (cell @count0 100))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 3 _)
+         (slot (Foo 100) (cell @count0 101))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 2 _)
+         (slot (Foo 100) (cell @count0 102))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 1 _)
+         (slot (Foo 100) (cell @count0 103))⟩)
+
+    (frame pattern: true
+      ⟨& (cell @x (Bar x_) => (cell @count1 ^x))
+         (slot (Foo 100) (cell @count0 104))⟩)
+
+    (frame pattern: true
+      ⟨& (node @y (Bar x_) => (cell @count1 ^x))
+         (slot (Foo 100) (cell @count0 105))⟩)
+
+    (frame pattern: true
+      ⟨& (node @y (Bar x_) => (cell @count1 ^x))
+         (slot (Foo 100) (cell @count0 105))
+         (slot (Bar 200) (cell @count1 200))⟩)
+
+    (frame pattern: true
+      ⟨& (slot (Foo 100) (cell @count0 106))
+         (slot (Bar 200) (cell @count1 201))⟩)
+
+    (frame pattern: true
+      ⟨& (slot (Foo 100) (cell @count0 107))
+         (slot (Bar 200) (cell @count1 202))⟩)
+
+    (frame pattern: true
+      ⟨& (slot (Foo 100) (cell @count0 108))
+         (slot (Bar 200) (cell @count1 203))⟩))
+    ;; ...
+
+  ;; Rule deletion invalidates associated slots.
+  (rack
+    (frame
+      (node @x (Foo) => (delay 100 foo))
+      (delay 5
+        (discard @x))
+
+      (Bar) => (delay 100 bar)
+
+      (slot (Foo))
+      (slot (Bar)))
+
+    (frame pattern: true
+      ⟨& (delay 5 _)
+         (slot (Foo) (delay 100 foo))
+         (slot (Bar) (delay 100 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 4 _)
+         (slot (Foo) (delay 99 foo))
+         (slot (Bar) (delay 99 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 3 _)
+         (slot (Foo) (delay 98 foo))
+         (slot (Bar) (delay 98 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 2 _)
+         (slot (Foo) (delay 97 foo))
+         (slot (Bar) (delay 97 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (delay 1 (discard @x))
+         (slot (Foo) (delay 96 foo))
+         (slot (Bar) (delay 96 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @x (Foo) => (delay 100 foo))
+         (discard @x)
+         (slot (Foo) (delay 95 foo))
+         (slot (Bar) (delay 95 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @x)
+         (discard @x)
+         (slot (Foo) (delay 94 foo))
+         (slot (Bar) (delay 94 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @x)
+         (discard @x)
+         (slot (Foo))
+         (slot (Bar) (delay 94 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @x)
+         (discard @x)
+         (slot (Foo))
+         (slot (Bar) (delay 93 bar))⟩))
+    ;; ...
+
+  ;; Rule update invalidates associated slots.
+  (rack
+    (frame
+      (node @rule (Foo) => (cell @count 0))
+      (Bar) => (delay 100 bar)
+      (backsys @rule
+        (rule _ (cell @_ ±count))
+          <> {count: ^(+ count 1)})
+
+      (slot (Foo))
+      (slot (Bar)))
+
+    (frame pattern: true
+      ⟨& (node @rule (Foo) => (cell @count 0))
+         (slot (Foo) (cell @count 0))
+         (slot (Bar) (delay 100 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @rule (Foo) => (cell @count 1))
+         (slot (Foo) (cell @count 0))
+         (slot (Bar) (delay 99 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @rule (Foo) => (cell @count 1))
+         (slot (Foo) (cell @count 1))
+         (slot (Bar) (delay 99 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @rule (Foo) => (cell @count 2))
+         (slot (Foo) (cell @count 1))
+         (slot (Bar) (delay 98 bar))⟩)
+
+    (frame pattern: true
+      ⟨& (node @rule (Foo) => (cell @count 2))
+         (slot (Foo) (cell @count 2))
+         (slot (Bar) (delay 98 bar))⟩))
+    ;;; ...
+
+  ;; Slots can be constructed & are instantiated dynamically.
+  (rack
+    (frame
+      (Foo n_) => (cell @x ^n)
+      (cell @arg 0)
+      (transfer (@arg n_ @node) (slot (Foo ^n)))
+      (frag @node)
+      (feed @x @y)
+      (cell @y))
+
+    (frame
+      (Foo n_) => (cell @x ^n)
+      (cell @arg)
+      (transfer (@arg n_ @node) (slot (Foo ^n)))
+      (frag @node (slot (Foo 0)))
+      (feed @x @y)
+      (cell @y))
+
+    (frame
+      (Foo n_) => (cell @x ^n)
+      (cell @arg)
+      (transfer (@arg n_ @node) (slot (Foo ^n)))
+      (frag @node (slot (Foo 0) (cell @x 0)))
+      (feed @x @y)
+      (cell @y))
+
+    (frame
+      (Foo n_) => (cell @x ^n)
+      (cell @arg)
+      (transfer (@arg n_ @node) (slot (Foo ^n)))
+      (frag @node (slot (Foo 0) (cell @x)))
+      (feed @x @y)
+      (cell @y 0))
+
+    end)
+
+  ;; Many slots from the same rule (add & remove).
+  (rack
+    (frame
+      (delay 3
+        (node @rule (Foo n_) => ^n))
+      (delay 5
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Bar "John")))
+    (frame
+      (delay 3
+        (node @rule (Foo n_) => ^n))
+      (delay 5
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (delay 2
+        (node @rule (Foo n_) => ^n))
+      (delay 4
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (delay 1
+        (node @rule (Foo n_) => ^n))
+      (delay 3
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (node @rule (Foo n_) => ^n)
+      (delay 2
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (node @rule (Foo n_) => ^n)
+      (delay 2
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0) 0)
+      (slot (Foo 1) 1)
+      (slot (Foo 2) 2)
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (node @rule (Foo n_) => ^n)
+      (delay 1
+        (discard @rule))
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0) 0)
+      (slot (Foo 1) 1)
+      (slot (Foo 2) 2)
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (node @rule (Foo n_) => ^n)
+      (discard @rule)
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0) 0)
+      (slot (Foo 1) 1)
+      (slot (Foo 2) 2)
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (node @rule)
+      (discard @rule)
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0) 0)
+      (slot (Foo 1) 1)
+      (slot (Foo 2) 2)
+      (slot (Bar "John") "Kaixo John"))
+    (frame
+      (node @rule)
+      (discard @rule)
+      (Bar name_) => ^"Kaixo ⸢name⸣"
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Bar "John") "Kaixo John"))
+    end)
+
+  ;; Many slots from the same rule (update).
+  (rack
+    (frame
+      (node @rule (Foo 0) => "Kaixo")
+      (backsys @rule
+        (rule (Foo ±n) _) <> {n: ^(mod (+ n 1) 4)})
+      (Bar) => (delay 100 qux)
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Foo 3))
+      (slot (Bar)))
+    (frame/tail
+      (slot (Foo 0) "Kaixo")
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Foo 3))
+      (slot (Bar) (delay 100 qux)))
+    (frame
+      (node @rule (Foo 1) => "Kaixo")
+      (backsys @rule
+        (rule (Foo ±n) _) <> {n: ^(mod (+ n 1) 4)})
+      (Bar) => (delay 100 qux)
+      (slot (Foo 0) "Kaixo")
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Foo 3))
+      (slot (Bar) (delay 99 qux)))
+    (frame/tail
+      (slot (Foo 0))
+      (slot (Foo 1) "Kaixo")
+      (slot (Foo 2))
+      (slot (Foo 3))
+      (slot (Bar) (delay 99 qux)))
+    (frame/tail
+      ;; (Foo 2) => ...
+      (slot (Foo 0))
+      (slot (Foo 1) "Kaixo")
+      (slot (Foo 2))
+      (slot (Foo 3))
+      (slot (Bar) (delay 98 qux)))
+    (frame/tail
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2) "Kaixo")
+      (slot (Foo 3))
+      (slot (Bar) (delay 98 qux)))
+    (frame/tail
+      ;; (Foo 3) => ...
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2) "Kaixo")
+      (slot (Foo 3))
+      (slot (Bar) (delay 97 qux)))
+    (frame/tail
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Foo 3) "Kaixo")
+      (slot (Bar) (delay 97 qux)))
+    (frame/tail
+      ;; (Foo 0) => ...
+      (slot (Foo 0))
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Foo 3) "Kaixo")
+      (slot (Bar) (delay 96 qux)))
+    (frame/tail
+      (slot (Foo 0) "Kaixo")
+      (slot (Foo 1))
+      (slot (Foo 2))
+      (slot (Foo 3))
+      (slot (Bar) (delay 96 qux))))
+    ;; ...
+
+  ;; Module creates rule scope.
+  (rack
+    (frame
+      (backsys @lab
+        ((_* `dst) rule_ _) <> {dst: ^rule, (rule): ()}
+        ((_* rule_) `dst _) <> {dst: ^rule, (rule): ()})
+      (circuit @lab
+        (module {})
+        (Foo) => 100
+        (slot (Foo))))
+
+    (frame/tail
+      (circuit @lab
+        (module {})
+        (Foo) => 100
+        (slot (Foo) 100)))
+
+    (frame/tail
+      (circuit @lab
+        (module {} (Foo) => 100)
+        (slot (Foo) 100)))
+
+    (frame/tail
+      (circuit @lab
+        (module {} (Foo) => 100)
+        (slot (Foo))))
+
+    (frame/tail
+      (circuit @lab
+        (module {})
+        (Foo) => 100
+        (slot (Foo))))
+
+    (frame/tail
+      (circuit @lab
+        (module {})
+        (Foo) => 100
+        (slot (Foo) 100)))))
+    ;; ...
 
 ;; BUG: Make sure append and prepend on the same cell are not merged
 ;; (and related).

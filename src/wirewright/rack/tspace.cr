@@ -32,8 +32,8 @@ module Ww::Rack::Tspace
   defrecord Appearance, id : D7::NodeId, tspace : Term, matchee : Term
 
   # Returns the termspace pass.
-  def pass : D7::Pass
-    D7::Pass.new { |clf, circuit| step(clf, circuit) }
+  def pass(clf : D7::Classifier) : D7::Pass
+    D7::Pass.new { |circuit| step(clf, circuit) }
   end
 
   private def step(clf : D7::Classifier, circuit : Term) : Slice(Term)
