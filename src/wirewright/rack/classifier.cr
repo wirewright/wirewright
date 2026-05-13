@@ -35,16 +35,8 @@ module Ww::Rack
         D7.gnd(node, src, dst)
       end
 
-      matchpi %{[group _*]}, %{[window _*]} do
+      matchpi %{[group _*]} do
         D7.parent(node.as_d, 1...node.itemsize)
-      end
-
-      matchpi %{[picture @_ _]} do
-        D7.parent(node.as_d, 2...node.itemsize)
-      end
-
-      matchpi %{[keyboard _*]} do
-        D7.gnd(node)
       end
 
       matchpi %{[module bindings_dict _*]} do
