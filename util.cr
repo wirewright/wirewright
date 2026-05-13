@@ -402,6 +402,20 @@ module Enumerable(T)
 end
 
 abstract struct Int
+  # Reference: https://mostlymangling.blogspot.com/2019/01/better-stronger-mixer-and-test-procedure.html
+  # See also: https://jonkagstrom.com/bit-mixer-construction/
+  def self.mix(x : UInt64) : UInt64
+    x ^= x.rotate_right(25) ^ x.rotate_right(50)
+    x &*= 0xA24BAED4963EE407u64
+    x ^= x.rotate_right(24) ^ x.rotate_right(49)
+    x &*= 0x9FB21C651E98DF25u64
+    x ^ (x >> 28)
+  end
+
+  def self.mix(x : UInt64, y : UInt64) : UInt64
+    Int.mix(x ^ y.rotate_left(5))
+  end
+
   def bit_set?(index)
     !bit(index).zero?
   end

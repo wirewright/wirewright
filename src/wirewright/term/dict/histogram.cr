@@ -146,6 +146,17 @@ class Ww::Term::Dict
       numbers + strings + symbols + trues + falses + blobs
     end
 
+    def subset_of?(other : Histogram) : Bool
+      return false unless numbers <= other.numbers
+      return false unless strings <= other.strings
+      return false unless symbols <= other.symbols
+      return false unless trues <= other.trues
+      return false unless falses <= other.falses
+      return false unless blobs <= other.blobs
+
+      true
+    end
+
     def inspect(io)
       io << "Histogram("
       io << "numbers=" << numbers << ", "

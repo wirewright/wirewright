@@ -797,20 +797,23 @@ module Ww
     end
 
     # :nodoc:
-    DISTURBANCE_APPROX = 2761370561472851u64
+    DISTURBANCE_APPROX = 0x9cf73af68e953u64
 
     def hashrepr : UInt64
       case @k
       in Int64
-        @k.unsafe_as(UInt64)
+        bits = @k.unsafe_as(UInt64)
       in Float64
         # Distrurb approx values with DISTURBANCE_APPROX so that our hashcode doesn't collide
         # with Int64 and BigRational as readily but most importantly so that hashcode behaves
         # like equality, which requires both parties to be of the approximate kind.
-        Term.hashcode(DISTURBANCE_APPROX, @k.unsafe_as(UInt64))
+        bits = Int.mix(DISTURBANCE_APPROX, @k.unsafe_as(UInt64))
       in Pointer(BigRational)
-        to(Float64).unsafe_as(UInt64)
+        bits = to(Float64).unsafe_as(UInt64)
       end
+
+      # Numbers use plain bit mixing.
+      Int.mix(bits)
     end
 
     def ==(other : Num) : Bool

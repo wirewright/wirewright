@@ -6,6 +6,7 @@ class Ww::Term::Dict
   # - `at?(root : R, key : Term) : Term?``
   # - `nth?(root : R, n : UInt32) : {Term, Term}?``
   # - `each(root : R, & : Term, Term ->) : Nil`
+  # - `guided_each(root : R, guide : Summary, & : Term, Term ->) : Nil`
   # - `assoc(root : R, key : Term, value : Term, *, cookie : Cookie = Cookie.none) : R`
   # - `dissoc(root : R, key : Term, *, cookie : Cookie = Cookie.none) : R`
   module TermTrie
@@ -137,6 +138,36 @@ class Ww::Term::Dict
         case child
         in Node
           stack << {child, 0u32}
+          next
+        in Entry
+          entries = {child}
+        in Bucket
+          entries = child.entries
+        end
+
+        entries.each do |entry|
+          yield entry.key.term, entry.value
+        end
+      end
+    end
+
+    def guided_each(root : Node, guide : Summary, & : Term, Term ->) : Nil
+      stack = Pf::Kit.stack_array({Node, UInt32})
+      stack << {root, 0u32}
+
+      loop do
+        break unless frame = stack.pop?
+
+        node, n = frame
+        next unless child = node.children.ix[n]?
+
+        stack << {node, n + 1}
+
+        case child
+        in Node
+          if guide.subset_of?(child.summary)
+            stack << {child, 0u32}
+          end
           next
         in Entry
           entries = {child}

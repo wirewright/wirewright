@@ -60,6 +60,7 @@ class Ww::Term::Dict
   # - `at?(root : R, key : UInt32) : Term?``
   # - `nth?(root : R, n : UInt32) : {Term, Term}?``
   # - `each(root : R, & : UInt32, Term ->) : Nil`
+  # - `guided_each(root : R, guide : Summary, & : UInt32, Term ->) : Nil`
   # - `seqsize(root : R) : UInt32`
   # - `assoc(root : R, key : UInt32, value : Term, *, cookie : Cookie = Cookie.none) : R`
   # - `dissoc(root : R, key : UInt32, *, cookie : Cookie = Cookie.none) : R`
@@ -495,6 +496,33 @@ class Ww::Term::Dict
     # Order: ascending by key.
     def each(node : Leaf | Node, & : UInt32, Term ->)
       each(0u32, node) { |key, value| yield key, value }
+    end
+
+    private def guided_each(prefix : UInt32, node : Leaf, guideptr : Summary*, & : UInt32, Term ->) : Nil
+      return unless guideptr.value.subset_of?(node.summary)
+
+      node.children.each_entry do |key, item|
+        yield (prefix << 4) | key, item.term
+      end
+    end
+
+    {% for level in 0..6 %}
+      private def guided_each(prefix : UInt32, node : Node{{level}}, guideptr : Summary*, & : UInt32, Term ->)
+        return unless guideptr.value.subset_of?(node.summary)
+
+        node.children.each_entry do |key, child|
+          guided_each((prefix << 4) | key, child, guideptr) do |full_key, value|
+            yield full_key, value
+          end
+        end
+      end
+    {% end %}
+
+    # Order: ascending by key.
+    def guided_each(node : Leaf | Node, guide : Summary, & : UInt32, Term ->)
+      guideptr = pointerof(guide)
+
+      guided_each(0u32, node, guideptr) { |key, value| yield key, value }
     end
 
     # We call *the sequence* a view of *node* that is empty, or starts

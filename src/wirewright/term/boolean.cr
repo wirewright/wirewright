@@ -49,6 +49,15 @@ module Ww
       inspect(io)
     end
 
+    def hashrepr : UInt64
+      # Booleans hash into a TRUE or FALSE constant, which are simply random numbers.
+      if true?
+        0x473419c1b81a5431u64
+      else
+        0x143ea81786b6282du64
+      end
+    end
+
     def_equals @value
   end
 end

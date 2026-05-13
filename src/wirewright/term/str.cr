@@ -6,12 +6,12 @@ module Ww
     include AutoUpcast
     include TypeConversion
 
-    # Returns the 64-bit hash of this string.
-    getter hashcode : UInt64
+    # Returns the 64-bit hash-representation of this string.
+    getter hashrepr : UInt64
 
     def initialize(@value : String)
       # Strings use XXH3 to compute their hashcode.
-      @hashcode = LibXXH64.hashcode(@value.to_unsafe, @value.bytesize)
+      @hashrepr = LibXXH64.hashcode(@value.to_unsafe, @value.bytesize)
     end
 
     def self.new(value : Escaped)

@@ -94,6 +94,17 @@ class Ww::Term::Dict
     def maxdepth : Magnitude
       @maxdepth16 == UInt16::MAX ? Magnitude::INFINITY : Magnitude.new(@maxdepth16)
     end
+
+    def subset_of?(other : Summary) : Bool
+      return false unless symbol_sketch.subset_of?(other.symbol_sketch)
+      return false unless value_sketch.subset_of?(other.value_sketch)
+      return false unless key_sketch.subset_of?(other.key_sketch)
+      return false unless maxdepth16 <= other.maxdepth16
+      return false unless size_set.subset_of?(other.size_set)
+      return false unless histogram.subset_of?(other.histogram)
+
+      true
+    end
   end
 
   struct Summary
@@ -108,6 +119,23 @@ class Ww::Term::Dict
         value_sketch: Sketch.empty,
         symbol_sketch: Sketch.empty,
         histogram: Histogram.zero,
+      )
+    end
+
+    # Returns the summary for *item*.
+    def self.of(item : Term) : Summary
+      if dict = item.as_d?
+        return dict.summary
+      end
+
+      hashcode = Term.hashcode(item)
+
+      # Non-dict items don't have a size, maxdepth, size set.
+      zero.copy_with(
+        hashcode: hashcode,
+        value_sketch: Sketch.value(item, hashcode),
+        symbol_sketch: Sketch.symbol(item, hashcode),
+        histogram: Histogram.of(item),
       )
     end
 
@@ -127,7 +155,7 @@ class Ww::Term::Dict
 
       base.copy_with(
         size: 1u32,
-        hashcode: Term.hashcode(key.to_u64, hashcode),
+        hashcode: Int.mix(key.to_u64, hashcode),
       )
     end
 
@@ -150,7 +178,7 @@ class Ww::Term::Dict
 
       base.copy_with(
         size: 1u32,
-        hashcode: Term.hashcode(key[:hashcode], value_hashcode),
+        hashcode: Int.mix(key[:hashcode], value_hashcode),
         key_sketch: Sketch.union(base.key_sketch, Sketch.key(key[:term], key[:hashcode])),
       )
     end
@@ -207,7 +235,11 @@ class Ww::Term::Dict
         maxdepth16 = UInt16::MAX
       end
 
-      summary.copy_with(maxdepth16: maxdepth16, size_set: size_set)
+      summary.copy_with(
+        hashcode: Term.hashcode(:dict, summary.hashcode),
+        maxdepth16: maxdepth16,
+        size_set: size_set,
+      )
     end
 
     # Returns `true` if two summaries are *compatible*. Compatible summaries

@@ -230,7 +230,7 @@ module Ww
     # :nodoc:
     #
     # Non-cryptographic hash for use primarily by `Term.hashcode`.
-    def hashcode : UInt64
+    def hashrepr : UInt64
       digest.unsafe_slice_of(UInt64)[0]
     end
 

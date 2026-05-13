@@ -269,6 +269,10 @@ module Ww
       ML.compact(io, self)
     end
 
+    def hashrepr : UInt64
+      Int.mix(@bits)
+    end
+
     def_equals @bits
   end
 

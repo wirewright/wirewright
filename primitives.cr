@@ -376,6 +376,10 @@ PRIMITIVES = ProcRuleset.build do
     haystack.to(String).includes?(needle.to(String))
   end
 
+  rulepi1 %{(any? haystack_dict needle_)} do
+    haystack.as_d.any?(needle)
+  end
+
   rulepi1 %{(prefix-run matchee_string prefix_string)} do
     matchee_ = matchee.to(StringView)
     prefix_ = prefix.to(StringView)

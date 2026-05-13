@@ -358,6 +358,18 @@ module Ww
       !!self[key]?
     end
 
+    def any?(value) : Bool
+      value_summary = Summary.of(Term.of(value))
+
+      each_entry(value_summary) do |_, candidate|
+        next unless Term.hashcode(candidate) == value_summary.hashcode
+        next unless candidate == value
+        return true
+      end
+
+      false
+    end
+
     # Returns `true` if *object* is the first item in this dict (checked with `==`).
     def starts_with?(object) : Bool
       return false if itemsize.zero?
@@ -499,6 +511,16 @@ module Ww
       end
 
       TermTrie.each(@ttrie) do |key, value|
+        yield key, value
+      end
+    end
+
+    def each_entry(guide : Summary, & : Term, Term ->) : Nil
+      UTermTrie32.guided_each(@utrie, guide) do |key, value|
+        yield Term.of(key), Term.of(value)
+      end
+
+      TermTrie.guided_each(@ttrie, guide) do |key, value|
         yield key, value
       end
     end

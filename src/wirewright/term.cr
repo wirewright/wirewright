@@ -883,59 +883,43 @@ module Ww
   # Hashing, comparison
 
   struct Term
-    # Reference: https://mostlymangling.blogspot.com/2019/01/better-stronger-mixer-and-test-procedure.html
-    # See also: https://jonkagstrom.com/bit-mixer-construction/
-    private def self.mix(x : UInt64) : UInt64
-      x ^= x.rotate_right(25) ^ x.rotate_right(50)
-      x &*= 0xA24BAED4963EE407u64
-      x ^= x.rotate_right(24) ^ x.rotate_right(49)
-      x &*= 0x9FB21C651E98DF25u64
-      x ^ (x >> 28)
+    # :nodoc:
+    def self.hashcode(type : TermType, hashcode : UInt64) : UInt64
+      Int.mix(type.value.to_u64, hashcode)
     end
 
     # :nodoc:
-    def self.hashcode(a : UInt64, b : UInt64) : UInt64
-      mix(a ^ b.rotate_left(5))
-    end
-
-    # :nodoc:
-    #
-    # Symbols use plain bit mixing.
     def self.hashcode(term : Term::Sym)
-      hashcode(TermType::Symbol.value.to_u64, mix(term.@bits))
+      hashcode(:symbol, term.hashrepr)
     end
 
     # :nodoc:
     def self.hashcode(term : Term::Str) : UInt64
-      hashcode(TermType::String.value.to_u64, term.hashcode)
+      hashcode(:string, term.hashrepr)
     end
 
     # :nodoc:
-    #
-    # Numbers use plain bit mixing.
     def self.hashcode(term : Term::Num) : UInt64
-      hashcode(TermType::Number.value.to_u64, mix(term.hashrepr))
+      hashcode(:number, term.hashrepr)
     end
 
     # :nodoc:
-    #
-    # Booleans hash into a TRUE or FALSE constant, which are simply random numbers.
     def self.hashcode(term : Term::Boolean)
-      if term.true?
-        hashcode(TermType::Boolean.value.to_u64, 0x473419c1b81a5431u64)
-      else
-        hashcode(TermType::Boolean.value.to_u64, 0x143ea81786b6282du64)
-      end
+      hashcode(:boolean, term.hashrepr)
     end
 
     # :nodoc:
     def self.hashcode(term : Term::Dict) : UInt64
-      hashcode(TermType::Dict.value.to_u64, term.hashcode)
+      # Since dictionaries cache their hashcode, it'd be quite a complicated
+      # matter to have hashcode(:dict, _) here. Right now, the latter is
+      # called in `Summary.assoc` -- quite a distance from here, I know,
+      # but sadly, not much I can do about it (yet?).
+      term.hashcode
     end
 
     # :nodoc:
     def self.hashcode(term : Term::Blob) : UInt64
-      hashcode(TermType::Blob.value.to_u64, term.hashcode)
+      hashcode(:blob, term.hashrepr)
     end
 
     # :nodoc:
@@ -1640,8 +1624,7 @@ module Ww
         end
       end
 
-      # :nodoc:
-      def collapse
+      def collapse : Term
         case rep = @rep
         in One  then rep.offspring
         in Many then Term.of(rep.offspring)
