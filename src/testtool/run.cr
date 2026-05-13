@@ -289,7 +289,7 @@ module Testtool
           hit_query = Scenery::HitQuery.parse(query)
           _, observers = Scenery::Safe.describe(scene_out.unwrap, Slice[hit_query])
           unless observers.any? { |observer| M1.probe?(pattern, observer) }
-            complaints << complaint("did not hit according to", query: query, pattern: pattern)
+            complaints << complaint("did not hit according to", query: query, pattern: pattern, observers: Term.of(observers))
           end
         end
 
