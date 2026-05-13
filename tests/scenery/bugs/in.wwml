@@ -1,0 +1,15 @@
+width: 300
+height: 200
+backdrop: (oklch 0.2 0 0)
+microfold: true
+
+(z-stack
+  (group style: "content-y flow-col min-h-5xs"
+    (p "BUG: Negative transform hit test")
+    (group style: "flow-none bg-neutral-800 fr-1"
+      (observer id: arrow
+        (observable
+          (icon "chevron_right" style: "center -dl-8 font-icons bg-neutral-900")))))
+  ;(transform dl: 118 dt: 70
+    (content x: true y: true
+      (rect min-w: 1 min-h: 1 fill: red))))

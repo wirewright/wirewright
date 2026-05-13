@@ -154,7 +154,7 @@ module Ww::Scenery
     end
   end
 
-  private def hit(node : Inert | RectShape | Pending | Img | Svg | IconGlyph, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Inert | RectShape | Pending | Img | Svg | IconGlyph, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
     part = Rect.intersection(vbox.bounds, itf.map(query.rect))
@@ -167,7 +167,7 @@ module Ww::Scenery
     HitLeaf.new(hover, part)
   end
 
-  private def hit_index(node : ShapedText, box : Box, point : Point) : Int32
+  private def hit_index(node : ShapedText, box : OriginBox, point : Point) : Int32
     if point.y <= 0
       return 0 # before begin
     end
@@ -215,7 +215,7 @@ module Ww::Scenery
     node.caption.size # after end
   end
 
-  private def hit(node : ShapedText, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : ShapedText, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
     part = Rect.intersection(vbox.bounds, itf.map(query.rect))
@@ -236,22 +236,20 @@ module Ww::Scenery
     HitTextLeaf.new(anchor_index, focus_index, seln, hover, part)
   end
 
-  private def hit(node : TransformMatrix, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : TransformMatrix, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, Tf[tf, node.tf], query)
   end
 
   # TODO: Implement proper rounded rect-rect intersection?
-  private def hit(node : Clip, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Clip, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, Tf[tf, Tf.translate(-node.offset)], query)
   end
 
-  private def hit(node : Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Padding | Align | XYStack | ZStack | Composite | Observer | Observable | Gate, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, tf, query)
   end
 
-  # NOTE: We're using *box* for its width only; so we won't bother doing coordinate
-  # system translation here.
-  private def box_hit(node : AimedNode, box : Box, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
+  private def box_hit(node : AimedNode, box : OriginBox, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
     part = Rect.intersection(vbox.bounds, itf.map(query.rect))
@@ -275,10 +273,11 @@ module Ww::Scenery
       child_box = box.children[child_index]
       child_vbox = vbox.children[child_index]
 
-      translated_child_tf = Tf[child_tf, Tf.translate(child_vbox.bounds.tl)]
-      child_vbox = VBox.new(Rect.new(tl: Point[0, 0], size: child_vbox.bounds.size), child_vbox.children)
+      translated_child_tf = Tf[child_tf, Tf.translate(child_box.bounds.tl)]
+      child_vbox = VBox.new(child_vbox.bounds.translate(-child_box.bounds.tl), child_vbox.children)
+      child_origin_box = OriginBox.new(child_box.bounds.size, child_box.children)
+      child_hit = hit(child_node, child_origin_box, child_vbox, translated_child_tf, query)
 
-      child_hit = hit(child_node, child_box, child_vbox, translated_child_tf, query)
       present ||= !child_hit.is_a?(HitEmpty)
       hits << child_hit
     end
@@ -294,7 +293,7 @@ module Ww::Scenery
 
   # Constructs a hit tree for *root*, *box*, and *vbox* according to *query*.
   def hit(root : Root(AimedNode), box : OriginBox, vbox : VBox, query : HitQuery) : HitNode
-    hit(root.node, box.translate(Point[0, 0]), vbox, Tf.new, query)
+    hit(root.node, box, vbox, Tf.new, query)
   end
 
   # Constructs a hit tree for *scene* according to *query*.

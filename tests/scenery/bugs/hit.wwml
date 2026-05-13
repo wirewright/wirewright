@@ -1,0 +1,3 @@
+;; BUG: Negative transform hit test
+(hit (point 118 70)
+  (observer ⟪(icon ⍊ codepoint hit-hover: true hit-dl: ≈8 hit-dt: ≈7)⟫ ⍊ id: arrow))

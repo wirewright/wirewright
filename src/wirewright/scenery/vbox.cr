@@ -54,7 +54,7 @@ module Ww::Scenery
   #
   # The visual box tree is different from the [layout] box tree in that it accounts
   # for transforms (`TransformMatrix`, aka `Transform`, aka `scenery.transform`).
-  # The visual box tree is sued for hit testing and visibility checking.
+  # The visual box tree is used for hit testing and visibility checking.
   def vbox(cache : CacheSet, root : Root(AimedNode), box : OriginBox) : VBox
     cache.vbox.epoch { vbox(cache.vbox, root.node, box) }
   end
