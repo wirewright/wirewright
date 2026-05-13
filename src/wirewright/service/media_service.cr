@@ -12,8 +12,8 @@ module Ww
   # Window example:
   #
   # ```
-  # # We use an isolated context to make sure all spawns go to MT. Wirewright
-  # # requires a parallel context -- which isn't yet ExecutionContext.default.
+  # # We need to use an isolated context to make sure all spawns go to MT;
+  # # Wirewright requires a parallel context -- which isn't yet ExecutionContext.default.
   # ctx = Fiber::ExecutionContext::Isolated.new("App", spawn_context: MT) do
   #   spec = ML.term(<<-WWML)
   #   (window
@@ -440,6 +440,7 @@ module Ww
       command : Scenery::DrawCommand?,
       scenesrc : Scenery::SceneSource?,
       description : WindowDescription?,
+      input : Pf::Set(Term),
       keyboard : Pf::Set(Term),
       mice : Slice(Mouse),
       mutation: true
@@ -533,9 +534,14 @@ module Ww
       end
     end
 
+    # The difference between *input* and *keyboard* is that *input* may contain
+    # `rune`s and other virtual keys, and responds to key repeats. *keyboard* only
+    # contains `key`s, and does not respond to key repeats; so while you hold
+    # a key, it is present in *keyboard*, and when you release it, it is removed.
     defrecord WindowDescription,
       observers : Slice(Term),
       mice : Slice(Mouse),
+      input : Pf::Set(Term),
       keyboard : Pf::Set(Term),
       width : Int32,
       height : Int32,
@@ -699,23 +705,26 @@ module Ww
 
       def handle(event : SDL::KeyboardKeyUp, entity : Term) : Nil
         before_tick_handle(event) do |_, session|
+          session.input = session.input.delete(entity)
           session.keyboard = session.keyboard.delete(entity)
         end
       end
 
       def handle(event : SDL::KeyboardKeyDown, entity : Term) : Nil
         session(event) do |session_key, session|
+          session.keyboard = session.keyboard.add(entity)
+
           if event.repeat
             # Release
-            session.keyboard = session.keyboard.delete(entity)
+            session.input = session.input.delete(entity)
             tick(session_key, session)
 
             # Press
-            session.keyboard = session.keyboard.add(entity)
+            session.input = session.input.add(entity)
             tick(session_key, session)
           else
             # Press
-            session.keyboard = session.keyboard.add(entity)
+            session.input = session.input.add(entity)
             tick(session_key, session)
           end
         end
@@ -726,11 +735,11 @@ module Ww
           entity = Term.of(:rune, event.rune)
 
           # Press
-          session.keyboard = session.keyboard.add(entity)
+          session.input = session.input.add(entity)
           tick(session_key, session)
 
           # Release
-          session.keyboard = session.keyboard.delete(entity)
+          session.input = session.input.delete(entity)
           tick(session_key, session)
         end
       end
@@ -766,6 +775,7 @@ module Ww
           command: nil,
           scenesrc: nil,
           description: nil,
+          input: Pf::Set(Term).new,
           keyboard: Pf::Set(Term).new,
           mice: Slice(Mouse).empty,
         )
@@ -925,10 +935,13 @@ module Ww
         queries = session.mice.to_readonly_slice(&.position)
         _, observers = Scenery::Safe.describe(scene, queries)
 
-        description = WindowDescription.new(observers, session.mice, session.keyboard,
-          width: session.width_real,
-          height: session.height_real,
-          state: session.state,
+        description = WindowDescription.new(observers,
+          session.mice,
+          session.input,
+          session.keyboard,
+          session.width_real,
+          session.height_real,
+          session.state,
         )
 
         return if session.description == description
