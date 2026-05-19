@@ -2910,26 +2910,30 @@ module Ww::M1
       # |@pattern
       # (%'%mime type_string params_)
       #
-      # |@key type
-      # MIME type to match. See e.g. https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types
+      # |@key type m1.operator
+      # MIME type operator.
+      #
+      # See e.g. https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types
       # for reference.
       #
-      # |key params m1.operator
+      # |@key params m1.operator
       # An operator for matching MIME parameters. MIME parameters look like this:
       # `charset=UTF-8; x-a=foo; x-b=bar`. We encode them as a dictionary like so:
       # `{charset: "UTF-8", x-a: "foo", x-b: "bar"}`. Notice that symbols are used
       # for attributes (parameter names), and strings are used for parameter values.
       #
       # |@block
-      # Matches a blob with the given MIME type and parameters.
+      # Matches a blob's MIME type and parameters.
       #
       # ```
       # (describe (%mime "text/plain" {charset: "UTF-8"})) => "This is a UTF-8 text"
       # (describe (%mime "text/plain" _)) => "This is some other text"
       # (describe (%mime "image/png" _)) => "This is an image"
       # ```
-      matchpi %{[%'%mime type_string params_]}, cue: :"%mime" do
-        Term.of(:"%mime", type, Normalize.sealed(Π.pattern(params)))
+      matchpi %{[%'%mime type_ params_]}, cue: :"%mime" do
+        Term.of(:"%mime",
+          Normalize.sealed(Π.pattern(type)),
+          Normalize.sealed(Π.pattern(params)))
       end
 
       # TODO: (%mime type_string subtype_string params_)

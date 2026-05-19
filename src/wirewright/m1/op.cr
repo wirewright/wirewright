@@ -196,7 +196,7 @@ module Ww::M1
     defcase Pluck, spec : Tzip::PluckSpec, successor : Any
     defcase Flat, spec : Tzip::FlatSpec, successor : Any
 
-    defcase Mime, type : Term::Str, params : Any
+    defcase Mime, type : Any, params : Any
   end
 
   # Compiled sequence operators such as `(⏏_⏏ ⏏(%optional 0 x_)⏏ ⏏y_⏏)`.

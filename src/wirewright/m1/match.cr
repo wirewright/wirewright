@@ -1304,9 +1304,12 @@ module Ww::M1
     return Fb[] unless blob = matchee.term.as_blob?
 
     classif = blob.classif
-    return Fb[] unless classif.media_type == op.type
 
-    match(ctx, op.params, Tzip.new(Term.of(classif.media_params), Log.none), plan)
+    media_type = Tzip.new(Term.of(classif.media_type), Log.none)
+    media_params = Tzip.new(Term.of(classif.media_params), Log.none)
+
+    ahead = ctx.interject(plan, Action.match(op.params, media_params))
+    match(ctx, op.type, media_type, ahead)
   end
 
   # :nodoc:

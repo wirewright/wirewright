@@ -760,8 +760,8 @@ module Ww::M1
         )
       end
 
-      matchpiT %{[%'%mime type_string params_]}, cue: :"%mime" do
-        Op::Mime.new(type, compile(Π.pattern(params)))
+      matchpiT %{[%'%mime type_ params_]}, cue: :"%mime" do
+        Op::Mime.new(compile(Π.pattern(type)), compile(Π.pattern(params)))
       end
     end
   end
