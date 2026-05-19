@@ -195,11 +195,18 @@ module Ww::Scenery
       }
     )
 
-    if Paint.transparent?(node.stroke)
+    fill_transparent = Paint.transparent?(node.fill)
+    stroke_transparent = Paint.transparent?(node.stroke)
+
+    if stroke_transparent && fill_transparent
+      return DrawSeq.empty
+    end
+
+    if stroke_transparent
       return DrawRoundedRect.new(inner, node.fill)
     end
 
-    if Paint.transparent?(node.fill)
+    if fill_transparent
       return DrawRoundedRectFrame.new(outer, inner, node.stroke)
     end
 
