@@ -468,16 +468,18 @@ module Ww
         Middle
         Forward
         Backward
+        ScrollUp
+        ScrollDn
+        ScrollLeft
+        ScrollRight
       end
 
       getter id : UInt32
       getter position : Scenery::HitQuery
       getter state : State
-      getter scroll_x : Magnitude
-      getter scroll_y : Magnitude
 
       # :nodoc:
-      def initialize(@id, @position, @state, @scroll_x, @scroll_y)
+      def initialize(@id, @position, @state)
       end
 
       # :nodoc:
@@ -489,8 +491,6 @@ module Ww
           initial = Mouse.new(id,
             position: Scenery::HitQuery.zero,
             state: State::None,
-            scroll_x: Magnitude.new(0),
-            scroll_y: Magnitude.new(0),
           )
           mouse_index = mice.size
           mice = mice.append(initial)
@@ -508,10 +508,11 @@ module Ww
       # :nodoc:
       def_copy_with
 
+      # Setting *clicks* to 0 makes it not modify position state.
       def down(delta : State, clicks : Int) : Mouse
         case clicks
-        when 0 # ?!
-          copy_with(state: @state | delta, position: @position.point)
+        when 0
+          copy_with(state: @state | delta)
         when 1
           copy_with(state: @state | delta, position: @position.single)
         when 2
@@ -521,16 +522,17 @@ module Ww
         end
       end
 
-      def up(delta : State) : Mouse
-        copy_with(state: @state ^ delta, position: @position.point)
+      # Setting *clicks* to 0 makes it not modify position state.
+      def up(delta : State, clicks : Int) : Mouse
+        if clicks.zero?
+          copy_with(state: @state ^ delta)
+        else
+          copy_with(state: @state ^ delta, position: @position.point)
+        end
       end
 
       def move(x : Number, y : Number) : Mouse
         copy_with(position: @position.move(Scenery::Point[x, y]))
-      end
-
-      def scroll(dx : Number, dy : Number) : Mouse
-        copy_with(scroll_x: @scroll_x + dx, scroll_y: @scroll_y + dy)
       end
     end
 
@@ -680,16 +682,41 @@ module Ww
       def handle(event : SDL::MouseButtonUp, delta : Mouse::State) : Nil
         before_tick_handle(event) do |_, session|
           session.mice = Mouse.morph(session.mice, event.mouse_id) do |mouse|
-            mouse.up(delta)
+            mouse.up(delta, event.clicks)
           end
         end
       end
 
       def handle(event : SDL::MouseWheelScrolled) : Nil
-        before_tick_handle(event) do |_, session|
-          session.mice = Mouse.morph(session.mice, event.mouse_id) do |mouse|
-            mouse.scroll(event.dx, -event.dy)
+        session(event) do |session_key, session|
+          delta = Mouse::State::None
+
+          if event.dx < 0
+            delta |= Mouse::State::ScrollLeft
+          elsif event.dx > 0
+            delta |= Mouse::State::ScrollRight
           end
+
+          # FIXME: SDL_MouseWheelDirection
+          # FIXME: trigger for each delta-1, not on any delta!
+
+          if event.dy < 0
+            delta |= Mouse::State::ScrollDn
+          elsif event.dy > 0
+            delta |= Mouse::State::ScrollUp
+          end
+
+          # Press
+          session.mice = Mouse.morph(session.mice, event.mouse_id) do |mouse|
+            mouse.down(delta, clicks: 0)
+          end
+          tick(session_key, session)
+
+          # Release
+          session.mice = Mouse.morph(session.mice, event.mouse_id) do |mouse|
+            mouse.up(delta, clicks: 0)
+          end
+          tick(session_key, session)
         end
       end
 
