@@ -83,7 +83,7 @@ microfold: true
              (icon "close" style: "text-neutral-400 center-y"))
            (hr style: "bg-neutral-800 max-h-1px")
            (group style: "flow-row fr-1 px-3"
-             (group style: "flow-col fr-1 clip content-y" page-y: (50 %)
+             (group style: "flow-col fr-1 clip content-y" µ-page-y: (50 %)
                (MuPopupAction "Open project" active: false keys: ("C-n"))
                (MuPopupAction "Add database" active: false)
                (MuPopupAction "Update database" active: true)
