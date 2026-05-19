@@ -44,6 +44,9 @@ group: "flow-col"
 code: "font-mono font-normal text-xs/4 bg-neutral-900 text-neutral-300 px-3 py-2 rounded border-l-md border-blue-400"
 button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 rounded content-center content-clip hover:bg-blue-700 hover:text-white hover:cursor-pointer active:bg-blue-600"
 
+;; FIXME: Microfold should probably treat Scenery nodes as Microfold nodes?
+vantage: ""
+
 
 --- definitions
 
@@ -1164,13 +1167,28 @@ button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 roun
   (property underlines underline-anchor underline-span))
 
 (for content-viewport-box
-  (property content-page-x as: page-x)
-  (property content-page-y as: page-y)
-  (property content-offset-x as: offset-x)
-  (property content-offset-y as: offset-y))
+  (property µ-content-page-x as: page-x))
+
+(for content-view-box
+  (property µ-content-page-y as: page-y))
+
+(for content-view-box
+  (property µ-content-offset-x as: offset-x))
+
+(for content-view-box
+  (property µ-content-offset-y as: offset-y))
 
 (for viewport-box
-  (property page-x page-y offset-x offset-y))
+  (property µ-page-x as: page-x))
+
+(for viewport-box
+  (property µ-page-y as: page-y))
+
+(for viewport-box
+  (property µ-offset-x as: offset-x))
+
+(for viewport-box
+  (property µ-offset-y as: offset-y))
 
 (for bg-box
   (property µ-bg as: fill))
