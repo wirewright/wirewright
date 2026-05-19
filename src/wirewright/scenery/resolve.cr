@@ -31,7 +31,7 @@ module Ww::Scenery
     query_set(node.font, node.codepoints)
   end
 
-  private def queries!(cache, node : Content | Floating | Limit | Clamp | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Observer | Observable | Gate) : QuerySet
+  private def queries!(cache, node : Content | Floating | Limit | Clamp | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Vantage | Gate) : QuerySet
     query_set(node.children) do |commit, child|
       queries = queries(cache, child)
       queries.each { |query| commit.add(query) }
@@ -131,7 +131,7 @@ module Ww::Scenery
     Resn::Ready.new(icon_glyph)
   end
 
-  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Content | Floating | Limit | Clamp | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Observer | Observable | Gate) : Resn::Any
+  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Content | Floating | Limit | Clamp | Padding | Align | XYStack | ZStack | XYWrap | Composite | Transform | Viewport | Aim | Page | Overlay | Variant | Vantage | Gate) : Resn::Any
     cls = Resn::Ready
 
     children = node.children.to_readonly_slice do |child|

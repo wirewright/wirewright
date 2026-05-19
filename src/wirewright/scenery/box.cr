@@ -104,7 +104,7 @@ module Ww::Scenery
     OriginBox.new(size.outer, child_boxes.to_unsafe_readonly_slice!)
   end
 
-  private def box!(cache, node : ZStack | Composite | TransformMatrix | Viewport | Aim | Page | Overlay | Observer | Observable | Gate, size : Size) : OriginBox
+  private def box!(cache, node : ZStack | Composite | TransformMatrix | Viewport | Aim | Page | Overlay | Vantage | Gate, size : Size) : OriginBox
     child_boxes = Pf::Kit.stack_array(Box, 8)
 
     node.children.zip(size.children) do |child_node, child_size|

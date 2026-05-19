@@ -3,12 +3,12 @@
 
 ;; Hit the image.
 (hit (point 80 20)
-  (observer {¦ hit-dl: ≈4 hit-dt: ≈5 hit-w: ≈0 hit-h: ≈0} ⍊ id: img))
+  (vantage {¦ hit-dl: ≈4 hit-dt: ≈5 hit-w: ≈0 hit-h: ≈0} ⍊ id: img))
 
 ;; Hit the "Bye World" text with many spaces. We hit it at a whitespace
 ;; to see where the hit lands.
 (hit (point 55 118)
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 5 hit-span: 0)
       (word ⍊ hit-anchor: 5 hit-span: 0)
@@ -18,7 +18,7 @@
 
 ;; Now select from "ye" through some spaces and "Wo".
 (hit (single (anchor 15 120) (focus 110 125))
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 1 hit-span: 10)
       (word ⍊ hit-anchor: 1 hit-span: 8 span: 9)
@@ -28,7 +28,7 @@
 
 ;; Hit scaled text after "W"
 (hit (point 394 381)
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 7 hit-span: 0)
       (word ⍊ -hit-anchor -hit-span)
@@ -38,7 +38,7 @@
 
 ;; Select "por" in viewport text.
 (hit (single (anchor 310 21) (focus 335 21))
-  (observer
+  (vantage
     (text
       (line ⍊ -hit-anchor -hit-span)
       (line ⍊ hit-anchor: 4 hit-span: 3)
@@ -49,7 +49,7 @@
 
 ;; Hit rotated text before NUL.
 (hit (point 400 198)
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 11 hit-span: 0)
       (line ⍊ -hit-anchor -hit-span)
@@ -62,7 +62,7 @@
 
 ;; Hit rotated text after NUL.
 (hit (point 415 209)
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 12 hit-span: 0)
       (line ⍊ -hit-anchor -hit-span)
@@ -75,7 +75,7 @@
 
 ;; Select NUL in rotated text.
 (hit (single (anchor 400 198) (focus 415 209))
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 11 hit-span: 1)
       (line ⍊ -hit-anchor -hit-span)
@@ -88,7 +88,7 @@
 
 ;; Select NUL in reverse.
 (hit (single (anchor 415 209) (focus 400 198))
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 12 hit-span: -1)
       (line ⍊ -hit-anchor -hit-span)
@@ -101,7 +101,7 @@
 
 ;; Select through lines in rotated text.
 (hit (single (anchor 310 116) (focus 345 180))
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 1 hit-span: 11)
       (line ⍊ hit-anchor: 0 hit-span: 7)
@@ -114,7 +114,7 @@
 
 ;; Select through lines in rotated text in reverse.
 (hit (single (anchor 345 180) (focus 310 116))
-  (observer
+  (vantage
     (text
       (line ⍊ hit-anchor: 12 hit-span: -11)
       (line ⍊ hit-anchor: 7 hit-span: -7)
@@ -127,7 +127,7 @@
 
 ;; Hit within selection, check selection left-leaning
 (hit (point 48 150)
-  (observer
+  (vantage
     (text
       (line ⍊ selection-anchor: 3 selection-span: 10 hit-anchor: 6 hit-span: 0)
       (line ⍊ -hit-anchor -hit-span)
@@ -140,7 +140,7 @@
 
 ;; Hit within selection, check selection right-leaning
 (hit (point 48 203)
-  (observer
+  (vantage
     (text
       (line ⍊ selection-anchor: 13 selection-span: -10 hit-anchor: 6 hit-span: 0)
       (line ⍊ -hit-anchor -hit-span)

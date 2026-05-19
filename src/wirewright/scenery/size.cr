@@ -291,7 +291,7 @@ module Ww::Scenery
     Point.max(min_size(cache, node.children), Point[node.min_w.resolve(0), node.min_h.resolve(0)])
   end
 
-  private def min_size!(cache, node : ZStack | Content | Align | Composite | Transform | Aim | Page | Observer | Observable | Gate) : Point
+  private def min_size!(cache, node : ZStack | Content | Align | Composite | Transform | Aim | Page | Vantage | Gate) : Point
     min_size(cache, node.children)
   end
 
@@ -478,7 +478,7 @@ module Ww::Scenery
     {TransformMatrix(SizedNode).new(sized_z_stack.children, tf), size}
   end
 
-  private def size!(cache, node : ZStack | Composite | Viewport | Aim | Page | Observer | Observable | Gate, cst : Cst) : {SizedNode, Size}
+  private def size!(cache, node : ZStack | Composite | Viewport | Aim | Page | Vantage | Gate, cst : Cst) : {SizedNode, Size}
     box_size(cache, node, cst)
   end
 

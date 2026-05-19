@@ -539,7 +539,7 @@ module Ww
     # contains `key`s, and does not respond to key repeats; so while you hold
     # a key, it is present in *keyboard*, and when you release it, it is removed.
     defrecord WindowDescription,
-      observers : Slice(Term),
+      vantages : Slice(Term),
       mice : Slice(Mouse),
       input : Pf::Set(Term),
       keyboard : Pf::Set(Term),
@@ -933,9 +933,9 @@ module Ww
 
       def redescribe(session_key : Term, session : Session, scene : Scenery::Scene) : Nil
         queries = session.mice.to_readonly_slice(&.position)
-        _, observers = Scenery::Safe.describe(scene, queries)
+        vantages = Scenery::Safe.describe(session.cache, scene, queries)
 
-        description = WindowDescription.new(observers,
+        description = WindowDescription.new(vantages,
           session.mice,
           session.input,
           session.keyboard,

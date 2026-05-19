@@ -517,7 +517,7 @@ module Ww::Scenery
     )
   end
 
-  private def depict!(cache, node : Padding | Align | XYStack | ZStack | Observer | Observable | Gate, box : OriginBox) : DrawCommand
+  private def depict!(cache, node : Padding | Align | XYStack | ZStack | Vantage | Gate, box : OriginBox) : DrawCommand
     depict(cache, node.children, box.children)
   end
 

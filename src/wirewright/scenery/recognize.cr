@@ -36,7 +36,6 @@ module Ww::Scenery
       Term.of(:"overlay"),
       Term.of(:"suspense"),
       Term.of(:"variant"),
-      Term.of(:"observable"),
       Term.of(:"gate"),
     }
 
@@ -1440,16 +1439,17 @@ module Ww::Scenery
         Variant(RecognizedNode).new(cond, children)
       end
 
-      matchpi %{(observer subterms_+ ⍊ id_)} do
+      matchpi %{(vantage subterms_+ ⍊ id_ active_⋮ true)} do
         children = recognize(cache, nodes: subterms.items)
 
-        Observer.new(id, children)
-      end
-
-      matchpi %{[observable subterms_+]} do
-        children = recognize(cache, nodes: subterms.items)
-
-        Observable.new(children)
+        case active
+        when Term.of(false)
+          Vantage.new(id, :inactive, children)
+        when Term.of(:"if-hit")
+          Vantage.new(id, :active_if_hit, children)
+        else
+          Vantage.new(id, :active, children)
+        end
       end
 
       matchpi %{[gate subterms_+]} do

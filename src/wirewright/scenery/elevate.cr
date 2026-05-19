@@ -16,7 +16,7 @@ module Ww::Scenery
   end
 
   # Nodes with a subtree elevate() their subtree recursively.
-  private def elevate!(cache, node : Padding | Align | XYStack | ZStack | Composite | TransformMatrix | Viewport | Aim | Observer | Observable | Gate, box : OriginBox) : ElevateResponse
+  private def elevate!(cache, node : Padding | Align | XYStack | ZStack | Composite | TransformMatrix | Viewport | Aim | Vantage | Gate, box : OriginBox) : ElevateResponse
     elevated_children, elevated_boxes, upbound = elevate(cache, node.children, box.children)
     elevated_node = node.copy_with(children: elevated_children)
     elevated_box = OriginBox.new(box.bounds.size, children: elevated_boxes)

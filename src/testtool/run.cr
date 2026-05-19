@@ -244,8 +244,9 @@ module Testtool
       scenery_in = in_instance
     end
 
+    cache = Scenery::Safe.cache
+
     scene_out, ppm = measure(stat) do
-      cache = Scenery::Safe.cache
       scene_out = Scenery::Safe.scene(cache, scenery_in, test.width, test.height)
       raster = Scenery::Safe.rasterize(cache, scene_out.unwrap, backdrop: test.backdrop)
       {scene_out, raster.to_ppm}
@@ -267,9 +268,9 @@ module Testtool
       Term.case(item) do
         matchpi %{[hit query_ pattern_]} do
           hit_query = Scenery::HitQuery.parse(query)
-          _, observers = Scenery::Safe.describe(scene_out.unwrap, Slice[hit_query])
-          unless observers.any? { |observer| M1.probe?(pattern, observer) }
-            complaints << complaint("did not hit according to", query: query, pattern: pattern, observers: Term.of(observers))
+          vantages = Scenery::Safe.describe(cache, scene_out.unwrap, Slice[hit_query])
+          unless vantages.any? { |vantage| M1.probe?(pattern, vantage) }
+            complaints << complaint("did not hit according to", query: query, pattern: pattern, vantages: Term.of(vantages))
           end
         end
 

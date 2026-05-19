@@ -1,103 +1,146 @@
 module Ww::Scenery
   # See `Safe.describe`.
-  def describe(scene : Scene, hit : HitNode) : {Term, Slice(Term)}
-    upflow = describe(scene.root, scene.box, hit)
+  def describe(cache : CacheSet, scene : Scene, hit : HitNode) : Slice(Term)
+    descriptions = describe(cache, scene.root, scene.box, hit)
 
-    node_desc = Term::Dict.build do |commit|
-      commit << :scene
-      commit.with(:width, scene.width)
-      commit.with(:height, scene.height)
-      commit.concat(upflow.nodes)
-    end
-
-    {Term.of(node_desc), upflow.observers}
+    Description.vantages(descriptions)
   end
 
-  # :nodoc:
-  struct DescribeUpflow
-    getter nodes : Slice(Term)
-    getter observers : Slice(Term)
-    getter observing : Slice(Term)
-
-    def initialize(@nodes, @observers, @observing)
-    end
-
-    def self.empty : DescribeUpflow
-      new(nodes: Slice(Term).empty, observers: Slice(Term).empty, observing: Slice(Term).empty)
-    end
-
-    def self.node(term : Term) : DescribeUpflow
-      new(nodes: Slice[term], observers: Slice(Term).empty, observing: Slice(Term).empty)
+  private def describe(cache : CacheSet, root : Root(AimedNode), box : OriginBox, hit : HitNode)
+    cache.describe.epoch do
+      describe(cache.describe, root.node, box, hit)
     end
   end
 
-  private def describe(root : Root(AimedNode), box : OriginBox, hit : HitNode)
-    describe(root.node, box, Tf.new, hit)
-  end
-
-  private def describe(node : Inert, box : OriginBox, tf : Tf, hit : HitNode)
-    DescribeUpflow.empty
-  end
-
-  private def describe(node : RectShape, box : OriginBox, tf : Tf, hit : HitNode)
-    desc = Term::Dict.build do |commit|
-      commit << :rect
-
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+  class Description
+    def initialize(@describe : (-> Slice(Term)), @vantages : (-> Slice(Term)))
     end
 
-    DescribeUpflow.node(Term.of(desc))
-  end
-
-  private def describe(node : Pending, box : OriginBox, tf : Tf, hit : HitNode)
-    desc = Term::Dict.build do |commit|
-      commit << :pending
-
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+    # Asks the callee to describe its subtree (including itself).
+    def describe : Slice(Term)
+      @describe_result ||= @describe.call
     end
 
-    DescribeUpflow.node(Term.of(desc))
+    # Asks the callee for vantages in its subtree (including itself).
+    def vantages : Slice(Term)
+      @vantages_result ||= @vantages.call
+    end
   end
 
-  private def describe(node : Img, box : OriginBox, tf : Tf, hit : HitNode)
-    desc = Term::Dict.build do |commit|
-      commit << :img
-      commit.with(:src, node.src.digest)
+  def Description.vantages(descriptions : Indexable(Description), tail : Tuple() | Indexable(Term) = Tuple.new) : Slice(Term)
+    sink = Pf::Kit.stack_array(Term, 8)
 
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+    descriptions.each do |description|
+      sink.concat(description.vantages)
     end
 
-    DescribeUpflow.node(Term.of(desc))
+    tail.each do |term|
+      sink << term
+    end
+
+    sink.to_unsafe_readonly_slice!
   end
 
-  private def describe(node : Svg, box : OriginBox, tf : Tf, hit : HitNode)
-    desc = Term::Dict.build do |commit|
-      commit << :svg
-      commit.with(:src, node.src.digest)
-
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+  private def describe(cache, node : AimedNode, box : OriginBox, hit : HitNode)
+    cache.put_if_absent({node, box, hit}) do
+      describe!(cache, node, box, hit)
     end
-
-    DescribeUpflow.node(Term.of(desc))
   end
 
-  private def describe(node : IconGlyph, box : OriginBox, tf : Tf, hit : HitNode)
-    desc = Term::Dict.build do |commit|
-      commit << :icon
-      commit.with(:font, node.font.digest)
-      commit.with(:codepoint, node.codepoint)
-      commit.with(:glyph, node.glyph_index)
-      commit.with(:size, node.size)
+  private def describe!(cache, node : Inert, box : OriginBox, hit : HitNode)
+    describe = -> { Slice(Term).empty }
+    vantages = -> { Slice(Term).empty }
 
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+    Slice[Description.new(describe, vantages)]
+  end
+
+  private def describe!(cache, node : RectShape, box : OriginBox, hit : HitNode)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        commit << :rect
+        annotate(commit, box)
+        annotate(commit, hit)
+      end
+
+      Slice[Term.of(result)]
     end
 
-    DescribeUpflow.node(Term.of(desc))
+    vantages = -> { Slice(Term).empty }
+
+    Slice[Description.new(describe, vantages)]
+  end
+
+  private def describe!(cache, node : Pending, box : OriginBox, hit : HitNode)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        commit << :pending
+        annotate(commit, box)
+        annotate(commit, hit)
+      end
+
+      Slice[Term.of(result)]
+    end
+
+    vantages = -> { Slice(Term).empty }
+
+    Slice[Description.new(describe, vantages)]
+  end
+
+  private def describe!(cache, node : Img, box : OriginBox, hit : HitNode)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        commit << :img
+        commit.with(:src, node.src.digest)
+
+        annotate(commit, box)
+        annotate(commit, hit)
+      end
+
+      Slice[Term.of(result)]
+    end
+
+    vantages = -> { Slice(Term).empty }
+
+    Slice[Description.new(describe, vantages)]
+  end
+
+  private def describe!(cache, node : Svg, box : OriginBox, hit : HitNode)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        commit << :svg
+        commit.with(:src, node.src.digest)
+
+        annotate(commit, box)
+        annotate(commit, hit)
+      end
+
+      Slice[Term.of(result)]
+    end
+
+    vantages = -> { Slice(Term).empty }
+
+    Slice[Description.new(describe, vantages)]
+  end
+
+  private def describe!(cache, node : IconGlyph, box : OriginBox, hit : HitNode)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        commit << :icon
+        commit.with(:font, node.font.digest)
+        commit.with(:codepoint, node.codepoint)
+        commit.with(:glyph, node.glyph_index)
+        commit.with(:size, node.size)
+
+        annotate(commit, box)
+        annotate(commit, hit)
+      end
+
+      Slice[Term.of(result)]
+    end
+
+    vantages = -> { Slice(Term).empty }
+
+    Slice[Description.new(describe, vantages)]
   end
 
   private def rel_annotate(parent, whole : Pf::GraphemeSeln, part : Pf::GraphemeSeln)
@@ -110,72 +153,40 @@ module Ww::Scenery
     end
   end
 
-  private def describe(node : ShapedText, box : OriginBox, tf : Tf, hit : HitNode)
-    desc = Term::Dict.build do |commit|
-      commit << :text
-      commit.with(:caption, node.caption.to_s)
-      commit.with(:"line-h", describe(node.line_height))
+  # TODO: Refactor, this thing is *massive*.
+  private def describe!(cache, node : ShapedText, box : OriginBox, hit : HitNode)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        commit << :text
+        commit.with(:caption, node.caption.to_s)
+        commit.with(:"line-h", describe(node.line_height))
 
-      if selection = node.selections.first?
-        seln = node.caption.select(selection.range)
-        selection_anchor, selection_span = rel_annotate(selection, node.caption, seln)
-        commit.with(:"selection-anchor", selection_anchor)
-        commit.with(:"selection-span", selection_span)
-      end
-
-      x = Magnitude.new(0)
-      y = Magnitude.new(0)
-
-      line_infos = [] of Term
-      word_infos = [] of Term
-
-      line_wrap(node, at: box.bounds.w) do |line|
-        line_info = Term::Dict.build do |info|
-          range = line.grapheme_range? || (0...0)
-          assert range.exclusive?
-
-          info << :line
-          info.with(:dl, describe(x)) unless x.approx?(0)
-          info.with(:dt, describe(y)) unless y.approx?(0)
-          info.with(:w, describe(line.advance))
-          info.with(:anchor, range.begin)
-          info.with(:span, range.size)
-
-          text = node.caption.select(range)
-
-          node.selections.each do |selection|
-            seln = node.caption.select(selection.range)
-            next unless part = Pf::GraphemeSeln.intersection?(text, seln)
-
-            selection_anchor, selection_span = rel_annotate(selection, text, part)
-            info.with(:"selection-anchor", selection_anchor)
-            info.with(:"selection-span", selection_span)
-            break
-          end
-
-          next unless hit.is_a?(HitTextLeaf)
-          next unless part = Pf::GraphemeSeln.intersection?(text, hit.seln)
-
-          hit_anchor, hit_span = rel_annotate(hit, text, part)
-          info.with(:"hit-anchor", hit_anchor)
-          info.with(:"hit-span", hit_span)
+        if selection = node.selections.first?
+          seln = node.caption.select(selection.range)
+          selection_anchor, selection_span = rel_annotate(selection, node.caption, seln)
+          commit.with(:"selection-anchor", selection_anchor)
+          commit.with(:"selection-span", selection_span)
         end
 
-        line_infos << Term.of(line_info)
+        x = Magnitude.new(0)
+        y = Magnitude.new(0)
 
-        each_word(line, collapse: false) do |word|
-          next unless range = word.grapheme_range?
-          assert range.exclusive?
+        line_infos = [] of Term
+        word_infos = [] of Term
 
-          word_info = Term::Dict.build do |info|
-            text = node.caption.select(range)
+        line_wrap(node, at: box.bounds.w) do |line|
+          line_info = Term::Dict.build do |info|
+            range = line.grapheme_range? || (0...0)
+            assert range.exclusive?
 
-            info << :word
+            info << :line
             info.with(:dl, describe(x)) unless x.approx?(0)
             info.with(:dt, describe(y)) unless y.approx?(0)
-            info.with(:w, describe(word.advance))
+            info.with(:w, describe(line.advance))
             info.with(:anchor, range.begin)
             info.with(:span, range.size)
+
+            text = node.caption.select(range)
 
             node.selections.each do |selection|
               seln = node.caption.select(selection.range)
@@ -195,150 +206,204 @@ module Ww::Scenery
             info.with(:"hit-span", hit_span)
           end
 
-          word_infos << Term.of(word_info)
+          line_infos << Term.of(line_info)
 
-          x += word.advance
+          each_word(line, collapse: false) do |word|
+            next unless range = word.grapheme_range?
+            assert range.exclusive?
+
+            word_info = Term::Dict.build do |info|
+              text = node.caption.select(range)
+
+              info << :word
+              info.with(:dl, describe(x)) unless x.approx?(0)
+              info.with(:dt, describe(y)) unless y.approx?(0)
+              info.with(:w, describe(word.advance))
+              info.with(:anchor, range.begin)
+              info.with(:span, range.size)
+
+              node.selections.each do |selection|
+                seln = node.caption.select(selection.range)
+                next unless part = Pf::GraphemeSeln.intersection?(text, seln)
+
+                selection_anchor, selection_span = rel_annotate(selection, text, part)
+                info.with(:"selection-anchor", selection_anchor)
+                info.with(:"selection-span", selection_span)
+                break
+              end
+
+              next unless hit.is_a?(HitTextLeaf)
+              next unless part = Pf::GraphemeSeln.intersection?(text, hit.seln)
+
+              hit_anchor, hit_span = rel_annotate(hit, text, part)
+              info.with(:"hit-anchor", hit_anchor)
+              info.with(:"hit-span", hit_span)
+            end
+
+            word_infos << Term.of(word_info)
+
+            x += word.advance
+          end
+
+          x = Magnitude.new(0)
+          y += node.line_height
         end
 
-        x = Magnitude.new(0)
-        y += node.line_height
+        commit.concat(line_infos)
+        commit.concat(word_infos)
+
+        annotate(commit, box)
+        annotate(commit, hit)
       end
 
-      commit.concat(line_infos)
-      commit.concat(word_infos)
-
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+      Slice[Term.of(result)]
     end
 
-    DescribeUpflow.node(Term.of(desc))
+    vantages = -> { Slice(Term).empty }
+
+    Slice[Description.new(describe, vantages)]
   end
 
-  private def describe(node : TransformMatrix, box : OriginBox, tf : Tf, hit : HitNode)
-    describe(node.children, box.children, Tf[tf, node.tf], hit)
+  private def describe!(cache, node : Padding | Align | Composite | TransformMatrix, box : OriginBox, hit : HitNode)
+    describe(cache, node.children, box.children, hit)
   end
 
-  private def describe(node : Padding | Align | Composite | TransformMatrix, box : OriginBox, tf : Tf, hit : HitNode)
-    describe(node.children, box.children, tf, hit)
-  end
+  private def describe!(cache, node : XYStack, box : OriginBox, hit : HitNode)
+    descriptions = describe(cache, node.children, box.children, hit)
 
-  private def describe(node : XYStack, box : OriginBox, tf : Tf, hit : HitNode)
-    upflow = describe(node.children, box.children, tf, hit)
+    describe = -> do
+      result = Term::Dict.build do |commit|
+        case node.axis
+        in .x? then commit << :"x-stack"
+        in .y? then commit << :"y-stack"
+        end
 
-    desc = Term::Dict.build do |commit|
-      case node.axis
-      in .x? then commit << :"x-stack"
-      in .y? then commit << :"y-stack"
+        descriptions.each do |description|
+          commit.concat(description.describe)
+        end
+
+        annotate(commit, box)
+        annotate(commit, hit)
       end
 
-      commit.concat(upflow.nodes)
-
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+      Slice[Term.of(result)]
     end
 
-    DescribeUpflow.new(nodes: Slice[Term.of(desc)], observers: upflow.observers, observing: upflow.observing)
+    vantages = -> { Description.vantages(descriptions) }
+
+    Slice[Description.new(describe, vantages)]
   end
 
-  private def describe(node : ZStack, box : OriginBox, tf : Tf, hit : HitNode)
-    upflow = describe(node.children, box.children, tf, hit)
+  private def describe!(cache, node : ZStack, box : OriginBox, hit : HitNode)
+    descriptions = describe(cache, node.children, box.children, hit)
 
-    info = node.info || ZInfo.new(Term.of(:"z-stack"), pairs: Term[])
+    describe = -> do
+      info = node.info || ZInfo.new(Term.of(:"z-stack"), pairs: Term[])
 
-    desc = Term::Dict.build do |commit|
-      commit << info.name
-      commit.concat(upflow.nodes)
+      result = Term::Dict.build do |commit|
+        commit << info.name
+        descriptions.each do |description|
+          commit.concat(description.describe)
+        end
 
-      annotate(commit, box, tf)
-      annotate(commit, hit)
-
-      # Prefer client's pairs if annotate() happens to conflict.
-      info.pairs.each_entry do |key, value|
-        commit.with(key, value)
+        annotate(commit, box)
+        annotate(commit, hit)
+        # Prefer client's pairs if annotate() happens to conflict.
+        info.pairs.each_entry do |key, value|
+          commit.with(key, value)
+        end
       end
+
+      Slice[Term.of(result)]
     end
 
-    DescribeUpflow.new(nodes: Slice[Term.of(desc)], observers: upflow.observers, observing: upflow.observing)
+    vantages = -> { Description.vantages(descriptions) }
+
+    Slice[Description.new(describe, vantages)]
   end
 
-  private def describe(node : Clip, box : OriginBox, tf : Tf, hit : HitNode)
-    upflow = describe(node.children, box.children, tf, hit)
+  private def describe!(cache, node : Clip, box : OriginBox, hit : HitNode)
+    descriptions = describe(cache, node.children, box.children, hit)
 
-    content_box = box.children.reduce(Rect.empty) do |memo, child|
-      Rect.union(memo, child.bounds)
+    describe = -> do
+      content_rect = box.children.reduce(Rect.empty) do |memo, child|
+        Rect.union(memo, child.bounds)
+      end
+
+      result = Term::Dict.build do |commit|
+        commit << :clip
+        commit.with(:"offset-x", node.offset.x)
+        commit.with(:"offset-y", node.offset.y)
+
+        descriptions.each do |description|
+          commit.concat(description.describe)
+        end
+
+        annotate(commit, box)
+        annotate(commit, hit)
+      end
+
+      Slice[Term.of(result)]
     end
 
-    total = Point.max(box.bounds.size, content_box.size, Point[1, 1])
+    vantages = -> { Description.vantages(descriptions) }
 
-    desc = Term::Dict.build do |commit|
-      commit << :clip
+    Slice[Description.new(describe, vantages)]
+  end
 
-      x_start = node.offset.x / total.x
-      x_end = (node.offset.x + box.bounds.w) / total.x
+  private def describe!(cache, node : Vantage, box : OriginBox, hit : HitNode)
+    descriptions = describe(cache, node.children, box.children, hit)
 
-      y_start = node.offset.y / total.y
-      y_end = (node.offset.y + box.bounds.h) / total.y
-
-      commit.with(:"x-thumb-start", x_start.clamp(0.0..1.0))
-      commit.with(:"x-thumb-end", x_end.clamp(0.0..1.0))
-
-      commit.with(:"y-thumb-start", y_start.clamp(0.0..1.0))
-      commit.with(:"y-thumb-end", y_end.clamp(0.0..1.0))
-
-      commit.concat(upflow.nodes)
-
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+    # Vantages shadow their subtree's description.
+    describe = -> do
+      Slice[Term.of(:vantage, id: node.id)]
     end
 
-    DescribeUpflow.new(nodes: Slice[Term.of(desc)], observers: upflow.observers, observing: upflow.observing)
-  end
+    case {node.status, hit}
+    in {.inactive?, _}
+      vantages = -> { Description.vantages(descriptions) }
 
-  private def describe(node : Observer, box : OriginBox, tf : Tf, hit : HitNode)
-    upflow = describe(node.children, box.children, tf, hit)
+      return Slice[Description.new(describe, vantages)]
+    in {.active_if_hit?, HitEmpty}
+      vantages = -> { Description.vantages(descriptions, tail: {Term.of(:vantage, id: node.id)}) }
 
-    observer = Term::Dict.build do |commit|
-      commit << :observer
-      commit.with(:id, node.id)
-      commit.concat(upflow.observing)
+      return Slice[Description.new(describe, vantages)]
+    in {.active?, _}, {.active_if_hit?, _}
     end
 
-    desc = Term.of(:observer, id: node.id)
+    vantages = -> do
+      result = Term::Dict.build do |commit|
+        commit << :vantage
+        commit.with(:id, node.id)
+        descriptions.each do |description|
+          commit.concat(description.describe)
+        end
+      end
 
-    DescribeUpflow.new(nodes: upflow.nodes, observers: upflow.observers.append(Term.of(observer)), observing: Slice[Term.of(desc)])
-  end
-
-  private def describe(node : Observable, box : OriginBox, tf : Tf, hit : HitNode)
-    upflow = describe(node.children, box.children, tf, hit)
-
-    desc = Term::Dict.build do |commit|
-      commit << :observable
-      annotate(commit, box, tf)
-      annotate(commit, hit)
+      # Add our own vantage to the list of vantages in the subtree.
+      Description.vantages(descriptions, tail: {Term.of(result)})
     end
 
-    DescribeUpflow.new(nodes: Slice[Term.of(desc)], observers: upflow.observers, observing: upflow.nodes)
+    Slice[Description.new(describe, vantages)]
   end
 
-  private def describe(node : Gate, box : OriginBox, tf : Tf, hit : HitNode)
-    upflow = describe(node.children, box.children, tf, hit)
+  private def describe!(cache, node : Gate, box : OriginBox, hit : HitNode)
+    descriptions = describe(cache, node.children, box.children, hit)
 
-    DescribeUpflow.new(Slice(Term).empty, upflow.observers, observing: Slice(Term).empty)
+    describe = -> { Slice(Term).empty }
+    vantages = -> { Description.vantages(descriptions) }
+
+    Slice[Description.new(describe, vantages)]
   end
 
-  private def describe(node : AimedNode, box : Box, tf : Tf, hit : HitNode)
-    describe(node, OriginBox.new(box.bounds.size, box.children), Tf[tf, Tf.translate(box.bounds.tl)], hit)
+  private def describe(cache, node : AimedNode, box : Box, hit : HitNode)
+    describe(cache, node, OriginBox.new(box.bounds.size, box.children), hit)
   end
 
-  private def describe(nodes : Slice(AimedNode), boxes : Slice(Box), tf : Tf, hit_parent : HitNode)
-    offspring_nodes = Pf::Kit.stack_array(Term, 8)
-    offspring_observers = Pf::Kit.stack_array(Term, 8)
-    offspring_observing = Pf::Kit.stack_array(Term, 8)
+  private def describe(cache, nodes : Slice(AimedNode), boxes : Slice(Box), hit_parent : HitNode)
+    descriptions = Pf::Kit.stack_array(Description, 8)
 
-    (0...nodes.size).each do |index|
-      node = nodes[index]
-      box = boxes[index]
-
+    nodes.zip(boxes, 0...nodes.size) do |node, box, index|
       case hit_parent
       in HitEmpty, HitLeaf
         # HitLeaf means the parent's own bounds were hit but none of its children
@@ -350,36 +415,23 @@ module Ww::Scenery
         hit = hit_parent.children[index]
       end
 
-      upflow = describe(node, box, tf, hit)
-
-      offspring_nodes.concat(upflow.nodes)
-      offspring_observers.concat(upflow.observers)
-      offspring_observing.concat(upflow.observing)
+      description = describe(cache, node, box, hit)
+      descriptions.concat(description)
     end
 
-    DescribeUpflow.new(
-      offspring_nodes.to_unsafe_readonly_slice!,
-      offspring_observers.to_unsafe_readonly_slice!,
-      offspring_observing.to_unsafe_readonly_slice!,
-    )
+    descriptions.to_unsafe_readonly_slice!
   end
 
   # Since we never promised to return precise values, let's round to be less
   # noisy. Ultimately, we can't be precise anyway, it's floats we're
   # talking about.
-  private def describe(m : Magnitude) : Term
+  def describe(m : Magnitude) : Term
     Term.of(m.round)
   end
 
-  private def annotate(commit : Term::Dict::Commit, box : OriginBox, tf : Tf) : Nil
-    screen_bounds = tf.map(box.bounds)
-
-    commit.with(:"screen-l", describe(screen_bounds.x))
-    commit.with(:"screen-t", describe(screen_bounds.y))
-    commit.with(:"screen-w", describe(screen_bounds.w))
-    commit.with(:"screen-h", describe(screen_bounds.h))
-    commit.with(:"layout-w", describe(box.bounds.w))
-    commit.with(:"layout-h", describe(box.bounds.h))
+  private def annotate(commit : Term::Dict::Commit, box : OriginBox) : Nil
+    commit.with(:w, describe(box.bounds.w))
+    commit.with(:h, describe(box.bounds.h))
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitEmpty) : Nil
@@ -390,10 +442,13 @@ module Ww::Scenery
       commit.with(:"hit-hover", true)
     end
 
-    commit.with(:"hit-dl", describe(hit.part.x))
-    commit.with(:"hit-dt", describe(hit.part.y))
-    commit.with(:"hit-w", describe(hit.part.w))
-    commit.with(:"hit-h", describe(hit.part.h))
+    focus = hit.part.tl
+    anchor = hit.part.br
+
+    commit.with(:"hit-focus-l", describe(focus.x))
+    commit.with(:"hit-focus-t", describe(focus.y))
+    commit.with(:"hit-anchor-l", describe(anchor.x))
+    commit.with(:"hit-anchor-t", describe(anchor.y))
   end
 
   private def annotate(commit : Term::Dict::Commit, hit : HitTextLeaf) : Nil
@@ -401,10 +456,13 @@ module Ww::Scenery
       commit.with(:"hit-hover", true)
     end
 
-    commit.with(:"hit-dl", describe(hit.part.x))
-    commit.with(:"hit-dt", describe(hit.part.y))
-    commit.with(:"hit-w", describe(hit.part.w))
-    commit.with(:"hit-h", describe(hit.part.h))
+    focus = hit.part.tl
+    anchor = hit.part.br
+
+    commit.with(:"hit-focus-l", describe(focus.x))
+    commit.with(:"hit-focus-t", describe(focus.y))
+    commit.with(:"hit-anchor-l", describe(anchor.x))
+    commit.with(:"hit-anchor-t", describe(anchor.y))
 
     hit_anchor, hit_span = rel_annotate(hit, hit.seln.expand, hit.seln)
     commit.with(:"hit-anchor", hit_anchor)

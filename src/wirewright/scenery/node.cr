@@ -29,8 +29,7 @@ module Ww::Scenery
                          Overlay(RecognizedNode) |
                          Suspense(RecognizedNode) |
                          Variant(RecognizedNode) |
-                         Observer(RecognizedNode) |
-                         Observable(RecognizedNode) |
+                         Vantage(RecognizedNode) |
                          Gate(RecognizedNode)
 
   # `AssetNode`s know about *assets*; the queries from `RecognizedNode` having been
@@ -60,8 +59,7 @@ module Ww::Scenery
                     Page(AssetNode) |
                     Overlay(AssetNode) |
                     Variant(AssetNode) |
-                    Observer(AssetNode) |
-                    Observable(AssetNode) |
+                    Vantage(AssetNode) |
                     Gate(AssetNode)
 
   # `ShapedNode`s are `AssetNode`s after shaping (`shape`), which is, very roughly
@@ -94,8 +92,7 @@ module Ww::Scenery
                      Page(ShapedNode) |
                      Overlay(ShapedNode) |
                      Variant(ShapedNode) |
-                     Observer(ShapedNode) |
-                     Observable(ShapedNode) |
+                     Vantage(ShapedNode) |
                      Gate(ShapedNode)
 
   # `SizedNode`s are `ShapedNode`s after *sizing* (`size`). Things like `XYWrap` are
@@ -118,8 +115,7 @@ module Ww::Scenery
                     Aim(SizedNode) |
                     Page(SizedNode) |
                     Overlay(SizedNode) |
-                    Observer(SizedNode) |
-                    Observable(SizedNode) |
+                    Vantage(SizedNode) |
                     Gate(SizedNode)
 
   # `ElevatedNode`s are `SizedNode`s after *elevation* (`elevate`). During elevation,
@@ -141,8 +137,7 @@ module Ww::Scenery
                        TransformMatrix(ElevatedNode) |
                        Viewport(ElevatedNode) |
                        Aim(ElevatedNode) |
-                       Observer(ElevatedNode) |
-                       Observable(ElevatedNode) |
+                       Vantage(ElevatedNode) |
                        Gate(ElevatedNode)
 
   # `AimedNode`s are `ElevatedNode`s after *aiming* (`aim`). During aiming, viewport
@@ -168,8 +163,7 @@ module Ww::Scenery
                     Composite(AimedNode) |
                     TransformMatrix(AimedNode) |
                     Clip(AimedNode) |
-                    Observer(AimedNode) |
-                    Observable(AimedNode) |
+                    Vantage(AimedNode) |
                     Gate(AimedNode)
 
   # Used for unrecognized nodes and tombstones.
@@ -628,14 +622,17 @@ module Ww::Scenery
     children : Slice(Node),
     caches_hash: true
 
-  defcase Observer(Node),
+  defcase Vantage(Node),
     id : Term,
+    status : Status,
     children : Slice(Node),
     caches_hash: true
 
-  defcase Observable(Node),
-    children : Slice(Node),
-    caches_hash: true
+  enum Vantage::Status
+    Inactive
+    Active
+    ActiveIfHit
+  end
 
   defcase Gate(Node),
     children : Slice(Node),

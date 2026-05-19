@@ -48,6 +48,8 @@ module Ww::Scenery
     getter vbox
     # :nodoc:
     getter depict
+    # :nodoc:
+    getter describe
 
     # :nodoc:
     def initialize
@@ -64,6 +66,7 @@ module Ww::Scenery
       @aim = GenerationalCache({ElevatedNode, OriginBox}, AimResponse).new
       @vbox = GenerationalCache({AimedNode, OriginBox}, VBox).new
       @depict = GenerationalCache({AimedNode, OriginBox}, DrawCommand).new
+      @describe = GenerationalCache({AimedNode, OriginBox, HitNode}, Slice(Description)).new
     end
   end
 
@@ -296,23 +299,20 @@ module Ww::Scenery
     end
 
     # A shorthand for `describe` with no hit queries.
-    def describe(scene : Scene) : {Term, Slice(Term)}
+    def describe(cache : CacheSet, scene : Scene) : Slice(Term)
       describe(scene, Slice(HitQuery).empty)
     end
 
-    # Describes *scene* after hitting it (see `hit`) with the union of *queries*.
-    # Returns a description of *scene* followed by the observers in it (if any).
-    #
-    # Each observer acts as a kind of "point of view" on the scene, letting
-    # one see the scene, symbolically, from different locations.
-    def describe(scene : Scene, queries : Enumerable(HitQuery)) : {Term, Slice(Term)}
+    # Returns vantages in *scene* after hitting it (see `hit`) with the union
+    # of *queries*.
+    def describe(cache : CacheSet, scene : Scene, queries : Enumerable(HitQuery)) : Slice(Term)
       @@lock.synchronize do
         hit = HitEmpty.new
         queries.each do |query|
           hit = Scenery.union(hit, Scenery.hit(scene, query))
         end
 
-        Scenery.describe(scene, hit)
+        Scenery.describe(cache, scene, hit)
       end
     end
   end
