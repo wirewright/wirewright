@@ -1807,6 +1807,21 @@ module Ww
       patch(dict, changes)
     end
 
+    # Same as the unguided overload of `flatten`, but accepts a *guide* summary to
+    # guide search.
+    def self.flatten(dict : Dict, guide : Dict::Summary, *, part = Dict.itemspart, & : Term, Term -> Rep) : Dict
+      changes = Pf::Kit.stack_array({Term, Term, Rep}, 8)
+
+      dict.each_entry(guide, in: part) do |key, value|
+        rep = yield key, value
+        next unless changes?(value, after: rep)
+
+        changes << {key, value, rep}
+      end
+
+      patch(dict, changes)
+    end
+
     # Applies *changes* to *dict*. Returns the resulting dict.
     #
     # *changes* is an indexable of key, original value, replacement for value.

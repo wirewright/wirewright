@@ -525,6 +525,31 @@ module Ww
       end
     end
 
+    def each_entry(guide : Summary, & : Term, Term ->) : Nil
+      each_entry(guide, in: Dict.itemspart) { |key, value| yield key, value }
+      each_entry(guide, in: Dict.pairspart) { |key, value| yield key, value }
+    end
+
+    def each_entry(guide : Summary, *, in part : Part::Entries, & : Term, Term ->) : Nil
+      each_entry(guide) { |key, value| yield key, value }
+    end
+
+    def each_entry(guide : Summary, *, in part : Part::Items, & : Term, Term ->) : Nil
+      UTermTrie32.guided_each(@utrie, guide) do |key, value|
+        yield Term.of(key), Term.of(value)
+      end
+    end
+
+    def each_entry(guide : Summary, *, in part : Part::Pairs, & : Term, Term ->) : Nil
+      TermTrie.guided_each(@ttrie, guide) do |key, value|
+        yield key, value
+      end
+    end
+
+    def each_entry(guide : Summary, *, in part, & : Term, Term ->) : Nil
+      each_entry(in: part) { |key, value| yield key, value }
+    end
+
     # Yields each itemspart entry whose key is in range, ordered 0
     # to itemsize.
     @[Dncast]

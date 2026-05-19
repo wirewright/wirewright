@@ -148,23 +148,9 @@ module Ww
 
     # :nodoc:
     defrecord LeafPredicate(T),
-      symbol_sketch : Term::Dict::Sketch,
-      value_sketch : Term::Dict::Sketch,
+      guide : Term::Dict::Summary,
       passable : M1::PatternSet(T)?,
       impassable : M1::PatternSet(T)?
-
-    private def leaf?(predicate : LeafPredicate, input : Term) : Bool
-      return true unless dict = input.as_d?
-
-      if predicate.symbol_sketch.present? || predicate.value_sketch.present?
-        summary = dict.summary
-
-        return true unless predicate.symbol_sketch.subset_of?(summary.symbol_sketch)
-        return true unless predicate.value_sketch.subset_of?(summary.value_sketch)
-      end
-
-      leaf?(predicate.passable, predicate.impassable, input)
-    end
 
     alias Part = Term::Dict::Part::Any
 
@@ -180,7 +166,7 @@ module Ww
         return rep
       end
 
-      if leaf?(leafp, input)
+      if leaf?(leafp.passable, leafp.impassable, input)
         return successor.call(input, attachments.cache)
       end
 
@@ -189,13 +175,17 @@ module Ww
         return rep
       end
 
-      output = Term.flatten(input, part: part) do |_, value|
+      assert dict0 = input.as_d?
+
+      dict1 = Term.flatten(dict0, leafp.guide, part: part) do |_, value|
         descR(successor, part, leafp, attachments, value)
       end
 
-      attachments.cache.put({attachments.id, input}, rep)
+      output = Term.rep_of(dict1)
 
-      Term.rep(output)
+      attachments.cache.put({attachments.id, input}, output)
+
+      output
     end
 
     # *Ascending rewriter*. See `rho.ascR`.
@@ -210,13 +200,17 @@ module Ww
         return rep
       end
 
-      if leaf?(leafp, input)
+      if leaf?(leafp.passable, leafp.impassable, input)
         return successor.call(input, attachments.cache)
       end
 
-      output = Term.flatten(input, part: part) do |_, value|
+      assert dict0 = input.as_d?
+
+      dict1 = Term.flatten(dict0, leafp.guide, part: part) do |_, value|
         ascR(successor, part, leafp, attachments, value)
       end
+
+      output = Term.of(dict1)
 
       rep = successor.call(output, attachments.cache)
 
@@ -241,7 +235,7 @@ module Ww
 
       rep = successor.call(input, attachments.cache)
 
-      if leaf?(leafp, input)
+      if leaf?(leafp.passable, leafp.impassable, input)
         return rep
       end
 
@@ -250,9 +244,13 @@ module Ww
         return rep
       end
 
-      output = Term.flatten(input, part: part) do |_, value|
+      assert dict0 = input.as_d?
+
+      dict1 = Term.flatten(dict0, leafp.guide, part: part) do |_, value|
         bidiR(successor, part, leafp, attachments, value)
       end
+
+      output = Term.of(dict1)
 
       if input == output
         return Term.rep(input)
@@ -276,7 +274,7 @@ module Ww
         return rep
       end
 
-      if leaf?(leafp, input)
+      if leaf?(leafp.passable, leafp.impassable, input)
         return successor.call(input, attachments.cache)
       end
 
@@ -292,11 +290,11 @@ module Ww
           next Term.rep(offspring)
         end
 
-        output = Term.flatten(offspring, part: Term::Dict.itemspart) do |_, value|
+        output = Term.flatten(dict1, leafp.guide, part: Term::Dict.itemspart) do |_, value|
           waveR(successor, leafp, attachments, value)
         end
 
-        Term.rep(output)
+        Term.rep_of(output)
       end
 
       if Term.changes?(input, after: rep1)
@@ -399,21 +397,18 @@ module Ww
           part = Term::Dict.itemspart # default
         end
 
-        symbol_sketch = Term::Dict::Sketch.empty
-        value_sketch = Term::Dict::Sketch.empty
+        guide = Term::Dict::Summary.zero
 
         pass do
           next unless cues = spec[:cues]?
           next unless cue_list = cues.as_d?
 
           cue_list.items.each do |item|
-            hashcode = Term.hashcode(item)
-            symbol_sketch = Term::Dict::Sketch.union(symbol_sketch, Term::Dict::Sketch.symbol(item, hashcode))
-            value_sketch = Term::Dict::Sketch.union(value_sketch, Term::Dict::Sketch.value(item, hashcode))
+            guide = Term::Dict::Summary.union(guide, Term::Dict::Summary.of(item))
           end
         end
 
-        leafp = LeafPredicate.new(symbol_sketch, value_sketch, passable_set, impassable_set)
+        leafp = LeafPredicate.new(guide, passable_set, impassable_set)
 
         yield rewriter(successor, data), part, leafp
       end
