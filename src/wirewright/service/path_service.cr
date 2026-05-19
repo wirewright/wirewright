@@ -9,16 +9,16 @@ module Ww
   # *Reactivity* comes from the fact that `PathService` taps into the stream
   # of notifications produced by `PathMonitorService`. Notably, however, it
   # *does not manage watches for you*. In other words, it *passively* listens
-  # to the notifications broadcast by `PathService`, using them to invalidate
-  # its cache. From the outside, looks like reactivity.
+  # to the notifications broadcast by `PathMonitorService`, and uses them to
+  # invalidate its cache. From the outside, this looks like reactivity.
   #
   # That is, if you happen to add a watch using `PathMonitorService#add`,
   # `PathService` will benefit from that watch; otherwise, the cached report
-  # will remain stale until it is evicted.
+  # will remain stale until it is evicted for other reasons.
   #
   # ```
   # # You are recommended to watch the parent directory of a file for more
-  # # stability on atomic writes.
+  # # stability & smaller delay on atomic writes.
   # PathMonitorService.add(NormalPath["/tmp"])
   #
   # loop do
@@ -88,7 +88,7 @@ module Ww
   # This means you are guaranteed to receive the up-to-date reading/listing of your path
   # after `listen` tells you to. On the other hand, if you trigger re-reads based on some
   # other signal, `PathService` may not wake up quickly enough to invalidate before you
-  # call `read` or `listing` on your own call. Thus, you'll receive an outdated (cached)
+  # call `read` or `listing` at your own pace. Thus, you'll receive an outdated (cached)
   # version and go to sleep again, ignoring the invalidation that PathService schedules
   # immediately after. You should design with this in mind; for example, by using
   # notifications sent by `listen` as an additional trigger for wakeups.
@@ -186,7 +186,7 @@ module Ww
       end
 
       def receive(msg : Msg)
-        Log.trace { msg }
+        Log.trace { msg.class }
 
         handle(msg)
       end
@@ -313,12 +313,14 @@ module Ww
         Log.debug { "read_large(#{path}) #{info.size.humanize_bytes}" }
 
         digest = IO::Digest.new(file, Term::Blob::DIGEST_ALGORITHM.new)
-        IO.copy(src: file, dst: digest, limit: info.size)
+        IO.copy(src: digest, dst: IO::Empty.new, limit: info.size)
 
         DigestReading.new(digest.final, info.size)
       end
 
       private def write(path : NormalPath, blob : Term::Blob) : WriteResult
+        Log.debug { "write() #{path} (#{blob.ubytesize64.humanize_bytes})" }
+
         tmp_file = File.tempfile(@rng, tempdir: path.parent.unwrap)
         tmp_path = tmp_file.path
 
