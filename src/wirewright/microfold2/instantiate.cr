@@ -101,7 +101,7 @@ module Ww::Microfold2
         next unless defn = codex.property?(key)
 
         properties ||= Set(Term).new
-        properties << defn.dst
+        properties << key
 
         settings = Term[].with(defn.dst, value)
 
@@ -140,8 +140,8 @@ module Ww::Microfold2
           offset = 1
         end
 
-        properties.try &.each do |key|
-          commit.without(key)
+        if properties
+          properties.each { |key| commit.without(key) }
         end
 
         args = node.items.move(offset)

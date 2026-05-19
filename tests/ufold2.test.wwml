@@ -991,3 +991,9 @@
     (p "Kaixo"))
   (G style: ""
     (p "Kaixo" style: "font-lg")))
+
+(µfold=
+  (el "Kaixo" style: "clip" µ-page-x: 10)
+  (el
+    (viewport page-x: 10
+      (text caption: "Kaixo"))))
