@@ -127,7 +127,7 @@ module Ww
           member = NormalPath[path / msg.name]
         end
 
-        if msg.mask.create? || msg.mask.moved_to?
+        if msg.mask.create?
           PathMonitorService.broadcast(EntryCreated.new(member))
         end
 
@@ -143,7 +143,7 @@ module Ww
           PathMonitorService.broadcast(FileModified.new(member))
         end
 
-        if msg.mask.close_write?
+        if msg.mask.close_write? || msg.mask.moved_to?
           PathMonitorService.broadcast(FileCommitted.new(member))
         end
 
