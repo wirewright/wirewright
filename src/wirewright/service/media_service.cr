@@ -1001,8 +1001,8 @@ module Ww
         {% begin %}
           case code
           {% for n in 0..9 %}
-          when .scancode_{{n}}? then Term.of(:digit, {{n}})
-          when .kp_{{n}}?  then Term.of(:np, {{n}})
+          when .scancode_{{n}}? then Term.of({{n.stringify}})
+          when .kp_{{n}}?  then Term.of(:np{{n}})
           {% end %}
           {% for n in 1..12 %}
           when .f{{n}}? then Term.of(:fn, {{n}})
