@@ -1799,6 +1799,15 @@ module Ww
         changes << {key, value, rep}
       end
 
+      patch(dict, changes)
+    end
+
+    # Applies *changes* to *dict*. Returns the resulting dict.
+    #
+    # *changes* is an indexable of key, original value, replacement for value.
+    #
+    # NOTE: This function fully relies on you to provide accurate data in *changes*.
+    def self.patch(dict : Dict, changes : Indexable({Term, Term, Rep})) : Dict
       # Fast, no-alloc path for cases when no changes were made to the dict.
       if changes.empty?
         return dict
