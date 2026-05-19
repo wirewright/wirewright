@@ -214,7 +214,7 @@ module Ww
     alias MouseEvent = MouseMoved | MouseButtonEvent | MouseWheelScrolled
     alias MouseButtonEvent = MouseButtonUp | MouseButtonDown
 
-    defrecord MouseMoved, window_id : WindowId, mouse_id : MouseId, x : Float32, y : Float32
+    defrecord MouseMoved, window_id : WindowId, mouse_id : MouseId, x : Float32, y : Float32, dx : Float32, dy : Float32
     defrecord MouseButtonUp, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
     defrecord MouseButtonDown, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
     defrecord MouseWheelScrolled, window_id : WindowId, mouse_id : MouseId, dx : Float32, dy : Float32
@@ -272,6 +272,8 @@ module Ww
           mouse_id: event.motion.which,
           x: event.motion.x,
           y: event.motion.y,
+          dx: event.motion.xrel,
+          dy: event.motion.yrel,
         )
       when .mouse_wheel?
         # https://wiki.libsdl.org/SDL3/SDL_MouseWheelEvent
