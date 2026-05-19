@@ -510,7 +510,7 @@ module Ww
     def epoch(&)
       yield
     ensure
-      @active = {} of K => V
+      @active.clear
       @active, @surviving = @surviving, @active
     end
   end
