@@ -246,7 +246,7 @@ module Ww::Alloy
         get_var(ctx, Term.of(name), issues) do |value, issues|
           case kind
           when :ml
-            Term.rep(Term.of(ML.compact(value)))
+            Term.rep_of(ML.compact(value))
           when :splice
             unless dict = value.as_d?
               issues.major("value must be a dict")
@@ -609,7 +609,7 @@ module Ww::Alloy
               .grow(count)
               .collect
 
-            Term.rep(Term.of(selection))
+            Term.rep_of(selection)
           end
         end
       end
@@ -740,7 +740,7 @@ module Ww::Alloy
               return Term.rep
             end
 
-            return Term.rep(Term.of(Term.union(base_dict, extras_dict)))
+            return Term.rep_of(Term.union(base_dict, extras_dict))
           end
 
           unions = expansion.to_readonly_slice do |offspring, index|
@@ -838,7 +838,7 @@ module Ww::Alloy
             end
           end
 
-          Term.rep(Term.of(expansion))
+          Term.rep_of(expansion)
         end
       end
 

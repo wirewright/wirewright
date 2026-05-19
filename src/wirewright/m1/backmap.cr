@@ -976,7 +976,7 @@ module Ww::M1
       end
 
       def one(object) : Some
-        some(Term.rep(Term.of(object)))
+        some(Term.rep_of(object))
       end
     end
 

@@ -1675,6 +1675,11 @@ module Ww
       rep(offspring.to_readonly_slice(&.itself))
     end
 
+    # Constructs a singleton replacement.
+    def self.rep_of(offspring) : Rep
+      rep(of(offspring))
+    end
+
     # We collapse *rep* to a term in the following way:
     #
     # - Replacement with one collapses to itself.
