@@ -47,6 +47,14 @@ module Ww::Scenery
       end
     end
 
+    def x : Magnitude
+      @focus.x
+    end
+
+    def y : Magnitude
+      @focus.y
+    end
+
     # Returns a copy of this query which is set to be a `Mode::Point` query.
     def point : HitQuery
       HitQuery.new(@focus, @focus, mode: :point)

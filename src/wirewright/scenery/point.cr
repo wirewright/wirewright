@@ -128,6 +128,11 @@ module Ww::Scenery
       Point[x.ceil, y.ceil]
     end
 
+    # Removes the sign from both axes.
+    def abs : Point
+      Point[x.abs, y.abs]
+    end
+
     # Returns `true` if either component of the point is set to positive infinity.
     def inf? : Bool
       x == Magnitude::INFINITY || y == Magnitude::INFINITY

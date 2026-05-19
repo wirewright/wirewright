@@ -22,6 +22,11 @@ module Ww::Scenery
       IDENTITY
     end
 
+    # :nodoc:
+    def self.new(matrix : PlutoVG::Matrix) : Tf
+      new(matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+    end
+
     # Constructs a transformation matrix by combining the given *actions*.
     def self.[](*actions : Tf) : Tf
       actions.reduce(new) { |tf, action| tf.append(action) }
@@ -115,6 +120,10 @@ module Ww::Scenery
       br = Point[points.max_of(&.x), points.max_of(&.y)]
 
       Rect.new(tl, br)
+    end
+
+    def scale : Point
+      Point[Math.sqrt(@a**2 + @b**2), Math.sqrt(@c**2 + @d**2)]
     end
 
     def to_pvg : PlutoVG::Matrix

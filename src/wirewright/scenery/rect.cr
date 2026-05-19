@@ -258,6 +258,10 @@ module Ww::Scenery
       Point.new(x + point.x * w, y + point.y * h)
     end
 
+    def abs : Rect
+      Rect.new(tl: tl.min(br), size: size.abs)
+    end
+
     # Maps a point from rectangle space into [0,1]x[0,1].
     def normalize(point : Point) : Point
       (point - tl) * size.normalized
