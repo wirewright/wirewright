@@ -3,6 +3,9 @@ enum Ww::ML::Style
   # The pretty-printer is allowed to make syntax errors and omissions for
   # clarity, brevity, etc.
   Brief
+
+  # The top-level term is interpreted as a document dict if possible.
+  Document
 end
 
 module Ww::ML::Formatter
@@ -162,12 +165,34 @@ module Ww::ML::Formatter
       end
     end
   end
+
+  def format_top(pp, term : Term, style : Style) : Nil
+    unless style.document? && (docdict = term.as_d?)
+      return format(pp, term, style)
+    end
+
+    docdict.each_entry(in: Term::Dict.pairspart_ord) do |key, value|
+      format(pp, key, style)
+      pp.text(":")
+      pp.group(2) do
+        pp.breakable
+        format(pp, value, style)
+      end
+
+      pp.break
+    end
+
+    docdict.items.each do |item|
+      format(pp, item, style)
+      pp.break
+    end
+  end
 end
 
 module Ww::ML
-  def display(io : IO, term : Term, *, endl : Bool = true, maxwidth = 60, style = Style::None)
+  def display(io : IO, term : Term, *, endl : Bool = true, maxwidth = 60, style : Style = Style::None)
     pp = PrettyPrint.new(io, maxwidth: maxwidth)
-    Formatter.format(pp, term, style)
+    Formatter.format_top(pp, term, style)
     pp.flush
     io.puts if endl
   end
