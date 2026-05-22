@@ -297,8 +297,12 @@ module Ww::M1
         end
 
         matchpi %{[%'%keypool _*]}, %{[%'%keytest _*]}, cues: {:"%keypool", :"%keytest"} do
-          keys = op.items.move(1)
+          keys = member.items.move(1)
           details += keys.size
+        end
+
+        matchpi %{[%'%all _*]}, cue: :"%all" do
+          constraints += member.items.size - 1
         end
 
         otherwise do

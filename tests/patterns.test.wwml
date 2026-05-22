@@ -3912,6 +3912,23 @@
   (level ([_ | _] (`>U (goto line start) _*)))
   (level ([() | _] (U←(goto line start) _*))))
 
+;; BUG
+(specificity
+  (level ((%keypool x) b c))
+  (level ((%keypool x y) b c))
+  (level ((%keypool x y z) b c)))
+
+(specificity
+  (level (x_ b c))
+  (level ((%all x_ y_) b c))
+  (level ((%all x_ y_ z_) b c)))
+
+;; Even though the first pattern is more "detailed" the second one has
+;; a stricter %all.
+(specificity
+  (level {¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_ I * _ draft_) seed_ seed'_})
+  (level {¦ mode: normal input: ⟨& (key (shift _)) K←(key "r")⟩ live-reload_boolean}))
+
 ;; M1.head
 (head
   ;; Toplevel
