@@ -27,16 +27,18 @@ module Ww
     # The algorithm used to compute blob digest.
     DIGEST_ALGORITHM = Digest::SHA256
 
+    # Returns the hash digest of this blob.
+    #
+    # The hash is computed by `DIGEST_ALGORITHM`.
+    getter digest : Bytes
+
     @size : UInt64
-    @digest : UInt8[32]
     @classif : Atomic(Classif?)
     @mem : UInt8*
 
     # :nodoc:
     def initialize(@size, @mem, digester, classif = nil)
-      @digest = uninitialized UInt8[32]
-      digester.final(@digest.to_slice)
-
+      @digest = digester.final
       @classif = Atomic(Classif?).new(classif)
     end
 
@@ -205,13 +207,6 @@ module Ww
     # WARNING: Only call this if the blob wasn't published yet!
     def classify!(classif : Classif?) : Classif
       @classif.set(classif || Classif.of(bytes), :release)
-    end
-
-    # Returns the hash digest of this blob.
-    #
-    # The hash is computed by `DIGEST_ALGORITHM`.
-    def digest : Bytes
-      Slice.new(@digest.to_unsafe, @digest.size, read_only: true)
     end
 
     # Blobs are compared lexicographically like Crystal slices. See `Slice#<=>`.

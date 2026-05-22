@@ -248,11 +248,7 @@ module Ww::Scenery
         status = FreeType.new_memory_face(ft, blob.bytes, blob.bytes.size, ttcindex, out ft_face)
         next unless status.zero?
 
-        # NOTE: Here and below we'll dup the digest so that the GC can free the blob
-        # if it wants to. Blobs are usually big so that's beneficial. That is, by default
-        # blob.digest makes us refer to the blob (because it's a view into the memory
-        # allocated for the blob).
-        PvgFont.new(pvg_face, ft_face, blob.digest.dup)
+        PvgFont.new(pvg_face, ft_face, blob.digest)
       end
 
       unless response
@@ -280,7 +276,7 @@ module Ww::Scenery
         next unless blob.classif.media_type.in?(MEDIA_TYPES_RASTER)
         next unless surface = PlutoVG.surface_load_from_image_data(blob.bytes, blob.bytes.size)
 
-        PvgRasterImage.new(surface, blob.digest.dup)
+        PvgRasterImage.new(surface, blob.digest)
       end
 
       unless response
@@ -306,7 +302,7 @@ module Ww::Scenery
         size = Point[extents.w, extents.h]
       end
 
-      PvgSvgImage.new(blob.bytes, size, blob.digest.dup)
+      PvgSvgImage.new(blob.bytes, size, blob.digest)
     end
 
     # Same as `svg?`, but raises `ArgumentError` instead of returning `nil` if *blob* is
@@ -358,7 +354,7 @@ module Ww::Scenery
           lineno += 1
         end
 
-        Outcome.ok(CodepointsMap.new(map, blob.digest.dup))
+        Outcome.ok(CodepointsMap.new(map, blob.digest))
       end
     end
 
