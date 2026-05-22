@@ -8,10 +8,7 @@ module Ww::D7
   # here or leave it as-is?", "Should I ignore this or pass it to the solver?".
   alias Classifier = Term -> Feature
 
-  # Nodes from a circuit are *classified* into *features*.
-  alias Feature = Ready | Nonready
-
-  alias Ready = Flat | Mixture | Scope | Parent | Circuit
+  alias Feature = Flat | Mixture | Scope | Parent | Circuit
 
   # Features without a successor.
   alias Flat = Gnd | Inert
@@ -19,9 +16,7 @@ module Ww::D7
   # Lists annotations that can be used on an inert node.
   @[Flags]
   enum InertAnnotationSet
-    # A request to ignore the inert node even though a pass might consider
-    # it fitting.
-    Ignore
+    Incomplete
   end
 
   # Represents an inert (data) node.
@@ -34,6 +29,11 @@ module Ww::D7
   # *annotations* can be used for semantic tagging.
   def inert(node : Term, annotations : Tuple = Tuple.new) : Inert
     Inert.new(node, InertAnnotationSet.with(annotations))
+  end
+
+  # :ditto:
+  def inert(node : Term, annotations : InertAnnotationSet) : Inert
+    Inert.new(node, annotations)
   end
 
   # Ground nodes form the hypergraph that is solved by a D7 `Regime`.
@@ -83,7 +83,7 @@ module Ww::D7
   end
 
   # Wraps a continuation feature *cont* in a lexical scope qualified by *scope*.
-  defcase Scope, scope : NodeScope::Any, cont : Ready
+  defcase Scope, scope : NodeScope::Any, cont : Feature
 
   # Constructs a scope feature.
   #
@@ -101,19 +101,20 @@ module Ww::D7
   # range of its items.
   #
   # Used by e.g. `group`, `module`.
-  defrecord Parent, node : Term::Dict, range : Range(Int32, Int32)
+  defrecord Parent, node : Term::Dict, range : Range(UInt32, UInt32)
 
   # Constructs a parent feature.
   #
   # See `Parent`.
-  def parent(node : Term::Dict, range : Range(Int32, Int32)) : Parent
-    assert range.exclusive? && range.begin >= 0 && range.end >= 0
+  def parent(node : Term::Dict, range : Range(UInt32, UInt32)) : Parent
+    assert range.exclusive?
 
     Parent.new(node, range)
   end
 
+  # :ditto:
   def parent(node : Term::Dict)
-    parent(node, 0...node.itemsize)
+    parent(node, 0u32...node.uitemsize)
   end
 
   # Used primarily by the `circuit` node; represents an isolated, nested
@@ -131,51 +132,23 @@ module Ww::D7
   # *leaf* emits a circuit, that circuit is always a leaf, and so its *leaf* function
   # is called, and so on, until some sort of base case where there is no circuit
   # (or infinitely if there is no base case).
-  defrecord Circuit,
+  defcase Circuit,
     node : Term::Dict,
-    range : Range(Int32, Int32),
-    leaf : -> Ready
+    range : Range(UInt32, UInt32),
+    leaf : Feature
 
   # Constructs a circuit feature.
   #
   # See `Circuit`.
-  def circuit(node : Term::Dict, range : Range(Int32, Int32), &leaf : -> Ready) : Circuit
-    assert range.exclusive? && range.subrange_of?(0...node.itemsize)
+  def circuit(node : Term::Dict, range : Range(UInt32, UInt32), leaf : Feature) : Circuit
+    assert range.exclusive? && range.subrange_of?(0u32...node.uitemsize)
 
     Circuit.new(node, range, leaf)
   end
 
+  # :ditto:
   def circuit(node : Term::Dict) : Circuit
-    circuit(node, 0...node.itemsize) { inert(Term.of(node)) }
-  end
-
-  # `Nonready` represents a thunk which must be further classified by the caller.
-  # `Nonready`s can be evaluated using `ready`.
-  defrecord Nonready, node : Term
-
-  # See `Nonready`.
-  def nonready(node : Term) : Nonready
-    Nonready.new(node)
-  end
-
-  # Classifies *node* using *clf*, evaluating `Nonready` thunks using *clf*
-  # until they are `Ready`.
-  #
-  # The separation between `Ready` and `Nonready` is useful when you want to
-  # wrap a classifier *clf* within another one. Especially during component
-  # expansion or recursive classification, the nested classifier cannot call
-  # the parent one to [tail-] recurse. To resolve this, we use `Nonready`
-  # thunks, which "bubble up" to the outermost classifier and are then classified
-  # by it, and so on down the chain if needed.
-  def ready(clf : Classifier, node : Term) : Ready
-    loop do
-      case result = clf.call(node)
-      in Ready
-        return result
-      in Nonready
-        node = result.node
-      end
-    end
+    circuit(node, 0u32...node.uitemsize) { inert(Term.of(node)) }
   end
 
   # A tree of `Feature`s.
@@ -183,116 +156,165 @@ module Ww::D7
 
   defrecord InertLeaf, feature : Inert
   defrecord GndLeaf, feature : Gnd
-  defcase MixtureNode, feature : Mixture, child : ParseTree
+  defcase MixtureNode, feature : Mixture, child : ParseTree, maxlevel : Int32
   defcase ScopeNode, feature : Scope, child : ParseTree
-  defrecord ParentNode, feature : Parent, children : Slice(ParseTree)
 
-  # *Unaugmented feature trees* are clear of "augmentation" features such as
-  # `Scope`. `Mixture` are treated as `Inert`. `Circuit`s are treated as `Parent`s.
+  alias ParentNode = GroupNode | CircuitNode
+
+  defrecord GroupNode, feature : Parent, children : Slice(ParseTree), maxlevel : Int32
+  defcase CircuitNode, feature : Circuit, children : Slice(ParseTree), leaf : ParseTree, maxlevel : Int32
+
+  # :nodoc:
+  def maxlevel(tree : InertLeaf | GndLeaf) : Int32
+    0
+  end
+
+  # :nodoc:
+  def maxlevel(tree : ScopeNode) : Int32
+    maxlevel(tree.child)
+  end
+
+  # :nodoc:
+  def maxlevel(tree : MixtureNode | GroupNode) : Int32
+    tree.maxlevel
+  end
+
+  # :nodoc:
+  def maxlevel(tree : CircuitNode) : Int32
+    tree.maxlevel + 1
+  end
+
+  # Smart constructor for `MixtureNode`.
+  def MixtureNode.new(feature : Mixture, child : ParseTree) : MixtureNode
+    MixtureNode.new(feature, child, D7.maxlevel(child))
+  end
+
+  # Smart constructor for `GroupNode`.
+  def GroupNode.new(feature, children : Slice(ParseTree)) : GroupNode
+    maxlevel = children.max_of? { |child| D7.maxlevel(child) } || 0
+
+    GroupNode.new(feature, children, maxlevel)
+  end
+
+  # Smart constructor for `CircuitNode`.
+  def CircuitNode.new(feature, children : Slice(ParseTree), leaf) : CircuitNode
+    maxlevel = children.max_of? { |child| D7.maxlevel(child) } || 0
+    maxlevel += 1
+
+    CircuitNode.new(feature, children, leaf, maxlevel)
+  end
+
+  # *Unaugmented parse trees* are clear of "augmentation" features such as
+  # `Scope`. `Mixture`s are treated as `Inert`. `Circuit`s are treated as `Parent`s.
   alias UnaugmentedParseTree = InertLeaf | GndLeaf | UnaugmentedParentNode
 
-  defrecord UnaugmentedParentNode, feature : Parent, children : Slice(UnaugmentedParseTree)
+  defrecord UnaugmentedParentNode,
+    feature : Parent,
+    children : Slice(UnaugmentedParseTree)
 
-  # *Level feature trees* stop at `Circuit` features, calling their leaf function.
-  module LevelParseTree
-  end
-
-  # *Full feature trees* proceed into `Circuit`s as if they were `Parent`s.
-  module FullParseTree
-  end
+  alias IParseCache = ICache(Term, ParseTree)
 
   # Uses the classifier *clf* to convert a *circuit* into a tree of the kind
-  # defined by the given *reply* type.
-  def parse(clf : Classifier, circuit : Term, reply : LevelParseTree.class | FullParseTree.class | UnaugmentedParseTree.class)
+  # defined by the *reply* type.
+  def parse(clf : Classifier, circuit : Term, reply : ParseTree.class, *, cache : IParseCache = Uncached(Term, ParseTree).new)
     unless nodes = circuit.as_d?
       return InertLeaf.new(feature: inert(circuit))
     end
 
-    parse(clf, parent(nodes), reply)
+    parse(clf, cache, parent(nodes), reply)
   end
 
-  private def parse(clf : Classifier, feature : Inert, reply)
+  # :ditto:
+  def parse(clf : Classifier, circuit : Term, reply : UnaugmentedParseTree.class, *, cache = Uncached(Term, UnaugmentedParseTree).new)
+    unless nodes = circuit.as_d?
+      return InertLeaf.new(feature: inert(circuit))
+    end
+
+    parse(clf, cache, parent(nodes), reply)
+  end
+
+  private def parse(clf, cache, feature : Inert, reply)
     InertLeaf.new(feature)
   end
 
-  private def parse(clf : Classifier, feature : Gnd, reply)
+  private def parse(clf, cache, feature : Gnd, reply)
     GndLeaf.new(feature)
   end
 
-  private def parse(clf : Classifier, feature : Mixture, reply : LevelParseTree.class | FullParseTree.class)
-    child = parse(clf, ready(clf, feature.defn), reply)
+  private def parse(clf, cache, feature : Mixture, reply : ParseTree.class)
+    child = parse(clf, cache, clf.call(feature.defn), reply)
 
     MixtureNode.new(feature, child)
   end
 
-  private def parse(clf : Classifier, feature : Mixture, reply : UnaugmentedParseTree.class)
-    InertLeaf.new(inert(feature.node))
-  end
-
-  private def parse(clf : Classifier, feature : Scope, reply : LevelParseTree.class | FullParseTree.class)
-    child = parse(clf, feature.cont, reply)
+  private def parse(clf, cache, feature : Scope, reply : ParseTree.class)
+    child = parse(clf, cache, feature.cont, reply)
 
     ScopeNode.new(feature, child)
   end
 
-  private def parse(clf : Classifier, feature : Scope, reply : UnaugmentedParseTree.class)
-    parse(clf, feature.cont, reply)
+  private def parse(clf, cache, feature : Parent, reply : ParseTree.class) : ParentNode
+    children = parse(clf, cache, feature.range, feature.node, reply)
+
+    GroupNode.new(feature, children)
   end
 
-  private def parse(clf : Classifier, feature : Parent, reply : LevelParseTree.class | FullParseTree.class)
-    assert feature.range.exclusive?
-    assert feature.range.begin <= feature.range.end
+  private def parse(clf, cache, feature : Circuit, reply : ParseTree.class) : ParentNode
+    children = parse(clf, cache, feature.range, feature.node, reply)
+    leaf = parse(clf, cache, feature.leaf, reply)
 
-    children = Pf::Kit.stack_array(ParseTree)
+    CircuitNode.new(feature, children, leaf)
+  end
 
-    feature.range.each do |index|
-      child = parse(clf, ready(clf, feature.node[index]), reply)
-      children << child
+  private def parse(clf, cache, feature : Mixture, reply : UnaugmentedParseTree.class)
+    InertLeaf.new(inert(feature.node))
+  end
+
+  private def parse(clf, cache, feature : Scope, reply : UnaugmentedParseTree.class)
+    parse(clf, cache, feature.cont, reply)
+  end
+
+  private def parse(clf, cache, feature : Parent, reply : UnaugmentedParseTree.class) : UnaugmentedParentNode
+    children = parse(clf, cache, feature.range, feature.node, reply)
+
+    UnaugmentedParentNode.new(feature, children)
+  end
+
+  private def parse(clf, cache, feature : Circuit, reply : UnaugmentedParseTree.class)
+    parse(clf, cache, parent(feature.node, feature.range), reply)
+  end
+
+  private def parse(clf, cache, range : Range(UInt32, UInt32), node : Term::Dict, reply)
+    assert range.exclusive?
+    assert range.begin <= range.end
+
+    range.to_readonly_slice { |index| parse(clf, cache, node[index], reply) }
+  end
+
+  private def parse(clf, cache, term : Term, reply)
+    cache.put_if_absent(term) do
+      parse(clf, cache, clf.call(term), reply)
     end
-
-    ParentNode.new(feature, children.to_unsafe_readonly_slice!)
   end
 
-  private def parse(clf : Classifier, feature : Parent, reply : UnaugmentedParseTree.class)
-    assert feature.range.exclusive?
-    assert feature.range.begin <= feature.range.end
-
-    children = Pf::Kit.stack_array(UnaugmentedParseTree)
-
-    feature.range.each do |index|
-      child = parse(clf, ready(clf, feature.node[index]), reply)
-      children << child
-    end
-
-    UnaugmentedParentNode.new(feature, children.to_unsafe_readonly_slice!)
-  end
-
-  private def parse(clf : Classifier, feature : Circuit, reply : LevelParseTree.class)
-    parse(clf, feature.leaf.call, reply)
-  end
-
-  private def parse(clf : Classifier, feature : Circuit, reply : FullParseTree.class | UnaugmentedParseTree.class)
-    parse(clf, parent(feature.node, feature.range), reply)
-  end
-
-  # `ParseTree` is usually rewritten; we call this *repair*, and represent
-  # the result of repairing a `ParseTree` using `RepairTree`.
+  # `ParseTree`s are usually rewritten; we call that *repair*, and represent
+  # its result with `RepairTree`.
   #
   # - `InertLeaf` and `GndLeaf` must become a `Term`.
   # - `MixtureNode` must become `MixtureRepair` or `Term` if not changed.
   # - `ScopeNode` must be omitted, since it is purely an augmentation; not an
   #   actual, structural node.
-  # - `ParentNode` must become `ParentRepair`.
+  # - `ParentNode` or `CircuitNode` must become `ParentRepair`.
   #
-  # Most complexities in the above are handled by the set of `repair`
+  # Most complexities of the above are handled by the set of `repair`
   # utility functions. You are advised to use them instead of employing
   # custom logic for achieving the above.
   alias RepairTree = Term | MixtureRepair | ParentRepair
 
   defcase MixtureRepair, feature : Mixture, child : RepairTree
-  defrecord ParentRepair, feature : Parent, children : Slice(RepairTree)
+  defrecord ParentRepair, feature : Parent | Circuit, children : Slice(RepairTree)
 
-  private def changed?(before : GndLeaf | InertLeaf | MixtureNode | ParentNode, after : Term) : Bool
+  private def changed?(before : GndLeaf | InertLeaf | MixtureNode | ParentNode | UnaugmentedParentNode, after : Term) : Bool
     before.feature.node != after
   end
 
@@ -318,7 +340,7 @@ module Ww::D7
   end
 
   # Handles repair of a `ParentNode`. Yields each child to the block for repair.
-  def repair(tree : ParentNode, & : ParseTree -> RepairTree) : RepairTree
+  def repair(tree : ParentNode | UnaugmentedParentNode, &) : RepairTree
     children = Pf::Kit.stack_array(RepairTree)
     changed = false
 
@@ -374,16 +396,64 @@ module Ww::D7
   {% end %}
 
   # Calls *fn* for each `Flat` feature found in the given parse *tree*.
-  def each_flat_feature(tree : ParseTree, &fn : Flat ->) : Nil
+  def each_flat_feature(tree : ParseTree | UnaugmentedParseTree, &fn : Flat ->) : Nil
     case tree
     in InertLeaf, GndLeaf
       fn.call(tree.feature)
     in MixtureNode, ScopeNode
       each_flat_feature(tree.child, &fn)
-    in ParentNode
+    in ParentNode, UnaugmentedParentNode
       tree.children.each do |child|
         each_flat_feature(child, &fn)
       end
     end
+  end
+
+  # Calls *fn* for each `Flat` feature found in the given parse *tree*.
+  def each_flat_feature_with_addr(tree : ParseTree | UnaugmentedParseTree, &fn : Flat, NodeAddr ->) : Nil
+    each_flat_feature_with_addr(tree, NodeAddr.empty, fn)
+  end
+
+  private def each_flat_feature_with_addr(tree : InertLeaf | GndLeaf, addr, fn) : Nil
+    fn.call(tree.feature, addr)
+  end
+
+  private def each_flat_feature_with_addr(tree : MixtureNode | ScopeNode, addr, fn) : Nil
+    each_flat_feature_with_addr(tree.child, addr, fn)
+  end
+
+  private def each_flat_feature_with_addr(tree : ParentNode | UnaugmentedParentNode, addr, fn) : Nil
+    tree.children.each_with_index do |child, index|
+      key = tree.feature.range.begin + index
+      each_flat_feature_with_addr(child, addr.append(key), fn)
+    end
+  end
+
+  # Applies a perturbation *fn* to ground and parent node terms. Parents
+  # are perturbed after their children.
+  def perturb(tree : ParseTree | UnaugmentedParentNode, &fn : Term, NodeAddr -> Term) : Term
+    perturb(tree, NodeAddr.empty, fn)
+  end
+
+  private def perturb(tree : InertLeaf, addr, fn) : Term
+    tree.feature.node
+  end
+
+  private def perturb(tree : GndLeaf, addr, fn) : Term
+    fn.call(tree.feature.node, addr)
+  end
+
+  private def perturb(tree : MixtureNode | ScopeNode, addr, fn) : Term
+    collapse(repair(tree) { |child| perturb(child, addr, fn) })
+  end
+
+  private def perturb(tree : ParentNode | UnaugmentedParentNode, addr, fn) : Term
+    repair = repair(tree) do |child, index|
+      key = tree.feature.range.begin + index
+      perturb(child, addr.append(key), fn)
+    end
+
+    # repair : ParentRepair
+    fn.call(collapse(repair), addr)
   end
 end

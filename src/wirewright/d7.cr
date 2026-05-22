@@ -163,7 +163,7 @@ module Ww::D7
   #   end
   # end
   # ```
-  macro case(clf, circuit, *, decorator = nil, &block)
+  macro case(clf, circuit, *, decorator = nil, cache = Uncached(::Ww::Term, ::Ww::D7::ParseTree).new, &block)
     {%
       unless block
         raise "expected a block containing one or more `rule`s"
@@ -210,7 +210,7 @@ module Ww::D7
 
     %clf = {{clf}}
 
-    {{@type}}.step(%clf, {{circuit}}) do |%hg|
+    {{@type}}.step({{cache}}, %clf, {{circuit}}) do |%hg|
       {% if decorator %}
       {{decorator}}.call(%hg) do |%hg|
       {% end %}

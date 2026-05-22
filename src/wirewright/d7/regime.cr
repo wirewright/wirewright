@@ -74,6 +74,7 @@ module Ww::D7
 
     # :nodoc:
     def initialize(@patterns : Slice(Pattern), @queries : Hash(Term, Array(Query)))
+      @cache = SyncLRU({PatternId, Term}, {Term::Dict?}).new(128)
     end
 
     # Constructs a regime from the given list of query IR objects.
@@ -115,7 +116,16 @@ module Ww::D7
       pattern = @patterns[pattern_id]
       return unless M1.probably_matches?(pattern.op, candidate.term)
 
-      M1.match?(Term[], pattern.op, candidate.term)
+      # NOTE: I am not sure how helpful this cache is. We seem to get a small boost
+      # of performance but I am not sure whether it is worth the memory expense...
+      # I suppose we are matching the same terms over and over here. The solution
+      # is probably to restucture the solver for Regime; so that it operates on trees
+      # (of some sort...), and is bottom up. Then bolt caching on top of that.
+      response = @cache.put_if_absent({pattern_id, candidate.term}) do
+        {M1.match?(Term[], pattern.op, candidate.term)}
+      end
+
+      response[0]
     end
 
     private def crawl(hg, node : Node, query : Query, &fn : MatchTable ->)
@@ -475,6 +485,14 @@ module Ww::D7
 
       Patch.transaction do |patch|
         patchtab.each do |node_id, reps|
+          if entry = reps.single? # Fast path
+            rep, proposal_index = entry
+            next if proposal_index.in?(proposals_declined)
+
+            patch.assoc(node_id, rep)
+            next
+          end
+
           ref = hg[node_id]
           acc = ref
 

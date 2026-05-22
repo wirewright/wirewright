@@ -1,13 +1,16 @@
 module Ww::D7
-  # The address of a node in a circuit.
+  # Represents the address of a node in a circuit.
+  #
+  # Node addresses are sequences of item keys to follow to reach the referenced
+  # node in the circuit term.
   struct NodeAddr
-    include Indexable(Int32)
+    include Indexable(UInt32)
 
     # :nodoc:
     def initialize(@addr : Pf::UPath32)
     end
 
-    def self.new(objects : Enumerable(T), & : T -> Int32) : NodeAddr forall T
+    def self.new(objects : Enumerable(T), & : T -> UInt32) : NodeAddr forall T
       objects.reduce(empty) { |addr, object| addr.append(yield object) }
     end
 
@@ -15,25 +18,25 @@ module Ww::D7
       NodeAddr.new(Pf::UPath32[])
     end
 
-    def self.[](*indices : Int32) : NodeAddr
-      new(indices, &.itself)
+    def self.[](*keys : UInt32) : NodeAddr
+      new(keys, &.itself)
     end
 
     # Lexicographical comparison of two node addresses.
     def <=>(other : NodeAddr)
-      compare(other) { |a, b| a <=> b }
+      compare(other) { |key0, key1| key0 <=> key1 }
     end
 
     def size : Int32
       @addr.size
     end
 
-    def unsafe_fetch(index : Int) : Int32
-      @addr[index].to_i
+    def unsafe_fetch(index : Int) : UInt32
+      @addr[index]
     end
 
-    def append(index : Int32) : NodeAddr
-      NodeAddr.new(@addr.append(index.to_u32))
+    def append(key : UInt32) : NodeAddr
+      NodeAddr.new(@addr.append(key))
     end
   end
 
@@ -98,226 +101,71 @@ module Ww::D7
     end
   end
 
-  # Calls *frep* (a replacement function) with each `Flat` feature in
-  # *circuit*; expects the function to return the replacement term.
-  # Returns the modified version of *circuit*.
-  #
-  # - Each `Flat` feature corresponds to a node term in *circuit*.
-  #   The replacement function is used to produce its offspring.
-  # - *clf* is the classifier to use (see `Classifier`).
-  # - *circuit* is the circuit term (a dict; this function is noop otherwise).
-  # - *depth* sets the depth limit. `0` means `Flat` nodes in *circuit*, `1`
-  #   means `Flat` nodes in *circuit*'s sub-`Circuit`s, `2` in sub-sub-`Circuit`s,
-  #   and so on. In other words, *depth* is not about term depth but about
-  #   *circuit depth*; it is about evaluating nested circuits at a specific depth
-  #   (e.g. the `circuit` node in Rack), presupposing an IDDFS-like caller.
-  # - Along with the feature, *frep*' is called with the node's address and scope
-  #   (both are stable throughout changes to *depth*; both are unstable throughout
-  #   changes to *circuit* and *clf*).
-  def update(clf : Classifier, circuit : Term, *, depth : Int, &frep : NodeAddr, NodeScope, Flat -> Term) : Term
-    assert depth >= 0
+  # :nodoc:
+  def update(cache : IParseCache, clf : Classifier, circuit : Term, level : Int, &fn : NodeAddr, NodeScope, Flat -> Term) : Term
+    assert level >= 0
 
-    unless nodes = circuit.as_d?
-      return circuit
-    end
-
-    update(clf,
-      addr: NodeAddr.empty,
-      scope: NodeScope.empty,
-      depth: depth,
-      feature: parent(nodes),
-      sink: frep,
-    )
+    feature_tree = parse(clf, circuit, reply: ParseTree, cache: cache)
+    repair_tree = update(NodeAddr.empty, NodeScope.empty, feature_tree, level, fn)
+    collapse(repair_tree)
   end
 
-  # :nodoc:
-  def update(clf, addr, scope, depth, feature : Inert, sink) : Term
-    unless depth.zero?
-      return feature.node
+  private def update(addr, scope, tree : InertLeaf | GndLeaf, level, fn) : RepairTree
+    if level.zero?
+      return fn.call(addr, scope, tree.feature)
     end
 
-    sink.call(addr, scope, feature)
+    tree.feature.node
   end
 
-  # :nodoc:
-  def update(clf, addr, scope, depth, feature : Gnd, sink) : Term
-    unless depth.zero?
-      return feature.node # Not the target depth, so we shouldn't use defn!
+  private def update(addr, scope, tree : ScopeNode, level, fn) : RepairTree
+    repair(tree) do |child|
+      update(addr, scope.append(addr, tree.feature.scope), child, level, fn)
     end
-
-    sink.call(addr, scope, feature)
   end
 
-  # :nodoc:
-  def update(clf, addr, scope, depth, feature : Circuit, sink) : Term
-    if depth.zero?
-      return update(clf, addr, scope, depth, feature.leaf.call, sink)
+  private def update(addr, scope, tree : MixtureNode, level, fn) : RepairTree
+    repair(tree) do |child|
+      update(addr, scope, child, level, fn)
+    end
+  end
+
+  private def update(addr, scope, tree : CircuitNode, level, fn) : RepairTree
+    if level.zero?
+      return update(addr, scope, tree.leaf, level, fn)
     end
 
-    assert depth > 0
+    assert level > 0
 
-    # NOTE: Circuits must create scopes to seal themselves from the outside
-    # world completely. Otherwise, two circuits with the same depth could comm,
-    # and that goes against our semantics.
+    if tree.maxlevel < level
+      # This branch cannot possibly contain circuits at the target level.
+      return Term.of(tree.feature.node)
+    end
+
+    # NOTE: Circuits must surround themselves with scopes to seal themselves off
+    # from the outside world completely. Otherwise, two circuits with the same
+    # level would be able to communicate, and that would go against our semantics.
     #
     #   ;; Must NOT work!
     #   (circuit @0 (cell @x 100))
     #   (circuit @1 (cell @y))
     #   (circuit @2 (feed @x @y))
     #
-    update(clf, addr, scope.append(addr, NodeScope::ClosedExcept.new(Term[])), depth - 1, parent(feature.node, feature.range), sink)
+    subscope = scope.append(addr, NodeScope::ClosedExcept.new(Term[]))
+    treatment = GroupNode.new(parent(tree.feature.node, tree.feature.range), tree.children)
+    update(addr, subscope, treatment, level - 1, fn)
   end
 
-  # :nodoc:
-  def update(clf, addr, scope, depth, feature : Parent, sink) : Term
-    node0 = feature.node
-    node1 = Term.flatten(node0, part: Term::Dict.items_range(feature.range)) do |key, child|
-      Term.rep(update(clf, addr.append(key.to(Int32)), scope, depth, child, sink))
+  private def update(addr, scope, tree : GroupNode, level, fn) : RepairTree
+    if tree.maxlevel < level
+      # This branch cannot possibly contain circuits at the target level.
+      return Term.of(tree.feature.node)
     end
 
-    Term.of(node1)
-  end
-
-  # :nodoc:
-  def update(clf, addr, scope, depth, feature : Scope, sink) : Term
-    update(clf, addr, scope.append(addr, feature.scope), depth, feature.cont, sink)
-  end
-
-  # :nodoc:
-  def update(clf, addr, scope, depth, feature : Mixture, sink) : Term
-    feature.mix.call(update(clf, addr, scope, depth, feature.defn, sink))
-  end
-
-  # :nodoc:
-  def update(clf, addr, scope, depth, node : Term, sink) : Term
-    update(clf, addr, scope, depth, ready(clf, node), sink)
-  end
-
-  # Represents the three ways you can image a parent.
-  #
-  # - As its children (thus, the parent disappears);
-  # - As itself, replacing children in its children range with their images (*node*);
-  # - In a user-specific way, in which case you have access to the original
-  #   *parent* and the images of *children*.
-  record ParentImage, parent : Parent, children : Slice(Term) do
-    def node : Term
-      result = parent.node.replace(parent.range, Term.rep(children))
-
-      Term.of(result)
+    repair(tree) do |child, index|
+      key = tree.feature.range.begin + index
+      update(addr.append(key), scope, child, level, fn)
     end
-  end
-
-  alias ImageFn = NodeAddr, ParentImage | Inert | Gnd -> Slice(Term)
-
-  # Returns the view of *circuit* as if seen through a "lens". The lens is defined
-  # by *clf* and *fn*. Only that structure is preserved which is visible through
-  # the lens; its image possibly altered by the lens.
-  #
-  # This function backs one of the core metaphors of Wirewright and Rack in
-  # particular: in that you can look at the same term (here, *circuit*) in lots
-  # of different ways. You can look at it raw, or through a graphics "lens" that
-  # renders it as a literal image; symbolically; or in some other way. The same
-  # thing, seen with different "glasses" or "lenses", assumes different appearances,
-  # some of them more useful than others at that particular instant. Importantly,
-  # the metaphor assumes those appearances are bidirectional: you can "poke" them
-  # and the raw object responds. This isn't particularly relevant here, but it is
-  # relevant otherwise.
-  #
-  # Like in `each_feature_with_addr`, *split* enables descent into `Mixture`
-  # definitions; they are otherwise treated as `inert` nodes.
-  def image(clf : Classifier, circuit : Term, *, split : Bool = true, &fn : ImageFn) : Term
-    unless nodes = circuit.as_d?
-      return circuit
-    end
-
-    Term.of(image(clf, NodeAddr.empty, parent(nodes), split, fn))
-  end
-
-  # :nodoc:
-  def image(clf, addr, feature : Inert | Gnd, split, fn) : Slice(Term)
-    fn.call(addr, feature)
-  end
-
-  # :nodoc:
-  def image(clf, addr, feature : Circuit, split, fn) : Slice(Term)
-    image(clf, addr, parent(feature.node, feature.range), split, fn)
-  end
-
-  # :nodoc:
-  def image(clf, addr, feature : Parent, split, fn) : Slice(Term)
-    children = Pf::Kit.stack_array(Term)
-
-    feature.range.each do |index|
-      child = feature.node[index]
-      image(clf, addr.append(index), child, split, fn).each do |seln|
-        children << seln
-      end
-    end
-
-    img = ParentImage.new(feature, children.to_readonly_slice(&.itself))
-    fn.call(addr, img)
-  end
-
-  # :nodoc:
-  def image(clf, addr, feature : Scope, split, fn) : Slice(Term)
-    image(clf, addr, feature.cont, split, fn)
-  end
-
-  # :nodoc:
-  def image(clf, addr, feature : Mixture, split, fn) : Slice(Term)
-    if split
-      image(clf, addr, feature.defn, split, fn)
-    else
-      fn.call(addr, inert(feature.node))
-    end
-  end
-
-  # :nodoc:
-  def image(clf, addr, node : Term, split, fn) : Slice(Term)
-    image(clf, addr, ready(clf, node), split, fn)
-  end
-
-  # Similar to `image`, but *replaces* nodes using *fn* instead.
-  def map(clf : Classifier, circuit : Term, &fn : NodeAddr, Inert | Gnd | Parent -> Term) : Term
-    unless nodes = circuit.as_d?
-      return circuit
-    end
-
-    Term.of(map(clf, NodeAddr.empty, parent(nodes), fn))
-  end
-
-  # :nodoc:
-  def map(clf, addr, feature : Inert | Gnd, fn) : Term
-    fn.call(addr, feature)
-  end
-
-  # :nodoc:
-  def map(clf, addr, feature : Circuit, fn) : Term
-    map(clf, addr, parent(feature.node, feature.range), fn)
-  end
-
-  # :nodoc:
-  def map(clf, addr, feature : Parent, fn) : Term
-    result = Term.flatten(feature.node, part: Term::Dict.items_range(feature.range)) do |key, child|
-      Term.rep(map(clf, addr.append(key.to(Int32)), child, fn))
-    end
-
-    fn.call(addr, parent(result, feature.range))
-  end
-
-  # :nodoc:
-  def map(clf, addr, feature : Scope, fn) : Term
-    map(clf, addr, feature.cont, fn)
-  end
-
-  # :nodoc:
-  def map(clf, addr, feature : Mixture, fn) : Term
-    feature.mix.call(map(clf, addr, feature.defn, fn))
-  end
-
-  # :nodoc:
-  def map(clf, addr, node : Term, fn) : Term
-    map(clf, addr, ready(clf, node), fn)
   end
 
   # :nodoc:
@@ -335,31 +183,33 @@ module Ww::D7
 
   # Executes one time-step on *circuit* (the *previous frame*). Returns
   # the resulting sequence of substeps, the last of which is the *next frame* --
-  # the given *circuit* at t+1.
+  # *circuit* at t+1.
   #
-  # The algorithm runs a top-down iterative-deepening circuit traversal in which ground
-  # nodes at each consecutive target depth are assembled into a hypergraph.
+  # The `step` algorithm runs a top-down iterative-deepening circuit traversal in
+  # which ground nodes at each consecutive *level* are assembled into a hypergraph.
+  #
   # The hypergraph is then solved by the block to obtain a patch (see `Regime#solve`
-  # for relevant code). The algorithm applies the patch, producing a target depth-
-  # patched *circuit*. This target depth-patched circuit is traversed on the next
-  # iteration of deepening. Each target depth-patched circuit is recorded as
-  # a substep, forming the resulting sequence of substeps.
+  # for relevant code).
+  #
+  # The `step` algorithm applies the patch, producing a *level*-patched *circuit*.
+  # It then deepens. Each level-patched circuit is recorded as a substep, forming
+  # the resulting sequence of substeps.
   #
   # Replacement proceeds top-down (see `D7` for reasoning).
   #
   # See `D7` for terminology (e.g. subframe vs. substep).
-  def step(clf : Classifier, circuit : Term, & : Hypergraph -> Patch) : Slice(Term)
+  def step(cache : IParseCache, clf : Classifier, circuit : Term, &) : Slice(Term)
     substeps = Pf::Kit.stack_array(Term, 8)
 
-    MAX_SUBSTEPS.times do |depth|
+    MAX_SUBSTEPS.times do |level|
       substeps << circuit
 
       hg = Hypergraph.new
       running = false
 
-      # This update() can still do template expansion etc. -- even though
-      # *we* do not change the circuit, *clf* might.
-      circuit = update(clf, circuit, depth: depth) do |addr, scope, flat|
+      # This update() can still modify the circuit -- even though *we* do not
+      # do it, *clf* might.
+      circuit = update(cache, clf, circuit, level) do |addr, scope, flat|
         running = true
 
         case flat
@@ -376,7 +226,7 @@ module Ww::D7
         flat.node # Leave unchanged
       end
 
-      # No nodes in hypergraph => No nodes found at *depth* => We're done.
+      # No nodes in hypergraph => No nodes found at *level* => We're done.
       break unless running
 
       patch = yield hg
@@ -386,7 +236,7 @@ module Ww::D7
         {hg.addr(node_id), replacement}
       end
 
-      circuit = update(clf, circuit, depth: depth) do |addr, scope, flat|
+      circuit = update(cache, clf, circuit, level) do |addr, scope, flat|
         case flat
         in Inert then flat.node
         in Gnd   then addr_patch[addr]? || flat.node
@@ -395,67 +245,5 @@ module Ww::D7
     end
 
     substeps.to_readonly_slice(&.itself)
-  end
-
-  # Calls *sink* with `Flat` features in *circuit* and their corresponding address.
-  #
-  # - Always descends into circuits (never runs their leaf function).
-  # - Descends into `Mixture`'s definition if *split* is true, otherwise
-  #   treats `Mixture`s as inert nodes.
-  # - If *split* is `false`, the address of a node is guaranteed to be the itempath
-  #   to that node starting at *circuit*. If *split* is `true`, on the other hand,
-  #   the address is not guaranteed to be a valid itempath. In both cases, the addresses
-  #   of all nodes uniquely identify them within the same *circuit*.
-  def each_feature_with_addr(clf : Classifier, circuit : Term, *, split : Bool = true, &sink : Flat, NodeAddr ->) : Nil
-    unless nodes = circuit.as_d?
-      return circuit
-    end
-
-    each_feature_with_addr(clf, NodeAddr.empty, parent(nodes), split, sink)
-  end
-
-  # :nodoc:
-  def each_feature_with_addr(clf, addr, feature : Inert | Gnd, split, sink) : Nil
-    sink.call(feature, addr)
-  end
-
-  # :nodoc:
-  def each_feature_with_addr(clf, addr, feature : Mixture, split : Bool, sink) : Nil
-    if split
-      successor = ready(clf, feature.defn)
-    else
-      successor = inert(feature.node)
-    end
-
-    each_feature_with_addr(clf, addr, successor, split, sink)
-  end
-
-  # :nodoc:
-  def each_feature_with_addr(clf, addr, feature : Scope, split, sink) : Nil
-    each_feature_with_addr(clf, addr, feature.cont, split, sink)
-  end
-
-  # :nodoc:
-  def each_feature_with_addr(clf, addr, feature : Parent | Circuit, split, sink) : Nil
-    items = feature.node.items
-
-    feature.range.each do |index|
-      item = items[index]
-
-      each_feature_with_addr(clf, addr.append(index), ready(clf, item), split, sink)
-    end
-  end
-
-  # Returns a hash map of `Flat` nodes in *circuit*.
-  #
-  # See also: `each_feature_with_addr`.
-  def node_map(clf : Classifier, circuit : Term, **kwargs) : Hash(NodeAddr, Term)
-    node_map = {} of NodeAddr => Term
-
-    each_feature_with_addr(clf, circuit, **kwargs) do |flat, addr|
-      node_map[addr] = flat.node
-    end
-
-    node_map
   end
 end

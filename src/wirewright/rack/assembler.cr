@@ -39,7 +39,7 @@ module Ww::Rack::Assembler
   def recipe(clf : D7::Classifier, body : Term) : Recipe
     Term.case(body) do
       matchpi %{[component interior_*]} do
-        tree = D7.parse(clf, interior, reply: D7::FullParseTree)
+        tree = D7.parse(clf, interior, reply: D7::ParseTree)
         surfaces = surfaces(tree)
         surface = surfaces.single?
 
@@ -83,11 +83,35 @@ module Ww::Rack::Assembler
   # Since we have state anyway, we also use it to cache various things,
   # so that scans on each cycle are as cheap as possible, and scale
   # roughly with the amount of `Assembler`-related change.
-  defcase State, clf : D7::Classifier, rules : Array(Rule)
+  defcase State, rules : Array(Rule)
 
   # Constructs a Assembler state object. See `State` for more info.
-  def state(clf : D7::Classifier) : State
-    State.new(clf, rules: [] of Rule)
+  def state : State
+    State.new(rules: [] of Rule)
+  end
+
+  defrecord RuleLibrary, defns : Slice(RuleDefn)
+
+  def RuleLibrary.empty : RuleLibrary
+    RuleLibrary.new(Slice(RuleDefn).empty)
+  end
+
+  def library : RuleLibrary
+    RuleLibrary.empty
+  end
+
+  def library(document : Term) : RuleLibrary
+    unless dict = document.as_d?
+      return RuleLibrary.empty
+    end
+
+    defns = dict.items.to_compact_readonly_slice do |item|
+      Term.matchpi?(item, %{[rule pattern_ template_]}) do
+        RuleDefn.new(RuleScope[], :none, pattern, template)
+      end
+    end
+
+    RuleLibrary.new(defns)
   end
 
   # Represents a rule definition such as `x => 100` in the circuit. Such rule
@@ -154,11 +178,12 @@ module Ww::Rack::Assembler
   end
 
   # Returns a list of rule definitions found in *tree*.
-  def rule_defns(tree : D7::ParseTree) : Slice(RuleDefn)
+  def rule_defns(library : RuleLibrary, tree : D7::ParseTree) : Slice(RuleDefn)
     defns = Pf::Kit.stack_array(RuleDefn)
     each_rule_defn(tree) do |defn|
       defns << defn
     end
+    defns.concat(library.defns)
     defns.to_unsafe_readonly_slice!
   end
 
@@ -184,7 +209,7 @@ module Ww::Rack::Assembler
     # Find new rules.
     # Find rules whose patterns are the same but their bodies are different.
     defns.each do |defn|
-      next if defn.annotations.ignore?
+      next if defn.annotations.incomplete?
 
       present = false
 
@@ -221,7 +246,7 @@ module Ww::Rack::Assembler
   # Mutates *state* to account for *events*. Returns a list of slot invalidations,
   # which should be shown to all slots in the circuit. Slots will then decide
   # whether to respond to a invalidation and re-instantiate.
-  def update(state : State, events : Indexable(RuleEvent)) : Slice(SlotInvalidation)
+  def update(clf : D7::Classifier, state : State, events : Indexable(RuleEvent)) : Slice(SlotInvalidation)
     invalidations = Pf::Kit.stack_array(SlotInvalidation, 8)
 
     removed = Pf::Kit.stack_array(Int32, 4)
@@ -229,7 +254,7 @@ module Ww::Rack::Assembler
     events.each do |event|
       case event
       in RuleAdded
-        rule = rule(state.clf, event.defn)
+        rule = rule(clf, event.defn)
         # Appends do not disrupt indices so we can commit them immediately.
         state.rules << rule
         invalidations << RuleBodyInvalidation.new(rule.op)
@@ -238,7 +263,7 @@ module Ww::Rack::Assembler
         removed << event.index
         invalidations << RuleBodyInvalidation.new(event.rule.op)
       in RuleBodyChanged
-        successor = rule(state.clf, event.rule, event.defn)
+        successor = rule(clf, event.rule, event.defn)
         # Assigns do not disrupt indices.
         state.rules[event.index] = successor
         invalidations << RuleBodyInvalidation.new(event.rule.op)
@@ -521,14 +546,10 @@ module Ww::Rack::Assembler
     D7.repair(tree) { |child| instantiate(vars, recipe, child) }
   end
 
-  # Performs reconciliation & rewrites associated with the assembler pass on
-  # the given *circuit*.
-  def step(state : State, circuit circuit0 : Term) : Term
-    feature_tree = D7.parse(state.clf, circuit0, reply: D7::FullParseTree)
-
+  def step(rclf : D7::Classifier, rtree : D7::ParseTree, wtree : D7::ParseTree, state : State, library : RuleLibrary = RuleLibrary.empty) : Term
     # Find rule definitions. This is an unavoidable scan of the tree.
     # Cues help us skip some paths not containing a rule.
-    defns = rule_defns(feature_tree)
+    defns = rule_defns(library, rtree)
 
     # See what changed.
     events = diff(state.rules, defns)
@@ -536,18 +557,29 @@ module Ww::Rack::Assembler
     # If anything changed, generate invalidations & sync state.
     invalidations = Slice(SlotInvalidation).empty
     if events.present?
-      invalidations = update(state, events)
+      invalidations = update(rclf, state, events)
     end
 
     # Broadcast invalidations and produce a repair tree. This is another
     # unavoidable scan & rewrite of the tree. Most often this does nothing
     # or close to nothing, so we optimize for that. We use cues as well.
-    repair_tree = broadcast(state, feature_tree, invalidations)
+    repair_tree = broadcast(state, wtree, invalidations)
 
     D7.collapse(repair_tree)
   end
 
-  def pass(state : State) : D7::Pass
-    D7::Pass.new { |circuit| Slice[step(state, circuit)] }
+  def step(rclf : D7::Classifier, wclf : D7::Classifier, state : State, circuit : Term, library : RuleLibrary = RuleLibrary.empty)
+    rtree = D7.parse(rclf, circuit, reply: D7::ParseTree)
+    if rclf == wclf
+      wtree = rtree
+    else
+      wtree = D7.parse(wclf, circuit, reply: D7::ParseTree)
+    end
+
+    step(rclf, rtree, wtree, state, library)
+  end
+
+  def pass(rclf : D7::Classifier, wclf : D7::Classifier, state : State) : D7::Pass
+    D7::Pass.new { |circuit| Slice[step(rclf, wclf, state, circuit)] }
   end
 end

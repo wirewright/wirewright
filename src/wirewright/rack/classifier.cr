@@ -36,15 +36,15 @@ module Ww::Rack
       end
 
       matchpi %{[group _*]} do
-        D7.parent(node.as_d, 1...node.itemsize)
+        D7.parent(node.as_d, 1u32...node.uitemsize)
       end
 
       matchpi %{[module bindings_dict _*]} do
-        D7.scope(D7.parent(node.as_d, 2...node.itemsize), bindings: bindings.as_d)
+        D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), bindings: bindings.as_d)
       end
 
       matchpi %{[locals locals←((%past @_ min: 0)) _*]} do
-        D7.scope(D7.parent(node.as_d, 2...node.itemsize), locals: locals.items)
+        D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
       end
 
       # A device is a unit (an edge-less circuit) with an "appearance", which is
@@ -115,50 +115,50 @@ module Ww::Rack
       end
 
       matchpi %{[unit _*]} do
-        D7.circuit(node.as_d, 1...node.itemsize) { D7.inert(node) }
+        D7.circuit(node.as_d, 1u32...node.uitemsize, D7.inert(node))
       end
 
       matchpi %{[node @edge_ _?]} do
-        D7.circuit(node.as_d, 2...node.itemsize) do
-          if child = node[2]?
-            mix0 = Term.of(:cell, edge, child)
-          else
-            mix0 = Term.of(:cell, edge)
-          end
+        if child = node[2]?
+          mix0 = Term.of(:cell, edge, child)
+        else
+          mix0 = Term.of(:cell, edge)
+        end
 
-          D7.mixture(node, mix0) do |mix1|
-            Term.of_case(mix1) do
-              matchpi %{(cell @_ child1_)} { Term.morph(node, {2, child1}) }
-              otherwise { Term.morph(node, {2, nil}) }
-            end
+        leaf = D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            matchpi %{(cell @_ child1_)} { Term.morph(node, {2, child1}) }
+            otherwise { Term.morph(node, {2, nil}) }
           end
         end
+
+        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
       matchpi %{[circuit @edge_ children0_*]} do
-        D7.circuit(node.as_d, 2...node.itemsize) do
-          if children0.empty?
-            mix0 = Term.of(:cell, edge)
-          else
-            mix0 = Term.of(:cell, edge, children0)
-          end
+        if children0.empty?
+          mix0 = Term.of(:cell, edge)
+        else
+          mix0 = Term.of(:cell, edge, children0)
+        end
 
-          D7.mixture(node, mix0) do |mix1|
-            Term.of_case(mix1) do
-              matchpi %{(cell @_ children1←[_*])} do
-                node.replace(2...node.itemsize, Term.rep(children1.items))
-              end
+        leaf = D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            matchpi %{(cell @_ children1←[_*])} do
+              node.replace(2...node.itemsize, Term.rep(children1.items))
+            end
 
-              otherwise do
-                node.replace(2...node.itemsize, Term.rep)
-              end
+            otherwise do
+              node.replace(2...node.itemsize, Term.rep)
             end
           end
         end
+
+        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
       matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do
-        D7.circuit(node.as_d, 2...node.itemsize) do
+        leaf = pass do
           next D7.inert(node) unless M1.probably_matches?(pattern, children0)
           next D7.inert(node) unless env = M1.match?(pattern, children0)
 
@@ -186,6 +186,8 @@ module Ww::Rack
             Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
           end
         end
+
+        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
       matchpi %{[frag @edge_ value_]} do
@@ -198,6 +200,14 @@ module Ww::Rack
             # New value computed.
             matchpi %{(_ _ (group value1_))} { Term.morph(node, {2, value1}) }
           end
+        end
+      end
+
+      matchpi %{[frag (r @edge_) value_]} do
+        mix = Term.of(:group, {:cell, edge, value}, value)
+
+        D7.mixture(node, mix) do |(_, _, value1)|
+          Term.morph(node, {2, value1})
         end
       end
 
@@ -461,7 +471,7 @@ module Ww::Rack
       end
 
       matchpi %{[slot _ _]} do
-        D7.parent(node.as_d, 2...3)
+        D7.parent(node.as_d, 2u32...3u32)
       end
 
       otherwise do

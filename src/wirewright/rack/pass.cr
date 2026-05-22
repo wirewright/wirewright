@@ -14,8 +14,8 @@ module Ww::Rack
     end
   end
 
-  def step(clf : D7::Classifier, circuit : Term, prepass) : Slice(Term)
-    D7.case(clf, circuit, decorator: prepass) do
+  def step(clf : D7::Classifier, circuit : Term, prepass, *, cache : D7::IParseCache = Uncached(Term, D7::ParseTree).new) : Slice(Term)
+    D7.case(clf, circuit, cache: cache, decorator: prepass) do
       rule(<<-WWML) do |tgt|
       [discard @u_] dev
         -> (one u) [cell @u_ _] {name: tgt, max: ∞}

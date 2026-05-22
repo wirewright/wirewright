@@ -1892,6 +1892,18 @@ module Ww
       rep(sink)
     end
 
+    # Concatenates `Rep`s returned by the block for each object.
+    def self.flatten(objects : Indexable, &) : Rep
+      sink = Pf::Kit.stack_array(Term)
+
+      objects.each_with_index do |object, index|
+        rep = yield object, index
+        sink.concat(rep)
+      end
+
+      rep(sink.to_unsafe_readonly_slice!)
+    end
+
     # Compares itemsparts of *dict0* and *dict1* recursively (i.e., item dict
     # itemsparts and so on). If any itemspart changed, returns `true`.
     def self.item_changed?(dict0 : Dict, dict1 : Dict) : Bool

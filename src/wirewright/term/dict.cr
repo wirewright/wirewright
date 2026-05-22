@@ -140,7 +140,7 @@ module Ww
     module Part
       alias Any = ItemsRange | Items | Pairs | PairsOrd | Entries | EntriesOrd
 
-      defrecord ItemsRange, range : Range(Int32, Int32) do
+      defrecord ItemsRange, range : Range(UInt32, UInt32) do
         assert range.exclusive?
       end
 
@@ -156,7 +156,7 @@ module Ww
     end
 
     # NOTE: *range* must be exclusive.
-    def self.items_range(range : Range(Int32, Int32)) : Part::ItemsRange
+    def self.items_range(range : Range(UInt32, UInt32)) : Part::ItemsRange
       Part::ItemsRange.new(range)
     end
 
@@ -297,7 +297,8 @@ module Ww
       size <=> other.size
     end
 
-    # :nodoc:
+    # Returns the itemsize of this dict as a `UInt32`.
+    @[Dncast]
     def uitemsize : UInt32
       UTermTrie32.seqsize(@utrie)
     end
@@ -557,7 +558,7 @@ module Ww
       from = Math.min(part.range.begin, itemsize)
       to = Math.min(part.range.end, itemsize)
 
-      if to - from > itemsize * 0.5
+      if to - from > itemsize//2
         # Scan
         items.each_with_index do |item, index|
           next unless from <= index < to

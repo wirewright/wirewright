@@ -245,7 +245,7 @@ module Ww::D7
       return
     end
 
-    ancestor_nodes = node_map(clf, ancestor, split: false)
+    ancestor_nodes = fuse_map(clf, ancestor)
     fuse(clf, ancestor, ancestor_nodes, subframes, &fn)
   end
 
@@ -257,7 +257,7 @@ module Ww::D7
 
     # Notice that this is an iterator.
     assessments = subframes.each.map do |subframe|
-      nodes = node_map(clf, subframe, split: false)
+      nodes = fuse_map(clf, subframe)
 
       {subframe: subframe,
        nodes:    nodes,
@@ -305,5 +305,16 @@ module Ww::D7
     end
 
     changed
+  end
+
+  private def fuse_map(clf : Classifier, circuit : Term)
+    nodes = {} of NodeAddr => Term
+
+    feature_tree = D7.parse(clf, circuit, reply: UnaugmentedParseTree)
+    D7.each_flat_feature_with_addr(feature_tree) do |feature, addr|
+      nodes[addr] = feature.node
+    end
+
+    nodes
   end
 end
