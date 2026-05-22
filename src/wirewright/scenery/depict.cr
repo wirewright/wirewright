@@ -99,7 +99,7 @@ module Ww::Scenery
     def self.new(child : DrawCommand, tf : Tf)
       # Collapse nested transforms.
       if child.is_a?(DrawTransform)
-        return new(child.child, Tf[tf, child.tf], bounds: tf.map(child.bounds))
+        return new(child.child, Tf[child.tf, tf], bounds: tf.map(child.bounds))
       end
 
       new(child, tf, bounds: tf.map(child.bounds))
@@ -511,7 +511,7 @@ module Ww::Scenery
     DrawClip.new(
       child: DrawTransform.new(
         child: depict(cache, node.children, box.children),
-        tf: Tf[Tf.translate(-node.offset)],
+        tf: Tf.translate(-node.offset),
       ),
       visible: RoundedRect.new(box.bounds, node.radii),
     )
@@ -531,7 +531,7 @@ module Ww::Scenery
       return draw_command
     end
 
-    DrawTransform.new(draw_command, tf: Tf[Tf.translate(box.bounds.tl)])
+    DrawTransform.new(draw_command, tf: Tf.translate(box.bounds.tl))
   end
 
   private def depict(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph | ShapedText, bounds : Rect) : DrawCommand

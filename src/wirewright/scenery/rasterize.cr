@@ -8,9 +8,50 @@ module Ww::Scenery
     diffx(command0, command1)
   end
 
+  # The idea is to exclude the bounds of unchanged commands from the resulting
+  # dirty rect, and include all other bounds (of commands removed or added/updated).
+  private def idiff?(commands0 : Slice(DrawCommand), commands1 : Slice(DrawCommand)) : Slice(Rect)?
+    # Hashes are usually large and usually random-ish so there's no point
+    # in using e.g. USet32 here.
+    #
+    # Note also that all DrawCommands cache_hash so it's cheap to call #hash.
+    l = Set(UInt64).new
+    r = Set(UInt64).new
+
+    commands0.each do |child|
+      return unless l.add?(child.hash) # Duplicate or collision
+    end
+
+    commands1.each do |child|
+      return unless r.add?(child.hash) # Duplicate or collision
+    end
+
+    # No duplicates or collisions in l and r.
+
+    dirty_rects = Pf::Kit.stack_array(Rect, 8)
+
+    commands0.each do |child|
+      next if child.hash.in?(r)
+
+      # Removed
+      dirty_rects << child.bounds
+    end
+
+    commands1.each do |child|
+      next if child.hash.in?(l)
+
+      # Updated or created
+      dirty_rects << child.bounds
+    end
+
+    dirty_rects.to_unsafe_readonly_slice!
+  end
+
   private def diffx(command0 : DrawSeq, command1 : DrawSeq) : Slice(Rect)
     unless command0.children.size == command1.children.size
-      return Slice[command0.bounds, command1.bounds]
+      dirty_rects = idiff?(command0.children, command1.children)
+      dirty_rects ||= Slice[command0.bounds, command1.bounds]
+      return dirty_rects
     end
 
     dirty_rects = Pf::Kit.stack_array(Rect, 8)
@@ -72,26 +113,26 @@ module Ww::Scenery
       raise "pvg: failed to create canvas for surface of size #{screen.width}x#{screen.height}"
     end
 
-    # Add a 1px margin to conceal any float/rasterization artifacts.
-    dirty_rects = dirty_rects.map(&.snap.margin(3))
-
     begin
-      dirty_rects.each do |dirty_rect|
-        PlutoVG.canvas_add_rect(canvas, dirty_rect.x, dirty_rect.y, dirty_rect.w, dirty_rect.h)
-        PlutoVG.canvas_set_rgba(canvas, *backdrop.rgba)
-        PlutoVG.canvas_fill(canvas)
-      end
-
       dirty = Rect.empty
 
       dirty_rects.each do |dirty_rect|
+        # Add 1px margin to conceal any float/rasterization artifacts.
+        dirty_rect = dirty_rect.snap.margin(5)
         PlutoVG.canvas_add_rect(canvas, dirty_rect.x, dirty_rect.y, dirty_rect.w, dirty_rect.h)
         dirty = Rect.union(dirty, dirty_rect)
       end
 
-      PlutoVG.canvas_clip(canvas)
+      PlutoVG.canvas_clip_preserve(canvas)
 
-      rasterize(canvas, command, dirty)
+      {% if flag?(:scenery_rasterize_dmg_debug) %}
+        PlutoVG.canvas_set_rgba(canvas, 1.0, 0, 0, 0.1)
+        PlutoVG.canvas_fill(canvas)
+      {% else %}
+        PlutoVG.canvas_set_rgba(canvas, *backdrop.rgba)
+        PlutoVG.canvas_fill(canvas)
+        rasterize(canvas, command, dirty)
+      {% end %}
     ensure
       PlutoVG.canvas_destroy(canvas)
       PlutoVG.surface_destroy(surface)
@@ -107,7 +148,7 @@ module Ww::Scenery
       PlutoVG::GradientStop.new(offset: stop.offset, color: stop.color.to_pvg)
     end
 
-    tf = Tf[Tf.translate(bounds.tl)]
+    tf = Tf.translate(bounds.tl)
     matrix = tf.to_pvg
 
     PlutoVG.canvas_set_linear_gradient(canvas,
@@ -127,7 +168,7 @@ module Ww::Scenery
       PlutoVG::GradientStop.new(offset: stop.offset, color: stop.color.to_pvg)
     end
 
-    tf = Tf[Tf.translate(bounds.tl)]
+    tf = Tf.translate(bounds.tl)
     matrix = tf.to_pvg
 
     # NOTE: the clamps here are due to the fact that for some reason, the gradient
@@ -191,20 +232,26 @@ module Ww::Scenery
   private def rasterize(canvas, command : DrawTransform, dirty : Rect)
     return unless command.bounds.intersects?(dirty)
 
-    matrix = command.tf.to_pvg
+    step_matrix = command.tf.to_pvg
 
     PlutoVG.canvas_save(canvas)
-    PlutoVG.canvas_transform(canvas, pointerof(matrix))
+    PlutoVG.canvas_transform(canvas, pointerof(step_matrix))
+    PlutoVG.canvas_get_matrix(canvas, out acc_matrix)
 
-    # Check out where our origin lands on the screen given the accumulated
-    # the transforms.
-    PlutoVG.canvas_map(canvas, 0.0, 0.0, out ox, out oy)
+    acc_tf = Tf.new(acc_matrix)
 
-    # Make sure we're aligned with the pixels on the screen. Or, as it goes,
-    # "as aligned as we can be".
-    error_x = ox - ox.round
-    error_y = oy - oy.round
-    PlutoVG.canvas_translate(canvas, -error_x, -error_y)
+    scale = acc_tf.scale
+
+    # Only apply pixel alignment if scale is essentially 1.0.
+    if (scale.x - 1.0).abs < 1e-5 && (scale.y - 1.0).abs < 1e-5
+      # Check out where our origin lands on the screen given the accumulated transforms.
+      origin = acc_tf.map(Point[0, 0])
+
+      # Make sure we're aligned with the pixels on the screen.
+      error_x = origin.x - origin.x.round
+      error_y = origin.y - origin.y.round
+      PlutoVG.canvas_translate(canvas, -error_x, -error_y)
+    end
 
     # Since the dirty rect is in parent-space and we want it in child-space,
     # we use the inverse transform.
@@ -280,19 +327,19 @@ module Ww::Scenery
     case fit = command.fit
     in Img::Fit::Align
       transform = Tf[
-        Tf.translate(Rect.align(command.bounds, Rect.new(tl: Point[0, 0], size: command.target_size), fit.normpt).tl),
         Tf.scale(scale),
+        Tf.translate(Rect.align(command.bounds, Rect.new(tl: Point[0, 0], size: command.target_size), fit.normpt).tl),
       ]
     in Img::Fit::Pan
       transform = Tf[
-        Tf.translate(command.bounds.tl + fit.delta),
         Tf.scale(scale),
+        Tf.translate(command.bounds.tl + fit.delta),
       ]
     in Img::Fit::Stretch
       transform = Tf[
-        Tf.scale(scale),
-        Tf.translate(command.bounds.tl),
         Tf.scale(command.bounds.size * command.target_size.normalized),
+        Tf.translate(command.bounds.tl),
+        Tf.scale(scale),
       ]
     end
 
@@ -319,18 +366,18 @@ module Ww::Scenery
         tf = Tf.new
       in .stretch?
         tf = Tf[
-          Tf.translate(svg_bounds.tl),
           Tf.scale(command.bounds.size * svg_bounds.size.normalized),
+          Tf.translate(svg_bounds.tl),
         ]
       in .keep_ratio?
         ratio = svg_bounds.h/svg_bounds.w
         scale = Point[command.bounds.w / svg_bounds.w, (command.bounds.w * ratio) / svg_bounds.h]
 
         tf = Tf[
-          Tf.translate(svg_bounds.tl),
+          Tf.scale(scale),
           # Center vertically.
           Tf.translate(Point[0, (command.bounds.h - svg_bounds.h * scale.y) * 0.5]),
-          Tf.scale(scale),
+          Tf.translate(svg_bounds.tl),
         ]
       end
 

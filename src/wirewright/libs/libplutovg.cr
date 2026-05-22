@@ -132,6 +132,7 @@ lib PlutoVG
   fun canvas_add_glyph_by_index = plutovg_canvas_add_glyph_by_index(canvas : Canvas, index : LibC::Int, x : LibC::Float, y : LibC::Float)
   fun canvas_set_color = plutovg_canvas_set_color(canvas : Canvas, color : Color*)
   fun canvas_set_fill_rule = plutovg_canvas_set_fill_rule(canvas : Canvas, winding : FillRule)
+  fun canvas_get_matrix = plutovg_canvas_get_matrix(canvas : Canvas, matrix : Matrix*)
 
   fun canvas_set_rgba = plutovg_canvas_set_rgba(canvas : Canvas, r : LibC::Float, g : LibC::Float, b : LibC::Float, a : LibC::Float)
   fun canvas_set_texture = plutovg_canvas_set_texture(canvas : Canvas, surface : Surface, type : TextureType, opacity : LibC::Float, matrix : Matrix*)

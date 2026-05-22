@@ -451,28 +451,27 @@ module Ww::Scenery
     # a ZStack.
     sized_z_stack, size = size!(cache, ZStack.anon(node.children), cst)
 
-    bounds = Rect.new(tl: Point[0, 0], size: size.inner)
+    inner_bounds = Rect.new(tl: Point[0, 0], size: size.inner)
 
-    origin = bounds.map(node.translation.origin)
-    pivot = bounds.map(node.rotation.origin)
+    origin = inner_bounds.map(node.translation.origin)
+    pivot = inner_bounds.map(node.rotation.origin)
     scale = node.scale.factor
 
-    total_w = cst.max_w.infinite? ? bounds.w : Math.max(bounds.w, cst.max_w)
-    total_h = cst.max_h.infinite? ? bounds.h : Math.max(bounds.h, cst.max_h)
+    total_w = cst.max_w.infinite? ? inner_bounds.w : Math.max(inner_bounds.w, cst.max_w)
+    total_h = cst.max_h.infinite? ? inner_bounds.h : Math.max(inner_bounds.h, cst.max_h)
 
     offset = Point[
-      node.translation.dl.resolve(total_w - bounds.w),
-      node.translation.dt.resolve(total_h - bounds.h),
+      node.translation.dl.resolve(total_w - inner_bounds.w),
+      node.translation.dt.resolve(total_h - inner_bounds.h),
     ]
 
-    origin -= offset
-
     tf = Tf[
-      Tf.translate(-origin),
-      Tf.translate(pivot),
+      Tf.translate(-pivot),
       Tf.rotate(node.rotation.angle),
       Tf.scale(scale),
-      Tf.translate(-pivot),
+      Tf.translate(pivot),
+      Tf.translate(-origin),
+      Tf.translate(offset),
     ]
 
     {TransformMatrix(SizedNode).new(sized_z_stack.children, tf), size}
@@ -493,8 +492,8 @@ module Ww::Scenery
       min_h = cst.min_h
     end
 
-    max_w = node.max_w.try(&.resolve(cst.max_w)) || Magnitude::INFINITY
-    max_h = node.max_h.try(&.resolve(cst.max_h)) || Magnitude::INFINITY
+    max_w = Math.max(Magnitude.new(0), node.max_w.try(&.resolve(cst.max_w)) || Magnitude::INFINITY)
+    max_h = Math.max(Magnitude.new(0), node.max_h.try(&.resolve(cst.max_h)) || Magnitude::INFINITY)
 
     child_max_w = Math.min(max_w, cst.max_w)
     child_max_h = Math.min(max_h, cst.max_h)

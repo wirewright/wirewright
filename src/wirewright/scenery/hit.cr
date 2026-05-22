@@ -93,11 +93,21 @@ module Ww::Scenery
 
   # The hit tree is like the `Box` tree or the `Size` tree or the `VBox` tree
   # etc.; except it's about *hits*, as in, mouse hits, as in, things currently
-  # hovered over with the mouse. We generalize quite a bit from this picture with
-  # `HitQuery`, but the idea stays the same: we define some region of interest in
-  # screen-space coordinates; and we want a tree representation of which nodes
-  # are in this region of interest, isomorphic to the original `AimedNode` tree;
-  # and of their "reaction" to being there.
+  # hovered over with the mouse.
+  #
+  # We generalize quite a bit from this with `HitQuery`, but the idea remains
+  # roughly the same: we define some region of interest in screen-space
+  # coordinates; and build a tree representation of which nodes are in this
+  # region, and of their reaction to being there. The tree is isomorphic
+  # ("analogous") to the original `AimedNode` tree.
+  #
+  # All hit nodes except `HitEmpty` have a *part* rect, which is a `Rect` with
+  # some important properties. Its top-left point is *always* the hit query's
+  # focus point (see `HitQuery#focus`), and its bottom-right point is *always*
+  # the anchor point (see `HitQuery#anchor`). This means it is a "directed
+  # rectangle": its size can be negative, which just means the anchor
+  # point is above the focus. Most if not all rectangle methods work the same,
+  # but you might want to use `Rect#abs` if you want to be extra careful.
   alias HitNode = HitEmpty | HitLeaf | HitTextLeaf | HitGroup
 
   # The current node and its subtree (if any) were not hit by the hit query.
@@ -105,13 +115,14 @@ module Ww::Scenery
 
   # A leaf was hit by the hit query (e.g., a rectangle).
   #
-  # - *hover* tells whether the hit query's focus is currently over the leaf.
-  # - *part* is the part of the leaf's visual bounds that was hit.
+  # *hover* tells whether the hit query's focus is currently over the leaf.
+  #
+  # See `HitNode` for info about *part*.
   defrecord HitLeaf, hover : Bool, part : Rect, copying: true
 
   # A text node was hit by the hit query.
   #
-  # *part* is the part of the text's visual bounds that was hit.
+  # See `HitNode` for info about *part*.
   defrecord HitTextLeaf,
     anchor : Int32,
     focus : Int32,
@@ -122,7 +133,7 @@ module Ww::Scenery
 
   # Multiple children of the current node were hit by the hit query.
   #
-  # *part* is the part of the current node's visual bounds that was hit.
+  # See `HitNode` for info about *part*.
   defrecord HitGroup,
     children : Slice(HitNode),
     hover : Bool,
@@ -165,12 +176,12 @@ module Ww::Scenery
   private def hit(node : Inert | RectShape | Pending | Img | Svg | IconGlyph, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    part = Rect.intersection(vbox.bounds, itf.map(query.rect))
-    if part.negative?
+    unless vbox.bounds.intersects?(itf.map(query.rect))
       return HitEmpty.new
     end
 
-    hover = vbox.bounds.includes?(itf.map(query.focus))
+    part = Rect.new(tl: itf.map(query.focus), br: itf.map(query.anchor))
+    hover = vbox.bounds.includes?(part.tl)
 
     HitLeaf.new(hover, part)
   end
@@ -226,12 +237,12 @@ module Ww::Scenery
   private def hit(node : ShapedText, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    part = Rect.intersection(vbox.bounds, itf.map(query.rect))
-    if part.negative?
+    unless vbox.bounds.intersects?(itf.map(query.rect))
       return HitEmpty.new
     end
 
-    hover = vbox.bounds.includes?(itf.map(query.focus))
+    part = Rect.new(tl: itf.map(query.focus), br: itf.map(query.anchor))
+    hover = vbox.bounds.includes?(part.tl)
 
     anchor_index = hit_index(node, box, itf.map(query.anchor)).clamp(0..node.caption.size)
     focus_index = hit_index(node, box, itf.map(query.focus)).clamp(0..node.caption.size)
@@ -245,12 +256,11 @@ module Ww::Scenery
   end
 
   private def hit(node : TransformMatrix, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
-    box_hit(node, box, vbox, tf, Tf[tf, node.tf], query)
+    box_hit(node, box, vbox, tf, Tf[node.tf, tf], query)
   end
 
-  # TODO: Implement proper rounded rect-rect intersection?
   private def hit(node : Clip, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
-    box_hit(node, box, vbox, tf, Tf[tf, Tf.translate(-node.offset)], query)
+    box_hit(node, box, vbox, tf, Tf[Tf.translate(-node.offset), tf], query)
   end
 
   private def hit(node : Padding | Align | XYStack | ZStack | Composite | Vantage | Gate, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
@@ -260,12 +270,12 @@ module Ww::Scenery
   private def box_hit(node : AimedNode, box : OriginBox, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    part = Rect.intersection(vbox.bounds, itf.map(query.rect))
-    if part.negative?
+    unless vbox.bounds.intersects?(itf.map(query.rect))
       return HitEmpty.new
     end
 
-    hover = vbox.bounds.includes?(itf.map(query.focus))
+    part = Rect.new(tl: itf.map(query.focus), br: itf.map(query.anchor))
+    hover = vbox.bounds.includes?(part.tl)
 
     hits = Pf::Kit.stack_array(HitNode)
     present = false
@@ -281,7 +291,7 @@ module Ww::Scenery
       child_box = box.children[child_index]
       child_vbox = vbox.children[child_index]
 
-      translated_child_tf = Tf[child_tf, Tf.translate(child_box.bounds.tl)]
+      translated_child_tf = Tf[Tf.translate(child_box.bounds.tl), child_tf]
       child_vbox = VBox.new(child_vbox.bounds.translate(-child_box.bounds.tl), child_vbox.children)
       child_origin_box = OriginBox.new(child_box.bounds.size, child_box.children)
       child_hit = hit(child_node, child_origin_box, child_vbox, translated_child_tf, query)

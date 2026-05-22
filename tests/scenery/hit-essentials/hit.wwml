@@ -3,7 +3,7 @@
 
 ;; Hit the image.
 (hit (point 80 20)
-  (vantage {¦ hit-dl: ≈4 hit-dt: ≈5 hit-w: ≈0 hit-h: ≈0} ⍊ id: img))
+  (vantage {¦ hit-focus-l: ≈4 hit-focus-t: ≈5} ⍊ id: img))
 
 ;; Hit the "Bye World" text with many spaces. We hit it at a whitespace
 ;; to see where the hit lands.
@@ -44,7 +44,12 @@
       (line ⍊ hit-anchor: 4 hit-span: 3)
       (word ⍊ -hit-anchor -hit-span)
       (word ⍊ hit-anchor: 4 hit-span: 3)
-     ⍊ hit-anchor: 11 hit-span: 3 hit-dl: ≈30 hit-dt: ≈31)
+     ⍊ hit-anchor: 11
+       hit-span: 3
+       hit-anchor-l: ≈30
+       hit-anchor-t: ≈31
+       hit-focus-l: ≈55
+       hit-focus-t: ≈31)
    ⍊ id: viewport-text))
 
 ;; Hit rotated text before NUL.

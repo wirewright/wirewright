@@ -91,6 +91,7 @@ module Ww::Scenery
   private def aim!(cache, node : Viewport, box : OriginBox) : AimResponse
     aimed_children, foci = aim(cache, node.children, box.children)
 
+    # Union through aim rects of children to get to the aim rect for us.
     aim_rect = nil
 
     case node.aim
@@ -101,44 +102,42 @@ module Ww::Scenery
       end
     end
 
-    content = box.children.reduce(Rect.empty) do |memo, child|
+    # Union through child bounds to determine the content rect.
+    content_rect = box.children.reduce(Rect.empty) do |memo, child|
       Rect.union(memo, child.bounds)
     end
 
-    total_size = Point.max(box.bounds.size, content.size)
+    # Resolve offsets.
+    total_size = Point.max(box.bounds.size, content_rect.size)
     remaining_size = total_size - box.bounds.size
 
-    # If there's no children, we use the viewport's page-x and page-y to
-    # determine the aim rect.
-    if aim_rect.nil?
-      page_offset = Point[
-        node.page_x.resolve(remaining_size.x),
-        node.page_y.resolve(remaining_size.y),
-      ]
-
-      # box : OriginBox
-      aim_rect = box.bounds.translate(page_offset)
-    end
+    page_offset = Point[
+      node.page_x.resolve(remaining_size.x),
+      node.page_y.resolve(remaining_size.y),
+    ]
 
     offset = Point[
       node.offset_x.resolve(remaining_size.x),
       node.offset_y.resolve(remaining_size.y),
     ]
 
+    # Finalize aim rect. If we don't have an aim rect, make it the page.
+    # Offset applies unconditionally from wherever we thus land.
+    aim_rect ||= Rect.new(tl: page_offset, size: box.bounds.size)
     aim_rect = aim_rect.translate(offset)
 
-    x = scroll(0, box.bounds.w, aim_rect.x, aim_rect.w)
-    y = scroll(0, box.bounds.h, aim_rect.y, aim_rect.h)
+    # Compute the view rect.
+    x = scroll(page_offset.x, box.bounds.w, aim_rect.x, aim_rect.w)
+    y = scroll(page_offset.y, box.bounds.h, aim_rect.y, aim_rect.h)
+    view_offset = Point[x, y].round
 
-    aimed_node = Clip.new(aimed_children, offset: Point[x, y], radii: node.radii)
+    aimed_node = Clip.new(aimed_children, view_offset, node.radii)
 
     case node.aim
     in .on?, .off?
       foci = Slice(Rect).empty
     in .on_through?, .off_through?
-      foci = foci.map do |focus|
-        focus.translate(-Point[x, y])
-      end
+      foci = foci.to_readonly_slice(&.translate(-view_offset))
     end
 
     AimResponse.new(aimed_node, foci)

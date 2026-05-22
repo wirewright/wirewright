@@ -85,15 +85,15 @@ module Ww::Scenery
       Tf.new(d, -b, -c, a, e, f)
     end
 
-    # Composes this and *other* transformations. Returns the resulting transformation.
+    # Combines this and *other* transformations. Returns the resulting transformation.
     def append(other : Tf) : Tf
       Tf.new(
-        a: other.@a * @a + other.@b * @c,
-        b: other.@a * @b + other.@b * @d,
-        c: other.@c * @a + other.@d * @c,
-        d: other.@c * @b + other.@d * @d,
-        e: other.@e * @a + other.@f * @c + @e,
-        f: other.@e * @b + other.@f * @d + @f,
+        a: @a * other.@a + @b * other.@c,
+        b: @a * other.@b + @b * other.@d,
+        c: @c * other.@a + @d * other.@c,
+        d: @c * other.@b + @d * other.@d,
+        e: @e * other.@a + @f * other.@c + other.@e,
+        f: @e * other.@b + @f * other.@d + other.@f,
       )
     end
 

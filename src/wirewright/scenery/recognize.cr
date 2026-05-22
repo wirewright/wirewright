@@ -1214,8 +1214,6 @@ module Ww::Scenery
       # - `off`: absorbs aim rects without adjusting the viewport.
       # - `off-through`: passes aim rects through without adjusting the viewport.
       #
-      # If aiming is enabled, it is preferred over *page-x* and *page-y*.
-      #
       # |@key page-x scenery.unit
       # TODO: How to describe this?
       #
