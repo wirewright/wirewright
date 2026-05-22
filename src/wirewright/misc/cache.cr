@@ -17,7 +17,9 @@ module Ww
     # NOTE: This is simply a get followed by a put. In other words, atomicity
     # is not guaranteed; someone else may insert a value for *key* between us
     # checking it and inserting it.
-    def put_if_absent?(key : K, & : -> V) : {Bool, V}
+    #
+    # Signature: `put_if_absent?(key : K, & : -> V) : {Bool, V}`.
+    def put_if_absent?(key : K, &)
       if value = get?(key)
         return true, value
       end
@@ -27,7 +29,9 @@ module Ww
 
     # Same as `put_if_absent?`, but discards the boolean returned alongside
     # the value.
-    def put_if_absent(key, & : -> V) : V
+    #
+    # Signature: `put_if_absent(key : K, & : -> V) : V`.
+    def put_if_absent(key, &)
       _, value = put_if_absent?(key) { yield }
       value
     end
