@@ -101,9 +101,17 @@ module Ww::Microfold2
       )
     end
 
+    # Minimum possible value for rem (clamp).
+    MIN_REM_PX = 4
+
+    # Maximum possible value for rem (clamp).
+    MAX_REM_PX = 128
+
     # Constructs a `Codex` object based on the codex dict *codex*, and *rem*, the base
     # font size (in pixels).
     def self.compile(codex : Term::Dict, rem : Term::Num) : Outcome::Accepted(Codex)
+      rem = Math.min(Math.max(rem, Term[MIN_REM_PX]), Term[MAX_REM_PX])
+
       globals_section = codex[:globals]?.as_d? || Term[]
       globals_out = globals(globals_section.with(:rem, rem)).at(:globals)
 
