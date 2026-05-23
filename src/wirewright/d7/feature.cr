@@ -221,7 +221,10 @@ module Ww::D7
       return InertLeaf.new(feature: inert(circuit))
     end
 
-    parse(clf, cache, parent(nodes), reply)
+    # Assuming you can't embed a circuit inside itself, of course ... Which you can't.
+    cache.put_if_absent(circuit) do
+      parse(clf, cache, parent(nodes), reply)
+    end
   end
 
   # :ditto:
