@@ -186,6 +186,10 @@ vantage: ""
   (utility "bg-min-none"
     {min-w: 0, min-h: 0}))
 
+(for bg-box
+  (utility (circumfix "bg-min-" (number value) "px")
+    {min-w: ^value, min-h: ^value}))
+
 ;; Solid paint.
 (for bg-box
   (utility (prefix "bg-" (one-of colors fill))
