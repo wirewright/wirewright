@@ -73,7 +73,7 @@ module Ww::Rack::Assembler
     surfaces.to_unsafe_readonly_slice!
   end
 
-  # Holds state for the assembler pass.
+  # Holds **mutable** state for the assembler pass.
   #
   # `Assembler` is ultimately a stateful pass. We need to know which rules
   # have appeared and disappeared and changed at the beginning of each
