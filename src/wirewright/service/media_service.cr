@@ -472,6 +472,55 @@ module Ww
         ScrollDn
         ScrollLeft
         ScrollRight
+
+        def self.parse(term : Term) : State
+          state = None
+
+          case term
+          when Term.of(:left)
+            state |= Left
+          when Term.of(:right)
+            state |= Right
+          when Term.of(:middle)
+            state |= Middle
+          when Term.of(:forward)
+            state |= Forward
+          when Term.of(:backward)
+            state |= Backward
+          when Term.of(:"scroll-up")
+            state |= ScrollUp
+          when Term.of(:"scroll-dn")
+            state |= ScrollDn
+          when Term.of(:"scroll-left")
+            state |= ScrollLeft
+          when Term.of(:"scroll-right")
+            state |= ScrollRight
+          end
+
+          state
+        end
+
+        def self.parse(terms : Enumerable(Term)) : State
+          terms.reduce(None) do |state, term|
+            state | parse(term)
+          end
+        end
+
+        def term : Term
+          case self
+          when .left?         then Term.of(:left)
+          when .right?        then Term.of(:right)
+          when .middle?       then Term.of(:middle)
+          when .forward?      then Term.of(:forward)
+          when .backward?     then Term.of(:backward)
+          when .scroll_up?    then Term.of(:"scroll-up")
+          when .scroll_dn?    then Term.of(:"scroll-dn")
+          when .scroll_left?  then Term.of(:"scroll-left")
+          when .scroll_right? then Term.of(:"scroll-right")
+          else
+            raise ArgumentError.new
+          end
+        end
       end
 
       getter id : UInt32
