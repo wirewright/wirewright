@@ -7,6 +7,13 @@ presets:
    source: "src/dev.cr"},
  "mt":
   {flags: {"execution_context": true, "preview_mt": true}},
+ "musoma":
+  {flags:
+    {"execution_context": true,
+     "main": true,
+     "preview_mt": true,
+     "sdl3": true},
+   source: "src/musoma.cr"},
  "tests":
   {flags:
     {"execution_context": true,

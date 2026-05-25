@@ -2456,6 +2456,16 @@ class Channel
 end
 
 module Indexable(T)
+  def ends_with?(objects : Indexable(T)) : Bool
+    return false unless size >= objects.size
+
+    (size - objects.size...size).each_with_index do |i, j|
+      return false unless self[i] == objects[j]
+    end
+
+    true
+  end
+
   def single?(&)
     result = nil
 
@@ -2478,7 +2488,17 @@ module Indexable(T)
   end
 
   def single? : T?
-    size == 1 ? unsafe_fetch(0) : nil
+    return unless size == 1
+
+    unsafe_fetch(0)
+  end
+
+  def single : T
+    unless size == 1
+      raise IndexError.new
+    end
+
+    unsafe_fetch(0)
   end
 
   def compare(other : Indexable, &)
@@ -3784,6 +3804,53 @@ class BlockingSignal
     end
   end
 
+  def wait_until(epoch : UInt64, timeout : Nil) : UInt64
+    wait(epoch)
+  end
+
+  def wait_until(epoch : UInt64, timeout : Time::Span) : UInt64
+    if timeout.zero? || timeout.negative?
+      call
+      return wait(epoch)
+    end
+
+    # Fast path
+    @mutex.synchronize do
+      if @epoch > epoch
+        return @epoch
+      end
+    end
+
+    # Slower path
+    Fiber.yield
+    @mutex.synchronize do
+      if @epoch > epoch
+        return @epoch
+      end
+    end
+
+    # Slowest path.
+    #
+    # This "contraption" manages to properly cancel the timeout if wait() is
+    # woken up; and waits for the cleaning up of the worker fiber on timeout().
+    # That I call an achievement, although it is probably quite costly vs.
+    # a simple wait()!
+
+    chan = Channel(UInt64).new
+
+    spawn do
+      chan.send(wait(epoch))
+    end
+
+    select
+    when timeout(timeout)
+      call
+      chan.receive
+    when next_epoch = chan.receive
+      next_epoch
+    end
+  end
+
   def each(&) : Nil
     epoch = 0u64
     loop do
@@ -3839,6 +3906,10 @@ class BlockingQueue(T)
     @queue = Deque(T).new
     @mutex = Sync::Mutex.new
     @cv = Sync::ConditionVariable.new(@mutex)
+  end
+
+  def present? : Bool
+    @mutex.synchronize { @queue.present? }
   end
 
   def interject(*objects : T) : Nil
@@ -4849,6 +4920,111 @@ class Promise(T)
   end
 end
 
+# A map of *K*s to a source of promises of *V*. Promises can be `add`ed,
+# then polled by *K* using `[]?`. Promises can be removed by *K*. Importantly,
+# *K*s can be `invalidate`d; this makes the map ask the promise source for
+# a new promise.
+class PromiseMap(K, V)
+  def initialize
+    @lock = Sync::Mutex.new
+    @sources = {} of K => (-> Promise(V))
+    @promises = {} of K => Promise(V)
+  end
+
+  # Returns `true` if a promise with the given *key* exists.
+  def includes?(key : K) : Bool
+    @lock.synchronize { @promises.has_key?(key) }
+  end
+
+  # Polls the promise for *key*. Returns `nil` if no such promise exists,
+  # or if the promise rejects (in that case it will keep rejecting until
+  # you invalidate it).
+  def []?(key : K) : V?
+    return unless promise = @lock.synchronize { @promises[key]? }
+    return unless result = promise.poll?
+
+    result.unwrap?
+  end
+
+  # Registers a source for *key*.
+  def add(key : K, &fn : -> Promise(V)) : Nil
+    promise = fn.call
+
+    @lock.synchronize do
+      @sources[key] = fn
+      @promises[key] = promise
+    end
+  end
+
+  # Removes the promise for *key*.
+  def delete(key : K) : Nil
+    @lock.synchronize do
+      @sources.delete(key)
+      @promises.delete(key)
+    end
+  end
+
+  # Invalidates just the promise for *key*. Returns `true` if invalidated. Returns
+  # `false` if *key* does not exist.
+  def invalidate?(key : K) : Bool
+    unless source = @lock.synchronize { @sources[key]? }
+      return false
+    end
+
+    promise = source.call
+
+    @lock.synchronize do
+      # If someone called add() while we were calling source, this means
+      # they've called source and the promise is up-to-date already (and so,
+      # invalidated already).
+      #
+      # If someone called delete(), likewise, the promise does not exist. We
+      # don't have to do anything.
+      unless @sources[key]? == source
+        return false
+      end
+
+      @promises[key] = promise
+    end
+
+    true
+  end
+
+  # Invalidates all of keys. Returns `true` if any key was invalidated.
+  def invalidate?(*keys : K) : Bool
+    invalidated = false
+
+    keys.each do |key|
+      if invalidate?(key)
+        invalidated = true
+      end
+    end
+
+    invalidated
+  end
+
+  # Invalidates all promises.
+  def invalidate : Nil
+    @lock.synchronize do
+      @promises.clear
+      @sources.each do |key, source|
+        @promises[key] = source.call
+      end
+    end
+  end
+end
+
 lib LibC
   fun fdopendir(fd : LibC::Int) : DIR*  # ?!?!?!?!?
+end
+
+class ::PrettyPrint
+  # Forces a break.
+  def break : Nil
+    flush
+    @output << @newline
+    @indent.times { @output << ' ' }
+    @output_width = @indent
+    @buffer_width = 0
+  end
 end

@@ -1,0 +1,15 @@
+(window title: "Hello World" style: "backdrop-neutral-900 content-center flow-col gap-10"
+  ;; The following is to show how you can load images by the means of the circuit,
+  ;; using the `resource` node...
+  (node @img
+    (resource (uri "https://picsum.photos/100/100")))
+  (view (@img (resource _ (present _ blob_)) @img-view)
+    (img src: '^blob))
+  (group style: "flow-none content"
+    (node @img-view))
+
+  ;; Most likely, however, you don't want to do that. Instead, simply pass the URI
+  ;; to `img`, like so:
+  (group style: "flow-none content rotate-xs"
+    ;; (shows the same image due to how the current HTTP cache works)
+    (img src: (uri "https://picsum.photos/100/100"))))

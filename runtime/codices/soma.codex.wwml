@@ -1,0 +1,1795 @@
+;;   ############
+;;  ##############
+;;  ##############
+;;  #####     ####
+;;  #####     ####    Wirewright µsoma
+;;   #############    https://github.com/wirewright/wirewright [iota]
+;;    ###########
+;;  #   ######   #
+;;  ###        ###
+;;  ###############
+;;   ###############
+
+--- config ;; General config
+
+;; No. of history frames to keep in memory.
+history-limit: 128
+
+
+--- theme ;; Microfold config
+
+(include (theme fonts))
+(include (theme "Rose Pine Main"))
+
+
+--- (theme fonts) ;; Configure fonts for Microfold
+
+(table fonts):
+  {"mono":
+     (list
+       (font "IBM Plex Mono")
+       (font "Julia Mono"))}
+
+
+--- (theme "Rose Pine Main") ;; [Rose Pine](https://rosepinetheme.com)
+
+(var base): "#191724"
+(var surface): "#1f1d2e"
+(var overlay): "#26233a"
+(var muted): "#6e6a86"
+(var subtle): "#908caa"
+(var text): "#e0def4"
+(var love): "#eb6f92"
+(var gold): "#f6c177"
+(var rose): "#ebbcba"
+(var pine): "#31748f"
+(var foam): "#9ccfd8"
+(var iris): "#c4a7e7"
+(var highlight-low): "#21202e"
+(var highlight-med): "#403d52"
+(var highlight-high): "#524f67"
+
+(table colors):
+  {"theme-base": ^base,
+   "theme-surface": ^surface,
+   "theme-overlay": ^overlay,
+   "theme-muted": ^muted,
+   "theme-subtle": ^subtle,
+   "theme-text": ^text,
+   "theme-highlight-low": ^highlight-low,
+   "theme-highlight-med": ^highlight-med,
+   "theme-highlight-high": ^highlight-high,
+   "theme-punct": ^subtle,
+   "theme-number": ^gold,
+   "theme-boolean": ^rose,
+   "theme-key": ^foam,
+   "theme-blob": ^pine,
+   "theme-string": ^gold,
+   "theme-edge": ^love,
+   "theme-section": ^iris,
+   "theme-editor-selection-bg": ^gold,
+   "theme-editor-selection-fg": ^text,
+   "theme-grab-bg": ^pine,
+   "theme-grab-fg": ^text,
+   "theme-normal-bg": ^iris,
+   "theme-normal-fg": ^base,
+   "theme-insert-bg": ^gold,
+   "theme-insert-fg": ^base,
+   "theme-attention-fg": ^gold
+   "theme-info-fg": ^foam}
+
+
+--- (theme "Rose Pine Moon") ;; [Rose Pine](https://rosepinetheme.com)
+
+(var base): "#232136"
+(var surface): "#2a273f"
+(var overlay): "#393552"
+(var muted): "#6e6a86"
+(var subtle): "#908caa"
+(var text): "#e0def4"
+(var love): "#eb6f92"
+(var gold): "#f6c177"
+(var rose): "#ebbcba"
+(var pine): "#3e8fb0"
+(var foam): "#9ccfd8"
+(var iris): "#c4a7e7"
+(var highlight-low): "#2a283e"
+(var highlight-med): "#44415a"
+(var highlight-high): "#56526e"
+
+(table colors):
+  {"theme-base": ^base,
+   "theme-surface": ^surface,
+   "theme-overlay": ^overlay,
+   "theme-muted": ^muted,
+   "theme-subtle": ^subtle,
+   "theme-text": ^text,
+   "theme-highlight-low": ^highlight-low,
+   "theme-highlight-med": ^highlight-med,
+   "theme-highlight-high": ^highlight-high,
+   "theme-punct": ^subtle,
+   "theme-number": ^gold,
+   "theme-boolean": ^rose,
+   "theme-key": ^foam,
+   "theme-blob": ^pine,
+   "theme-string": ^gold,
+   "theme-edge": ^love,
+   "theme-section": ^iris,
+   "theme-editor-selection-bg": ^gold,
+   "theme-editor-selection-fg": ^text,
+   "theme-grab-bg": ^pine,
+   "theme-grab-fg": ^text,
+   "theme-normal-bg": ^iris,
+   "theme-normal-fg": ^base,
+   "theme-insert-bg": ^gold,
+   "theme-insert-fg": ^base,
+   "theme-attention-fg": ^gold
+   "theme-info-fg": ^foam}
+
+
+--- (theme "Rose Pine Dawn") ;; [Rose Pine](https://rosepinetheme.com)
+
+(var base): "#faf4ed"
+(var surface): "#fffaf3"
+(var overlay): "#f2e9e1"
+(var muted): "#9893a5"
+(var subtle): "#797593"
+(var text): "#575279"
+(var love): "#b4637a"
+(var gold): "#ea9d34"
+(var rose): "#d7827e"
+(var pine): "#286983"
+(var foam): "#56949f"
+(var iris): "#907aa9"
+(var highlight-low): "#f4ede8"
+(var highlight-med): "#dfdad9"
+(var highlight-high): "#cecacd"
+
+(table colors):
+  {"theme-base": ^base,
+   "theme-surface": ^surface,
+   "theme-overlay": ^overlay,
+   "theme-muted": ^muted,
+   "theme-subtle": ^subtle,
+   "theme-text": ^text,
+   "theme-highlight-low": ^highlight-low,
+   "theme-highlight-med": ^highlight-med,
+   "theme-highlight-high": ^highlight-high,
+   "theme-punct": ^subtle,
+   "theme-number": ^gold,
+   "theme-boolean": ^rose,
+   "theme-key": ^foam,
+   "theme-blob": ^pine,
+   "theme-string": ^gold,
+   "theme-edge": ^love,
+   "theme-section": ^iris,
+   "theme-editor-selection-bg": ^gold,
+   "theme-editor-selection-fg": ^text,
+   "theme-grab-bg": ^pine,
+   "theme-grab-fg": ^base,
+   "theme-normal-bg": ^iris,
+   "theme-normal-fg": ^base,
+   "theme-insert-bg": ^gold,
+   "theme-insert-fg": ^text,
+   "theme-attention-fg": ^gold
+   "theme-info-fg": ^foam}
+
+
+--- pretty/sema ;; Semantic analysis
+
+;; NOTE:
+;;
+;; Auxiliary groups don't need a `detail`; they're usually dissolved
+;; during `present`. They're used to refer to e.g. the pairs of a dict
+;; in bulk, for example, to reposition them as in:
+;;
+;;   (group a: 100
+;;          b: 200
+;;     x
+;;     y)
+;;
+;; All other groups normally have a `detail`, which is most importantly
+;; handled in `translate`.
+
+
+;; NOTE:
+;;
+;; Pretty printing expects atoms to be guaranteed-inline. If they're
+;; multiline, parens wouldn't be properly bottom-aligned, and the print
+;; would look broken.
+
+(term term_⸨symbol,number,boolean⸩)
+  => (atom ^\term type: ⸨symbol,number,boolean⸩)
+
+;; TODO: un-hardcode constants!
+(term term_string)
+  => (^match (charcount term)
+       (when (%number _ <= 60)
+         (atom ^\term type: string))
+       (when _
+         (group detail: (long-string ^term)
+           ;; Long-string is visually more "massive" than long-blob.
+           (atom mass: 64))))
+
+;; TODO: un-hardcode constants!
+(term ⟬⟭) => (atom "⟬⟭" type: blob)
+(term term_blob)
+  => (^let hexwidth: (* (bytesize term) 2) ;; Each byte is two hexdigits
+       (^let width: (+ hexwidth (- hexwidth 1)) ;; Also one space between hexdigits
+         (^match width
+           (when (%number _ <= 60)
+             (atom ^\term type: blob))
+           (when _
+             (group detail: (long-blob ^term)
+               (atom mass: 32))))))
+
+(term (%'edge name_))
+  => (atom ^"@⸢name⸣" type: edge)
+
+(term (%'%let capture_ successor_))
+  => (group detail: infix
+       (term ^capture)
+       (atom "←")
+       (term ^successor))
+
+(term (^ term_))
+  => (group detail: seq
+       (atom "^") (term ^term))
+
+(term [[I _*] (l_string * r_string) anchor←(%number +i32)])
+  => (group detail: (editor ^l I ^r ^:anchor)
+       (atom mass: ^(charcount l r)))
+
+(term [[[I _*] compose buffer_string] (l_string * r_string) anchor←(%number +i32)])
+  => (group detail: (editor ^l (compose ^buffer) ^r ^:anchor)
+       (atom mass: ^(charcount l buffer r)))
+
+(term ())
+  => (atom "()" type: dict)
+
+;; Example:
+;; (x (a b c) y z)
+;; (x (a b c)
+;;   y
+;;   z)
+(term (l0_symbol l1_dict m_* r_))
+  => (group detail: (dict block)
+       (term ^l0)
+       (term ^l1)
+       (group
+         (^each (m as item_)
+           (term ^item)))
+       (term ^r))
+
+;; Example:
+;; (x y z a: 100 b: 200)
+;; (x a: 100
+;;    b: 200
+;;   y
+;;   z)
+(term (l_symbol m_* r_ ¦ pairs←(%not ())))
+  => (group detail: (dict group)
+       (term ^l)
+       (group
+         (^each (m as item_)
+           (term ^item)))
+       (term ^r)
+       (group
+         (^each (pairs entry as (key_ value_))
+           (pair ^key ^value detail: block-pair))))
+
+;; Example:
+;; {a: 100, b: 200}
+;; {a: 100,
+;;  b: 200}
+(term D←(¦ _))
+  => (group detail: (dict curly)
+       (^each (D entry as (key_ value_))
+         (pair ^key ^value)))
+
+;; Example:
+;; (1 2 3)
+;; (1 2 3 a: 100 b: 200)
+;; (1
+;;  2
+;;  3)
+;; (1
+;;  2
+;;  3
+;;  a: 100
+;;  b: 200)
+(term D_dict)
+  => (group detail: (dict generic)
+       (^each (D item as (item_ _))
+         (term ^item))
+       (^each ((pairspart D) entry as (key_ value_))
+         (pair ^key ^value)))
+
+;; Example:
+;; :"hello world"
+[pair k_ k_]
+  => (group detail: seq
+       (atom ":") (inline (term ^k)))
+
+;; Example:
+;; :x
+[pair k_symbol k_symbol]
+  => (group detail: seq
+       (atom ":") (atom ^\k type: key))
+
+;; Example:
+;; "hello world": 100
+(pair k_ v_ ⍊ detail_⋮ pair)
+  => (group ^:detail
+       (inline (term ^k)) (term ^v))
+
+;; Example:
+;; x: 100
+(pair k_symbol v_ ⍊ detail_⋮ pair)
+  => (group ^:detail
+       (atom ^\k type: key) (term ^v))
+
+;; Example:
+;; style: "bg-neutral-500"
+(pair k←style v_string ⍊ detail_⋮ pair)
+  => (group ^:detail
+       (atom ^\k type: key) (µ-style ^v))
+
+(µ-style style_string)
+  => (group detail: (µ-string ^style)
+       (atom mass: ^(charcount style)))
+
+[inert term_] => (term ^term)
+
+(inert (comment caption_string) ⍊ -incomplete)
+  => (group detail: (comment ^caption))
+
+(inert (rule pattern_ _ ⍊ doc⋮ ()) ⍊ -incomplete)
+  => (group detail: (rule-brief ^doc)
+       (term ^pattern))
+
+(inert (backmap pattern_ _ ⍊ doc⋮ ()) ⍊ -incomplete)
+  => (group detail: (backmap-brief ^doc)
+       (term ^pattern))
+
+(gnd term_) => (inert ^term)
+
+;; Slot widget
+
+(open-slot-widget addr_ node_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       ^(view node))
+
+(closed-slot-widget addr_ call_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (term ^call))
+
+;; Device widget
+
+(open-device-widget addr_ node_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       ^(view node))
+
+(closed-device-widget addr_ surface_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (group detail: device
+          (term ^surface)))
+
+;; Backsys widget
+
+(open-backsys-widget addr_ node_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       (term ^node))
+
+(closed-backsys-widget addr_ header_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (group detail: backsys
+         (term ^header)))
+
+;; Section widget
+
+(open-section-widget addr_ title_string node_)
+  => (group detail: col
+       (group detail: seq
+         (atom type: (expander ^addr icon: "expand_more" center: true) mass: 0)
+         (group detail: (section ^title)))
+       ^(view node))
+
+(closed-section-widget addr_ title_string)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right" center: true) mass: 0)
+       (group detail: (section ^title)))
+
+;; Path report widget
+
+(path-report-widget addr_ [path-report path_string report_])
+  => (group detail: (dict block)
+            multiline: true
+       (term path-report) ;; l0
+       (term ^path) ;; l1
+       (group) ;; empty mid
+       (group detail: (path-report ^addr ^path ^report))) ;; r
+
+;; Path reading widget
+
+(path-reading-widget addr_ [path-reading path_string reading_])
+  => (group detail: (dict block)
+            multiline: true
+       (term path-reading) ;; l0
+       (term ^path) ;; l1
+       (group) ;; empty mid
+       (group detail: (path-reading ^addr ^path ^reading))) ;; r
+
+;; Generic parent treatment
+;;
+;; TODO: if parent or gnd head is a symbol, highlight it differently (emphasis)
+
+(parent/dict ((inert l0←(%all _symbol (%not group window))) (inert l1_dict) m_* r_) {})
+  => (group detail: (dict block)
+            multiline: true
+       (term ^l0)
+       (term ^l1)
+       (group
+         (^each (m as item_)
+           ^(view item)))
+       ^(view r))
+
+(parent/dict (l_ m_* r_) pairs_dict)
+  => (group detail: (dict group)
+            multiline: true
+       ^(view l)
+       (group
+         (^each (m as item_)
+           ^(view item)))
+       ^(view r)
+       (group
+         (^each (pairs entry as (key_ value_))
+           (pair ^key ^value))))
+
+;; Edge case
+(parent/dict (head_) pairs_dict)
+  => (group detail: (dict generic)
+       ^(view head)
+       (^each (pairs entry as (key_ value_))
+         (pair ^key ^value)))
+
+;; FIXME: We can't follow the same form because ^extend doesn't interact nicely
+;; with Alloy.compose. The left-hand side is composed prematurely before being
+;; extended with pairs.
+(parent items_* ¦ pairs_)
+  => (parent/dict ^items ^pairs)
+
+;; Root
+
+;; If there are pairs on the root itself we have to get rid of them.
+(root items_* ¦ pairs←(%not ()))
+  => (root
+       (^each (pairs entry as (key_ value_))
+         (pair ^key ^value))
+       (^each (items as item_)
+         ^(view item)))
+
+
+--- pretty/style-down ;; Constraints go down
+
+;; Root asks itself about style via mode: content.
+(root _* ⍊ -mode -?mode_)
+  <> {?mode: content}
+
+;; These nodes ask their elements and also remember the mode.
+(⸨root,group⸩ (%group ⟨{¦ -?mode_}⟩° _*) ⍊ ?mode: M_ -mode_)
+  <> {?mode: ^M, mode: ^M, (M): ()}
+
+;; The `inline` node forces inline mode on its element, then removes itself.
+node←(inline child←{¦ -?mode_} ⍊ ?mode: M_)
+  <> {node: ^(up child), ?mode: inline}
+
+
+--- pretty/style-up ;; Styles go up
+
+(atom ⍊ -style_ ?mode_ ±mass)
+  <> {(?mode): (),
+      style: (inline ^:mass children: ())}
+
+(atom caption_string ⍊ -style_ ?mode_)
+  <> {(?mode): (),
+      style: (inline mass: ^(charcount caption) children: ())}
+
+(group ⍊ -style_ ?mode_)
+  <> {(?mode): (),
+      style: (inline mass: 0 children: ())}
+
+(group entries_+ ⍊ -borrowing-styles_)
+  <> {borrowing-styles:
+        ((^each (entries as {¦ style: entry-style_})
+           ^entry-style))}
+
+(group (%group ⟨{¦ style_}⟩° _*) ⍊ borrowing-styles_ -styles_)
+  <> {(style): (), styles: ^borrowing-styles, (borrowing-styles): ()}
+
+;; Forced multiline groups immediately promote styles to multiline.
+(group _* ⍊ mode_: content multiline styles_ -style_)
+  <> {(mode): (), style: (multiline children: ^styles), (styles): ()}
+
+;; ... otherwise we must calculate the mass.
+(group _* ⍊ styles_ -mass_)
+  <> {mass: ^(sum (select-f styles {¦ mass: ±value}))}
+
+;; If some styles are multiline, we can't be inline unless forced inline.
+(group _* ⍊ styles: ⟨[multiline]⟩ -styles-multiline_)
+  <> {styles-multiline: true}
+
+;; Forced inline nodes are ready.
+(group _* ⍊ mode_: inline styles_ mass_ -style_)
+  <> {(mode): (),
+      (mass): (),
+      style: (inline ^:mass children: ^styles), (styles): ()}
+
+;; Content nodes are ready, too, if we're multiline.
+(group _* ⍊ mode_: content styles-multiline_ styles_ -style_)
+  <> {(mode): (),
+      (mass): (),
+      (styles-multiline): (),
+      style: (multiline children: ^styles), (styles): ()}
+
+;; ... while other nodes continue. If the mass is less than some
+;; heuristic threshold, pick inline style.
+;;
+;; TODO: un-hardcode threshold.
+(group _* ⍊ mode_: content -styles-multiline mass_: (%number _ <= 50) styles_ -style_)
+  <> {(mode): (),
+      style: (inline ^:mass children: ^styles),
+      (mass): (),
+      (styles): ()}
+
+;; ... otherwise, pick multiline style.
+(group _* ⍊ mode_: content mass_ styles_ -style_)
+  <> {(mode): (),
+      style: (multiline children: ^styles),
+      (mass): (),
+      (styles): ()}
+
+
+--- pretty/style-broadcast ;; Final styles go down
+
+(atom _* ⍊ style_ -form_)
+  <> {(style): (), form: inline}
+
+(group _* ⍊ style_: (tag_ ⍊ children_dict) -styles_ -form_)
+  <> {(children): (), styles: ^children, form: ^tag, (style): ()}
+
+(group elements_* ⍊ styles_dict)
+  <> {elements:
+       (^each (elements item as (element_ index_))
+         ^(union element {style: (value styles index)}))
+      (styles): ()}
+
+
+--- pretty/qualify
+;; More detailed `detail` based on `form`, which is computed from mass and context.
+;; Consumes form if it was handled. Keeps for later stages if not.
+
+(atom _* ⍊ form_) <> {(form): ()}
+
+(group elements_* ⍊ -detail form_)
+  <> {(form): ()}
+
+(group _ {¦ form: inline} ⍊ detail_: pair form_)
+  <> {detail: (pair row), (form): ()}
+
+;; block-pair is row in both form: inline and form: multiline. For instance:
+;;
+;;  (group foo: (100
+;;               200
+;;               300)
+;;    x
+;;    y
+;;    z)
+;;
+;; This is particularly relevant for Microfold styles, which expect this kind
+;; of formatting rather than `pair`.
+(group _ _ ⍊ detail_: block-pair form_)
+  <> {detail: (pair row), (form): ()}
+
+(group _ {¦ form: multiline} ⍊ detail_: pair form_)
+  <> {detail: (pair col), (form): ()}
+
+(group _* ⍊ detail_: (dict ⸨block,group⸩) form_: inline)
+  <> {detail: (dict row-⸨block,group⸩), (form): ()}
+
+(group _* ⍊ detail_: (dict generic) form_: inline)
+  <> {detail: (dict row lbr: "(" rbr: ")" comma: false), (form): ()}
+
+(group _* ⍊ detail_: (dict curly) form_: inline)
+  <> {detail: (dict row lbr: "{" rbr: "}" comma: true), (form): ()}
+
+(group {¦ form: inline} _ _ _ ⍊ detail_: (dict group) form_: multiline)
+  <> {detail: (dict col-group), (form): ()}
+
+(group {¦ form: inline} {¦ form: inline} _ _ ⍊ detail_: (dict block) form_: multiline)
+  <> {detail: (dict col-block), (form): ()}
+
+(group _* ⍊ detail_: (dict ⸨generic,block,group⸩) form_: multiline)
+  <> {detail: (dict col lbr: "(" rbr: ")" comma: false), (form): ()}
+
+(group _* ⍊ detail_: (dict curly) form_: multiline)
+  <> {detail: (dict col lbr: "{" rbr: "}" comma: true), (form): ()}
+
+
+--- pretty/present ;; Convert to cat-friendly IR
+
+(group l_ r_ ⍊ detail: cat)
+  => (cat ^l ^r)
+
+;; :x
+(group ⍊ detail: seq) => (^splice)
+(group children_* ⍊ detail: seq) => (row ^*children)
+
+;; x: 100
+(group key_ value_ ⍊ detail: (pair row))
+  => (row gap: 1
+       (cat ^key (atom ":" type: punct))
+       ^value)
+
+;; x:
+;;   100
+(group key_ value_ ⍊ detail: (pair col))
+  => (col gap: 1
+       (cat ^key (atom ":" type: punct))
+       (indent by: 2
+         ^value))
+
+;; (1 2 3)  (1 2 3 a: 100 b: 200)
+(group children_+ ⍊ detail: (dict row ⍊ lbr_string rbr_string comma: false))
+  => (cat (atom ^lbr type: punct) (cat (row ^*children gap: 1) (atom ^rbr type: punct)))
+
+;; {x: 100, y: 200}
+(group children_* tail_ ⍊ detail: (dict row ⍊ lbr_string rbr_string comma: true))
+  => (cat
+       (cat
+         (atom ^lbr type: punct)
+         (row gap: 1
+           (^each (children item as (child_ index_))
+             (cat ^child (atom "," type: punct)))
+           ^tail))
+       (atom ^rbr type: punct))
+
+;; (x y z a: 100 b: 200)
+(group _ Gmid←[group mid_*] _ Gpairs←[group pairs_*] ⍊ detail_: (dict row-group))
+  <> {(Gmid): ^mid,
+      (Gpairs): ^pairs,
+      detail: (dict row lbr: "(" rbr: ")" comma: false)}
+
+;; (x a: 100
+;;    b: 200
+;;   y
+;;   z)
+(group head_ [group mid_*] tail_ [group pairs_*] ⍊ detail: (dict col-group))
+  => (col
+       (cat
+         (atom "(" type: punct)
+         (row ^head (col ^*pairs) gap: 1))
+       (indent by: 2
+         (col
+           ^*mid
+           (cat ^tail (atom ")" type: punct)))))
+
+;; (x (a b c) y z)
+(group _ _ Gmid←[group mid_*] _ ⍊ detail_: (dict row-block))
+  <> {(Gmid): ^mid, detail: (dict row lbr: "(" rbr: ")" comma: false)}
+
+;; (x (a b c)
+;;   y
+;;   z)
+(group head0_ head1_ [group mid_*] tail_ ⍊ detail: (dict col-block))
+  => (col detail: dict
+       (cat
+         (atom "(" type: punct)
+         (row ^head0 ^head1 gap: 1))
+       (indent by: 2
+         (col
+           ^*mid
+           (cat ^tail (atom ")" type: punct)))))
+
+;; (1   (1
+;;  2    2
+;;  3)   3
+;;       a: 100
+;;       b: 200)
+(group head_ mid_* tail_ ⍊ detail: (dict col ⍊ lbr_string rbr_string comma: false))
+  => (col
+       (cat (atom ^lbr type: punct) ^head)
+       (indent by: 1
+         (col
+           ^*mid
+           (cat ^tail (atom ^rbr type: punct)))))
+
+;; {x: 100,
+;;  y: 200}
+(group head_ mid_* tail_ ⍊ detail: (dict col ⍊ lbr_string rbr_string comma: true))
+  => (col
+       (cat
+         (atom ^lbr type: punct)
+         (cat ^head (atom "," type: punct)))
+       (indent by: 1
+         (col
+           (^each (mid as child_)
+             (cat ^child (atom "," type: punct)))
+           (cat ^tail (atom ^rbr type: punct)))))
+
+;; Edge case:
+;; ((a
+;;   b))
+(group head_ ⍊ detail: (dict col ⍊ lbr_string rbr_string))
+  => (cat (atom ^lbr type: punct) (cat ^head (atom ^rbr type: punct)))
+
+--- pretty/concat ;; Evaluate cats & minor reductions
+
+node←(cat l←(atom x_string ⍊ type: punct) (atom y_string ⍊ type: punct))
+  <> {node: ^(up l), x: ^(~ x y)}
+
+(head←cat [atom _] [atom _])
+  <> {head: row}
+
+node←(cat l←[⸨row,col,indent⸩ _* tail_] r_)
+  <> {node: ^(up l), tail: (cat ^tail ^r)}
+
+node←(cat l_ r←[⸨row,col,indent⸩ head_ _*])
+  <> {node: ^(up r), head: (cat ^l ^head)}
+
+;; Edge case: empty row, col, indent.
+node←(cat l←[⸨row,col,indent⸩] r_) <> {node: ^r}
+node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
+
+;; Universal fallback
+(head←cat l_ r←[atom _])
+  <> {head: row, r: (align-bottom ^r)}
+(head←cat l←[atom _] r_)
+  <> {head: row, l: (align-bottom ^l)}
+(head←cat l_ r_)
+  <> {head: row}
+
+(⸨row,col⸩ (%group ⟨child←(⸨row,col⸩ subrows_* ⍊ -gap -detail)⟩ _*) ⍊ -gap -detail)
+  <> {(child): ^subrows}
+
+
+--- pretty/translate ;; Rewrite cat-ted IR to Microfold
+
+(atom caption_string ⍊ type: punct)
+  => (p ^caption style: "text-theme-punct")
+
+(atom caption_string ⍊ type: number)
+  => (p ^caption style: "text-theme-number")
+
+(atom caption_string ⍊ type: boolean)
+  => (p ^caption style: "text-theme-boolean")
+
+(atom caption_string ⍊ type: key)
+  => (p ^caption style: "text-theme-key")
+
+(atom caption_string ⍊ type: blob)
+  => (p ^caption style: "text-theme-blob")
+
+(atom caption_string ⍊ type: string)
+  => (p ^caption style: "text-theme-string")
+
+(atom caption_string ⍊ type: edge)
+  => (p ^caption style: "text-theme-edge")
+
+(group ⍊ detail: (section caption_string))
+  => (p style: "font-sans pl-2 my-1 text-lg/6 text-theme-section font-medium \
+                border-l-md border-theme-section"
+       ^caption)
+
+(group ⍊ detail: (comment caption_string))
+  => (group style: "flow-row pl-1 text-xs/4 text-theme-subtle gap-2/3"
+       (icon "info" style: "font-icons pt-1/3")
+       (p style: "font-sans clamp max-w-2xs fr-1"
+         ^caption))
+
+[atom caption_string]
+  => (p ^caption style: "text-theme-text")
+
+(group [atom] ⍊ detail: (long-string content_string))
+  => (LongStringWidget ^content)
+
+(group [atom] ⍊ detail: (long-blob content_blob))
+  => (LongBlobWidget ^content)
+
+[row] => (^splice)
+(row elements_+) => (group ^*elements style: "flow-row")
+(row elements_+ ⍊ gap: 1) => (group ^*elements style: "flow-row gap-3/2")
+
+[col] => (^splice)
+[col elements_+] => (group ^*elements style: "flow-col gap-2/3")
+
+[indent] => (^splice)
+(indent elements_+ ⍊ by: 1) => (group ^*elements style: "flow-none pl-3")
+(indent elements_+ ⍊ by: 2) => (group ^*elements style: "flow-none pl-5")
+
+[align-bottom child_] => (group ^child style: "flow-none bottom")
+
+[root elements_*]
+  => (group style: "flow-col font-mono text-sm/5 gap-1"
+       ^*elements)
+
+(group l_ op_ r_ ⍊ detail: infix)
+  => (group style: "flow-row gap-1/3"
+       ^l ^op ^r)
+
+(group pattern_ ⍊ detail: (rule-brief doc←(_*)))
+  => (RuleBriefWidget ^doc ^pattern "=>")
+
+(group pattern_ ⍊ detail: (backmap-brief doc←(_*)))
+  => (RuleBriefWidget ^doc ^pattern "<>")
+
+(group surface_ ⍊ detail: device)
+  => (BlockWidget "memory" ^surface)
+
+(group header_ ⍊ detail: backsys)
+  => (BlockWidget "rule" ^header)
+
+(group [atom] ⍊ detail: (µ-string style_string))
+  => (MuStyleWidget ^style)
+
+(group [atom] ⍊ detail_: [editor _*])
+  => (EditorWidget ^detail)
+
+(group ⍊ detail: (path-report addr_ path_string report_))
+  => (PathReportWidget ^addr ^path ^report)
+
+(group ⍊ detail: (path-reading addr_ path_string reading_))
+  => (PathReadingWidget ^addr ^path ^reading)
+
+(atom ⍊ type: (expander addr_ ¦ pairs_))
+  => (Expander ^addr ^… pairs)
+
+
+--- prettyR ;; Pretty printing rewriter spec
+
+(chainR
+  ;; TODO: pretty/sema -- (alloyR (rulesetR)) (?)
+  (section pretty/style-down
+    waveR)
+  (section pretty/style-up
+    ascR)
+  (section pretty/style-broadcast
+    waveR)
+  (section pretty/qualify
+    waveR)
+  (section pretty/present
+    ascR)
+  (section pretty/concat
+    (exhR ascR))
+  (section pretty/translate
+    ascR))
+
+
+--- initial-state
+
+circuit-loading: true
+
+;; Window size.
+width: 1200
+height: 800
+
+;; Root font size. It is incremented using - and + in normal mode.
+rem: 16
+
+;; Requests that the runtime executes after each stateR rewrite cycle.
+;;
+;; Supported requests:
+;; - `(write-document document_)`: writes an ML representation of *document* to the input file.
+;; - `(log msg_string)`: sets `log` to *msg* for 5s from now.
+requests: ()
+
+mode: normal
+active-window-spec: none
+collapsed-pane: none
+
+help: false
+
+;; Input state (works like `soma.input`).
+input: ()
+;; Keyboard state (works like `soma.keyboard`).
+keyboard: ()
+
+;; Used for rule communication, mutual exclusion, or both. Cleared after
+;; every stateR cycle.
+cookies: {}
+
+;; Mouse button and mouse state. Buttons and state are normally stored
+;; in the pairspart, like so: `{| left dragging}`.
+mouse: {}
+
+;; A list of currently hovered vantage ids.
+hover-over: ()
+
+;; Set to `true` while you hold Tab in insert mode.
+hide: false
+
+;; Whether live reload of seed from disk is enabled. If enabled, the draft
+;; is replaced by the seed from disk on change.
+live-reload: false
+
+;; The timeline is the authoritative source for circuit history and the latest
+;; circuit draft. It allows you to navigate through time.
+;;
+;;   (<before> I <after> <gp> <draft>)
+;;
+;; - *before* contains circuits before the selected point-in-time, in sequence,
+;;   oldest to newest.
+;; - *after* contains circuits after the selected point-in-time, in sequence,
+;;   oldest to newest. *after* can be `*`, which means "show live draft".
+;; - *gp* is the "growth point". `...` means running, `-` means paused, `.` means
+;;   single-step.
+;; - *draft* is the latest, most up-to-date circuit draft.
+;;
+;; The draft is modified regardless of whether time is running or not. More
+;; specifically, it is modified through entanglement. Entanglement is ultimately
+;; driven by the outside world (e.g. a file change), so we cannot meaningfully
+;; "pause" it without pausing the outside world, which is impossible. We could
+;; have a queue but that would just be a more complex way of having a *draft*.
+;; The purpose of *draft* is to absorb changes until the next time-step (which
+;; may or may not come soon depending on whether time is paused).
+;;
+;; *draft* is discarded when history is cut (e.g. `/` in normal mode).
+timeline: (() I * ... ())
+
+;; log: (deadline_ msg_string)
+;;  Set while the log message *msg* should be shown. See also: `requests`.
+
+;; *Feedback* is used to communicate with the current circuit. It is sent
+;; to Rack nodes in the current circuit. The interaction itself is handled
+;; by fbR.
+fb: ()
+
+;; editR motions to send to the editor on the upcoming circuit step cycle.
+motions: ()
+
+circuit-camera: {l: 0, t: 0, scale: 1}
+
+pane-divider-l: 600 ;; pixels
+
+--- state/rules
+;; Rules for rewriting the state. This is what makes the UI interactive.
+
+;; When a new seed arrives from the disk, and we don't have a seed, this means
+;; it's the first ever seed, so we force it as a draft.
+{¦ -seed_ seed'_ timeline: (_ I _ _ draft_) circuit-loading_}
+  <> {seed: ^seed', (seed'): (), draft: ^seed', circuit-loading: false}
+
+;; When a new seed arrives from the disk, and we have an existing seed, if
+;; the user has enabled live-reload (`S-r`), force it as draft like we do above.
+;; If live-reload is disabled, we'll do nothing -- we'll wait until the user
+;; reloads manually using `r`.
+{¦ live-reload: true seed_ seed'_ timeline: (_ I _ _ draft_)}
+  <> {seed: ^seed', (seed'): (), draft: ^seed'}
+
+;; Fix mode transitioning to a collapsed pane by un-collapsing the pane.
+{¦ mode: ⸨grab,insert⸩ collapsed-pane_: ⸨window,circuit⸩-pane}
+  <> {collapsed-pane: none}
+
+;; TODO: Make docs here into help messages so that we can provide a help screen.
+
+;; `h` in normal mode goes to grab mode.
+{¦ mode_: normal input: ⟨K←(key "h")⟩}
+  <> {(K): (), mode: grab}
+
+;; `l` in normal mode goes to insert mode if at the end-of-time.
+{¦ mode_: normal input: ⟨K←(key "l")⟩ timeline: (_ I * _ _)}
+  <> {(K): (), mode: insert}
+;; ... otherwise, notify the user that they must be at end-of-time. This
+;; is a very confusing thing that one must get accustomed to; I'm not sure I can
+;; do anything better on my side, since it makes no sense to rewrite the past while
+;; the future dependent on the past one is rewriting, is still going. Instead, one
+;; must either adhere to the future (`>`), or erase it (`/`), and only then edit.
+{¦ mode: normal input: ⟨K←(key "l")⟩ timeline: (_ I _dict _ _) requests: (_* `request)}
+  <> {(K): (), request: (log "Cannot edit the past of an existing future. Go to end-of-time or erase the future to edit.")}
+
+;; `S-/` (aka ?) in normal mode toggles help.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "/")⟩ help_boolean}
+  <> {(K): (), help: ^(not help)}
+
+;; `\` in normal mode toggles the window pane collapsed.
+{¦ mode: normal input: ⟨K←(key "\\")⟩ collapsed-pane_: ⸨none,window-pane⸩}
+  <> {(K): (), collapsed-pane: ⸨window-pane,none⸩}
+
+;; `Shift-\` in normal mode toggles the circuit pane collapsed.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "\\")⟩ collapsed-pane_: ⸨none,circuit-pane⸩}
+  <> {(K): (), collapsed-pane: ⸨circuit-pane,none⸩}
+
+;; `escape` in grab mode goes to normal mode.
+{¦ mode_: grab input: ⟨K←(key escape)⟩ collapsed-pane_}
+  <> {(K): (), mode: normal, collapsed-pane: none}
+
+;; `space` in normal mode toggles the growth point on/off.
+{¦ mode: normal input: ⟨K←(key " ")⟩ timeline: (_ I _ state←⸨-,...⸩ _)}
+  <> {(K): (), state: ⸨...,-⸩}
+
+;; `,` in normal mode at end-of-time moves into history mode.
+{¦ mode: normal input: ⟨K←(key ",")⟩ timeline: (_ I ahead←* _ _)}
+  <> {(K): (), ahead: ()}
+
+;; `,` in normal mode moves backward in time.
+{¦ mode: normal input: ⟨K←(key ",")⟩ timeline: ((_* _ l_) I (`r _*) _ _)}
+  <> {(K): (), (l): (), r: ^l}
+
+;; `.` in normal mode moves forward in time.
+{¦ mode: normal input: ⟨K←(key ".")⟩ timeline: ((_* `l) I (r_ _*) _ _)}
+  <> {(K): (), l: ^r, (r): ()}
+
+;; `.` at end-of-time goes to draft mode.
+{¦ mode: normal input: ⟨K←(key ".")⟩ timeline: (_ I ahead←() _ _)}
+  <> {(K): (), ahead: *}
+
+;; `.` in normal mode at the end of the timeline introduces one-off growth
+;; point (single-step).
+{¦ mode: normal input: ⟨K←(key ".")⟩ timeline: ((_*) I * state←- _)}
+  <> {(K): (), state: .}
+
+;; `<` in normal mode moves to the beginning of the timeline.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key ",")⟩ timeline: ((_ behind_*) I (`ahead _*) _ _)}
+  <> {(K): (), (behind): (), (ahead): ^behind}
+
+;; `>` in normal mode moves to the end of the timeline.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key ".")⟩ timeline: ((_* `behind) I ahead←(_*) _ _)}
+  <> {(K): (), (behind): ^ahead, ahead: ()}
+
+;; `>` at the end of the timeline goes to live mode.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key ".")⟩ timeline: ((_* `behind) I ahead←() _ _)}
+  <> {(K): (), ahead: *}
+
+;; `C-/` in normal mode cuts the timeline at that point and goes to
+;; end-of-time. We use `Ctrl` because this is very destructive,
+;; as you can see, so we must make sure the user understands what
+;; they are doing instead of e.g. missing `.`.
+{¦ mode: normal input: ⟨& (key (ctrl _)) K←(key "/")⟩ timeline: ((_* current_) I ahead←(_*) _ draft_)}
+  <> {(K): (), ahead: *, draft: ^current}
+
+;; + in normal mode increments rem.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "=")⟩ ±rem}
+  <> {(K): (), rem: ^(+ rem 1)}
+
+;; - in normal mode decrements rem.
+{¦ mode: normal input: ⟨K←(key "-")⟩ ±rem}
+  <> {(K): (), rem: ^(- rem 1)}
+
+;; 0 in normal mode resets rem.
+{¦ mode: normal input: ⟨K←(key "0")⟩ ±rem}
+  <> {(K): (), rem: 16}
+
+;; W in normal mode writes current circuit to disk.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "w")⟩ timeline: ((_* current_) I _ _ _) requests: (_* `request)}
+  <> {(K): (), request: (write-document ^current)}
+
+;; w in normal mode writes the draft to disk.
+{¦ mode: normal input: ⟨K←(key "w")⟩ timeline: ((_*) I * _ draft_) requests: (_* `request)}
+  <> {(K): (), request: (write-document ^draft)}
+{¦ mode: normal input: ⟨K←(key "w")⟩ timeline: (_dict I _dict _ _) requests: (_* `request)}
+  <> {(K): (), request: (log "Go to end-of-time to write the latest circuit, or use `W` (S-w) to write the current (historical) one.")}
+
+;; r in normal mode reloads circuit from disk.
+{¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_ I * _ draft_) seed_ seed'_}
+  <> {(K): (), draft: ^seed', seed: ^seed', (seed'): ()}
+{¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_ I * _ draft_) seed_}
+  <> {(K): (), draft: ^seed}
+{¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_dict I _dict _ _) requests: (_* `request)}
+  <> {(K): (), request: (log "Go to end-of-time to reload the circuit from disk.")}
+
+;; S-r in normal mode toggles seed live-reload.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "r")⟩ live-reload_boolean}
+  <> {(K): (), live-reload: ^(not live-reload)}
+
+;; H in normal mode moves the pane divider left.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "h")⟩ ±pane-divider-l}
+  <> {(K): (), pane-divider-l: ^(max (- pane-divider-l 30) 100)}
+
+;; L in normal mode moves the pane divider right.
+{¦ mode: normal input: ⟨& (key (shift _)) K←(key "l")⟩ ±pane-divider-l}
+  <> {(K): (), pane-divider-l: ^(+ pane-divider-l 30)}
+
+;; Zoom in
+{¦ hover-over: ()
+   mouse: {+ scroll-dn}
+   circuit-view-vantage: [vantage {¦ hit-hover}]
+   circuit-camera: {¦ ±scale -scale'_}}
+  <> {scale': ^(max (- scale 0.1) 0.1)}
+
+;; Zoom out
+{¦ hover-over: ()
+   mouse: {+ scroll-up}
+   circuit-view-vantage: [vantage {¦ hit-hover}]
+   circuit-camera: {¦ ±scale -scale'_}}
+  <> {scale': ^(min (+ scale 0.1) 7)}
+
+;; Reset zoom
+{¦ hover-over: ()
+   mouse: {+ middle}
+   circuit-view-vantage: [vantage {¦ hit-hover}]
+   circuit-camera: {¦ -scale'_}}
+  <> {scale': 1}
+
+;; Evaluate zoom.
+{¦ circuit-view-vantage: [vantage {¦ hit-hover hit-focus-l: ±hit-l hit-focus-t: ±hit-t}]
+   circuit-camera: {¦ ±l ±t ±scale ±scale'}}
+  <> {l: ^(round (- (* (/ (+ hit-l l) scale) scale') hit-l)),
+      t: ^(round (- (* (/ (+ hit-t t) scale) scale') hit-t)),
+      scale: ^scale',
+      (scale'): ()}
+
+;; Bind feedback from the circuit viewport to circuit-view-l/t. It's *feedback*
+;; because offset-x/y are actually computed from circuit-view-l/t of the previous
+;; cycle. This leads to more intuitive scrolling behavior: we scroll the smallest
+;; amount possible instead of starting at the top and scrolling until the aim is
+;; in view (if any) -- which is what user experience seems to expect.
+{¦ mode: insert
+   circuit-view-vantage: [vantage (box ⟪(clip _* ⍊ ±offset-x ±offset-y)⟫ ⍊ -panning)]
+   circuit-camera: {¦ ±l ±t}}
+  <> {l: ^offset-x, t: ^offset-y}
+
+;; Begin panning circuit...
+{¦ hover-over: ()
+   mouse: {| left -dragging_} ;; | Damn Racket highlighting
+   circuit-view-vantage: [vantage {¦ hit-hover hit-focus-l: ±hit-l hit-focus-t: ±hit-t}]
+   -panning-circuit_}
+  <> {dragging: (circuit-view ^hit-l ^hit-t), panning-circuit: true}
+
+;; ...continue while Left is being held...
+{¦ mouse: {| left dragging: (circuit-view ±hit-l ±hit-t)} ;; |
+   circuit-camera: {¦ ±l ±t}
+   circuit-view-vantage: [vantage {¦ hit-focus-l: ±hit-l' hit-focus-t: ±hit-t'}]}
+  <> {l: ^(+ l (- hit-l hit-l')),
+      t: ^(+ t (- hit-t hit-t')),
+      hit-l: ^hit-l',
+      hit-t: ^hit-t'}
+
+;; ... and stop when not dragging anymore.
+{¦ mouse: {¦ -dragging} panning-circuit_} ;; |
+  <> {(panning-circuit): ()}
+
+;; When you hover over pane-divider and press Left, start dragging.
+{¦ hover-over: ((pane-divider))
+   mouse: {| left -dragging_}
+   -dragging-pane-divider_}
+  <> {dragging: pane-divider, dragging-pane-divider: true}
+
+{¦ mouse: {¦ -dragging} dragging-pane-divider_} ;; |
+  <> {(dragging-pane-divider): ()}
+
+;; While you're dragging the pane-divider with Left pressed, bind hit-focus-l
+;; to pane-divider-l.
+{¦ mouse: {| left dragging: pane-divider} ;; |
+   panes-vantage: [vantage {¦ hit-focus-l: ±l}]
+   ±pane-divider-l}
+  <> {pane-divider-l: ^l}
+
+;; Dragging without a mouse button pressed is not allowed.
+{¦ mouse: {| dragging_}} <> {(dragging): ()} ;; |
+
+;; Mouse press while tab is hovered goes to that tab.
+{¦ hover-over: ⟨(window-tab id_)⟩ mouse: {| left_} active-window-spec_} ;; |
+  <> {(left): (), active-window-spec: (some ^id)}
+
+;; When you press Left mouse button on top of an expander, it tells
+;; the underlying node to toggle its open state.
+{¦ hover-over: ⟨(expander addr_)⟩ mouse: {| left_} fb: (_* `msg)} ;; |
+  <> {(left): (), msg: (^addr toggle-open)}
+
+;; Holding Tab in insert mode hides the cursor.
+{¦ mode: insert keyboard: ((key tab)) hide_boolean cookies: {¦ -▢_}}
+  <> {hide: true, ▢: true}
+{¦ hide_: true cookies: {¦ -▢_}}
+  <> {hide: false}
+
+--- stateR ;; State rewriter
+
+(section state/rules
+  (rulesetR exh: true))
+
+
+--- fb/rules
+;; Rules for delivering feedback to nodes in the circuit. E.g. when you
+;; hit "expand", these rules get called eventually to set `open: true`
+;; on the targeted node.
+
+({¦ -open_} toggle-open) <> {open: true}
+({¦ open_: true} toggle-open) <> {(open): ()}
+
+
+--- fbR ;; Feedback rewriter.
+
+(section fb/rules
+  (rulesetR))
+
+
+--- app
+;; Components and markup for the MuSoma application itself.
+
+;;
+;; General widgets
+;;
+
+(Expander addr_ ⍊ icon_string center⋮ false)
+  => (vantage id: (hoverable (expander ^addr)) active: if-hit
+       (icon style: "-dl-1/2 font-icons font-lg text-theme-subtle rounded-sm \
+                     center:center-y -center:content-y hover:bg-theme-overlay \
+                     hover:text-theme-text hover:cursor-pointer"
+             hover: ^(any? hover-over ('expander addr))
+             ^:center
+         ^icon))
+
+;; Used for `closed-device-widget`, `closed-backsys-widget` etc.
+(BlockWidget icon_ term_)
+  => (group style: "content flow-row gap-1/2 px-2/3 rounded-sm border border-b-sm \
+                    bg-theme-surface border-theme-overlay text-theme-muted"
+       (icon ^icon style: "font-icons pt-2/3")
+       ^term)
+
+(LongStringWidget content_string)
+  => (^let prefix: (runes content 0 ..< 30)
+           suffix: (runes content -30 ..= -1)
+           omitted: (- (charcount content) 60)
+       (group style: "flow-row"
+         (p ^"\"⸢(escaped prefix)⸣" style: "text-theme-string")
+         (p ^"…⸢omitted⸣ rune(s) omitted…" style: "font-sans text-theme-muted")
+         (p ^"⸢(escaped suffix)⸣\"" style: "text-theme-string")))
+
+(LongBlobWidget content_blob)
+  => (p ^"⟬…⸢(hashcode/hex content)⸣…⟭" style: "text-theme-blob")
+
+(RuleBriefWidget doc←(_*) pattern_ arrow_string)
+  => (group style: "flow-col my-1"
+       (^each (doc as line_)
+         (group style: "flow-row gap-1 text-theme-muted leading-none"
+           (p ";;" style: "text-xs")
+           (p ^line style: "font-sans max-w-xs")))
+       (group style: "flow-row gap-2"
+         ^pattern (p ^"⸢arrow⸣ …" style: "text-theme-muted")))
+
+(MuStyleWidget style_string)
+  => (group style: "content flow-row gap-1"
+       (p style: "px-3/2 py-1/3 text-xs leading-none text-theme-muted \
+                  bg-min-none bg-theme-overlay rounded-full content"
+         "µ")
+       (group style: "clamp max-w-2xs"
+         (p style: "text-theme-string"
+           ^\style)))
+
+(EditorWidget (editor l_string I r_string ⍊ anchor_: (%number +i32)))
+  => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
+                  bg-theme-surface in-focused:bg-theme-overlay clamp \
+                  max-w-5xs max-h-5xs"
+       (p style: "px-3/2 content sel sel-aim sel-clearance-3/2 cursor-thick \
+                  sel-theme-highlight-med in-focused:sel-theme-editor-selection-bg \
+                  in-editor-hidden:sel-theme-highlight-high sel-text-theme-text \
+                  in-focused:sel-text-theme-editor-selection-fg text-theme-subtle \
+                  in-focused:text-theme-text"
+          selection-anchor: ^(charcount l)
+          selection-span: ^(- anchor (charcount l))
+         ^(~ l r)))
+
+(EditorWidget (editor l_string (compose buffer_string) r_string ⍊ anchor_: (%number +i32)))
+  => (box style: "content content-clip content-aim-through rounded-sm bg-min-none bg-theme-overlay \
+                  clamp max-w-5xs max-h-5xs"
+       (group style: "content px-3/2 flow-row rounded-sm"
+         (p ^l style: "text-theme-muted")
+         (p style: "px-2/3 text-theme-text rounded-sm bg-min-none bg-theme-highlight-med \
+                    sel sel-aim sel-clearance-3/2 cursor-thick sel-theme-highlight-high"
+            selection-anchor: -1
+            selection-span: 0
+           ^buffer)
+         (p ^r style: "text-theme-muted")))
+
+(PathWidgetBox children_*)
+  => (group style: "max-w-3xs content-y flow-col bg-theme-surface border-sm \
+                    border-theme-overlay font-sans text-theme-subtle rounded-sm"
+       ^*(view children))
+
+(PathWidgetHeader ⍊ icon_string path_string center_: (_*) right_: (_*))
+  => (group style: "flow-row px-3 py-3/2 -@only:border-b-sm -@only:border-theme-overlay"
+       (group style: "flow-row gap-3/2 fr-1"
+         (icon ^icon style: "font-icons center-y")
+         (p ^path style: "fr-1 leading-none"))
+       (p ^*center style: "flow-row gap-3/2 fr-2")
+       (p ^*right style: "flow-row gap-3/2"))
+
+;;
+;; PathReportWidget
+;;
+
+(PathReportWidget _ path_string (file ⍊ timestamp_string size: {¦ human: size_string}))
+  => (PathWidgetBox
+       (PathWidgetHeader ^:path
+         icon: "insert_drive_file"
+         center: (^timestamp)
+         right: (^size)))
+
+(PathReportWidget _ path_string (dir entries_* ⍊ timestamp_string))
+  => (PathWidgetBox
+       (PathWidgetHeader ^:path
+         icon: "folder"
+         center: (^timestamp)
+         right: ())
+       (PathReportEntryList ^entries))
+
+(PathReportWidget _ path_string [absent detail_string])
+  => (PathAbsentWidget ^path ^detail)
+
+(PathReportEntryList ())
+  => (p style: "text-theme-muted leading-none py-3/2 center-x"
+       "Empty directory")
+
+(PathReportEntryList (entries_*))
+  => (group style: "gap-3/2 px-3 py-3/2"
+       (^each (entries as entry_)
+         (PathReportEntry ^entry)))
+
+(PathReportEntry [file name_string])
+  => (PathReportEntry ^:name icon: "insert_drive_file")
+
+(PathReportEntry [dir name_string])
+  => (PathReportEntry ^:name icon: "folder")
+
+(PathReportEntry ⍊ icon_string name_string)
+  => (group style: "flow-row gap-2/3 fr-1"
+       (icon ^icon style: "font-icons center-y")
+       (p ^name style: "fr-1 clip leading-none"))
+
+;;
+;; PathReadingWidget
+;;
+
+(PathReadingWidget addr_ path_string reading_)
+  => (PathWidgetBox
+       (PathWidgetHeader ^:path
+          icon: "insert_drive_file"
+          center: ()
+          right: ())
+       (PathContentReading ^reading))
+
+(PathReadingWidget _ path_string [absent detail_string])
+  => (PathAbsentWidget ^path ^detail)
+
+(PathContentReading (present content_string))
+  => (box style: "max-h-4xs px-3 py-3/2"
+       ;; TODO: scrolling
+       (viewport offset-x: (0 px) offset-y: (0 px)
+         (p style: "text-theme-text font-mono content"
+           ^content)))
+
+;; TODO: scrolling
+;; TODO: hex view
+(PathContentReading (present content←(%mime type_string _)))
+  => (box style: "max-h-4xs px-3 py-3/2 gap-3/2 flow-col"
+       (p ^type style: "right")
+       (viewport offset-x: (0 px) offset-y: (0 px)
+         (p style: "text-theme-text font-mono"
+           "TODO: hex view")))
+
+(PathContentReading (digest hexdigest_string ⍊ size: {¦ human: size_string}))
+  => (group style: "flow-col"
+       (group style: "flow-row gap-3 px-3 py-3/2 text-theme-text"
+         (p ^hexdigest style: "fr-1 clip")
+         (p ^size))
+       (p style: "flow-row gap-1 bg-theme-base border border-theme-highlight-high \
+                  rounded-xs mx-3 my-3/2 p-1"
+         (icon "info" style: "font-icons pt-2/3")
+         (span style: "fr-1"
+           "Wirewright can't load files that are so large yet :( Showing only digest and size.")))
+
+;;
+;; Path absent widget
+;;
+
+(PathAbsentWidget path_string detail_string)
+  => (PathWidgetBox
+       (PathWidgetHeader ^:path
+          icon: "broken_image"
+          center: ()
+          right: ())
+       (p style: "gap-3/2 px-3 py-3/2 text-theme-text font-medium capitalize"
+         ^detail))
+
+;;
+;; Helpers
+;;
+
+(TooltipBL child_ hint_ ⍊ id_)
+  => (box style: "flow-none"
+       (vantage id: (hoverable ^id) active: if-hit
+         ^child)
+       (^if (any? hover-over id)
+         ;; FIXME: overlay doesn't work well with origin-* for some reason...
+         (box style: "floating content origin-bl -dt-2"
+           (box style: "clamp max-w-4xs"
+             ;; Triangle
+             (rect
+               style: "fill-theme-highlight-high dl-3 dt-1 content-x bottom pivot-center rotate-45"
+               min-w: 8
+               min-h: 8)
+             ;; FIXME: Why is flow-wrap f**ing everything up with text-base and larger?
+             (box style: "flow-none px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
+                          rounded-sm text-theme-text"
+                ^hint)))))
+
+;; FIXME: dedupe
+(TooltipBR child_ hint_ ⍊ id_)
+  => (box style: "flow-none"
+       (vantage id: (hoverable ^id) active: if-hit
+         ^child)
+       (^if (any? hover-over id)
+         ;; FIXME: overlay doesn't work well with origin-* for some reason...
+         (box style: "floating content origin-br -dt-2 dl-6"
+           (box style: "clamp max-w-4xs"
+             ;; Triangle
+             (rect
+               style: "fill-theme-highlight-high -dl-3 dt-1 bottom right pivot-center rotate-45"
+               min-w: 8
+               min-h: 8)
+             ;; FIXME: Why is flow-wrap f**ing everything up with text-base and larger?
+             (box style: "flow-none px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
+                          rounded-sm text-theme-text"
+                ^hint)))))
+
+;;
+;; Markup
+;;
+
+(Key name_string)
+  => (p style: "font-mono text-xs content rounded-sm px-2/3 bg-theme-highlight-med \
+                border-xs border-b-sm border-theme-highlight-high leading-none \
+                text-theme-text"
+       ^name)
+
+(Markup fragments_*)
+  => (box style: "flow-wrap gap-x-1 text-sm/5"
+       (^each (fragments as fragment_)
+         (^match fragment
+           (when (m-span text_string)
+             (^each ((words text) as word_string)
+               ^word))
+           (when (m-key key_)
+             (Key ^key))
+           (when (m-key expects-mode_ key_)
+             (^unless (= mode expects-mode)
+               (Key "escape"))
+             (Key ^key)))))
+
+(MuLogo)
+  => (svg
+       style: ""
+       fit: keep-ratio
+       src:
+         '⎡<svg width="92" height="122" viewBox="0 0 92 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+           <path fill-rule="evenodd" clip-rule="evenodd" d="M66.5789 0C75.2702 0 82.3158 7.24568 82.3158 16.1837V44.8163C82.3158 68.1926 63.8888 87.1429 41.1579 87.1429C18.427 87.1429 0 68.1926 0 44.8163V16.1837C0 7.24568 7.04562 0 15.7368 0H66.5789ZM41.1579 59.7551C49.8491 59.7551 56.8947 52.5094 56.8947 43.5714C56.8947 34.6334 49.8491 27.3878 41.1579 27.3878C32.4667 27.3878 25.4211 34.6334 25.4211 43.5714C25.4211 52.5094 32.4667 59.7551 41.1579 59.7551Z" fill="currentColor"/>
+           <path d="M0 105.816V80.6602C9.87405 92.2636 24.3812 99.5918 40.5526 99.5918C57.1778 99.5918 72.0439 91.8466 81.9253 79.6735H82.3158V102.082C87.6642 102.082 92 106.541 92 112.041C92 117.541 87.6642 122 82.3158 122H15.7368C7.04562 122 0 114.754 0 105.816Z" fill="currentColor"/>
+           </svg>⎤)
+
+;;
+;; Statusbar mode
+;;
+
+(StatusModeText caption_string)
+  => (p style: ^"font-mono font-semibold text-xs leading-none px-3/2 py-1/3 upcase"
+       ^caption)
+
+(StatusMode grab)
+  => (box style: "content-center-y bg-theme-grab-bg text-theme-grab-fg rounded-xs"
+       (StatusModeText "Grab"))
+
+(StatusMode normal)
+  => (box style: "content-center-y bg-theme-normal-bg text-theme-normal-fg rounded-xs"
+       (StatusModeText "Normal"))
+
+(StatusMode insert)
+  => (box style: "content-center-y bg-theme-insert-bg text-theme-insert-fg rounded-xs"
+       (StatusModeText "Insert"))
+
+(ModeTooltip grab)
+  => (Markup
+       (m-span "The window pane is given access to most of your keyboard keys. Hit")
+       (m-key "S-Tab") (m-span "/") (m-key "Tab") (m-span "to cycle through foci, or")
+       (m-key "escape") (m-span "to blur. When all foci are blurred, ") (m-key "escape")
+       (m-span "goes to Normal mode."))
+
+(ModeTooltip normal)
+  => (Markup
+       (m-span "Normal mode lets you use the keyboard to interact with")
+       (m-span "the MuSoma app itself. Use ") (m-key "h")
+       (m-span "to go to the Grab mode, or ") (m-key "l")
+       (m-span "to go to the Insert mode. Use ") (m-key "\\") (m-span "/")
+       (m-key "S-\\") (m-span "to toggle left/right pane. Hit ")
+       (m-key "?") (m-span "for help."))
+
+(ModeTooltip insert)
+  => (Markup
+       (m-span "Insert mode sends the keys you press to editor(s) inside the circuit.")
+       (m-span "An editor is a special kind of symbolic structure in the circuit that")
+       (m-span "acts as your \"avatar\" in the symbolic world (think a player character in a game).")
+       (m-span "Typing works; navigation using ") (m-key "↑") (m-key "↓") (m-key "←")
+       (m-key "→") (m-span "works. Hit ") (m-key "?") (m-span "for more info."))
+
+;;
+;; Statusbar time
+;;
+
+(TimeRunningIndicator (_ I _ ... _))
+  => (TimeIndicatorIcon "play_arrow"
+       (Markup
+         (m-span "Time is running (hit ")
+         (m-key normal "space")
+         (m-span "to toggle)")))
+
+(TimeRunningIndicator _)
+  => (TimeIndicatorIcon "pause"
+       (Markup
+         (m-span "Time is paused (hit ")
+         (m-key normal "space")
+         (m-span "to toggle)")))
+
+(TimeIndicatorIcon name_string hint_)
+  => (box style: "floating-y content"
+       (box style: "-dt-10 px-5 py-3 bg-theme-overlay rounded-tr"
+         (TooltipBL id: time-status
+           (icon style: "font-icons text-theme-text font-3xl"
+             ^name)
+           ^hint)))
+
+(TimePosition (behind←(_*) I ahead←(_*) _ _))
+  => (p style: "text-xs leading-none font-mono font-medium text-theme-subtle"
+       ^"⸢(tally behind)⸣ … I … ⸢(tally ahead)⸣")
+
+(TimePosition (behind←(_*) I * _ _))
+  => (p style: "text-xs leading-none font-mono font-medium text-theme-subtle"
+       ^"⸢(tally behind)⸣ … I (end-of-time)")
+
+(TimeTooltip (behind_dict I ahead_dict _ _))
+  => (Markup
+       (m-span ^"There are ⸢(itemsize behind)⸣ frame(s) before this one. There")
+       (m-span ^"are ⸢(itemsize ahead)⸣ frame(s) ahead.")
+       (^match behind
+         (when (_))
+         (when _
+           (m-span "Hit")
+           (m-key normal ",")
+           (m-span "to go back in time, or")))
+       (m-key normal ".")
+       (m-span
+         (^match ahead
+           (when () "to go to end-of-time.")
+           (when _ "to go forward."))))
+
+(TimeTooltip (behind_dict I * _ _))
+  => (Markup
+       (m-span ^"There are ⸢(itemsize behind)⸣ frame(s) of history. You are looking at")
+       (m-span "a not-yet-committed draft, called end-of-time. Hit ") (m-key normal ",")
+       (m-span "to go back."))
+
+;;
+;; Statusbar seed
+;;
+
+(SeedStatus)
+  => (^case vars
+       (when {¦ live-reload: true}
+         (TooltipBL id: seed-status
+           (SeedStatus live)
+           (Markup
+             (m-span "Live reload from disk is enabled. Unsaved state will be lost on reload. Use ")
+             (m-key normal "R") (m-span "to toggle."))))
+       (when {¦ seed seed'}
+         (TooltipBL id: seed-status
+           (SeedStatus stale)
+           (Markup
+             (m-span "Seed on disk changed. Hit ") (m-key normal "r") (m-span "to reload")
+             (m-span "(unsaved state will be lost). Hit ") (m-key normal "R")
+             (m-span "to toggle live reload."))))
+       (when _
+         (TooltipBL id: seed-status
+           (SeedStatus ok)
+           (Markup
+             (m-span "Seed is in sync. Hit ") (m-key normal "r") (m-span "to force reload")
+             (m-span "from disk (unsaved state will be lost). Hit ") (m-key normal "R")
+             (m-span "to toggle live reload.")))))
+
+(SeedStatus kind_)
+  => (group style: "flow-row gap-2/3 font-mono text-theme-subtle kind/stale:text-theme-attention-fg \
+                    kind/live:text-theme-info-fg"
+            ^:kind
+       (icon style: "font-icons"
+         (SeedIcon ^kind))
+       (p style: "fr-1 text-xs leading-none"
+         ^seed-path))
+
+(SeedIcon live) => "sync"
+(SeedIcon stale) => "sync_problem"
+(SeedIcon ok) => "sync_disabled"
+
+;;
+;; Statusbar
+;;
+
+(StatusMessage (_ msg_string))
+  => (StatusMessage ^msg)
+
+(StatusMessage msg_string)
+  => (p style: "clip text-xs leading-none flow-row gap-1 text-theme-attention-fg font-medium"
+       ^msg)
+
+(StatusBar)
+  => (group style: "bg-theme-overlay flow-row py-2/3"
+       (TimeRunningIndicator ^timeline)
+       (group style: "fr-1 flow-row gap-3"
+         (TooltipBL id: time-position
+           (TimePosition ^timeline)
+           (TimeTooltip ^timeline))
+         (box style: "fr-1"
+           (StatusMessage ^log)))
+       (group style: "flow-row gap-3 pr-2/3"
+         (box style: "fr-1"
+           (SeedStatus))
+         (TooltipBR id: status-mode
+           (StatusMode ^mode)
+           (ModeTooltip ^mode))))
+
+;;
+;; Window pane
+;;
+
+(WindowTab id_ caption_string ⍊ active⋮ false)
+  => (vantage id: (hoverable (window-tab ^id)) active: if-hit
+       (box style: "min-w-7xs flow-row gap-1 active:bg-theme-overlay \
+                    text-theme-subtle active:text-theme-text active:aim \
+                    content-y px-2 py-1 rounded-sm hover:cursor-pointer \
+                    hover:-active:bg-theme-surface"
+            hover: ^(any? hover-over ('window-tab id))
+            ^:active
+         (icon style: "text-xs center-y"
+           "window")
+         (p style: "text-xs font-medium leading-none clip content"
+           ^caption)))
+
+(WindowTabList)
+  => (group style: "gap-2 p-2"
+       (group style: "fr-1 flow-row gap-1 content-clip item-fr-1"
+         (^each (window-specs as (spec _ ⍊ id_ title_))
+           (WindowTab ^id ^"⸢title⸣ (⸢id⸣)" active: ^(= active-window-spec (some id))))))
+
+(WindowView (spec content_ ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false))
+  => (box style: "content-clip border-sm border-theme-highlight-low \
+                  in-focused:border-theme-grab-bg in-focused:input \
+                  -input-enabled:-input"
+          input-enabled: ^input
+       (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
+         ;; `content` is Scenery already, so let's save Microfold a whole bunch
+         ;; of work by marking this node as `leaf`.
+         (box style: "leaf"
+              µ-bg: ^backdrop
+              µ-cursor: (^unless (= cursor arrow) ^cursor)
+           ^*content)))
+
+(WindowViewPane)
+  => (pane style: "flow-col"
+       (WindowTabList)
+       (box style: "fr-1 p-2"
+         (pane style: "clip p-5 mode/grab:cue-focused" ^:mode
+           (^match (window-specs active-window-spec)
+             (when (⟨spec←{¦ id_}⟩ (some id_))
+               (box style: "content"
+                 (WindowView ^spec)))
+             (when _
+               (p style: "center text-theme-muted"
+                  "No window to show"))))))
+
+;;
+;; Circuit pane
+;;
+
+(CircuitViewPane)
+  => (^match help
+       (when true
+         (pane style: "flow-col"
+           (box style: "fr-3"
+             (CircuitView))
+           (box style: "fr-2 bg-theme-surface"
+             (HelpView))))
+       (when false
+         (pane style: ""
+           (CircuitView))))
+
+(CircuitView)
+  => (^br circuit-loading
+       (CircuitViewLoading)
+       (CircuitViewLoaded))
+
+(CircuitViewLoading)
+  => (box style: "flow-col gap-3 center text-theme-subtle color-theme-subtle"
+       (box style: "max-w-64px max-h-92px"
+         (MuLogo))
+       (p "Loading..."))
+
+(CircuitViewLoaded)
+  => (vantage id: (state circuit-view-vantage)
+       (box style: "border rounded-lg membrane mode/insert:cue-focused mode/insert:input \
+                    hide:cue-editor-hidden panning-circuit:cursor-resize
+                    panning-circuit:tag-panning"
+            ^:panning-circuit
+            ^:mode
+            ^:hide
+         (^match' (circuit-camera {¦ ±l ±t ±scale})
+           (box style: "clip clip-aim-off in-focused:clip-aim"
+                µ-page-x: (^l px)
+                µ-page-y: (^t px)
+             (gate
+               (transform scale: ^scale
+                 (box style: "p-7 content"
+                   ;; circuit-µ is in Microfold, so we leave it as-is. It also depends on the cues
+                   ;; that we send in the pane style above.
+                   ^(view circuit-µ))))))))
+
+;;
+;; Help
+;;
+
+(MuBanner)
+  => (group style: "flow-row gap-3"
+       (box style: "color-theme-subtle max-h-32"
+         (MuLogo))
+       (box style: "fr-1 flow-col center-y text-theme-text leading-none gap-2/3"
+         (p style: "font-base font-semibold"
+           "Wirewright µsoma")
+         (p style: "font-sm"
+           "https://github.com/wirewright/wirewright [iota]")))
+(HelpView)
+  => (group style: "flow-col clip content-y p-5 text-theme-text"
+       (p "Thank you for checking out MuSoma :^)")
+       (p "TODO: Write help"))
+
+;;
+;; General UI
+;;
+
+(HorizontalPaneDivider)
+  => (overlay
+       (vantage id: (hoverable (pane-divider)) active: if-hit
+         ;; There is a bit of complexity here because we need to have a small area around
+         ;; the divider that is draggable. Otherwise we have just the divider, which is 1px
+         ;; wide -- too narrow a target to mouse over it precisely!
+         (box style: "bg-transparent bg-min-8px hover:cursor-resize-x"
+              hover: ^(or (any? hover-over (pane-divider)) (= dragging-pane-divider true))
+           (rect style: "max-w-1px fill-theme-overlay"))))
+
+(window title: "MuSoma"
+        style: "bg-theme-base"
+        width: 1200
+        height: 800
+  (page
+    (group style: "flow-col"
+      (box style: "fr-1"
+        (^match collapsed-pane
+          (when window-pane
+            (CircuitViewPane))
+          (when circuit-pane
+            (WindowViewPane))
+          (when none
+            (vantage id: (state panes-vantage) active: if-hit
+              (box style: "bg-transparent"
+                (gate
+                  (page
+                    (group style: "flow-row"
+                      (limit max-w: ^pane-divider-l
+                        (WindowViewPane))
+                      (HorizontalPaneDivider)
+                      (limit fr: 1
+                        (CircuitViewPane))))))))))
+      (StatusBar))
+  ;; DEBUG
+  ;(p ^\log style: "content flow-col")))
+

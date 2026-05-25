@@ -1,0 +1,13 @@
+(window
+  (node @driver
+    (sequencer (1 s)
+      (> true)
+      false))
+  (node @text
+    (p style: "p-5 leading-tight on:sel sel-white cursor-thick"
+       selection-anchor: 0
+       selection-span: 0
+      "Kaixo mundua" ))
+  (backsys {@:driver @:text}
+    {¦ driver: ⟨(> state_boolean)⟩ text: {¦ on_: (%optional false _boolean)}}
+      <> {on: ^state}))

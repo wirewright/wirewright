@@ -107,6 +107,8 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(// a_number (%all b_number (%not 0)))] { a // b }
   rulepi1 %[(mod a_number (%all b_number (%not 0)))] { a % b }
 
+  rulepi1 %[(** a_number b_number)] { a.as_n ** b.as_n }
+
   rulepi1 %[(~ args_+)] do
     args.items.reduce(Term[""]) do |prefix, arg|
       suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
@@ -253,6 +255,10 @@ PRIMITIVES = ProcRuleset.build do
     Term.hashcode(term)
   end
 
+  rulepi1 %[(hashcode/hex term_)] do
+    Term.hashcode(term).to_s(base: 16)
+  end
+
   rulepi1 %[(iota n←(%number +i32))] do
     Term::Dict.build do |commit|
       (0...n.to(Int32)).each do |i|
@@ -278,8 +284,12 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(charcount xs_string+)] do
-    xs.items.sum(0, &.unsafe_as_s.charcount)
+  rulepi1 %[(charcount xs_string*)] do
+    xs.items.sum(0, &.as_s.charcount)
+  end
+
+  rulepi1 %[(bytesize xs_blob*)] do
+    xs.items.sum(0, &.as_blob.ubytesize64)
   end
 
   # TODO: sum, min, and max should probably ignore non-numbers, and they should operate
@@ -311,8 +321,17 @@ PRIMITIVES = ProcRuleset.build do
   # TODO: upcase/dncase args_string is mass-upcase/dncase
   # TODO: upcase/dncase on list of strings
 
+  # TODO: Rename to `size`
   rulepi1 %[(tally args_dict+)] do
-    args.items.reduce(0) { |memo, arg| memo + arg.size }
+    args.items.sum(0, &.size)
+  end
+
+  rulepi1 %[(itemsize args_dict+)] do
+    args.items.sum(0, &.itemsize)
+  end
+
+  rulepi1 %[(pairsize args_dict+)] do
+    args.items.sum(0, &.pairsize)
   end
 
   rulepi1 %[(runes s_string b←(%number i32) ..= e←(%number i32))] do
@@ -333,6 +352,15 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(word s_string b←e←(%number i32))] do
     StringSpan.words(s.to(StringView), b.to(Int32), e.to(Int32))
+  end
+
+  rulepi1 %[(words s_string)] do
+    words = Term::Dict.build do |commit|
+      s.to(StringView).split_and_rest(' ') do |word, _, _|
+        next if word.empty? # But *can* it be empty?
+        commit << word
+      end
+    end
   end
 
   rulepi1 %[(line/stem s_string)] do

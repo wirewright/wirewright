@@ -1,0 +1,29 @@
+(CounterButton msg_ caption_)
+  => (slot
+       (Button ^:msg
+         (p style: "bg-neutral-800 px-3 py-2 rounded leading-none text-neutral-300 \
+                    hover:text-white hover:bg-blue-700 active:text-white \
+                    active:bg-blue-600 hover:cursor-pointer content-center"
+            ^caption)))
+
+(window title: "Counter" style: "backdrop-neutral-950 center"
+  (group style: "flow-col bg-neutral-900 p-5 rounded-3xl gap-5"
+    (node @count
+      (p 0 style: "center text-6xl text-neutral-200 font-medium"))
+
+    (group style: "flow-wrap gap-3"
+      (slot (CounterButton (sub 1) "Decrement"))
+      (slot (CounterButton (set 0) "Reset"))
+      (slot (CounterButton (add 1) "Increment")))
+
+    (control @msg (#Button _ (msg_ _*)))
+
+    (backsys {@:msg @:count}
+      {¦ msg_: (add ±n) count: [p ±count]}
+        <> {(msg): (), count: ^(+ count n)}
+      {¦ msg_: (sub ±n) count: [p ±count]}
+        <> {(msg): (), count: ^(- count n)}
+      {¦ msg_: (set ±n) count: [p ±count]}
+        <> {(msg): (), count: ^n})))
+
+((I modify: true structural: true multiline: true compose: true) ("" * "") 0)

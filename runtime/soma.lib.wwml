@@ -1,0 +1,39 @@
+;; The "brain" of a button.
+(Button view_ ¦ opts_ msg_)
+  => (component
+       (surface (@surface (#Button msg_ msgs←(_*)))
+         (#Button ^msg ()))
+       (node @mouse (mouse))
+       (figure {@:observable, node: @view}
+         (template ^view))
+       ;; FIXME: Template must expand into group in this case anyway!..
+       (template
+         (group
+           (^match' (opts {¦ key_})
+             (node @input
+               (input focus: always))
+             (backsys {@:input @:view @:msg @:msgs}
+               {¦ input: ⟨K←^key⟩ msg_ view: {¦ -active_} msgs: (_* `msg)}
+                 <> {(K): (), active: tap, msg: ^^msg}))))
+       (backsys {@:mouse @:keyboard @:observable @:view @:msg @:msgs}
+         ;; Mouse enters the button.
+         {¦ mouse: [mouse] observable: (figure {¦ hit-hover}) view: {¦ hover_: (%optional false false)}}
+           <> {hover: true}
+         ;; Mouse leaves the button.
+         {¦ observable: (figure {¦ -hit-hover}) view: {¦ hover_: true}}
+           <> {(hover): ()}
+         ;; Mouse left pressed while over the button.
+         {¦ mouse: [mouse left] view: {¦ hover: true active_: (%optional false false)}}
+           <> {active: true}
+         ;; Mouse moved away from the button while holding left, then returned back
+         ;; while holding left.
+         {¦ observable: (figure {¦ hit-hover}) view: {¦ -hover_ active: true}}
+           <> {hover: true}
+         ;; Mouse left released while over the button.
+         {¦ mouse: [mouse], observable: (figure {¦ hit-hover}) view: {¦ active: true} msg_ msgs: (_* `>msg)}
+           <> {>msg: ^msg}
+         {¦ mouse: [mouse] view: {¦ active_: true}}
+           <> {(active): ()}
+         {¦ view: {¦ active_: tap}}
+           <> {(active): ()}))
+

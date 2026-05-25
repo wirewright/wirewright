@@ -1,0 +1,193 @@
+module MuSoma
+  alias ExtrinsicRef = ReadingRef | ReportRef | ResourceRef
+
+  defrecord ReadingRef, path : NormalPath
+  defrecord ReportRef, path : NormalPath
+  defrecord ResourceRef, query : ResourceService::Query
+
+  # A uniform surface API for services that work with *extrinsics*: file
+  # system readings, reports, HTTP, etc. Also sets watch handles for paths
+  # where possible and manages automatic, transparent invalidation with
+  # the help of `PromiseMap`.
+  #
+  # On the user end, using `ExtrinsicMap` is as simple as `add`ing a ref
+  # and then polling it at any desired rate or reactively (see `new`).
+  # None of the methods do IO; IO is done deep in the internals of `PathService`,
+  # `HTTPService` and so on, on dedicated fibers. You are simply performing or
+  # calling for "rendezvous" here, with `ExtrinsicMap` and various other facilities
+  # "cushioning" your calls while the rendezvous is arranged.
+  class ExtrinsicMap
+    Log = ::Log.for(self)
+
+    # :nodoc:
+    alias ReadingMap = PromiseMap(NormalPath, PathService::Reading)
+    # :nodoc:
+    alias ReportMap = PromiseMap(NormalPath, PathService::Report)
+    # :nodoc:
+    alias ResourceMap = PromiseMap(ResourceService::Query, ResourceService::Response)
+
+    # :nodoc:
+    def initialize(
+      @readings : ReadingMap,
+      @reports : ReportMap,
+      @resources : ResourceMap,
+    )
+    end
+
+    # Constructs an extrinsic map.
+    #
+    # - *alarm* is called on any invalidation.
+    # - *msgq* must be thread-safe, and respond to `#<<(UpdateRefs)`.
+    def self.new(msgq, alarm : BlockingSignal) : ExtrinsicMap
+      readings = PromiseMap(NormalPath, PathService::Reading).new
+      reports = PromiseMap(NormalPath, PathService::Report).new
+      resources = PromiseMap(ResourceService::Query, ResourceService::Response).new
+
+      wg = WaitGroup.new(2)
+      msgloop = Msgloop.new(msgq, alarm, readings, reports, resources)
+
+      spawn(name: "ExtrinsicMap path invalidation relay") do
+        PathService.listen(wg) do |notification|
+          msgloop.receive(notification)
+        end
+      end
+
+      spawn(name: "ExtrinsicMap HTTP invalidation relay") do
+        HTTPService.listen(wg) do |notification|
+          msgloop.receive(notification)
+        end
+      end
+
+      wg.wait
+
+      new(readings, reports, resources)
+    end
+
+    private class Msgloop(Q)
+      def initialize(
+        @msgq : Q,
+        @alarm : BlockingSignal,
+        @readings : ReadingMap,
+        @reports : ReportMap,
+        @resources : ResourceMap,
+      )
+      end
+
+      def receive(msg : PathService::Notification) : Nil
+        Log.trace { msg.class }
+
+        # We don't have any info on which resources correspond to which paths,
+        # so invalidate all of them and rely on deeper caches (if any)!
+        @resources.invalidate
+
+        handle(msg)
+      end
+
+      def receive(msg : HTTPService::Notification) : Nil
+        Log.trace { msg.class }
+
+        handle(msg)
+      end
+
+      private def handle(msg : PathService::ReadingInvalid) : Nil
+        return unless @readings.invalidate?(msg.path)
+
+        reload_refs
+      end
+
+      private def handle(msg : PathService::ReportInvalid) : Nil
+        # Invalidate parent for directory observers, when we receive a directory
+        # entry event.
+        #
+        # Invalidate the path itself for file observers, or directory observers
+        # to refresh entries.
+        return unless @reports.invalidate?(msg.path.parent, msg.path)
+
+        reload_refs
+      end
+
+      private def handle(msg : PathService::ReadingReady) : Nil
+        return unless @readings.includes?(msg.path)
+
+        # If there's a race it's just a spurious wakeup/reload.
+        reload_refs
+      end
+
+      private def handle(msg : PathService::ReportReady) : Nil
+        return unless @reports.includes?(msg.path) || @reports.includes?(msg.path.parent)
+
+        # If there's a race it's just a spurious wakeup/reload.
+        reload_refs
+      end
+
+      private def handle(msg : HTTPService::ResponseReady) : Nil
+        # Only resources from the resource map can be affected by HTTP invalidation
+        # at the moment.
+        @resources.invalidate
+
+        reload_refs
+      end
+
+      private def reload_refs : Nil
+        Log.trace { "ReloadRefs" }
+
+        @msgq << ReloadRefs.new
+        @alarm.call
+      end
+    end
+
+    # Returns the current value of *ref*.
+    def []?(ref : ReadingRef) : PathService::Reading?
+      @readings[ref.path]?
+    end
+
+    # Returns the current value of *ref*.
+    def []?(ref : ReportRef) : PathService::Report?
+      @reports[ref.path]?
+    end
+
+    # Returns the current value of *ref*.
+    def []?(ref : ResourceRef) : ResourceService::Response?
+      @resources[ref.query]?
+    end
+
+    # Adds *ref* to the map. After adding *ref*, you can start polling
+    # it using the corresponding `[]?` method.
+    def add(ref : ReadingRef) : Nil
+      PathMonitorService.add(ref.path.parent)
+
+      @readings.add(ref.path) { PathService.read(ref.path) }
+    end
+
+    # :ditto:
+    def add(ref : ReportRef) : Nil
+      PathMonitorService.add(ref.path)
+
+      @reports.add(ref.path) { PathService.report(ref.path) }
+    end
+
+    # :ditto:
+    def add(ref : ResourceRef) : Nil
+      @resources.add(ref.query) { ResourceService.get(ref.query) }
+    end
+
+    # Removes *ref* from the map.
+    def delete(ref : ReadingRef) : Nil
+      PathMonitorService.delete(ref.path.parent)
+
+      @readings.delete(ref.path)
+    end
+
+    # :ditto:
+    def delete(ref : ReportRef) : Nil
+      PathMonitorService.delete(ref.path)
+
+      @reports.delete(ref.path)
+    end
+
+    # :ditto:
+    def delete(ref : ResourceRef) : Nil
+      @resources.delete(ref.query)
+    end
+  end
+end
