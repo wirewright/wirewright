@@ -303,9 +303,6 @@ module MuSoma
   end
 
   def run(args : Array(String) = ARGV) : Nil
-    # Parse arguments.
-    input_arg = args.first
-
     # Initialize console.
     console = Channel(ConsoleWidget).new
 
@@ -319,13 +316,25 @@ module MuSoma
 
     console.send(MuBanner.new)
 
+    # Parse arguments.
+    unless input_arg = args.first?
+      console.send(CriticalLog.new("Expected a file argument (try `examples/calculator.wwml` your MuSoma download has an `examples` directory)"))
+      return
+    end
+
+    unless runtime = Ww.roots.runtime
+      console.send(CriticalLog.new("Could not find Wirewright runtime (you likely need to set WW_RUNTIME)"))
+      return
+    end
+
     console.send(InfoLog.new("Initializing refs"))
 
     input_ref = ReadingRef.new(NormalPath[input_arg])
-    library_ref = ReadingRef.new(NormalPath["runtime/soma.lib.wwml"])
-    codex_ref = ReadingRef.new(NormalPath["runtime/codices/soma.codex.wwml"])
-    editR_ref = ReadingRef.new(NormalPath["runtime/codices/editR.codex.wwml"])
-    microfold_ref = ReadingRef.new(NormalPath["runtime/codices/ufold.codex.wwml"])
+    # TODO: Use ResourceRef instead of manually resolving runtime!
+    library_ref = ReadingRef.new(NormalPath[runtime / "soma.lib.wwml"])
+    codex_ref = ReadingRef.new(NormalPath[runtime / "codices/soma.codex.wwml"])
+    editR_ref = ReadingRef.new(NormalPath[runtime / "codices/editR.codex.wwml"])
+    microfold_ref = ReadingRef.new(NormalPath[runtime / "codices/ufold.codex.wwml"])
 
     console.send(InfoLog.new("Initializing workspace"))
 

@@ -90,12 +90,12 @@ module Ww
   #
   # - *runtime* points to the runtime directory. The runtime directory contains
   #   assets used by Wirewright itself, such as codices and fonts. It defaults
-  #   `runtime/` sibling of the executable path, or `runtime/` in CWD in case
+  #   to the `runtime/` sibling of the executable path, or `runtime/` in CWD in case
   #   that doesn't work. The runtime directory can be overridden using
   #   the `WW_RUNTIME` environment variable. If the runtime directory cannot
   #   be determined, it is set to `nil`. Note that due to races and TOCTOU type
-  #   of stuff, the fact that *runtime* is not nil does not mean it exists at
-  #   the current moment; it only means that it existed at the time of check.
+  #   of stuff, the fact that *runtime* is not nil does not mean that it exists;
+  #   it only means that it existed at the time of the check.
   defrecord RootPathSet, cwd : Path, home : Path, runtime : Path?
 
   # Returns the root path set of Wirewright.

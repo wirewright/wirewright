@@ -33,9 +33,6 @@ module Ww::DwUIR
     end
   end
 
-  # Specifies where to start searching for fonts.
-  FONTS_FOLDER = NormalPath[Ww.roots.runtime.not_nil! / "fonts"]
-
   # Font entry parser can parse candidate font or font-related paths into
   # `FontEntry` objects.
   module FontEntryParser
@@ -192,7 +189,11 @@ module Ww::DwUIR
     end
 
     @@lock = Sync::RWLock.new
-    @@index : FontIndex = @@lock.write { index(FONTS_FOLDER) }
+    {% if flag?(:musoma) %}
+      @@index : FontIndex = FontIndex.new
+    {% else %}
+      @@index : FontIndex = @@lock.write { index(NormalPath[Ww.roots.runtime.not_nil! / "fonts"]) }
+    {% end %}
 
     private def each_possible_query_with_italic(family, weight pivot, italic, &) : Nil
       FontWeight.sway(pivot) do |weight|
