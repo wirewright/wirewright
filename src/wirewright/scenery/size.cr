@@ -439,7 +439,7 @@ module Ww::Scenery
   end
 
   private def size!(cache, node : Overlay, cst : Cst) : {SizedNode, Size}
-    node, size = box_size(cache, node, Cst.content)
+    node, size = box_size(cache, node, cst)
 
     {node, size.copy_with(outer: Point[0, 0])}
   end

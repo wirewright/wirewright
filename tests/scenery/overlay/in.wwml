@@ -12,19 +12,20 @@ height: 100
           (text color: white caption: "A")
           (text color: white caption: "B")
           (overlay
-            (transform dt: 25
-              (z-stack
-                (rect
-                  fill: (oklch 0.4 0 0)
-                  radius-tl: 5
-                  radius-tr: 5
-                  radius-bl: 5
-                  radius-br: 5)
-                (limit max-w: 16 max-h: 16
-                  (transform dl: 4 dt: -3 pivot-l: 0.5 pivot-t: 0.5 angle: 30
-                    (rect fill: (oklch 0.4 0 0))))
-                (padding pl: 10 pr: 10 pb: 10 pt: 10
-                  (text color: white size: 14 caption: "Tooltip")))))
+            (content x: true y: true
+              (transform dt: 25
+                (z-stack
+                  (rect
+                    fill: (oklch 0.4 0 0)
+                    radius-tl: 5
+                    radius-tr: 5
+                    radius-bl: 5
+                    radius-br: 5)
+                  (limit max-w: 16 max-h: 16
+                    (transform dl: 4 dt: -3 pivot-l: 0.5 pivot-t: 0.5 angle: 30
+                      (rect fill: (oklch 0.4 0 0))))
+                  (padding pl: 10 pr: 10 pb: 10 pt: 10
+                    (text color: white size: 14 caption: "Tooltip"))))))
           (text color: white caption: "C")
           (text color: white caption: "D")
           (text color: white caption: "E")
