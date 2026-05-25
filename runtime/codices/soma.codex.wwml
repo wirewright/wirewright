@@ -487,7 +487,7 @@ history-limit: 128
   <> {?mode: ^M, mode: ^M, (M): ()}
 
 ;; The `inline` node forces inline mode on its element, then removes itself.
-node←(inline child←{¦ -?mode_} ⍊ ?mode: M_)
+node←(inline child←{¦ -?mode_} ⍊ ?mode)
   <> {node: ^(up child), ?mode: inline}
 
 
@@ -1186,7 +1186,7 @@ pane-divider-l: 600 ;; pixels
 {¦ mode: insert keyboard: ((key tab)) hide_boolean cookies: {¦ -▢_}}
   <> {hide: true, ▢: true}
 {¦ hide_: true cookies: {¦ -▢_}}
-  <> {hide: false}
+  <> {hide: false, ▢: true}
 
 --- stateR ;; State rewriter
 
