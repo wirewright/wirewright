@@ -17,7 +17,7 @@ require "./musoma/input"
 require "./musoma/agents"
 require "./musoma/run"
 
-{% if flag?(:main) %}
+{% if flag?(:musoma) %}
   ctx = Fiber::ExecutionContext::Isolated.new("Wirewright MuSoma", spawn_context: Ww::MT) { MuSoma.run }
   ctx.wait
 {% end %}

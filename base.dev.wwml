@@ -10,7 +10,7 @@ presets:
  "musoma":
   {flags:
     {"execution_context": true,
-     "main": true,
+     "musoma": true,
      "preview_mt": true,
      "sdl3": true},
    source: "src/musoma.cr"},
