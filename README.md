@@ -3,56 +3,17 @@
 ![Wirewright Logo](https://github.com/user-attachments/assets/3e5dc602-9c8d-412d-a7fa-9e1a0c3b466e)
 </div>
 
-> [!WARNING]
-> You're looking at the development branch of Wirewright, `iota`. I've made `iota`
-> the main branch because the only alternative is to keep `kappa`, and `kappa` is
-> *very* outdated and won't receive updates anymore.
->
-> Wirewright is currently lacking a *frontend*. This means that aside from tests
-> and custom code (i.e., using Wirewright as a library), there's no way for a user
-> (*you*) to interact with the system.
->
-> This is *very* unfortunate, and a little bit funny, because what I'm saying here
-> is, basically, "here's my project but you can't use it". *Shrugs.*
->
-> But I have other things to do first, and then there's only one of me. I'm already
-> working full-time on Wirewright, and that's not enough, not even *remotely*, considering
-> the scope of the project.
->
-> Furthermore, this kind of thing -- Wirewright -- stems purely out of my curiosity.
-> There is no other incentive: no money will ever be in this area, period; so curiosity
-> is the only fuel we have here. Until the thing works. Or maybe it doesn't, and I'm screwed :)
-> On my end it's a big gamble, giving it so much effort. On your, it's probably something
-> that feels just a little bit crank. But then I run it, and it works, so who cares if
-> it's crank or not!
->
-> If you're interested, the best strategy for you right now is to read about ideas
-> related to Wirewright over at the Wiki page. Do not expect beautiful prose there:
-> those are dumps, unformatted, mostly unedited pieces that I publish raw. Rather
-> than considering them in any way related to truth, consider them as progress dumps
-> that are false the moment they're out, because the very fact of writing them changed
-> me somehow (or maybe at least showed me how stup... undeveloped the ideas *really* are).
-> The code is much better, believe me. At least I hope so.
->
-> You can wait, too. I don't know whether it'd take months or years to get a usable
-> frontend going (probably months). Some prototypes exist already that use all the new
-> stuff, but they're too broken and slow to be usable at the moment.
->
-> Right now, major work is ongoing on the components of Wirewright that receive the majority
-> of load. I am trying my best to speed them up. As a sidenote, it's nice to have modern CPUs
-> doing stuff worthy of their might, instead of sweating as they draw ads on the screen.
-> That the result of such workload is a button (one button!) anyway is funny, of course. But
-> if you open the hood of a browser, you'll see a mechanism; and if you open the hood of
-> Wirewright as it's drawing your button, you'll see tiny people running around like crazy,
-> moving pixels around. It's surprising such complexity can even run within semi-bearable time-budget!
->
-> That's a big warning about nothing in particular, huh?
-
 # Wirewright
 
 Wirewright explores the idea of having entire *worlds* as first-class objects. With Wirewright, you can create worlds, and pass them around. You can then build higher-order worlds from a bunch of smaller worlds, each acting as an agent. You can have worlds creating and populating worlds. You can have worlds interacting with other worlds through something Wirewright calls *entanglement*.
 
 See [the wiki](https://github.com/wirewright/wirewright/wiki/First%E2%80%90class-worlds) to read more about Wirewright. I don't want to scare people off with a wall of text.
+
+## Gallery
+
+## MuSoma
+
+I am excited to announce a new front-end for Wirewright (with the old name :^), MuSoma.
 
 ## References
 
@@ -69,13 +30,41 @@ precisely. Hopefully, this would be possible later.
 
 Wirewright's Microfold is heavily inspired by [Tailwind CSS](https://tailwindcss.com/)
 
-Wirewright includes colors from the following themes.
+Wirewright MuSoma includes colors from the following themes.
 
 - [Rose Pine](https://rosepinetheme.com)
 
-## Building
+# Building Wirewright
 
 Wirewright currently only runs on Linux.
+
+### Building with Docker
+
+This is probably the easiest way to build Wirewright. Note that I'm not an expert
+on Docker, so the Dockerfiles may not be the best ones on the planet.
+
+Go to the build directory:
+
+```console
+cd build
+```
+
+To build the Wirewright base image (which you can run tests on or do general Wirewright work):
+
+```console
+docker build -f wirewright.Dockerfile -t wirewright-base:latest .
+```
+
+To build the MuSoma AppImage:
+
+```console
+docker build -f musoma.Dockerfile --output type=local,dest=. .
+```
+
+It will eventually dump musoma-dist.tar.gz into the build/ dir. The archive contains
+the AppImage and miscellaneous files.
+
+### Building without Docker
 
 Wirewright can be built with Crystal 1.20.0 or later. If I forget to update the version number here, please
 remember that Wirewright more than likely depends on the newest features and bug-fixes in Crystal. So you are
@@ -88,7 +77,7 @@ You will need to install [Crystal](https://github.com/crystal-lang/crystal) befo
 Wirewright requires the following libraries. You should install them before building
 the project. Most Linux distributions have these in their package registry.
 
-- [SDL2](https://www.libsdl.org/) (but we are migrating to SDL3)
+- [SDL2](https://www.libsdl.org/) (but we are migrating to SDL3, so it should also be installed)
 - [FriBidi](https://github.com/fribidi/fribidi)
 - [FreeType](https://freetype.org/)
 - [HarfBuzz](https://github.com/harfbuzz/harfbuzz)
@@ -108,9 +97,11 @@ Wirewright vendors the following libraries (see the vendor/ directory):
 
 > [!NOTE]
 > Wirewright vendors `.a` files that I built on my machine. I didn't set anything
-> while building them so they should run fine as long as you're on x86-64.
+> while building them so they should run fine as long as you're on x86-64. However,
+> this is really brittle unless you happen to have the same versions of dependencies
+> as I have or later. So:
 
-However, if the linker or something else explodes with weird errors, this probably
+If the linker or something else explodes with weird errors, this probably
 means `.a`s shipped with Wirewright are junk for your machine, for whatever reason --
 modern tech is complicated enough, I suppose. So you may need to build them yourself.
 
@@ -121,10 +112,13 @@ as well). Others don't: you'll have to find their code and clone it yourself,
 according to the VERSION file. Afterwards, simply replace the `.a`s shipped
 with Wirewright with your ones.
 
+An alternative route for you is to inspect Dockerfiles in build/ and see what you
+have to install and do.
+
 ### Installing shards
 
 ```console
-$ shards install
+shards install
 ```
 
 ### Building the dev tool
@@ -133,7 +127,7 @@ Wirewright uses a custom dev tool to manage the various subprojects inside the r
 the dev tool with:
 
 ```console
-$ crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context 
+crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context 
 ```
 
 ### Using the dev tool
@@ -141,27 +135,25 @@ $ crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context
 After running the dev tool build command you should be able to run the `dev` executable:
 
 ```console
-$ ./dev
-# Shows help for the dev tool ...
+./dev
 ```
 
 There are several *presets* available. You can print them with:
 
 ```console
-$ ./dev g
-# Prints available presets ...
+./dev g
 ```
 
 Right now, the only interesting preset is `tests`. Switch to it using:
 
 ```console
-$ ./dev g tests
+./dev g tests
 ```
 
 And build it with:
 
 ```console
-$ ./dev b
+./dev b
 ```
 
 You should then have the `testtool` executable, which will run tests in the `tests/` directory.
