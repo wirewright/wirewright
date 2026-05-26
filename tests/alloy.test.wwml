@@ -27,7 +27,7 @@
       ^x)
     200)
 
-  ;; Lets can shadow
+  ;; Lets shadow
   (alloy {x: 100, y: 200, z: 300}
     (^let x: "hello"
           z: (1 2 3)
@@ -35,7 +35,7 @@
         (^x ^y ^z)))
     ("hello" 205 (1 2 3)))
 
-  ;; Something like each would equate though!
+  ;; Each shadows
   (alloy {first-name: "John"}
     (^each (({first-name: "John", last-name: "Doe"}
              {first-name: "Susan", last-name: "Doe"}
@@ -44,6 +44,7 @@
             {¦ first-name_ last-name_})
       (^first-name ^last-name))
     (("John" "Doe")
+     ("Susan" "Doe")
      ("John" "Poe")))
 
   ;; no eval
@@ -499,12 +500,16 @@
 
   ;; ^render vars
   (alloy {xs: (1 2 3), x: 2}
-    (^render (rendered_ vars)
-      (^each (xs as x_) ;; x is now imported, and this turns into an equality constraint
-        (foo ^x))
+    (^render ((rendered_) vars)
+      ((^each (xs as x_) ;; x is now imported, but ^each's x shadows the imported one
+         (foo ^x))
+       (bar ^x)) ;; here there's no shadowing
       (^each (rendered as r_)
         (rendered ^r)))
-    (rendered (foo 2)))
+    ((rendered (foo 1))
+     (rendered (foo 2))
+     (rendered (foo 3))
+     (rendered (bar 2))))
 
   ;; usage of pattern to extract first render
   (alloy {xs: (1 2 3)}
@@ -527,7 +532,7 @@
     (foo 1))
   (alloy {xs: (1 2 3), x: 2}
     (^render ((fst_) vars)
-      (^each (xs as x_)
+      (^when ((xs x) (⟨x_⟩° x_))
         (foo ^x))
       ^fst)
     (foo 2))

@@ -348,13 +348,13 @@ module Ww::Alloy
                   # which constitute the body of the branch -- to be spliced in place
                   # of the `^case` on match.
                   matchpi %{(when pattern_ body_*)} do
-                    matches = M1.matches(pattern, matchee, env: ctx.vars)
+                    matches = M1.matches(pattern, matchee)
                     next unless matches.present?
 
                     issues.adjoin("`^case` branch with pattern", pattern) do |issues|
                       expansion = render_many(issues) do |submit|
                         matches.each do |env|
-                          subctx = ctx.copy_with(vars: env)
+                          subctx = ctx.copy_with(vars: Term.union(ctx.vars, env))
 
                           body.items.each_with_index(offset: 2) do |item, index|
                             submit.call(subctx, item, index)
@@ -489,8 +489,10 @@ module Ww::Alloy
       matchpi %{(^each (iteratee_ as pattern_) body_*)} do
         render_each(ctx, iteratee, body.unsafe_as_d, issues) do |dict, submit|
           dict.items.each do |item|
-            matches = M1.matches(pattern, item, env: ctx.vars)
-            matches.each { |env| submit.call(ctx.copy_with(vars: env)) }
+            matches = M1.matches(pattern, item)
+            matches.each do |env|
+              submit.call(ctx.copy_with(vars: Term.union(ctx.vars, env)))
+            end
           end
         end
       end
@@ -510,8 +512,10 @@ module Ww::Alloy
       matchpi %{(^each (iteratee_ entry as pattern_) body_*)} do
         render_each(ctx, iteratee, body.unsafe_as_d, issues) do |dict, submit|
           dict.each_entry(in: Term::Dict.entries_ord) do |key, value|
-            matches = M1.matches(pattern, Term.of(key, value), env: ctx.vars)
-            matches.each { |env| submit.call(ctx.copy_with(vars: env)) }
+            matches = M1.matches(pattern, Term.of(key, value))
+            matches.each do |env|
+              submit.call(ctx.copy_with(vars: Term.union(ctx.vars, env)))
+            end
           end
         end
       end
@@ -530,8 +534,10 @@ module Ww::Alloy
       matchpi %{(^each (iteratee_ item as pattern_) body_*)} do
         render_each(ctx, iteratee, body.unsafe_as_d, issues) do |dict, submit|
           dict.items.each_with_index do |item, index|
-            matches = M1.matches(pattern, Term.of(item, index), env: ctx.vars)
-            matches.each { |env| submit.call(ctx.copy_with(vars: env)) }
+            matches = M1.matches(pattern, Term.of(item, index))
+            matches.each do |env|
+              submit.call(ctx.copy_with(vars: Term.union(ctx.vars, env)))
+            end
           end
         end
       end
@@ -992,9 +998,9 @@ module Ww::Alloy
 
           render_many(issues) do |submit|
             # Filter on expansion.
-            matches = M1.matches(pattern, matchee, env: ctx.vars)
+            matches = M1.matches(pattern, matchee)
             matches.each do |env|
-              subctx = ctx.copy_with(vars: env)
+              subctx = ctx.copy_with(vars: Term.union(ctx.vars, env))
               body.items.each_with_index(offset: 3) do |item, index|
                 submit.call(subctx, item, index)
               end
