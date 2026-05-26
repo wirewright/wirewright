@@ -15,6 +15,8 @@ See [the wiki](https://github.com/wirewright/wirewright/wiki/First%E2%80%90class
 
 I am excited to announce a new front-end for Wirewright (with the old name :^), MuSoma.
 
+<img width="1200" height="932" alt="musoma-shot" src="https://github.com/user-attachments/assets/ae2701f5-284c-474c-b8b4-95d5e4857dec" />
+
 ## References
 
 ### Inspiration
@@ -34,7 +36,49 @@ Wirewright MuSoma includes colors from the following themes.
 
 - [Rose Pine](https://rosepinetheme.com)
 
-# Building Wirewright
+## Running Wirewright
+
+You should hopefully be able to just [download the latest release of MuSoma](https://github.com/wirewright/wirewright/releases/latest).
+
+It's an archive which you will have to extract. Inside the archive are an AppImage and some miscellaneous files, in particular
+the examples. You should make the AppImage executable if it isn't already:
+
+```console
+chmod +x musoma-x86_64.AppImage
+```
+
+Then you should be able to run one of the examples.
+
+```console
+./musoma-x86_64.AppImage examples/calculator.wwml
+```
+
+If you want to start with an empty file, you'd probably want to have an editor in it. So create
+the file and put the editor in it:
+
+```console
+echo '((I modify: true structural: true multiline: true compose: true) ("" * "") 0)' > /tmp/example.wwml
+```
+
+Then you can run MuSoma.
+
+```console
+./musoma-x86_64.AppImage /tmp/example.wwml
+```
+
+If you hit `Shift-R` in normal mode (the app starts in it), you'll be able to edit `/tmp/example.wwml`
+and MuSoma will live-reload. Any running state will be lost on reload, however.
+
+Hover over things to learn more about them (or, well, about things I've bothered implementing tooltips for).
+The main things of interest are the examples. You probably won't be able to program much in MuSoma
+unless you're an exploratory type of person; there are barely any docs, and I have more interesting things
+to do than writing them, uhmm, sorry, I guess. The whole thing is so exciting I'm too bored to look back
+and trace my steps.
+
+> [!NOTE]
+> Wirewright doesn't yet quit when you close the window. You'll have to Ctrl-C it by hand. Sorry.
+
+## Building Wirewright
 
 Wirewright currently only runs on Linux.
 
