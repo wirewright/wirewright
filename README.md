@@ -72,7 +72,7 @@ and MuSoma will live-reload. Any running state will be lost on reload, however.
 Hover over things to learn more about them (or, well, about things I've bothered implementing tooltips for).
 The main things of interest are the examples. You probably won't be able to program much in MuSoma
 unless you're an exploratory type of person; there are barely any docs, and I have more interesting things
-to do than writing them, uhmm, sorry, I guess. The whole thing is so exciting I'm too bored to look back
+to do than writing them, uhmm, sorry, I guess. The whole thing is so exciting I don't want to look back
 and trace my steps.
 
 > [!NOTE]
