@@ -1288,7 +1288,7 @@ hierarchy:
             (when (%keytest thickness-l thickness-r thickness-t thickness-b)
               ;; If we have some thickness set up, create a padding node around
               ;; the child for insets.
-              (^match' (styles {¦ thickness-l⋮ 0 thickness-r⋮ 0 thickness-t⋮ 0 thickness-b⋮ 0})
+              (^when (styles {¦ thickness-l⋮ 0 thickness-r⋮ 0 thickness-t⋮ 0 thickness-b⋮ 0})
                 (padding pl: (^if (> thickness-l 0) ^thickness-l)
                          pr: (^if (> thickness-r 0) ^thickness-r)
                          pt: (^if (> thickness-t 0) ^thickness-t)

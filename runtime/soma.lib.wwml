@@ -9,7 +9,7 @@
        ;; FIXME: Template must expand into group in this case anyway!..
        (template
          (group
-           (^match' (opts {¦ key_})
+           (^when (opts {¦ key_})
              (node @input
                (input focus: always))
              (backsys {@:input @:view @:msg @:msgs}

@@ -110,9 +110,9 @@
   ;; empty body, mismatch
   (alloy {x: b} (foo (^match x (when a)) bar) (foo bar))
 
-  ;; match'
-  (alloy {x: a} (foo (^match' (x a) bar)) (foo bar))
-  (alloy {x: b} (foo (^match' (x a) bar)) (foo))
+  ;; ^when
+  (alloy {x: a} (foo (^when (x a) bar)) (foo bar))
+  (alloy {x: b} (foo (^when (x a) bar)) (foo))
 
   ;; match
   (alloy {x: a}

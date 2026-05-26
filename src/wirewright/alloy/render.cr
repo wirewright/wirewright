@@ -407,10 +407,10 @@ module Ww::Alloy
         end
       end
 
-      # |@ alloy.template.^match'
+      # |@ alloy.template.^when
       #
       # |@pattern
-      # (^match' (expr_ pattern_) body_*)
+      # (^when (expr_ pattern_) body_*)
       #
       # |@key expr alloy.expr
       # Value expression to match on.
@@ -421,11 +421,11 @@ module Ww::Alloy
       # to the body.
       #
       # |@block
-      # `^match'` is a shorthand for a single-branch `^match`, as in:
+      # `^when` is a shorthand for a single-branch `^match`, as in:
       # `(^match expr_ (when pattern_ body_*))`.
       #
-      # On mismatch, `^match'` replaces itself with nothing (disappears).
-      matchpi %{(^match' (expr_ pattern_) body_*)} do
+      # On mismatch, `^when` replaces itself with nothing (disappears).
+      matchpi %{(^when (expr_ pattern_) body_*)} do
         branch = Term::Dict.build do |commit|
           commit << :when << pattern
           commit.concat(body.items)
@@ -433,7 +433,7 @@ module Ww::Alloy
 
         expansion = Term.of(:"^match", expr, branch)
 
-        issues.adjoin(Spot::Expansion.new("^match'", expansion)) do |issues|
+        issues.adjoin(Spot::Expansion.new("^when", expansion)) do |issues|
           render0(ctx, expansion, issues)
         end
       end

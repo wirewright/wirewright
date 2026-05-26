@@ -1285,11 +1285,11 @@ vantage: ""
                       gradient-end-l⋮ 1
                       gradient-end-t⋮ 1}
                (linear-gradient
-                 (^match' (settings {¦ gradient-from_})
+                 (^when (settings {¦ gradient-from_})
                    (stop 0 ^gradient-from))
-                 (^match' (settings {¦ gradient-via_})
+                 (^when (settings {¦ gradient-via_})
                    (stop 0.5 ^gradient-via))
-                 (^match' (settings {¦ gradient-to_})
+                 (^when (settings {¦ gradient-to_})
                    (stop 1 ^gradient-to))
                  begin-l: ^gradient-begin-l
                  begin-t: ^gradient-begin-t
@@ -1305,7 +1305,7 @@ vantage: ""
          ;; If we have some thickness, create a padding node around the child
          ;; for insets.
          (when (%keytest thickness-l thickness-r thickness-t thickness-b)
-           (^match' (settings {¦ thickness-l⋮ 0 thickness-r⋮ 0 thickness-t⋮ 0 thickness-b⋮ 0})
+           (^when (settings {¦ thickness-l⋮ 0 thickness-r⋮ 0 thickness-t⋮ 0 thickness-b⋮ 0})
              (padding pl: ^thickness-l pr: ^thickness-r pt: ^thickness-t pb: ^thickness-b
                ^*children)))
          (when _ ^*children))))))

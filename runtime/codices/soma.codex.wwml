@@ -1723,7 +1723,7 @@ pane-divider-l: 600 ;; pixels
             ^:panning-circuit
             ^:mode
             ^:hide
-         (^match' (circuit-camera {¦ ±l ±t ±scale})
+         (^when (circuit-camera {¦ ±l ±t ±scale})
            (box style: "clip clip-aim-off in-focused:clip-aim"
                 µ-page-x: (^l px)
                 µ-page-y: (^t px)
