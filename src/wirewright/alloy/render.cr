@@ -934,7 +934,7 @@ module Ww::Alloy
       # |@block
       # Follows a keypath into the variables dict, replacing itself with the value
       # thus reached. For example, with vars `{screen: {width: 500, height: 400}}`,
-      # you can reach width using `(^. viewport width)` and height `(^. viewport height)`.
+      # you can reach width using `(^. screen width)` and height `(^. screen height)`.
       matchpi %{(^. keys_+)} do
         unless value = ctx.vars.follow?(keys.items)
           issues.adjoin("keypath", keys, &.major("no value at keypath"))
