@@ -1676,17 +1676,20 @@ pane-divider-l: 600 ;; pixels
            ^*content)))
 
 (WindowViewPane)
-  => (pane style: "flow-col"
-       (WindowTabList)
-       (box style: "fr-1 p-2"
-         (pane style: "clip p-5 mode/grab:cue-focused" ^:mode
-           (^match (window-specs active-window-spec)
-             (when (⟨spec←{¦ id_}⟩ (some id_))
-               (box style: "content"
-                 (WindowView ^spec)))
-             (when _
-               (p style: "center text-theme-muted"
-                  "No window to show"))))))
+  => (vantage id: (state window-view-vantage) active: if-hit
+       (pane style: "flow-col bg-transparent"
+         (gate
+           (group style: "flow-col"
+             (WindowTabList)
+             (box style: "fr-1 p-2"
+               (pane style: "clip p-5 mode/grab:cue-focused" ^:mode
+                 (^match (window-specs active-window-spec)
+                   (when (⟨spec←{¦ id_}⟩ (some id_))
+                     (box style: "content"
+                       (WindowView ^spec)))
+                   (when _
+                     (p style: "center text-theme-muted"
+                        "No window to show")))))))))
 
 ;;
 ;; Circuit pane

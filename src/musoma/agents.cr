@@ -792,6 +792,7 @@ module MuSoma
   class MouseAgent
     def initialize
       @mice = Slice(MediaService::Mouse).empty
+      @hovered = false
     end
 
     def receive(ws : Workspace, plan, msg : MediaService::WindowDescriptionChanged) : Nil
@@ -801,10 +802,25 @@ module MuSoma
         mice1 = description.mice
       end
 
-      @mice = mice1
+      hovered0 = @hovered
+      hovered1 = false
+      Term.matchpi?(ws.state.get, %{{¦ window-view-vantage: [vantage {¦ hit-hover}]}}) do
+        hovered1 = true
+      end
 
-      unless mice0 == mice1
+      @mice = mice1
+      @hovered = hovered1
+
+      case {hovered0, hovered1}
+      in {false, false}
+      in {false, true}, {true, false}
+        # Update mice in the circuit on window-view pane hover / unhover transition.
         plan << UpdateMice.new(mice0, mice1)
+      in {true, true}
+        # Update mice in the circuit while window-view is hovered.
+        unless mice0 == mice1
+          plan << UpdateMice.new(mice0, mice1)
+        end
       end
 
       state0 = MediaService::Mouse::State::None
