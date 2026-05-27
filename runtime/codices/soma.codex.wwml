@@ -66,6 +66,7 @@ history-limit: 128
    "theme-blob": ^pine,
    "theme-string": ^gold,
    "theme-edge": ^love,
+   "theme-comment": ^muted,
    "theme-section": ^iris,
    "theme-editor-selection-bg": ^gold,
    "theme-editor-selection-fg": ^text,
@@ -114,6 +115,7 @@ history-limit: 128
    "theme-blob": ^pine,
    "theme-string": ^gold,
    "theme-edge": ^love,
+   "theme-comment": ^muted,
    "theme-section": ^iris,
    "theme-editor-selection-bg": ^gold,
    "theme-editor-selection-fg": ^text,
@@ -162,6 +164,7 @@ history-limit: 128
    "theme-blob": ^pine,
    "theme-string": ^gold,
    "theme-edge": ^love,
+   "theme-comment": ^muted,
    "theme-section": ^iris,
    "theme-editor-selection-bg": ^gold,
    "theme-editor-selection-fg": ^text,
@@ -198,6 +201,18 @@ history-limit: 128
 ;; multiline, parens wouldn't be properly bottom-aligned, and the print
 ;; would look broken.
 
+;; TODO:
+;;
+;; We are intentionally careful with most shorthands here by restricting
+;; them to _symbol. Pretty-printing ML properly is less relevant here than
+;; in the string pretty printer (because here we're just simplifying stuff
+;; for the user; on the other hand, the string pretty-printer's output must
+;; always *deserialize* to the same term as the input term). Nevertheless,
+;; we still try to be really careful here, especially as we gather constraints
+;; and observations for a proper, well-behaved string pretty printer. When
+;; the situation clears up, we'll probably want to un-constrain some of
+;; these things.
+
 (term term_⸨symbol,number,boolean⸩)
   => (atom ^\term type: ⸨symbol,number,boolean⸩)
 
@@ -223,18 +238,33 @@ history-limit: 128
              (group detail: (long-blob ^term)
                (atom mass: 32))))))
 
+;; Example: @x
 (term (%'edge name_))
   => (atom ^"@⸢name⸣" type: edge)
 
+;; Example: x←100
 (term (%'%let capture_ successor_))
   => (group detail: infix
        (term ^capture)
        (atom "←")
        (term ^successor))
 
+;; Example: ±x
+(term (%'%let capture_symbol %'_number))
+  => (group detail: seq
+       (atom "±")
+       (term ^capture))
+
+;; Example: ^(+ 1 2)
 (term (^ term_))
   => (group detail: seq
        (atom "^") (term ^term))
+
+;; Example: (%slot x) --> `x
+(term (%'%slot term_symbol))
+  => (group detail: seq
+       (atom "`" type: punct)
+       (term ^term))
 
 (term [[I _*] (l_string * r_string) anchor←(%number +i32)])
   => (group detail: (editor ^l I ^r ^:anchor)
@@ -245,7 +275,7 @@ history-limit: 128
        (atom mass: ^(charcount l buffer r)))
 
 (term ())
-  => (atom "()" type: dict)
+  => (atom "()" type: punct)
 
 ;; Example:
 ;; (x (a b c) y z)
@@ -306,32 +336,141 @@ history-limit: 128
          (pair ^key ^value)))
 
 ;; Example:
-;; :"hello world"
+;;
+;; (rule x y)
+;;   x => y
+;;
+;; (rule x y doc: ("A" "B" "C"))
+;;   ;; A
+;;   ;; B
+;;   ;; C
+;;   x => y
+;;
+;; NOTE: We make the infix heavy to make sure only very small rules are printed
+;; inline. Most rules should be printed multiline because they are very dense --
+;; even if, in terms of characters, thay are not very long.
+(term (rule lhs_ rhs_ ¦ doc_: (%optional () (_string*))))
+  => (group detail: (rule ^:doc)
+       (term ^lhs)
+       (atom "=>" type: punct mass: 24)
+       (term ^rhs))
+(term (backmap lhs_ rhs_ ¦ doc_: (%optional () (_string*))))
+  => (group detail: (rule ^:doc)
+       (term ^lhs)
+       (atom "<>" type: punct mass: 24)
+       (term ^rhs))
+
+;; Example: [a b c]
+(term (%'%partition D←(_*) %'_))
+  => (group detail: (dict generic lbr: "[" rbr: "]")
+       (^each (D as item_) (term ^item)))
+
+;; Example: (+ a b c ⍊ -d)
+(term (%'%partition itemside←(_*) (%'%layer %'_ pairside_dict)))
+  => (group detail: (dict interfix "⍊")
+       (group
+         (^each (itemside as item_) (term ^item)))
+       (group
+         (^each (pairside entry as (key_ value_))
+           (pairside ^key ^value))))
+
+;; Example: {¦ x: 100 y: 200}
+(term (%'%layer %'_ D_dict))
+  => (group detail: (dict generic lbr: "{¦ " rbr: "}")
+       (^each (D entry as (key_ value_))
+         (pairside ^key ^value)))
+
+;; Example:
+;; active: active←true --> active_: true
+[pairside key_symbol (%'%let key_ value_)]
+  => (group detail: (pair "_:")
+       (atom ^\key type: key)
+       (term ^value))
+
+;; Example:
+;; active: _ --> active
+[pairside key_symbol %'_]
+  => (atom ^\key type: key)
+
+;; Example:
+;; msg: msg_ --> msg_
+;; msg: msg_string --> msg_string
+[pairside key_symbol (%symbol blank key_ type_)]
+  => (group detail: seq
+       (atom ^\key type: key)
+       (atom ^\type))
+
+;; Example:
+;; age: (%let age _number) --> ±age
+[pairside key_symbol (%'%let key_ %'_number)]
+  => (group detail: seq
+       (atom "±" type: punct)
+       (atom ^\key type: key))
+
+;; Example: x: (%- _) --> -x
+[pairside key_symbol %'(%- _)]
+  => (group detail: seq
+       (atom "-" type: punct)
+       (atom ^\key type: key))
+
+;; Example:
+;; status: (%- (%never) status) --> ⋮status
+[pairside key_symbol (%'%- %'(%never) key_)]
+  => (group detail: seq
+       (atom "⋮" type: punct)
+       (atom ^\key type: key))
+
+;; Example:
+;; title: (%optional "Untitled" title_string) --> title⋮ "Untitled"
+[pairside key_symbol (%'%optional value←(%pipe type T_) (%symbol blank key_ T_))]
+  => (group detail: (pair "⋮")
+       (atom ^\key type: key)
+       (term ^value))
+
+;; Example:
+;; title: (%optional "Untitled" title_) --> title_⋮ "Untitled"
+[pairside key_symbol (%'%optional value_ (%symbol blank key_ %'_))]
+  => (group detail: (pair "_⋮")
+       (atom ^\key type: key)
+       (term ^value))
+
+;; Example:
+;; hover: (%optional false hover←false) --> hover_: (%optional false false)
+[pairside key_symbol (%'%optional default_ (%'%let key_ value_))]
+  => (group detail: (pair "_:")
+       (atom ^\key type: key)
+       (term (%optional ^default ^value)))
+
+[pairside key_ value_]
+  => (pair ^key ^value)
+
+;; Example: :"hello world"
 [pair k_ k_]
   => (group detail: seq
        (atom ":") (inline (term ^k)))
 
-;; Example:
-;; :x
+;; Example: :x
 [pair k_symbol k_symbol]
   => (group detail: seq
        (atom ":") (atom ^\k type: key))
 
-;; Example:
-;; "hello world": 100
-(pair k_ v_ ⍊ detail_⋮ pair)
+;; Example: @:x
+[pair k←(%atom) (%'edge k_)]
+  => (group detail: seq
+       (atom ^"@:⸢k⸣" type: edge))
+
+;; Example: "hello world": 100
+(pair k_ v_ ⍊ detail_⋮ (pair ":"))
   => (group ^:detail
        (inline (term ^k)) (term ^v))
 
-;; Example:
-;; x: 100
-(pair k_symbol v_ ⍊ detail_⋮ pair)
+;; Example: x: 100
+(pair k_symbol v_ ⍊ detail_⋮ (pair ":"))
   => (group ^:detail
        (atom ^\k type: key) (term ^v))
 
-;; Example:
-;; style: "bg-neutral-500"
-(pair k←style v_string ⍊ detail_⋮ pair)
+;; Example: style: "bg-neutral-500"
+(pair k←style v_string ⍊ detail_⋮ (pair ":"))
   => (group ^:detail
        (atom ^\k type: key) (µ-style ^v))
 
@@ -493,13 +632,12 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 
 --- pretty/style-up ;; Styles go up
 
-(atom ⍊ -style_ ?mode_ ±mass)
+(atom _* ⍊ ±mass -style_ ?mode_)
   <> {(?mode): (),
       style: (inline ^:mass children: ())}
 
-(atom caption_string ⍊ -style_ ?mode_)
-  <> {(?mode): (),
-      style: (inline mass: ^(charcount caption) children: ())}
+(atom caption_string ⍊ -mass_)
+  <> {mass: ^(charcount caption)}
 
 (group ⍊ -style_ ?mode_)
   <> {(?mode): (),
@@ -580,8 +718,8 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 (group elements_* ⍊ -detail form_)
   <> {(form): ()}
 
-(group _ {¦ form: inline} ⍊ detail_: pair form_)
-  <> {detail: (pair row), (form): ()}
+(group _ {¦ form: inline} ⍊ detail_: (pair sep_string) form_)
+  <> {detail: (pair ^sep row), (form): ()}
 
 ;; block-pair is row in both form: inline and form: multiline. For instance:
 ;;
@@ -595,16 +733,16 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 ;; This is particularly relevant for Microfold styles, which expect this kind
 ;; of formatting rather than `pair`.
 (group _ _ ⍊ detail_: block-pair form_)
-  <> {detail: (pair row), (form): ()}
+  <> {detail: (pair ":" row), (form): ()}
 
-(group _ {¦ form: multiline} ⍊ detail_: pair form_)
-  <> {detail: (pair col), (form): ()}
+(group _ {¦ form: multiline} ⍊ detail_: (pair sep_string) form_)
+  <> {detail: (pair ^sep col), (form): ()}
 
 (group _* ⍊ detail_: (dict ⸨block,group⸩) form_: inline)
   <> {detail: (dict row-⸨block,group⸩), (form): ()}
 
-(group _* ⍊ detail_: (dict generic) form_: inline)
-  <> {detail: (dict row lbr: "(" rbr: ")" comma: false), (form): ()}
+(group _* ⍊ detail_: (dict generic ⍊ lbr⋮ "(" rbr⋮ ")") form_: inline)
+  <> {detail: (dict row ^:lbr ^:rbr comma: false), (form): ()}
 
 (group _* ⍊ detail_: (dict curly) form_: inline)
   <> {detail: (dict row lbr: "{" rbr: "}" comma: true), (form): ()}
@@ -615,7 +753,10 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 (group {¦ form: inline} {¦ form: inline} _ _ ⍊ detail_: (dict block) form_: multiline)
   <> {detail: (dict col-block), (form): ()}
 
-(group _* ⍊ detail_: (dict ⸨generic,block,group⸩) form_: multiline)
+(group _* ⍊ detail_: (dict generic ⍊ lbr⋮ "(" rbr⋮ ")") form_: multiline)
+  <> {detail: (dict col ^:lbr ^:rbr comma: false), (form): ()}
+
+(group _* ⍊ detail_: (dict ⸨block,group⸩) form_: multiline)
   <> {detail: (dict col lbr: "(" rbr: ")" comma: false), (form): ()}
 
 (group _* ⍊ detail_: (dict curly) form_: multiline)
@@ -632,18 +773,17 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 (group children_* ⍊ detail: seq) => (row ^*children)
 
 ;; x: 100
-(group key_ value_ ⍊ detail: (pair row))
+(group key_ value_ ⍊ detail: (pair sep_string row))
   => (row gap: 1
-       (cat ^key (atom ":" type: punct))
+       (cat ^key (atom ^sep type: punct))
        ^value)
 
 ;; x:
 ;;   100
-(group key_ value_ ⍊ detail: (pair col))
+(group key_ value_ ⍊ detail: (pair sep_string col))
   => (col gap: 1
-       (cat ^key (atom ":" type: punct))
-       (indent by: 2
-         ^value))
+       (cat ^key (atom ^sep type: punct))
+       (indent ^value))
 
 ;; (1 2 3)  (1 2 3 a: 100 b: 200)
 (group children_+ ⍊ detail: (dict row ⍊ lbr_string rbr_string comma: false))
@@ -675,7 +815,7 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
        (cat
          (atom "(" type: punct)
          (row ^head (col ^*pairs) gap: 1))
-       (indent by: 2
+       (indent
          (col
            ^*mid
            (cat ^tail (atom ")" type: punct)))))
@@ -692,7 +832,7 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
        (cat
          (atom "(" type: punct)
          (row ^head0 ^head1 gap: 1))
-       (indent by: 2
+       (indent
          (col
            ^*mid
            (cat ^tail (atom ")" type: punct)))))
@@ -703,31 +843,83 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 ;;       a: 100
 ;;       b: 200)
 (group head_ mid_* tail_ ⍊ detail: (dict col ⍊ lbr_string rbr_string comma: false))
-  => (col
-       (cat (atom ^lbr type: punct) ^head)
-       (indent by: 1
-         (col
-           ^*mid
-           (cat ^tail (atom ^rbr type: punct)))))
+  => (row
+       (atom ^lbr type: punct)
+       (col
+         ^head
+         ^*mid
+         (cat ^tail (atom ^rbr type: punct))))
 
 ;; {x: 100,
 ;;  y: 200}
 (group head_ mid_* tail_ ⍊ detail: (dict col ⍊ lbr_string rbr_string comma: true))
-  => (col
-       (cat
-         (atom ^lbr type: punct)
-         (cat ^head (atom "," type: punct)))
-       (indent by: 1
-         (col
-           (^each (mid as child_)
-             (cat ^child (atom "," type: punct)))
-           (cat ^tail (atom ^rbr type: punct)))))
+  => (row
+       (atom ^lbr type: punct)
+       (col
+         (cat ^head (atom "," type: punct))
+         (^each (mid as child_)
+           (cat ^child (atom "," type: punct)))
+         (cat ^tail (atom ^rbr type: punct))))
 
 ;; Edge case:
 ;; ((a
 ;;   b))
 (group head_ ⍊ detail: (dict col ⍊ lbr_string rbr_string))
   => (cat (atom ^lbr type: punct) (cat ^head (atom ^rbr type: punct)))
+
+;; Example:
+;; (a b ⍊ -c)
+(group (group itemside_*) (group pairside_*) ⍊ detail: (dict interfix interfix_string) form: inline)
+  => (row
+       (atom "(" type: punct)
+       (row gap: 1
+         ^*itemside
+         (atom ^interfix type: punct)
+         ^*pairside)
+       (atom ")" type: punct))
+
+;; Example:
+;; (a
+;;  b
+;;  ⍊ -c
+;;    -d)
+(group (group itemside_*) (group pairside_*) ⍊ detail: (dict interfix interfix_string) form: multiline)
+  => (row
+       (atom "(" type: punct)
+       (cat
+         (col
+           ^*itemside
+           (row gap: 1
+             (atom ^interfix)
+             (col ^*pairside)))
+         (atom ")" type: punct)))
+
+;; ;; Line 1
+;; ;; Line 2
+;; ;; Line 3
+;; x => 100
+(group lhs_ infix_ rhs_ ⍊ detail: (rule ⍊ doc_dict) form: inline)
+  => (col
+       (^each (doc as doc-line_string)
+         (atom ^doc-line type: comment))
+       (row gap: 1
+         ^lhs ^infix ^rhs))
+
+;; ;; Line 1
+;; ;; Line 2
+;; ;; Line 3
+;; x
+;;   => 100
+(group lhs_ infix_ rhs_ ⍊ detail: (rule ⍊ doc_dict) form: multiline)
+  => (col
+       (^each (doc as doc-line_string)
+         (atom ^doc-line type: comment))
+       (col ^lhs
+         (indent
+           (row gap: 1
+             ^infix
+             ^rhs))))
+
 
 --- pretty/concat ;; Evaluate cats & minor reductions
 
@@ -782,14 +974,17 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 (atom caption_string ⍊ type: edge)
   => (p ^caption style: "text-theme-edge")
 
+(atom caption_string ⍊ type: comment)
+  => (p ^";; ⸢caption⸣" style: "text-theme-comment text-xs/4")
+
 (group ⍊ detail: (section caption_string))
   => (p style: "font-sans pl-2 my-1 text-lg/6 text-theme-section font-medium \
                 border-l-md border-theme-section"
        ^caption)
 
 (group ⍊ detail: (comment caption_string))
-  => (group style: "flow-row pl-1 text-xs/4 text-theme-subtle gap-2/3"
-       (icon "info" style: "font-icons pt-1/3")
+  => (group style: "flow-row pl-1 text-xs/4 text-theme-comment gap-2/3"
+       (icon "comment" style: "font-icons pt-1/3")
        (p style: "font-sans clamp max-w-2xs fr-1"
          ^caption))
 
@@ -810,8 +1005,7 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 [col elements_+] => (group ^*elements style: "flow-col gap-2/3")
 
 [indent] => (^splice)
-(indent elements_+ ⍊ by: 1) => (group ^*elements style: "flow-none pl-3")
-(indent elements_+ ⍊ by: 2) => (group ^*elements style: "flow-none pl-5")
+[indent elements_+] => (group ^*elements style: "flow-none pl-3")
 
 [align-bottom child_] => (group ^child style: "flow-none bottom")
 
