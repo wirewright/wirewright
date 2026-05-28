@@ -1296,6 +1296,13 @@ module Ww::Scenery
           aim = ViewportAim::On
         end
 
+        goal = nil
+        if node[:"goal-x"]? || node[:"goal-y"]?
+          goal_x = node[:"goal-x"]?.try(&.to(Magnitude)) || Magnitude.new(0)
+          goal_y = node[:"goal-y"]?.try(&.to(Magnitude)) || Magnitude.new(0)
+          goal = Point[goal_x, goal_y]
+        end
+
         Viewport.new(children, aim,
           page_x: Unit.rel(page_x, fallback: Unit.rel(0)),
           page_y: Unit.rel(page_y, fallback: Unit.rel(0)),
@@ -1307,6 +1314,7 @@ module Ww::Scenery
             bl: Unit.px(radius_bl, fallback: Unit.px(0)),
             br: Unit.px(radius_br, fallback: Unit.px(0)),
           ),
+          goal: goal,
         )
       end
 

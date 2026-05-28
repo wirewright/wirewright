@@ -332,8 +332,31 @@ module Ww::Scenery
 
       result = Term::Dict.build do |commit|
         commit << :clip
-        commit.with(:"offset-x", node.offset.x)
-        commit.with(:"offset-y", node.offset.y)
+        commit.with(:"offset-x", describe(node.offset.x))
+        commit.with(:"offset-y", describe(node.offset.y))
+
+        max_offset = Point.max(Point[0, 0], content_rect.size - box.bounds.size)
+        commit.with(:"max-offset-x", describe(max_offset.x))
+        commit.with(:"max-offset-y", describe(max_offset.y))
+
+        if goal = node.goal
+          # Clamp goal offset.
+          goal = Point.min(Point.max(Point[0, 0], goal), max_offset)
+
+          # Calculate thumb values.
+          # FIXME: division by zero
+          thumb_dl = (goal.x / content_rect.w) * box.bounds.w
+          thumb_dt = (goal.y / content_rect.h) * box.bounds.h
+          thumb_w = (box.bounds.w / content_rect.w) * box.bounds.w
+          thumb_h = (box.bounds.h / content_rect.h) * box.bounds.h
+
+          commit.with(:"offset-x'", describe(goal.x))
+          commit.with(:"offset-y'", describe(goal.y))
+          commit.with(:"thumb-dl'", describe(thumb_dl))
+          commit.with(:"thumb-dt'", describe(thumb_dt))
+          commit.with(:"thumb-w'", describe(thumb_w))
+          commit.with(:"thumb-h'", describe(thumb_h))
+        end
 
         descriptions.each do |description|
           commit.concat(description.describe)

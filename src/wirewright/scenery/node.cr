@@ -586,6 +586,7 @@ module Ww::Scenery
     offset_x : Unit,
     offset_y : Unit,
     radii : RectRadii,
+    goal : Point?,
     caches_hash: true
 
   enum ViewportAim
@@ -599,6 +600,7 @@ module Ww::Scenery
     children : Slice(Node),
     offset : Point,
     radii : RectRadii,
+    goal : Point?,
     caches_hash: true
 
   defcase Aim(Node),

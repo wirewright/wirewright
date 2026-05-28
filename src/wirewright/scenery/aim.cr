@@ -131,7 +131,7 @@ module Ww::Scenery
     y = scroll(page_offset.y, box.bounds.h, aim_rect.y, aim_rect.h)
     view_offset = Point[x, y].round
 
-    aimed_node = Clip.new(aimed_children, view_offset, node.radii)
+    aimed_node = Clip.new(aimed_children, view_offset, node.radii, node.goal)
 
     case node.aim
     in .on?, .off?
