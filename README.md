@@ -93,13 +93,19 @@ Go to the build directory:
 cd build
 ```
 
-To build the Wirewright base image (which you can run tests on or do general Wirewright work):
+Build the Wirewright environment image:
+
+```console
+docker build -f wirewright-env.Dockerfile -t wirewright-env:latest .
+```
+
+Build the Wirewright base image (which you can run tests on or do general Wirewright work):
 
 ```console
 docker build -f wirewright.Dockerfile -t wirewright-base:latest .
 ```
 
-To build the MuSoma AppImage:
+Build the MuSoma AppImage:
 
 ```console
 docker build -f musoma.Dockerfile --output type=local,dest=. .
@@ -107,6 +113,11 @@ docker build -f musoma.Dockerfile --output type=local,dest=. .
 
 It will eventually dump musoma-dist.tar.gz into the build/ dir. The archive contains
 the AppImage and miscellaneous files.
+
+> [!NOTE]
+> The Dockerfiles are very poorly written right now and are not suitable for development.
+> You currently have to rebuild too much (`wirewright-base`). This makes fast iteration
+> nearly impossible. Improving the Dockerfiles remains future work.
 
 ### Building without Docker
 
