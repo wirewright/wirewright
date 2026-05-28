@@ -893,6 +893,12 @@ vantage: ""
 (for align-box
   (utility "center" {x: 0.5 y: 0.5}))
 
+(for align-box
+  (utility "justify" {justify: true}))
+
+(for align-box
+  (utility "-justify" {justify: false}))
+
 ;; Content
 
 ;; E.g. left, x-0.3
@@ -1172,27 +1178,28 @@ vantage: ""
 
 (for content-viewport-box
   (property µ-content-page-x as: page-x))
-
 (for content-view-box
   (property µ-content-page-y as: page-y))
 
 (for content-view-box
   (property µ-content-offset-x as: offset-x))
-
 (for content-view-box
   (property µ-content-offset-y as: offset-y))
 
 (for viewport-box
   (property µ-page-x as: page-x))
-
 (for viewport-box
   (property µ-page-y as: page-y))
 
 (for viewport-box
   (property µ-offset-x as: offset-x))
-
 (for viewport-box
   (property µ-offset-y as: offset-y))
+
+(for viewport-box
+  (property µ-goal-x as: goal-x))
+(for viewport-box
+  (property µ-goal-y as: goal-y))
 
 (for bg-box
   (property µ-bg as: fill))
