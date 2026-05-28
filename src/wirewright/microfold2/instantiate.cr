@@ -159,9 +159,24 @@ module Ww::Microfold2
               repr = Term.of(ML.compact(arg))
             end
 
+            # Instantiate text-box.
             settings = designations[:selfbound][Term.of(:"text-box")]? || Term[]
-            child_instance = codex.instantiate(Term.of(:"text-box"), Term.of(node, repr), settings, mode: :call)
-            commit.with(key, child_instance)
+            text = codex.instantiate(Term.of(:"text-box"), Term.of(node, repr), settings, mode: :call)
+
+            # If there are designations for x-sel-box, we must broadcast them to
+            # extra selections in *text*.
+            pass do
+              next unless x_sel_settings = designations[:selfbound][Term.of(:"x-sel-box")]?
+              next unless x_sels = text[:selections]?.as_d?
+
+              x_sels.items.each_with_index do |x_sel, x_sel_index|
+                next unless x_sel = x_sel.as_d?
+
+                text = Term.morph(text, {:selections, x_sel_index, Term.union(x_sel_settings, x_sel)})
+              end
+            end
+
+            commit.with(key, text)
             next
           end
 

@@ -533,6 +533,34 @@ vantage: ""
   (utility "-sel-aim" {selection-aim: false}))
 
 ;;
+;; Extra selection(s)
+;;
+
+(for x-sel-box
+  (utility (prefix "x-sel-" (one-of colors fill))
+    {selection-fill: ^fill}))
+
+(for x-sel-box
+  (utility (prefix "x-sel-clearance-" (number value))
+    {selection-clearance: ^(* value spacing)}))
+
+(for x-sel-box
+  (utility (prefix "x-sel-text-" (one-of colors color))
+    {selection-color: ^color}))
+
+(for x-sel-box
+  (utility (prefix "x-sel-rounded-" (one-of radii radius))
+    {selection-radius: ^radius}))
+
+(for x-sel-box
+  (utility (prefix "x-cursor-" (one-of cursor-thicknesses thickness))
+    {selection-thickness: ^thickness}))
+
+(for x-sel-box
+  (utility "x-sel-aim"
+    {selection-aim: true}))
+
+;;
 ;; Text transform
 ;;
 
@@ -1212,7 +1240,7 @@ vantage: ""
 ;;
 
 (box-order
-  ;; text-box (native code)
+  ;; text-box, x-sel-box (native code)
   placeholder-rect
   self-box
   flow-box
