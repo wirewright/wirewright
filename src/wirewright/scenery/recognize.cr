@@ -1298,8 +1298,8 @@ module Ww::Scenery
 
         goal = nil
         if node[:"goal-x"]? || node[:"goal-y"]?
-          goal_x = node[:"goal-x"]?.try(&.to(Magnitude)) || Magnitude.new(0)
-          goal_y = node[:"goal-y"]?.try(&.to(Magnitude)) || Magnitude.new(0)
+          goal_x = node[:"goal-x"]?.try(&.to?(Magnitude)) || Magnitude.new(0)
+          goal_y = node[:"goal-y"]?.try(&.to?(Magnitude)) || Magnitude.new(0)
           goal = Point[goal_x, goal_y]
         end
 
