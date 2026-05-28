@@ -372,76 +372,76 @@ history-limit: 128
          (^each (itemside as item_) (term ^item)))
        (group
          (^each (pairside entry as (key_ value_))
-           (pairside ^key ^value))))
+           (selector ^key ^value))))
 
 ;; Example: {¦ x: 100 y: 200}
 (term (%'%layer %'_ D_dict))
   => (group detail: (dict generic lbr: "{¦ " rbr: "}")
        (^each (D entry as (key_ value_))
-         (pairside ^key ^value)))
+         (selector ^key ^value)))
 
 ;; Example:
 ;; active: active←true --> active_: true
-[pairside key_symbol (%'%let key_ value_)]
+[selector key_symbol (%'%let key_ value_)]
   => (group detail: (pair "_:")
        (atom ^\key type: key)
        (term ^value))
 
 ;; Example:
 ;; active: _ --> active
-[pairside key_symbol %'_]
+[selector key_symbol %'_]
   => (atom ^\key type: key)
 
 ;; Example:
 ;; msg: msg_ --> msg_
 ;; msg: msg_string --> msg_string
-[pairside key_symbol (%symbol blank key_ type_)]
+[selector key_symbol (%symbol blank key_ type_)]
   => (group detail: seq
        (atom ^\key type: key)
        (atom ^\type))
 
 ;; Example:
 ;; age: (%let age _number) --> ±age
-[pairside key_symbol (%'%let key_ %'_number)]
+[selector key_symbol (%'%let key_ %'_number)]
   => (group detail: seq
        (atom "±" type: punct)
        (atom ^\key type: key))
 
 ;; Example: x: (%- _) --> -x
-[pairside key_symbol %'(%- _)]
+[selector key_symbol %'(%- _)]
   => (group detail: seq
        (atom "-" type: punct)
        (atom ^\key type: key))
 
 ;; Example:
 ;; status: (%- (%never) status) --> ⋮status
-[pairside key_symbol (%'%- %'(%never) key_)]
+[selector key_symbol (%'%- %'(%never) key_)]
   => (group detail: seq
        (atom "⋮" type: punct)
        (atom ^\key type: key))
 
 ;; Example:
 ;; title: (%optional "Untitled" title_string) --> title⋮ "Untitled"
-[pairside key_symbol (%'%optional value←(%pipe type T_) (%symbol blank key_ T_))]
+[selector key_symbol (%'%optional value←(%pipe type T_) (%symbol blank key_ T_))]
   => (group detail: (pair "⋮")
        (atom ^\key type: key)
        (term ^value))
 
 ;; Example:
 ;; title: (%optional "Untitled" title_) --> title_⋮ "Untitled"
-[pairside key_symbol (%'%optional value_ (%symbol blank key_ %'_))]
+[selector key_symbol (%'%optional value_ (%symbol blank key_ %'_))]
   => (group detail: (pair "_⋮")
        (atom ^\key type: key)
        (term ^value))
 
 ;; Example:
 ;; hover: (%optional false hover←false) --> hover_: (%optional false false)
-[pairside key_symbol (%'%optional default_ (%'%let key_ value_))]
+[selector key_symbol (%'%optional default_ (%'%let key_ value_))]
   => (group detail: (pair "_:")
        (atom ^\key type: key)
        (term (%optional ^default ^value)))
 
-[pairside key_ value_]
+[selector key_ value_]
   => (pair ^key ^value)
 
 ;; Example: :"hello world"
