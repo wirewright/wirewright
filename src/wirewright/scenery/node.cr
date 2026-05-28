@@ -470,6 +470,7 @@ module Ww::Scenery
   defcase Align(Node),
     children : Slice(Node),
     pivot : Point,
+    justify : Bool,
     caches_hash: true
 
   defcase XYStack(Node),

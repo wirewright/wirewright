@@ -572,6 +572,10 @@ module Ww::Scenery
 
     sized_node, size = box_size(cache, node, child_cst)
 
+    if node.justify && (size.inner.x > cst.max_w || size.inner.y > cst.max_h)
+      return size!(cache, ZStack.new(node.children, info: nil), cst)
+    end
+
     {sized_node, Size.expand(size.inner, cst, size.children)}
   end
 

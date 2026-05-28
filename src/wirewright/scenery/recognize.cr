@@ -918,15 +918,33 @@ module Ww::Scenery
       # |@ scenery.align
       #
       # |@pattern
-      # (align children_+ ⍊ x⋮ 0 y⋮ 0)
+      # (align children_+ ⍊ x⋮ 0 y⋮ 0 justify⋮ false)
       #
       # |@key children scenery
       #
       # |@key x
-      # The X-coordinate of the point to align (0-1).
+      # The X-coordinate of the point to align (0-1). Values other than `0`
+      # conceptually "detach" *children* from the parent's left side, causing
+      # them to be content-sized on the X axis.
       #
       # |@key y
-      # The Y-coordinate of the point to align (0-1).
+      # The Y-coordinate of the point to align (0-1). Values other than `0`
+      # conceptually "detach" *children* from the parent's top side, causing
+      # them to be content-sized on the Y axis.
+      #
+      # |@key justify
+      # If `true`, aligns only if the parent gives more space than the child
+      # takes according to `x`, `y`. Otherwise, behaves the same as a `z-stack`.
+      #
+      # For example, consider `x: 0.5 y: 0.5`. This detaches the children completely
+      # from the parent. Children are sized like with `content x: true y: true`.
+      # Then, if `justify: true x: 0.5 y: 0.5`, the align node will only consider
+      # aligning when the parent gives more size than the `content x: true y: true`
+      # size of the children (or the same exact size).
+      #
+      # On the other hand, in e.g. `justify: true x: 0.5`, the child's top is still
+      # attached to the parent. The decision to align will therefore depend on
+      # the `content x: true` size of children, with *y* disregarded.
       #
       # |@block
       # Moves a z-stack of *children* so that its *x*, *y* point (resolved using its
@@ -941,11 +959,14 @@ module Ww::Scenery
       # (align x: 1 y: 1
       #   (text caption: "Hello World"))
       # ```
-      matchpi %{(align subterms_+ ⍊ x⋮ 0 y⋮ 0)} do
+      matchpi %{(align subterms_+ ⍊ x⋮ 0 y⋮ 0 justify⋮ false)} do
         children = recognize(cache, nodes: subterms.items)
         return Inert.new if children.all?(Inert)
 
-        Align.new(children, pivot: Point[x.to(Magnitude), y.to(Magnitude)])
+        Align.new(children,
+          pivot: Point[x.to(Magnitude), y.to(Magnitude)],
+          justify: justify.to(Bool),
+        )
       end
 
       # |@ scenery.stack
