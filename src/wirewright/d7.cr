@@ -125,7 +125,7 @@ module Ww::D7
   # <link>
   #   (one <edge capture in query pattern>)
   #     Follows an edge from a capture in the query pattern.
-  #   (each <edge list capture in query pattern>
+  #   (many <edge list capture in query pattern>
   #         <edge capture in dependency pattern>)
   #     Follows each edge from a list of edges captured by the query pattern.
   #
@@ -151,8 +151,8 @@ module Ww::D7
   #   #                 vvv  vvv  vvv
   #   rule(<<-WWML) do |dev, src, dst|
   #   [transfer inhibitors←((%past @_ min: 0)) srcs←((%past @_ min: 1)) pattern_ @dst_ template_] dev
-  #     -> (each inhibitors inhibitor) [cell @inhibitor_ _] {name: inhibitor, min: 0, max: 0}
-  #     -> (each srcs src) [cell @src_ value_] {name: src}
+  #     -> (many inhibitors inhibitor) [cell @inhibitor_ _] {name: inhibitor, min: 0, max: 0}
+  #     -> (many srcs src) [cell @src_ value_] {name: src}
   #     -> (one dst) cell←[cell @dst_] {name: dst}
   #   WWML
   #     # dev : MatchGroup
