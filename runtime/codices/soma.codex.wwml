@@ -1526,26 +1526,29 @@ mode-help-scroll-thumb-h: 0
   => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
                   bg-theme-surface in-focused:bg-theme-overlay clamp \
                   max-w-5xs max-h-5xs"
-       (p style: "px-3/2 content sel sel-aim sel-clearance-3/2 cursor-thick \
-                  sel-theme-highlight-med in-focused:sel-theme-editor-selection-bg \
-                  in-editor-hidden:sel-theme-highlight-high sel-text-theme-text \
-                  in-focused:sel-text-theme-editor-selection-fg text-theme-subtle \
-                  in-focused:text-theme-text"
+       (p style: "px-3/2 sel sel-aim sel-clearance-3/2 cursor-thick sel-theme-highlight-med \
+                  in-focused:sel-theme-editor-selection-bg in-editor-hidden:sel-theme-highlight-high \
+                  sel-text-theme-text in-focused:sel-text-theme-editor-selection-fg \
+                  text-theme-subtle in-focused:text-theme-text"
           selection-anchor: ^(charcount l)
           selection-span: ^(- anchor (charcount l))
          ^(~ l r)))
 
+;; NOTE: We use selections to draw the compose buffer to avoid dealing with multiline l/r
+;; (it's impossible to do inline-block-like things in Scenery at the moment...)
 (EditorWidget (editor l_string (compose buffer_string) r_string ⍊ anchor_: (%number +i32)))
-  => (box style: "content content-clip content-aim-through rounded-sm bg-min-none bg-theme-overlay \
-                  clamp max-w-5xs max-h-5xs"
-       (group style: "content px-3/2 flow-row rounded-sm"
-         (p ^l style: "text-theme-muted")
-         (p style: "px-2/3 text-theme-text rounded-sm bg-min-none bg-theme-highlight-med \
-                    sel sel-aim sel-clearance-3/2 cursor-thick sel-theme-highlight-high"
-            selection-anchor: -1
-            selection-span: 0
-           ^buffer)
-         (p ^r style: "text-theme-muted")))
+  => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
+                  text-theme-muted in-focused:bg-theme-overlay clamp max-w-5xs max-h-5xs"
+       (p style: "px-3/2 sel sel-theme-overlay sel-text-theme-subtle in-focused:sel-text-theme-text \
+                  in-focused:sel-theme-highlight-med x-sel-aim x-sel-clearance-3/2 x-cursor-thick \
+                  x-sel-theme-muted in-focused:x-sel-theme-editor-selection-fg \
+                  in-focused:x-sel-theme-editor-selection-bg"
+          selection-anchor: ^(charcount l)
+          selection-span: ^(charcount buffer)
+          selections:
+            ({selection-anchor: ^(charcount l buffer),
+              selection-span: 0})
+         ^(~ l buffer r)))
 
 (PathWidgetBox children_*)
   => (group style: "max-w-3xs content-y flow-col bg-theme-surface border-sm \
