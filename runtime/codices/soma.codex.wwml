@@ -1151,11 +1151,9 @@ circuit-camera: {l: 0, t: 0, scale: 1}
 
 pane-divider-l: 600 ;; pixels
 
-;; pixels
-mode-help-scroll-goal-y: 0
-mode-help-scroll-offset-y: 0
-mode-help-scroll-thumb-y: 0
-mode-help-scroll-thumb-h: 0
+;; Stores scroll state. See e.g. `VScroll`.
+scroll: {}
+
 
 --- state/rules
 ;; Rules for rewriting the state. This is what makes the UI interactive.
@@ -1426,26 +1424,43 @@ mode-help-scroll-thumb-h: 0
 ;; /control (key insert "Esc")
 ;; Switch to Normal mode.
 
-;; Sync scroll.
-{¦ mode-help-vantage: [vantage [box {¦ ±offset-y' ±thumb-h' ±thumb-dt'}]]
-   ⋮mode-help-scroll-offset-y
-   ⋮mode-help-scroll-thumb-y
-   ⋮mode-help-scroll-thumb-h}
-  <> {mode-help-scroll-offset-y: ^offset-y',
-      mode-help-scroll-thumb-y: ^thumb-dt',
-      mode-help-scroll-thumb-h: ^thumb-h'}
+;; /control (key insert "↑")
+;; Move to the previous line (text). Move to previous item (structural).
 
-;; Scroll down.
-{¦ mode-help-vantage: [vantage (box {¦ ±max-offset-y} ⍊ hit-hover)]
-   mouse: {| scroll-dn_} ;; |
-   ±mode-help-scroll-goal-y}
-  <> {(scroll-dn): (), mode-help-scroll-goal-y: ^(min (+ mode-help-scroll-goal-y 30) max-offset-y)}
+;; /control (key insert "↓")
+;; Move to the next line (text). Move to next item (structural).
 
-;; Scroll up.
-{¦ mode-help-vantage: [vantage {¦ hit-hover}]
-   mouse: {| scroll-up_} ;; |
-   ±mode-help-scroll-goal-y}
-  <> {(scroll-up): (), mode-help-scroll-goal-y: ^(max 0 (- mode-help-scroll-goal-y 30))}
+;; /control (key insert "←")
+;; Move to the previous rune (text). Edit previous item (structural).
+
+;; /control (key insert "→")
+;; Move to the next rune (text). Edit next item (structural).
+
+;; Make goal state the actual state. Keep goal in bounds.
+{¦ scroll:
+     (%entry° _
+       {¦ vantage: [vantage [box {¦ ±max-offset-y ±offset-y' ±thumb-h' ±thumb-dt'}]]
+          ±goal-y
+          ⋮offset-y
+          ⋮thumb-y
+          ⋮thumb-h})}
+  <> {goal-y: ^(max 0 (min goal-y max-offset-y)),
+      offset-y: ^offset-y',
+      thumb-y: ^thumb-dt',
+      thumb-h: ^thumb-h'}
+
+;; Handle scrolling up.
+{¦ mouse: {| scroll-up_} ;; |
+   scroll: (%entry° _ {¦ vantage: [vantage {¦ hit-hover}] goal-y⋮ 0})}
+  <> {(scroll-up): (), goal-y: ^(max 0 (- goal-y 30))}
+
+;; Handle scrolling down.
+{¦ mouse: {| scroll-dn_} ;; |
+   scroll:
+     (%entry° _
+       {¦ vantage: [vantage (box {¦ ±max-offset-y} ⍊ hit-hover)]
+          goal-y⋮ 0})}
+  <> {(scroll-dn): (), goal-y: ^(min (+ goal-y 30) max-offset-y)}
 
 
 --- stateR ;; State rewriter
@@ -1698,6 +1713,21 @@ mode-help-scroll-thumb-h: 0
              (box style: "flow-none px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
                           rounded-sm text-theme-text"
                 ^hint)))))
+
+;; A very simple vertical scroll container. *id* is used to store scroll
+;; state for the container in the `scroll` dict.
+(VScroll children_* ⍊ id_symbol)
+  => (group style: "flow-row"
+       (vantage fr: 1 id: (state scroll ^id vantage)
+         (box style: "bg-transparent clip content-y"
+              µ-page-y: (^(value scroll id 'offset-y default: 0) px)
+              µ-goal-y: ^(value scroll id 'goal-y default: 0)
+           (gate
+             ^*children)))
+       (box style: "content"
+         (transform dt: ^(value scroll id 'thumb-y default: 0)
+           (limit max-w: 8 max-h: ^(value scroll id 'thumb-h default: 0)
+             (thumb style: "bg-theme-highlight-med bg-min-8px rounded-full")))))
 
 ;;
 ;; Markup
@@ -2016,30 +2046,22 @@ mode-help-scroll-thumb-h: 0
   => (group style: "flow-col px-5 py-3 gap-3 max-w-xs justify center-x clip"
        (p style: "upcase text-theme-text font-condensed font-lg leading-none"
          ^"⸢mode⸣ mode")
-       (group style: "flow-row fr-1"
-         (vantage fr: 1 id: (state mode-help-vantage)
-           (box style: "bg-transparent clip content-y"
-                µ-page-y: (^mode-help-scroll-offset-y px)
-                µ-goal-y: ^mode-help-scroll-goal-y
-             (gate
-               (table style: "flow-col border-x text-theme-text"
-                 (row style: "flow-row item-fr-1 border-b border-theme-highlight-med text-theme-text text-sm/6 font-bold"
-                   (cell style: "clip py-1"
-                     (p "Key(s)"))
-                   (cell style: "clip py-1"
-                     (p "Description")))
-                 (^when ((control-docs mode) (⟨{¦ head_: (key mode_ key_) body_}⟩° mode_))
-                   (row style: "flow-row item-fr-1 border-b border-theme-highlight-med"
-                     (cell style: "clip py-1"
-                       (Key ^key))
-                     (cell style: "clip py-1"
-                       (box style: "flow-col text-sm/6"
-                         (^each (body as paragraph_dict)
-                           (p ^*paragraph style: "flow-wrap gap-x-2/3"))))))))))
-         (box style: "floating-x dl-2 content"
-           (transform dt: ^mode-help-scroll-thumb-y
-             (limit max-w: 8 max-h: ^mode-help-scroll-thumb-h
-               (thumb style: "bg-theme-highlight-med bg-min-8px rounded-full"))))))
+       (box style: "fr-1"
+         (VScroll id: mode-help-scroll
+           (table style: "flow-col border-x text-theme-text"
+             (row style: "flow-row item-fr-1 border-b border-theme-highlight-med text-theme-text text-sm/6 font-bold"
+               (cell style: "clip py-1"
+                 (p "Key(s)"))
+               (cell style: "clip py-1"
+                 (p "Description")))
+             (^when ((control-docs mode) (⟨{¦ head_: (key mode_ key_) body_}⟩° mode_))
+               (row style: "flow-row item-fr-1 border-b border-theme-highlight-med"
+                 (cell style: "clip py-1"
+                   (Key ^key))
+                 (cell style: "clip py-1"
+                   (box style: "flow-col text-sm/6"
+                     (^each (body as paragraph_dict)
+                       (p ^*paragraph style: "flow-wrap gap-x-2/3"))))))))))
 
 ;;
 ;; General UI
@@ -2080,5 +2102,5 @@ mode-help-scroll-thumb-h: 0
                         (CircuitViewPane))))))))))
       (StatusBar))
   ;; DEBUG
-  ;(p ^(term->ml mode-help-vantage) style: "content flow-col")))
+  ;(p ^(term->ml scroll) style: "content flow-col")))
 

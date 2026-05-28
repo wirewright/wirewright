@@ -243,6 +243,10 @@ PRIMITIVES = ProcRuleset.build do
     xs[key]? || Term.of(:value, xs, key)
   end
 
+  rulepi1 %[(value xs_dict keys_* ⍊ default_)] do
+    xs.as_d.follow?(keys.items) || default
+  end
+
   rulepi1 %[(value? xs_dict key_)] do
     if value = xs[key]?
       Term.of(:some, value)

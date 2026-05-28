@@ -371,7 +371,7 @@ module MuSoma
     @mu : Microfold2::SyncCodex?
 
     def initialize
-      @monitoring_vantages = Set(Term).new
+      @monitoring_vantages = Set(Term::Dict).new
     end
 
     def receive(ws : Workspace, request : AppRequest) : Nil
@@ -415,7 +415,7 @@ module MuSoma
           )
         end
 
-        seen = Set(Term).new
+        seen = Set(Term::Dict).new
         hover = Set(Term).new
 
         # Add or update vantages in state, update hover-over.
@@ -425,9 +425,9 @@ module MuSoma
               hover << key
             end
 
-            matchpi %{(vantage _* ⍊ id: (state key_))} do
-              state = state.with(key, vantage)
-              seen << key
+            matchpi %{(vantage _* ⍊ id: (state keys_*))} do
+              state = Term.assign(state, keys.items, to: vantage)
+              seen << keys.as_d
             end
 
             otherwise { }
@@ -435,8 +435,8 @@ module MuSoma
         end
 
         # Delete vantages.
-        (@monitoring_vantages - seen).each do |id|
-          state = state.without(id)
+        (@monitoring_vantages - seen).each do |keys|
+          state = Term.assign(state, keys.items, to: nil)
         end
 
         @monitoring_vantages = seen
