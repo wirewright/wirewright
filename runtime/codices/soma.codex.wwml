@@ -1151,6 +1151,12 @@ circuit-camera: {l: 0, t: 0, scale: 1}
 
 pane-divider-l: 600 ;; pixels
 
+;; pixels
+mode-help-scroll-goal-y: 0
+mode-help-scroll-offset-y: 0
+mode-help-scroll-thumb-y: 0
+mode-help-scroll-thumb-h: 0
+
 --- state/rules
 ;; Rules for rewriting the state. This is what makes the UI interactive.
 
@@ -1170,13 +1176,13 @@ pane-divider-l: 600 ;; pixels
 {¦ mode: ⸨grab,insert⸩ collapsed-pane_: ⸨window,circuit⸩-pane}
   <> {collapsed-pane: none}
 
-;; TODO: Make docs here into help messages so that we can provide a help screen.
-
-;; `h` in normal mode goes to grab mode.
+;; /control (key normal "h")
+;; Switch to Grab mode.
 {¦ mode_: normal input: ⟨K←(key "h")⟩}
   <> {(K): (), mode: grab}
 
-;; `l` in normal mode goes to insert mode if at the end-of-time.
+;; /control (key normal "l")
+;; Switch to Insert mode if at end-of-time.
 {¦ mode_: normal input: ⟨K←(key "l")⟩ timeline: (_ I * _ _)}
   <> {(K): (), mode: insert}
 ;; ... otherwise, notify the user that they must be at end-of-time. This
@@ -1187,89 +1193,109 @@ pane-divider-l: 600 ;; pixels
 {¦ mode: normal input: ⟨K←(key "l")⟩ timeline: (_ I _dict _ _) requests: (_* `request)}
   <> {(K): (), request: (log "Cannot edit the past of an existing future. Go to end-of-time or erase the future to edit.")}
 
-;; `S-/` (aka ?) in normal mode toggles help.
+;; /control (key normal "?")
+;; Toggle help.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "/")⟩ help_boolean}
   <> {(K): (), help: ^(not help)}
 
-;; `\` in normal mode toggles the window pane collapsed.
+;; /control (key normal "\\")
+;; Toggle the window pane collapsed.
 {¦ mode: normal input: ⟨K←(key "\\")⟩ collapsed-pane_: ⸨none,window-pane⸩}
   <> {(K): (), collapsed-pane: ⸨window-pane,none⸩}
 
-;; `Shift-\` in normal mode toggles the circuit pane collapsed.
+;; /control (key normal "S-\\")
+;; Toggle the circuit pane collapsed.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "\\")⟩ collapsed-pane_: ⸨none,circuit-pane⸩}
   <> {(K): (), collapsed-pane: ⸨circuit-pane,none⸩}
 
-;; `escape` in grab mode goes to normal mode.
+;; /control (key grab "Esc")
+;; Switch to normal mode.
 {¦ mode_: grab input: ⟨K←(key escape)⟩ collapsed-pane_}
   <> {(K): (), mode: normal, collapsed-pane: none}
 
-;; `space` in normal mode toggles the growth point on/off.
+;; /control (key normal "space")
+;; Toggle time.
 {¦ mode: normal input: ⟨K←(key " ")⟩ timeline: (_ I _ state←⸨-,...⸩ _)}
   <> {(K): (), state: ⸨...,-⸩}
 
-;; `,` in normal mode at end-of-time moves into history mode.
+;; /control (key normal ",")
+;; Move back in time.
 {¦ mode: normal input: ⟨K←(key ",")⟩ timeline: (_ I ahead←* _ _)}
   <> {(K): (), ahead: ()}
 
-;; `,` in normal mode moves backward in time.
 {¦ mode: normal input: ⟨K←(key ",")⟩ timeline: ((_* _ l_) I (`r _*) _ _)}
   <> {(K): (), (l): (), r: ^l}
 
-;; `.` in normal mode moves forward in time.
+;; /control (key normal ".")
+;; Move forward in time. At the end of history, if time is running, goes to
+;; end-of-time. If time is paused, single-steps it.
 {¦ mode: normal input: ⟨K←(key ".")⟩ timeline: ((_* `l) I (r_ _*) _ _)}
   <> {(K): (), l: ^r, (r): ()}
 
-;; `.` at end-of-time goes to draft mode.
 {¦ mode: normal input: ⟨K←(key ".")⟩ timeline: (_ I ahead←() _ _)}
   <> {(K): (), ahead: *}
 
-;; `.` in normal mode at the end of the timeline introduces one-off growth
-;; point (single-step).
 {¦ mode: normal input: ⟨K←(key ".")⟩ timeline: ((_*) I * state←- _)}
   <> {(K): (), state: .}
 
-;; `<` in normal mode moves to the beginning of the timeline.
+;; /control (key normal "<")
+;; Go to the beginning of history.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key ",")⟩ timeline: ((_ behind_*) I (`ahead _*) _ _)}
   <> {(K): (), (behind): (), (ahead): ^behind}
 
-;; `>` in normal mode moves to the end of the timeline.
+;; /control (key normal ">")
+;; Go to the end of history.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key ".")⟩ timeline: ((_* `behind) I ahead←(_*) _ _)}
   <> {(K): (), (behind): ^ahead, ahead: ()}
 
-;; `>` at the end of the timeline goes to live mode.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key ".")⟩ timeline: ((_* `behind) I ahead←() _ _)}
   <> {(K): (), ahead: *}
 
-;; `C-/` in normal mode cuts the timeline at that point and goes to
-;; end-of-time. We use `Ctrl` because this is very destructive,
-;; as you can see, so we must make sure the user understands what
-;; they are doing instead of e.g. missing `.`.
+;; /control (key normal "C-/")
+;; Erase the future and go to end-of-time.
+;;
+;; We use `Ctrl` because this is destructive. Conceptually, this is like undo
+;; followed by erasing your redo history.
 {¦ mode: normal input: ⟨& (key (ctrl _)) K←(key "/")⟩ timeline: ((_* current_) I ahead←(_*) _ draft_)}
   <> {(K): (), ahead: *, draft: ^current}
 
-;; + in normal mode increments rem.
+;; /control (key normal "+")
+;; Increase rem (global font size on which most UI sizes depend).
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "=")⟩ ±rem}
   <> {(K): (), rem: ^(+ rem 1)}
 
-;; - in normal mode decrements rem.
+;; /control (key normal "-")
+;; Decrease rem (global font size on which most UI sizes depend).
 {¦ mode: normal input: ⟨K←(key "-")⟩ ±rem}
   <> {(K): (), rem: ^(- rem 1)}
 
-;; 0 in normal mode resets rem.
+;; /control (key normal "0")
+;; Reset rem.
 {¦ mode: normal input: ⟨K←(key "0")⟩ ±rem}
   <> {(K): (), rem: 16}
 
-;; W in normal mode writes current circuit to disk.
+;; /control (key normal "W")
+;; Write historical circuit to disk.
+;;
+;; WARNING: our pretty printer currently produces really bad code, please don't
+;; write over hand-written code (or at least back it up...)
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "w")⟩ timeline: ((_* current_) I _ _ _) requests: (_* `request)}
   <> {(K): (), request: (write-document ^current)}
 
-;; w in normal mode writes the draft to disk.
+;; /control (key normal "w")
+;; Write the draft at end-of-time to disk.
+;;
+;; WARNING: our pretty printer currently produces really bad code, please don't
+;; write over hand-written code (or at least back it up...)
 {¦ mode: normal input: ⟨K←(key "w")⟩ timeline: ((_*) I * _ draft_) requests: (_* `request)}
   <> {(K): (), request: (write-document ^draft)}
 {¦ mode: normal input: ⟨K←(key "w")⟩ timeline: (_dict I _dict _ _) requests: (_* `request)}
   <> {(K): (), request: (log "Go to end-of-time to write the latest circuit, or use `W` (S-w) to write the current (historical) one.")}
 
-;; r in normal mode reloads circuit from disk.
+;; /control (key normal "r")
+;; Replace draft with the seed on disk.
+;;
+;; WARNING: This will discard running state.
 {¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_ I * _ draft_) seed_ seed'_}
   <> {(K): (), draft: ^seed', seed: ^seed', (seed'): ()}
 {¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_ I * _ draft_) seed_}
@@ -1277,33 +1303,41 @@ pane-divider-l: 600 ;; pixels
 {¦ mode: normal input: ⟨K←(key "r")⟩ timeline: (_dict I _dict _ _) requests: (_* `request)}
   <> {(K): (), request: (log "Go to end-of-time to reload the circuit from disk.")}
 
-;; S-r in normal mode toggles seed live-reload.
+;; /control (key normal "R")
+;; Toggle seed live-reload.
+;;
+;; WARNING: This will discard running state on seed change.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "r")⟩ live-reload_boolean}
   <> {(K): (), live-reload: ^(not live-reload)}
 
-;; H in normal mode moves the pane divider left.
+;; /control (key normal "H")
+;; Move the pane divider left.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "h")⟩ ±pane-divider-l}
   <> {(K): (), pane-divider-l: ^(max (- pane-divider-l 30) 100)}
 
-;; L in normal mode moves the pane divider right.
+;; /control (key normal "L")
+;; Move the pane divider right.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "l")⟩ ±pane-divider-l}
   <> {(K): (), pane-divider-l: ^(+ pane-divider-l 30)}
 
-;; Zoom in
+;; /control (action "Scroll down over the circuit pane")
+;; Zoom out.
 {¦ hover-over: ()
    mouse: {+ scroll-dn}
    circuit-view-vantage: [vantage {¦ hit-hover}]
    circuit-camera: {¦ ±scale -scale'_}}
   <> {scale': ^(max (- scale 0.1) 0.1)}
 
-;; Zoom out
+;; /control (action "Scroll up over the circuit pane")
+;; Zoom in.
 {¦ hover-over: ()
    mouse: {+ scroll-up}
    circuit-view-vantage: [vantage {¦ hit-hover}]
    circuit-camera: {¦ ±scale -scale'_}}
   <> {scale': ^(min (+ scale 0.1) 7)}
 
-;; Reset zoom
+;; /control (action "Middle click over the circuit pane")
+;; Reset zoom.
 {¦ hover-over: ()
    mouse: {+ middle}
    circuit-view-vantage: [vantage {¦ hit-hover}]
@@ -1328,6 +1362,9 @@ pane-divider-l: 600 ;; pixels
    circuit-camera: {¦ ±l ±t}}
   <> {l: ^offset-x, t: ^offset-y}
 
+;; /control (action "Drag over the circuit pane")
+;; Pan.
+
 ;; Begin panning circuit...
 {¦ hover-over: ()
    mouse: {| left -dragging_} ;; | Damn Racket highlighting
@@ -1347,6 +1384,9 @@ pane-divider-l: 600 ;; pixels
 ;; ... and stop when not dragging anymore.
 {¦ mouse: {¦ -dragging} panning-circuit_} ;; |
   <> {(panning-circuit): ()}
+
+;; /control (action "Drag the pane divider")
+;; Move the pane divider left or right.
 
 ;; When you hover over pane-divider and press Left, start dragging.
 {¦ hover-over: ((pane-divider))
@@ -1376,11 +1416,37 @@ pane-divider-l: 600 ;; pixels
 {¦ hover-over: ⟨(expander addr_)⟩ mouse: {| left_} fb: (_* `msg)} ;; |
   <> {(left): (), msg: (^addr toggle-open)}
 
-;; Holding Tab in insert mode hides the cursor.
+;; /control (key insert "Tab")
+;; Conceal the editor while the key is held.
 {¦ mode: insert keyboard: ((key tab)) hide_boolean cookies: {¦ -▢_}}
   <> {hide: true, ▢: true}
 {¦ hide_: true cookies: {¦ -▢_}}
   <> {hide: false, ▢: true}
+
+;; /control (key insert "Esc")
+;; Switch to Normal mode.
+
+;; Sync scroll.
+{¦ mode-help-vantage: [vantage [box {¦ ±offset-y' ±thumb-h' ±thumb-dt'}]]
+   ⋮mode-help-scroll-offset-y
+   ⋮mode-help-scroll-thumb-y
+   ⋮mode-help-scroll-thumb-h}
+  <> {mode-help-scroll-offset-y: ^offset-y',
+      mode-help-scroll-thumb-y: ^thumb-dt',
+      mode-help-scroll-thumb-h: ^thumb-h'}
+
+;; Scroll down.
+{¦ mode-help-vantage: [vantage (box {¦ ±max-offset-y} ⍊ hit-hover)]
+   mouse: {| scroll-dn_} ;; |
+   ±mode-help-scroll-goal-y}
+  <> {(scroll-dn): (), mode-help-scroll-goal-y: ^(min (+ mode-help-scroll-goal-y 30) max-offset-y)}
+
+;; Scroll up.
+{¦ mode-help-vantage: [vantage {¦ hit-hover}]
+   mouse: {| scroll-up_} ;; |
+   ±mode-help-scroll-goal-y}
+  <> {(scroll-up): (), mode-help-scroll-goal-y: ^(max 0 (- mode-help-scroll-goal-y 30))}
+
 
 --- stateR ;; State rewriter
 
@@ -1619,7 +1685,6 @@ pane-divider-l: 600 ;; pixels
        (vantage id: (hoverable ^id) active: if-hit
          ^child)
        (^if (any? hover-over id)
-         ;; FIXME: overlay doesn't work well with origin-* for some reason...
          (box style: "floating content origin-br -dt-2 dl-6"
            (box style: "clamp max-w-4xs"
              ;; Triangle
@@ -1627,7 +1692,6 @@ pane-divider-l: 600 ;; pixels
                style: "fill-theme-highlight-high -dl-3 dt-1 bottom right pivot-center rotate-45"
                min-w: 8
                min-h: 8)
-             ;; FIXME: Why is flow-wrap f**ing everything up with text-base and larger?
              (box style: "flow-none px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
                           rounded-sm text-theme-text"
                 ^hint)))))
@@ -1653,7 +1717,7 @@ pane-divider-l: 600 ;; pixels
              (Key ^key))
            (when (m-key expects-mode_ key_)
              (^unless (= mode expects-mode)
-               (Key "escape"))
+               (Key "Esc"))
              (Key ^key)))))
 
 (MuLogo)
@@ -1690,7 +1754,7 @@ pane-divider-l: 600 ;; pixels
   => (Markup
        (m-span "The window pane is given access to most of your keyboard keys. Hit")
        (m-key "S-Tab") (m-span "/") (m-key "Tab") (m-span "to cycle through foci, or")
-       (m-key "escape") (m-span "to blur. When all foci are blurred, ") (m-key "escape")
+       (m-key "Esc") (m-span "to blur. When all foci are blurred, ") (m-key "Esc")
        (m-span "goes to Normal mode."))
 
 (ModeTooltip normal)
@@ -1857,9 +1921,8 @@ pane-divider-l: 600 ;; pixels
            (WindowTab ^id ^"⸢title⸣ (⸢id⸣)" active: ^(= active-window-spec (some id))))))
 
 (WindowView (spec content_ ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false))
-  => (box style: "content-clip border-sm border-theme-highlight-low \
-                  in-focused:border-theme-grab-bg in-focused:input \
-                  -input-enabled:-input"
+  => (box style: "content-clip border-sm border-theme-highlight-low in-focused:input \
+                  -input-enabled:-input in-focused:border-theme-grab-bg"
           input-enabled: ^input
        (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
          ;; `content` is Scenery already, so let's save Microfold a whole bunch
@@ -1871,7 +1934,7 @@ pane-divider-l: 600 ;; pixels
 
 (WindowViewPane)
   => (vantage id: (state window-view-vantage) active: if-hit
-       (pane style: "flow-col bg-transparent"
+       (pane style: "bg-transparent"
          (gate
            (group style: "flow-col"
              (WindowTabList)
@@ -1944,10 +2007,36 @@ pane-divider-l: 600 ;; pixels
            "Wirewright µsoma")
          (p style: "font-sm"
            "https://github.com/wirewright/wirewright [iota]")))
+
+;; Reference: The shortcuts pane design is inspired Github's [Keyboard Shortcuts](https://docs.github.com/en/get-started/accessibility/keyboard-shortcuts)
 (HelpView)
-  => (group style: "flow-col clip content-y p-5 text-theme-text"
-       (p "Thank you for checking out MuSoma :^)")
-       (p "TODO: Write help"))
+  => (group style: "flow-col px-5 py-3 gap-3 max-w-xs justify center-x clip"
+       (p style: "upcase text-theme-text font-condensed font-lg leading-none"
+         ^"⸢mode⸣ mode")
+       (group style: "flow-row fr-1"
+         (vantage fr: 1 id: (state mode-help-vantage)
+           (box style: "bg-transparent clip content-y"
+                µ-page-y: (^mode-help-scroll-offset-y px)
+                µ-goal-y: ^mode-help-scroll-goal-y
+             (gate
+               (table style: "flow-col border-x text-theme-text"
+                 (row style: "flow-row item-fr-1 border-b border-theme-highlight-med text-theme-text text-sm/6 font-bold"
+                   (cell style: "clip py-1"
+                     (p "Key(s)"))
+                   (cell style: "clip py-1"
+                     (p "Description")))
+                 (^when ((control-docs mode) (⟨{¦ head_: (key mode_ key_) body_}⟩° mode_))
+                   (row style: "flow-row item-fr-1 border-b border-theme-highlight-med"
+                     (cell style: "clip py-1"
+                       (Key ^key))
+                     (cell style: "clip py-1"
+                       (box style: "flow-col text-sm/6"
+                         (^each (body as paragraph_dict)
+                           (p ^*paragraph style: "flow-wrap gap-x-2/3"))))))))))
+         (box style: "floating-x dl-2 content"
+           (transform dt: ^mode-help-scroll-thumb-y
+             (limit max-w: 8 max-h: ^mode-help-scroll-thumb-h
+               (thumb style: "bg-theme-highlight-med bg-min-8px rounded-full"))))))
 
 ;;
 ;; General UI
@@ -1988,5 +2077,5 @@ pane-divider-l: 600 ;; pixels
                         (CircuitViewPane))))))))))
       (StatusBar))
   ;; DEBUG
-  ;(p ^\log style: "content flow-col")))
+  ;(p ^(term->ml mode-help-vantage) style: "content flow-col")))
 

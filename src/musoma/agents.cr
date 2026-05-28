@@ -34,17 +34,17 @@ module MuSoma
   end
 
   class EditorAgent
-    def initialize(@ref : ReadingRef)
+    def initialize(@codex_ref : ReadingRef)
       @seen = Bytes.empty
       @editR = Rho.noR
     end
 
     def boot(ws : Workspace) : Nil
-      ws.extrinsics.add(@ref)
+      ws.extrinsics.add(@codex_ref)
     end
 
     def sync(ws : Workspace) : Nil
-      return unless reading = ws.extrinsics[@ref]?
+      return unless reading = ws.extrinsics[@codex_ref]?
 
       sync(ws, reading)
     end
@@ -371,7 +371,7 @@ module MuSoma
     @mu : Microfold2::SyncCodex?
 
     def initialize
-      @monitoring = Set(Term).new
+      @monitoring_vantages = Set(Term).new
     end
 
     def receive(ws : Workspace, request : AppRequest) : Nil
@@ -435,11 +435,11 @@ module MuSoma
         end
 
         # Delete vantages.
-        (@monitoring - seen).each do |id|
+        (@monitoring_vantages - seen).each do |id|
           state = state.without(id)
         end
 
-        @monitoring = seen
+        @monitoring_vantages = seen
 
         state.with(:"hover-over", hover)
       end
@@ -588,7 +588,7 @@ module MuSoma
   class AssemblerAgent
     @seen : Bytes?
 
-    def initialize(@ref : ReadingRef)
+    def initialize(@library_ref : ReadingRef)
       @state = Rack::Assembler.state
     end
 
@@ -615,11 +615,11 @@ module MuSoma
     end
 
     def boot(ws : Workspace)
-      ws.extrinsics.add(@ref)
+      ws.extrinsics.add(@library_ref)
     end
 
     def sync(ws : Workspace)
-      return unless reading = ws.extrinsics[@ref]?
+      return unless reading = ws.extrinsics[@library_ref]?
 
       sync(ws, reading)
     end
@@ -671,17 +671,17 @@ module MuSoma
   end
 
   class CircuitAgent
-    def initialize(@ref : ReadingRef)
+    def initialize(@seed_ref : ReadingRef)
       @vantages = VarHash(D7::NodeAddr, Term).new
     end
 
     def boot(ws : Workspace)
-      ws.extrinsics.add(@ref)
-      ws.state.update(&.with(:"seed-path", @ref.path))
+      ws.extrinsics.add(@seed_ref)
+      ws.state.update(&.with(:"seed-path", @seed_ref.path))
     end
 
     def sync(ws : Workspace)
-      return unless reading = ws.extrinsics[@ref]?
+      return unless reading = ws.extrinsics[@seed_ref]?
 
       sync(ws, reading)
     end
@@ -739,7 +739,7 @@ module MuSoma
       Term.case(request.term) do
         matchpi %{(write-document document_)} do
           blob = Term::Blob.new(ML.display(document, style: ML::Style::Document, maxwidth: 80))
-          PathService.write(@ref.path, blob)
+          PathService.write(@seed_ref.path, blob)
         end
 
         otherwise { }
@@ -1051,12 +1051,57 @@ module MuSoma
   end
 
   class CodexAgent
-    def initialize(@ref : ReadingRef)
+    def initialize(@codex_ref : ReadingRef)
       @seen = Bytes.empty
     end
 
+    RE_CONTROL = /^;;\h+\/control\h+(?<head>[^\v]*)\v(?<body>(?:;;[^\v]*(?:\v|$))*)/m
+
+    def self.control_docs(source : String) : Term::Dict
+      Term::Dict.build do |commit|
+        source.scan(RE_CONTROL) do |match|
+          begin
+            head = ML.term(match["head"])
+          rescue e : ML::SyntaxError
+            next
+          end
+
+          body = match["body"].view
+
+          paragraphs = [] of Term
+          paragraph = [] of Term
+
+          body.each_line do |line|
+            assert line.starts_with?(";;")
+
+            line = line.lskip(nchars: 2).strip(charset: " \n")
+
+            # Paragraph boundary
+            #
+            #   ;; Foo bar baz
+            #   ;; ⏏
+            #   ;; Qux
+            if line.empty?
+              paragraphs << Term.of(paragraph)
+              paragraph.clear
+              next
+            end
+
+            line.split(' ') do |word|
+              paragraph << Term.of(word)
+            end
+          end
+
+          paragraphs << Term.of(paragraph)
+          paragraph.clear
+
+          commit << Term.of(head: head, body: paragraphs)
+        end
+      end
+    end
+
     def sync(ws : Workspace) : Nil
-      return unless reading = ws.extrinsics[@ref]?
+      return unless reading = ws.extrinsics[@codex_ref]?
 
       sync(ws, reading)
     end
@@ -1068,12 +1113,23 @@ module MuSoma
 
       ws.console.send(InfoLog.new("Reload MuSoma codex"))
 
+      source = reading.blob.to_string
+
       begin
-        document = ML.document(reading.blob.to_string)
+        document = ML.document(source)
       rescue e : ML::SyntaxError
         ws.console.send(ErrLog.new("MuSoma codex on disk is invalid, running from memory..."))
-      else
-        ws.codex.set(MuSoma.codex(document))
+        return
+      end
+
+      ws.codex.set(MuSoma.codex(document))
+
+      # Find inline documentation of the form `;; /control ...` and expose
+      # it to the state.
+      control_docs = CodexAgent.control_docs(source)
+
+      ws.state.update do |state|
+        Term.morph(state, {:"control-docs", control_docs})
       end
     end
 
