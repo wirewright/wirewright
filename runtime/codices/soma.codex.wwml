@@ -1545,7 +1545,7 @@ scroll: {}
   => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
                   bg-theme-surface in-focused:bg-theme-overlay clamp \
                   max-w-5xs max-h-5xs"
-       (p style: "px-3/2 sel sel-aim sel-clearance-3/2 cursor-thick sel-theme-highlight-med \
+       (p style: "px-3/2 content sel sel-aim sel-clearance-1 cursor-thick sel-theme-highlight-med \
                   in-focused:sel-theme-editor-selection-bg in-editor-hidden:sel-theme-highlight-high \
                   sel-text-theme-text in-focused:sel-text-theme-editor-selection-fg \
                   text-theme-subtle in-focused:text-theme-text"
@@ -1558,8 +1558,8 @@ scroll: {}
 (EditorWidget (editor l_string (compose buffer_string) r_string ⍊ anchor_: (%number +i32)))
   => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
                   text-theme-muted in-focused:bg-theme-overlay clamp max-w-5xs max-h-5xs"
-       (p style: "px-3/2 sel sel-theme-overlay sel-text-theme-subtle in-focused:sel-text-theme-text \
-                  in-focused:sel-theme-highlight-med x-sel-aim x-sel-clearance-3/2 x-cursor-thick \
+       (p style: "px-3/2 content sel sel-theme-overlay sel-text-theme-subtle in-focused:sel-text-theme-text \
+                  in-focused:sel-theme-highlight-med x-sel-aim x-sel-clearance-1 x-cursor-thick \
                   x-sel-theme-muted in-focused:x-sel-theme-editor-selection-fg \
                   in-focused:x-sel-theme-editor-selection-bg"
           selection-anchor: ^(charcount l)
@@ -1887,7 +1887,7 @@ scroll: {}
              (m-span "(unsaved state will be lost). Hit ") (m-key normal "R")
              (m-span "to toggle live reload."))))
        (when _
-         (TooltipBL id: seed-status
+         (TooltipBR id: seed-status
            (SeedStatus ok)
            (Markup
              (m-span "Seed is in sync. Hit ") (m-key normal "r") (m-span "to force reload")

@@ -319,11 +319,13 @@ module MuSoma
     # Parse arguments.
     unless input_arg = args.first?
       console.send(CriticalLog.new("Expected a file argument (try `examples/calculator.wwml` your MuSoma download has an `examples` directory)"))
+      Fiber.yield
       return
     end
 
     unless runtime = Ww.roots.runtime
       console.send(CriticalLog.new("Could not find Wirewright runtime (you likely need to set WW_RUNTIME)"))
+      Fiber.yield
       return
     end
 
