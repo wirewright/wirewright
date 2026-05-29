@@ -848,42 +848,6 @@ module Ww::Alloy
         end
       end
 
-      # |@ alloy.template.^capsule
-      #
-      # |@pattern
-      # (^capsule pattern_ body_*)
-      #
-      # |@key pattern m1.pattern
-      # M1 pattern for matching the variables dict.
-      #
-      # |@block
-      # Protects *body* from recursive expansion until *pattern* matches
-      # the variables dict. Capsule waits until its environment (the vars
-      # dict) satisfies *pattern*, and if that is the case, it "dissolves",
-      # leaving the content susceptible for expansion.
-      #
-      # ```wwml
-      # ;; Original
-      # (^capsule {¦ x} ("Hello" ^x))
-      #
-      # ;; Alloy pass 1 with vars={}
-      # (^capsule {¦ x} ("Hello" ^x))
-      #
-      # ;; Alloy pass 2 with vars={x: 123}
-      # ("Hello" 123)
-      # ```
-      matchpi %{(^capsule pattern_ body_*)} do
-        if M1.probe?(pattern, Term.of(ctx.vars))
-          render_many(issues) do |submit|
-            body.items.each_with_index(offset: 1) do |node, index|
-              submit.call(ctx, node, index)
-            end
-          end
-        else
-          Term.rep(template)
-        end
-      end
-
       # |@ alloy.template.^*
       #
       # |@pattern

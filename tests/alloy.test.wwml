@@ -473,14 +473,6 @@
     (^let x: '101
       ^x ^y)))
 
-;; ^capsule
-(group
-  (alloy {} ((^capsule _)) ())
-  (alloy {} ((^capsule {¦ x})) ((^capsule {¦ x})))
-  (alloy {} ((^capsule {¦ x} ^x)) ((^capsule {¦ x} ^x)))
-  (alloy {x: 100} ((^capsule {¦ x} ^x)) (100))
-  (alloy {y: 200} ((^capsule {¦ x} ^x)) ((^capsule {¦ x} ^x))))
-
 ;; escaping ^ with ^^, ^^^, etc.
 (group
   (alloy {} ^^x ^x)
