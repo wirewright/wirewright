@@ -345,4 +345,41 @@ backdrop: (oklch 0.2 0 0)
       selection: true
       selection-fill: (oklch 0.7 0.2 blue)
       selection-anchor: 0
+      selection-span: 0))
+  ;; BUG: I-beam/selection is duplicated due to incorrect cluster math
+  (content x: true y: true
+    (text
+      caption: "a⟨"
+      color: white
+      font:
+        (list
+          (font "IBM Plex Mono")
+          (font "Julia Mono"))
+      selection: true
+      selection-fill: (oklch 0.7 0.2 blue)
+      selection-anchor: 0
+      selection-span: 0))
+  (content x: true y: true
+    (text
+      caption: "a⟨"
+      color: white
+      font:
+        (list
+          (font "IBM Plex Mono")
+          (font "Julia Mono"))
+      selection: true
+      selection-fill: (oklch 0.7 0.2 blue)
+      selection-anchor: 1
+      selection-span: 0))
+  (content x: true y: true
+    (text
+      caption: "a⟨"
+      color: white
+      font:
+        (list
+          (font "IBM Plex Mono")
+          (font "Julia Mono"))
+      selection: true
+      selection-fill: (oklch 0.7 0.2 blue)
+      selection-anchor: 2
       selection-span: 0)))

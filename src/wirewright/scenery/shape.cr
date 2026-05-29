@@ -20,17 +20,20 @@ module Ww::Scenery
 
   # Uses a Raqm handle *raqm* and *font* to shape *item*. Returns the resulting `ShapedGlyph`s.
   #
-  # This is the [main] place where Wirewright's graphics talks to Raqm (and thus,
+  # This is the [main] place where Wirewright's graphics stack talks to Raqm (and thus,
   # HarfBuzz and friends).
   #
   # WARNING: Both *raqm* and *font* are modified while this function runs. It's
-  # more convenient to think of each of them as a machine with knobs we turn
-  # on every call.
+  # more convenient to think of each of them as a machine with knobs, and this function
+  # is allowed to turn them.
   private def shape(raqm : Raqm::Handle, font : Asset::PvgFont, size : Magnitude, tracking : Unit?, item : Pf::GraphemeSeln) : Slice(ShapedGlyph)
     assert FreeType.set_char_size(font.as_ft, size * FT_UNIT, 0, 0, 0).zero?
 
     Raqm.clear_contents(raqm)
 
+    # NOTE: By passing `item*` and its bytesize we lose *item*'s original byte
+    # offset. That is, Raqm doesn't know item is an offset into a larger string
+    # and won't do the math for us when it gives us byte indices for `cluster`...
     assert Raqm.set_text_utf8(raqm, item.to_slice, item.bytesize)
     assert Raqm.set_ft_face(raqm, font.as_ft)
 
@@ -48,7 +51,8 @@ module Ww::Scenery
     glyphs = Slice.new(glyphs_ptr, glyphs_size)
     glyphs.to_readonly_slice do |glyph|
       ShapedGlyph.new(
-        cluster: glyph.cluster.to_i,
+        # ... so we have to offset the cluster manually.
+        cluster: item.byte_start + glyph.cluster,
         index: glyph.index.to_i,
         advance: Point[
           Magnitude.new(glyph.x_advance) / FT_UNIT,
@@ -88,7 +92,7 @@ module Ww::Scenery
       GlyphTrain.new(segment.first.cluster, segment)
     end
 
-    # Determine which glyph trains are present and which ones are absent if
+    # Determine which glyph trains are present and which ones are absent when
     # rendered using *font*.
     glyph_presence = glyph_trains.map do |train|
       fonts.size == 1 || train.glyphs.none?(&.missing?)
@@ -102,11 +106,11 @@ module Ww::Scenery
     present = glyph_presence.first
 
     glyph_trains_by_presence.each do |trains|
-      # If absent, try shape the underlying graphemes with a different font.
+      # If absent, try shaping the underlying graphemes with a different font.
       unless present
         byte_start = trains.min_of(&.cluster)
         byte_end = trains.max_of(&.cluster)
-        byte_view = item.byte_select_inclusive(byte_start, byte_end)
+        byte_view = item.byte_select_abs_inclusive(byte_start, byte_end)
         shape(raqm, fonts + 1, size, tracking, byte_view, &fn)
         next
       end
@@ -120,6 +124,8 @@ module Ww::Scenery
         end
       end
     ensure
+      # Adjoin in glyph_trains_by_presence guarantees it's either true-false-true-false-...
+      # or false-true-false-true-... (i.e., alternating).
       present = !present
     end
   end
