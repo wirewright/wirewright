@@ -789,65 +789,6 @@ module Ww::Alloy
         Term.rep(body.items)
       end
 
-      # |@ alloy.template.^membrane
-      #
-      # |@pattern
-      # [^membrane body_*]
-      #
-      # |@block
-      # Replaces itself with `(^let body_*)` without recursive expansion. Unions
-      # evaluated pairspart with expansion `^let`'s pairspart.
-      #
-      # `^membrane` is useful for establishing communication between multiple passes
-      # of Alloy.
-      #
-      # ```wwml
-      # ;; Original
-      # (^membrane :x :y
-      #   ("Hello" ^x ^y))
-      #
-      # ;; After Alloy pass 1 with vars={x: 100, y: 200}:
-      # (^let x: 100 y: 200
-      #    ("Hello" ^x ^y))
-      #
-      # ;; After Alloy pass 2:
-      # ("Hello" 100 200)
-      # ```
-      #
-      # Notably, with `^membrane`, *body* can be enriched with variables from the first
-      # pass as well as variables from the second pass:
-      #
-      # ```wwml
-      # ;; Original
-      # (^membrane :x :y
-      #   ("Hello" ^x ^y ^z))
-      #
-      # ;; After Alloy pass 1 with vars={x: 100, y: 200}:
-      # (^let x: 100 y: 200
-      #    ("Hello" ^x ^y ^z))
-      #
-      # ;; After Alloy pass 2 with vars={z: 300}:
-      # ("Hello" 100 200 300)
-      # ```
-      matchpi %{[^membrane body_*]} do
-        issues.adjoin("`^membrane` template expression") do |issues|
-          expansion = Term::Dict.build do |commit|
-            commit << :"^let"
-            commit.concat(body.items)
-
-            template.each_entry(in: Term::Dict.pairspart) do |key, value|
-              issues.adjoin("binding", key) do |issues|
-                result = eval(ctx, value, issues)
-
-                commit.with(key, {:literal, result})
-              end
-            end
-          end
-
-          Term.rep_of(expansion)
-        end
-      end
-
       # |@ alloy.template.^*
       #
       # |@pattern

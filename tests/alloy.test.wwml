@@ -451,28 +451,6 @@
   ;; key-value pair
   (alloy {} (^verbatim (^x y: ^y z: (^z))) (^x y: ^y z: (^z))))
 
-;; ^membrane
-(group
-  ;; No vars
-  (alloy {} (^membrane) (^let))
-  (alloy {} (^membrane x y z) (^let x y z))
-  ;; Vars
-  (alloy {x: 100, y: 200}
-    (^membrane :x
-      ^x ^y)
-    (^let x: '100
-      ^x ^y))
-  (alloy {x: (+ 1 2), y: 200}
-    (^membrane :x
-      ^x ^y)
-    (^let x: '(+ 1 2)
-      ^x ^y))
-  (alloy {x: 100, y: 200}
-    (^membrane x: (+ x 1)
-      ^x ^y)
-    (^let x: '101
-      ^x ^y)))
-
 ;; escaping ^ with ^^, ^^^, etc.
 (group
   (alloy {} ^^x ^x)
