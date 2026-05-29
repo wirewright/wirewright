@@ -5,17 +5,44 @@
 
 # Wirewright
 
-Wirewright explores the idea of having entire *worlds* as first-class objects. With Wirewright, you can create worlds, and pass them around. You can then build higher-order worlds from a bunch of smaller worlds, each acting as an agent. You can have worlds creating and populating worlds. You can have worlds interacting with other worlds through something Wirewright calls *entanglement*.
-
-See [the wiki](https://github.com/wirewright/wirewright/wiki/First%E2%80%90class-worlds) to read more about Wirewright. I don't want to scare people off with a wall of text.
+Wirewright is an experimental symbolic physics environment.
 
 ## Gallery
 
-## MuSoma
+### MuSoma
 
 I am excited to announce a new front-end for Wirewright (with the old name :^), MuSoma.
 
 <img width="1200" height="932" alt="musoma-shot" src="https://github.com/user-attachments/assets/ae2701f5-284c-474c-b8b4-95d5e4857dec" />
+
+## Introduction
+
+> [!WARNING]
+> This is a multi-year research playground and is highly experimental! It can, and will break more
+> than it will work! I don't know if there's any point in this! I don't know what this is "for",
+> either. Sorry.
+>
+> BEWARE: Weird language ahead!
+
+Most modern programming paradigms model computation as verbs (functions, procedures, processes, etc.) acting upon nouns (e.g. data structures). This isn't exactly a problem to solve, but it turns out you can reduce the number of verbs to just one, and the number of nouns to just one.  The only remaining noun is *the world*. The only remaining verb is *the physics*.
+
+Wirewright attempts to model computation as a transformation over an immutable world: `physics(world) -> world'`. The function, `physics`, is not necessarily pure. In Wirewright, *Rack* implements it purely: `Rack(world) -> world'`. *MuSoma* extends Rack with impurities for I/O; so the function becomes, conceptually, `MuSoma(world, io) -> Rack(perturb(world, plan(world, io))) -> world'`. In practice, `musoma` is *a bit* more intricate than this, of course.
+
+The internals of `physics` are irrelevant philosophically. In practice, Wirewright uses (hyper)graph rewriting and simple scans here and there. Conceptually, you can think of `physics` as scanning the world, finding interesting structure in it, and rewriting the world in response (either `world` or the real world, for that matter).
+
+You do not need to write `physics`, `rack`, or `musoma`; Wirewright provides them for you, along with many other things, so all you care about is the world, and structure in it. Moreover, Wirewright encourages you to forget about the physics function altogether, and instead asks you to situate yourself *inside* the world. In this sense Wirewright is very similar to a computer game: all fun is out if all you're doing is thinking about how the game is implemented, what game engine it's using and so on. This "embedded" point-of-view is important for concepts such as *self-embodied programs*.
+
+Since *world* is ultimately a *symbolic world*, `physics` is ultimately *symbolic physics*. Symbolic physics is, then, roughly, the intersection of graph rewriting, symbolic pattern matching, dataflow, logic programming, and constraint satisfaction.
+
+The world is modeled as a hypergraph (with slight inspiration from Stephen Wolfram's physics project, although the way we end up using the hypergraph, I suppose, differs somewhat).
+
+Self-embodied programs (SEPs) are an important concept which eventually led me to symbolic physics. A SEP is simultaneously an algorithm (because of how physics "animates" it) and a structure (because it exists as such in the immutable world). In a sense, a SEP is a program for physics, as if physics was a computer that one could target. The resulting "instructions" are structure (matter) itself.
+
+Notably, self-embodiedness vanishes unless you situate yourself inside the world, so you only see structure. If you are outside, then you can see the physics function, and so, there's no magic and no self-embodiedness; the physics is an interpreter and structure corresponding to the SEP is its state.
+
+Wirewright is primarily for me and is a playground for some of my ideas. Other than that, Wirewright is for anyone interested in symbolic physics, including its applications to deterministic, symbolic AI.
+
+Currently, Wirewright lets you build very simple *circuits* using MuSoma, with its graphical *front-end*. You can look at some examples in the Gallery section below. See the `examples/` directory for more. We can do basic graphics and interactivity. Components other than `Button` remain future work as of now, although implementing them is more or less trivial based on my experience implementing the MuSoma app (which itself uses Wirewright, although in a slightly different way). The problem with buttons, input fields, and other UI widgets is that compared with the core of the project (which is more or less there), they take a very long time to make, while also being incredibly boring and unrewarding ("who cares if you made your own input field, we have input fields already").
 
 ## References
 
