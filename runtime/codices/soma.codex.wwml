@@ -1440,7 +1440,7 @@ scroll: {}
 {¦ scroll:
      (%entry° _
        {¦ vantage: [vantage [box {¦ ±max-offset-y ±offset-y' ±thumb-h' ±thumb-dt'}]]
-          ±goal-y
+          goal-y⋮ 0
           ⋮offset-y
           ⋮thumb-y
           ⋮thumb-h})}
@@ -1448,6 +1448,10 @@ scroll: {}
       offset-y: ^offset-y',
       thumb-y: ^thumb-dt',
       thumb-h: ^thumb-h'}
+
+;; Remove scroll entries without `vantage`.
+{¦ scroll: (%entry° _ entry←{¦ -vantage})}
+  <> {(entry): ()}
 
 ;; Handle scrolling up.
 {¦ mouse: {| scroll-up_} ;; |
