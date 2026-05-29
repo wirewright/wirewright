@@ -30,7 +30,7 @@ Wirewright attempts to model computation as a transformation over an immutable w
 
 The internals of `physics` are irrelevant philosophically. In practice, Wirewright uses (hyper)graph rewriting and simple scans here and there. Conceptually, you can think of `physics` as scanning the world, finding interesting structure in it, and rewriting the world in response (either `world` or the real world, for that matter).
 
-You do not need to write `physics`, `rack`, or `musoma`; Wirewright provides them for you, along with many other things, so all you care about is the world, and structure in it. Moreover, Wirewright encourages you to forget about the physics function altogether, and instead asks you to situate yourself *inside* the world. In this sense Wirewright is very similar to a computer game: all fun is out if all you're doing is thinking about how the game is implemented, what game engine it's using and so on. This "embedded" point-of-view is important for concepts such as *self-embodied programs*.
+You do not need to write `physics`, `rack`, or `musoma`; Wirewright provides them for you, along with many other things, so all you care about is the world, and structure in it. Moreover, Wirewright encourages you to forget about the physics function altogether, and instead asks you to situate yourself *inside* the world. In this sense Wirewright is very similar to a computer game: all fun is out if all you're doing is thinking about how the game is implemented, what game engine it uses and so on. This "embedded" point-of-view is important for concepts such as *self-embodied programs*.
 
 Since *world* is ultimately a *symbolic world*, `physics` is ultimately *symbolic physics*. Symbolic physics is, then, roughly, the intersection of graph rewriting, symbolic pattern matching, dataflow, logic programming, and constraint satisfaction.
 
@@ -226,19 +226,20 @@ There are several *presets* available. You can print them with:
 ./dev g
 ```
 
-Right now, the only interesting preset is `tests`. Switch to it using:
+Right now, the only interesting presets are `tests` and `musoma`. Switch using:
 
 ```console
-./dev g tests
+./dev g tests # or musoma
 ```
 
-And build it with:
+And build with:
 
 ```console
 ./dev b
 ```
 
 You should then have the `testtool` executable, which will run tests in the `tests/` directory.
+Or `musoma`, which is, well, MuSoma.
 
 ## Want to learn more?
 
