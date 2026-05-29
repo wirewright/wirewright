@@ -89,6 +89,9 @@
 [I M←[cond' _ _] _*]
   <> {(M): ()}
 
+[I M←(seq ms_*) _*]
+  <> {(M): ^ms}
+
 ;; -----------
 ;; TEXT EDITOR
 ;; -----------
@@ -668,6 +671,32 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
 [(I M←[keyboard key ⸨pgup,pgdn⸩ dn] _* ⍊ history: _dict structural: true) (_string * _string) _]
   <> {M: (goto history ⸨left,right⸩)}
 
+;; Misc structural editing.
+
+;; C-9 (left paren) selects [_ ⏏_⏏ _*].
+⟨_ [(I M←(keyboard key "9" dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") 0]⟩
+  <> {M: (select entity header)}
+
+;; C-0 (right paren) submits & escapes from [_ ⏏_⏏ _*] to [_ _ _*] ⏏ if allowed.
+(I M←(keyboard key "0" dn ⍊ ctrl) _* ⍊ structural: true)
+  <> {M: (escape entity header)}
+
+;; C-- enters from [_ _ [_ _*]] ⏏ to [_ _ [_ _* ⏏]].
+⟨_ [(I M←(keyboard key "-" dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") 0]⟩
+  <> {M: (enter entity body)}
+
+;; C-= (plus) escapes from anywhere in [_ _ ⏏[_ _*]⏏] to [_ _ [_ _*]] ⏏.
+(I M←(keyboard key "=" dn ⍊ ctrl) _* ⍊ structural: true)
+  <> {M: (escape entity body)}
+
+;; Atomic editing: C-r edits above.
+⟨term_ [(I M←(keyboard key r dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") 0]⟩
+  <> {M: (select (term ^term) right)}
+
+;; Atomic editing: C-r with nonempty l or r replaces the term above if allowed.
+⟨term_ [(I M←(keyboard key r dn ⍊ ctrl) _* ⍊ structural: true) (_string * _string) _]⟩
+  <> {M: (cond (submit item right) then: (seq (remove item left) (goto item right)))}
+
 ;;
 ;; Commands
 ;;
@@ -816,6 +845,7 @@ C←[[I M←[insert (term T_) right] _*] _ _]
 (_* `C' ¦ (%entry _ C←[[I M←[insert (term T_) ⸨left,right⸩] _*] (_string * _string) _]))
   <> {(M): (), C: ^T, C': ^(up C)}
 
+;; FIXME: WTF is going on here?
 D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
   <> {(C): (), D: ^(merge C ({1: ('select ('term (up D)) 'right)}))}
 
@@ -887,6 +917,28 @@ D←⟨C←[(I M←(carry m_ ⍊ -◇_) _* ⍊ -sack_) _*]⟩
 
 C←[(I M←[place] _* ⍊ sack: (%entry D_ _)) _*]
   <> {(M): (), C: ^D, (D): ()}
+
+;; Special case slot to invalidate the template conveniently.
+⟨[slot call_ (%plural instance min: 0 max: 1)] C←[[I M←(select entity header) _*] _*]⟩
+  <> {M: (select (term ^call) right), call: ^(up C), (C): (), (instance): ()}
+
+⟨[_ header_ _*] C←[[I M←(select entity header) _*] _*]⟩
+  <> {M: (select (term ^header) right), header: ^(up C), (C): ()}
+
+⟨[_ [[I M←(escape entity header) _*] _*] _*]⟩
+  <> {M: (cond (submit item left) then: (escape dict right))}
+
+⟨[(%not backmap) _ [_* `dst]] C←[[I M←(enter entity body ⍊ -handled_) _*] _*]⟩
+  <> {handled: true, dst: ^(up C), (C): ()}
+
+⟨[_ _ dst_] C←[[I M←(enter entity body) _*] _*]⟩
+  <> {M: (select (term ^dst) right), dst: ^(up C), (C): ()}
+
+⟨[_ _ [[I M←(escape entity body) _*] _*]]⟩
+  <> {M: (cond (submit item left) then: (escape dict right))}
+
+⟨R←[_ _ ⟨C←[[I M←(escape entity body) _*] ("" * "") 0]⟩]⟩
+  <> {(M): (), (R): (^(up R) ^(dn C)), (C): ()}
 
 ;; -------
 ;; HISTORY
