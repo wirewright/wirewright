@@ -360,6 +360,16 @@ history-limit: 128
        (atom "<>" type: punct mass: 24)
        (term ^rhs))
 
+;; Example: (%item a b c) --> ⟨a b c⟩
+(term (%'%item rest_*))
+  => (group detail: (dict generic lbr: "⟨" rbr: "⟩")
+       (^each (rest as item_) (term ^item)))
+
+;; Example: (%leaf a b c order: bfs self: true) --> ⟪a b c⟫
+(term (%'%leaf rest_* order: bfs self: true))
+  => (group detail: (dict generic lbr: "⟪" rbr: "⟫")
+       (^each (rest as item_) (term ^item)))
+
 ;; Example: [a b c]
 (term (%'%partition D←(_*) %'_))
   => (group detail: (dict generic lbr: "[" rbr: "]")
