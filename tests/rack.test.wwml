@@ -3807,7 +3807,7 @@
     ;; Breakdown of particles into strands of runes.
     (group
       (cell @particle)
-      (transfer (@particle p_ @strand) ^(term->ml p)))
+      (transfer (@particle p_ @strand) ^(ml/display p)))
     ;; Breakdown of strands of runes into individual runes.
     (group
       (cell @strand)

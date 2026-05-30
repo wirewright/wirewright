@@ -2115,5 +2115,5 @@ scroll: {}
                         (CircuitViewPane))))))))))
       (StatusBar))
   ;; DEBUG
-  ;(p ^(term->ml scroll) style: "content flow-col")))
+  ;(p ^(ml/display scroll) style: "content flow-col")))
 

@@ -253,7 +253,7 @@
 [(I M←[paste] _* ⍊ clipboard: (text text_string)) (_string m_string _string)]
   <> {(M): (), m: ^text}
 [(I M←[paste] _* ⍊ clipboard: (term (%entry term_ _))) (_string m_string _string)]
-  <> {(M): (), m: ^(term->ml term)}
+  <> {(M): (), m: ^(ml/display term)}
 
 [I M←[clear input] _*]
   <> {(M): ((select text right) (splice "" left))}
@@ -351,7 +351,7 @@
   <> {(M): (), m: ^text}
 
 [I M←[edit (term term_) ⸨left,right⸩] _*]
-  <> {(M): ((select text right) (splice ^(term->ml term) ⸨right,left⸩))}
+  <> {(M): ((select text right) (splice ^(ml/display term) ⸨right,left⸩))}
 
 [I M←[select (term term_) ⸨left,right⸩] _*]
   <> {(M): ((edit (term ^term) right) (select text ⸨left,right⸩))}

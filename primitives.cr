@@ -131,8 +131,7 @@ PRIMITIVES = ProcRuleset.build do
     Term[ML.compact(term)]
   end
 
-  rulepi1 %[(term->ml term_)] do
-    # TODO: use pretty print with forced inline
+  rulepi1 %[(ml/display term_)] do
     Term[ML.display(term, endl: false)]
   end
 
