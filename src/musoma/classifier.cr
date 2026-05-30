@@ -51,9 +51,9 @@ module MuSoma
           D7.parent(node.as_d, 2u32...node.uitemsize)
         end
 
-        matchpi %{[figure {¦ @observable_ node: @view_} body_]} do
+        matchpi %{[figure {¦ @desc_ node: @view_} body_]} do
           defn = Term.of(:group,
-            {:figure, observable},
+            {:figure, desc},
             {:node, view, body})
 
           D7.mixture(node, defn) do |(_, _, node_out)|
