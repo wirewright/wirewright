@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   alias UpboundDesignation = RootDesignation
   alias DownboundDesignation = ItemDesignation | CascadingDesignation
 

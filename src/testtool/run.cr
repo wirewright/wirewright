@@ -1,6 +1,6 @@
 module Testtool
   alias Leaf = AlloyTest |
-               Microfold2Test |
+               MicrofoldTest |
                MLeq |
                MLpos |
                MLneg |
@@ -133,16 +133,16 @@ module Testtool
     end
   end
 
-  defrecord Microfold2Test, variants : Array(Term)
+  defrecord MicrofoldTest, variants : Array(Term)
 
-  def run(test : Microfold2Test, assets, stat, complaints) : Nil
+  def run(test : MicrofoldTest, assets, stat, complaints) : Nil
     unless codex = assets.mu_codex
       complaints << complaint("missing Microfold codex (did you run with `--assets-none`?)")
       return
     end
 
     instances = test.variants.map do |variant|
-      measure(stat) { Microfold2.render(codex, variant) }
+      measure(stat) { Microfold.render(codex, variant) }
     end
 
     return if instances.all? { |instance| instances[0].unwrap == instance.unwrap } # ok
@@ -191,7 +191,7 @@ module Testtool
         return
       end
 
-      scenery_in = Microfold2.render(codex, in_instance).unwrap
+      scenery_in = Microfold.render(codex, in_instance).unwrap
     else
       scenery_in = in_instance
     end

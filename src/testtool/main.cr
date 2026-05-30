@@ -140,17 +140,17 @@ module Testtool
     ArgConf.new(index_path, focused, ignored, stats_path, interactive, display_assertion, assets)
   end
 
-  def mu_codex?(index : Term::Dict) : Microfold2::SyncCodex?
-    theme_query = index[:microfold2, :codex]?.try { |query| ResourceService.query?(query) }
-    theme_rem = index[:microfold2, :rem]?.as_n?
+  def mu_codex?(index : Term::Dict) : Microfold::SyncCodex?
+    theme_query = index[:microfold, :codex]?.try { |query| ResourceService.query?(query) }
+    theme_rem = index[:microfold, :rem]?.as_n?
     return unless theme_query && theme_rem
 
-    log("Loading Microfold2 codex #{theme_query}, rem: #{theme_rem}")
+    log("Loading Microfold codex #{theme_query}, rem: #{theme_rem}")
 
     pipe(theme_query,
       ResourceService.read_string,
       ML.document,
-      Microfold2.codex(rem: theme_rem),
+      Microfold.codex(rem: theme_rem),
     ).unwrap
   end
 
@@ -218,7 +218,7 @@ module Testtool
 
         if conf.assets
           unless mu_codex = mu_codex?(index)
-            err("Microfold2 codex query or rem not recognized or undefined, aborting")
+            err("Microfold codex query or rem not recognized or undefined, aborting")
             return
           end
 

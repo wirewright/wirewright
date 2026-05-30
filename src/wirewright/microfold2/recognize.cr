@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   defrecord StyleThunk,
     features : FeatureSeq?,
     children : Slice(UncuedStyleNode) | Slice(StyleNode)

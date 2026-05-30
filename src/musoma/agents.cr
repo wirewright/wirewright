@@ -291,7 +291,7 @@ module MuSoma
 
   class DistillAgent
     @seen : {Term, Bool}?
-    @mu : Microfold2::SyncCodex?
+    @mu : Microfold::SyncCodex?
 
     def present(ws : Workspace)
       force = false
@@ -339,7 +339,7 @@ module MuSoma
 
         window_infos = MuSoma.window_infos(mu, tree)
         window_infos.each do |window_info|
-          window_render = Microfold2.render(mu, window_info.defn).unwrap
+          window_render = Microfold.render(mu, window_info.defn).unwrap
           next unless window_spec = MediaService.window_spec?(window_render)
 
           window_specs << Term.of(:spec, window_spec.content,
@@ -368,7 +368,7 @@ module MuSoma
   end
 
   class AppAgent
-    @mu : Microfold2::SyncCodex?
+    @mu : Microfold::SyncCodex?
 
     def initialize
       @monitoring_vantages = Set(Term::Dict).new
@@ -462,7 +462,7 @@ module MuSoma
       return unless Var.pending?(ws.state, ws.codex, or_if: force)
 
       ui_mu = ws.codex.get.app.render(ws.state.get)
-      ui_scenery = Microfold2.render(mu, ui_mu).unwrap
+      ui_scenery = Microfold.render(mu, ui_mu).unwrap
       if spec = MediaService.window_spec?(ui_scenery)
         MediaService.publish(Term.of(:app), spec)
       else

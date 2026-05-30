@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   alias Defn = UtilityDefn | AliasDefn | ShorthandDefn | PropertyDefn |
                BoxDefn | BoxCascadeDefn | BoxOrderDefn
 
@@ -276,7 +276,7 @@ module Ww::Microfold2
             next
           end
 
-          preset = acc.unwrap(Microfold2.features(:preset, style.to(String)))
+          preset = acc.unwrap(Microfold.features(:preset, style.to(String)))
           presets[head] = preset
         end
 

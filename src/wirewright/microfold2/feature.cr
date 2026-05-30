@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   alias Feature = Utility | Cond | Present | Absent | UpCue | DnCue | Item
 
   # Marks the style origin of a feature, i.e., the style string from which

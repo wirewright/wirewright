@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   defrecord ScopedCue, scope : Pf::UPath32, cue : UpCue | DnCue
 
   # NOTE: Since cues require effectively global knowledge, they are very badly or

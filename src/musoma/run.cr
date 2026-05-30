@@ -63,7 +63,7 @@ module MuSoma
     state : Var(Term::Dict),
     library : Var(Rack::Assembler::RuleLibrary),
     mu_codex_doc : Term,
-    mu_codex : Var(Microfold2::SyncCodex),
+    mu_codex : Var(Microfold::SyncCodex),
     parser : CircuitParser,
     msgq : BlockingQueue(Msg),
     alarm : BlockingSignal,
@@ -98,7 +98,7 @@ module MuSoma
     mu_codex_doc = ML.document(PathService.read_string(microfold_ref.path))
     mu_themed_doc = Term.merge(mu_codex_doc, Term.of(codex.theme))
     mu_rem = state[:rem].as_n
-    mu_codex = Microfold2.codex(mu_themed_doc, rem: mu_rem).unwrap
+    mu_codex = Microfold.codex(mu_themed_doc, rem: mu_rem).unwrap
     mu_codex_var = Var.new(mu_codex)
 
     # Extrinsics.
@@ -201,7 +201,7 @@ module MuSoma
       next unless Var.pending?({ws.state, :rem}, ws.codex)
 
       mu_themed_doc = Term.merge(ws.mu_codex_doc, Term.of(ws.codex.get.theme))
-      ws.mu_codex.set(Microfold2.codex(mu_themed_doc, rem: ws.state.get[:rem].as_n).unwrap)
+      ws.mu_codex.set(Microfold.codex(mu_themed_doc, rem: ws.state.get[:rem].as_n).unwrap)
     end
   end
 

@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   # A *designation* is a collection of *settings* targeting a *box*.
   # Boxes are free to interpret *settings* however they want.
   defrecord Designation,

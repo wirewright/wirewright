@@ -11,7 +11,7 @@
 # ctx = Fiber::ExecutionContext::Isolated.new("App", spawn_context: MT) do
 #   # Load codex.
 #   codexdoc = ML.document(ResourceService.read_string(ResourceService.codex("ufold")))
-#   codex = Microfold2.codex(codexdoc).unwrap
+#   codex = Microfold.codex(codexdoc).unwrap
 #
 #   input = ML.term(<<-'WWML')
 #   (window style: "backdrop-neutral-900 center"
@@ -22,7 +22,7 @@
 #   # since it contains caches).
 #   #
 #   # This is thread-safe.
-#   spec = Microfold2.render(codex, input).unwrap
+#   spec = Microfold.render(codex, input).unwrap
 #
 #   MediaService.publish(Term.of(:app), MediaService.window_spec(spec)).wait
 #   MediaService.wait_until_all_closed(Set{Term.of(:app)})
@@ -79,7 +79,7 @@
 #   the original node has one or more children, then it appears on top (boxes are nested
 #   in it, e.g., `(el 1 2 3) -> (el (box 1 2 3))`); otherwise, it is surrounded
 #   by boxes, e.g., `(el) -> (box (el))`.
-module Ww::Microfold2
+module Ww::Microfold
   extend self
 
   # A synchronous wrapper around `Codex`.

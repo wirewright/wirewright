@@ -1,4 +1,4 @@
-module Ww::Microfold2
+module Ww::Microfold
   # Holds functions that construct utility parsers and parse strings with them.
   # A kind of very lightweight and slightly "mutant" parser combinator framework.
   module Parser

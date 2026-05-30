@@ -187,7 +187,7 @@ module Testtool
         variants = decl.items.move(1)
         continue if variants.empty?
 
-        test = Microfold2Test.new(variants.to_a)
+        test = MicrofoldTest.new(variants.to_a)
         annotated(assertions(test), decl, srcmap)
       end
 

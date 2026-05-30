@@ -388,7 +388,7 @@ module MuSoma
 
   # Finds Microfold and Scenery nodes in *tree* and returns a list of roots
   # for trees built this way.
-  def distill(codex : Microfold2::SyncCodex, tree : D7::ParseTree) : Term
+  def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
     Term.of(distill(codex, tree, D7::NodeAddr.empty))
   end
 
@@ -396,7 +396,7 @@ module MuSoma
 
   # Returns a list of `WindowInfo` objects describing windows (and their content)
   # found in *circuit*.
-  def window_infos(codex : Microfold2::SyncCodex, tree : D7::ParseTree) : Slice(WindowInfo)
+  def window_infos(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Slice(WindowInfo)
     roots = distill(codex, tree)
     unless roots = roots.as_d?
       return Slice(WindowInfo).empty
