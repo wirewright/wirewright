@@ -111,14 +111,7 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(~ args_+)] do
     args.items.reduce(Term[""]) do |prefix, arg|
-      suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
-      prefix.stitch(suffix)
-    end
-  end
-
-  rulepi1 %[(~* arg_dict)] do
-    arg.items.reduce(Term[""]) do |prefix, arg|
-      suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
+      suffix = arg.as_s? || Term[ML.compact(arg)]
       prefix.stitch(suffix)
     end
   end
