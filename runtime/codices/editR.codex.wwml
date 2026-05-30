@@ -207,7 +207,7 @@
 
 ;; If indent is given, also handle Tab.
 [(I M←[keyboard key tab dn] _* ⍊ modify: true indent: (n←(%number +i32!) x rune_string)) (l_string * _string) _]
-  <> {M: (splice ^(x rune n) left)}
+  <> {M: (splice ^(repeat rune n) left)}
 
 ;; The input in particular interprets `cancel` as collapse selection (if any).
 [[I M←[cancel] _*] (_string * _string) _]

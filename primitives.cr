@@ -123,7 +123,7 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %[(x a_string n←(%number +i32))] do
+  rulepi1 %[(repeat a_string n←(%number +i32))] do
     a.to(String) * n.to(Int32)
   end
 
