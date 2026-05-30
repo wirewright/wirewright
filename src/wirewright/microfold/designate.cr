@@ -18,8 +18,11 @@ module Ww::Microfold
   # Targets the children of the node it's attacheed to with *payload*.
   defrecord ItemDesignation, payload : SelfDesignation | CascadingDesignation
 
-  # Targets the node it's attached to and all nodes below.
-  defrecord CascadingDesignation, successor : Designation
+  # Targets the node it's attached to and all nodes below, except nodes whose
+  # head is in *exceptions*.
+  defrecord CascadingDesignation,
+    successor : Designation,
+    exceptions : Slice(Term::Sym)
 
   # NOTE: I had to inline defcase because Crystal's def_equals breaks on nilable Slices,
   # making `==` go to `Comparable` instead of rejecting on type mismatch. That's one
@@ -83,11 +86,15 @@ module Ww::Microfold
 
     designation = Designation.new(defn.box, settings, origin)
 
-    if defn.cascade || codex.cascade?(defn.box)
-      return Slice(NonItemDesignation).of(CascadingDesignation.new(designation))
+    cascade_pref = defn.cascade_pref
+    case {cascade_pref, codex.cascade?(defn.box)}
+    in {CascadePrefUnset, false}
+      Slice(NonItemDesignation).of(SelfDesignation.new(designation))
+    in {CascadePrefUnset, true}, {CascadePrefAll, _}
+      Slice(NonItemDesignation).of(CascadingDesignation.new(designation, exceptions: Slice(Term::Sym).empty))
+    in {CascadePrefExcept, _}
+      Slice(NonItemDesignation).of(CascadingDesignation.new(designation, cascade_pref.exceptions))
     end
-
-    Slice(NonItemDesignation).of(SelfDesignation.new(designation))
   end
 
   private def designate(codex : Codex, vars : Term::Dict, defn : ShorthandDefn, origin : StyleOrigin) : Slice(NonItemDesignation)

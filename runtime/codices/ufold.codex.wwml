@@ -404,7 +404,7 @@ vantage: ""
 ;;
 
 (for text-box
-  (utility (prefix "font-" (one-of fonts font))
+  (utility (prefix "font-" (one-of fonts font)) cascade: (except icon)
     {^:font}))
 
 ;;

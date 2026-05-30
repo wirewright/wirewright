@@ -8,7 +8,22 @@ module Ww::Microfold
     box : Term,
     name : Term?,
     contrib : Term,
-    cascade : Bool
+    cascade_pref : CascadePref
+
+  # Utility cascade preference.
+  alias CascadePref = CascadePrefUnset | CascadePrefAll | CascadePrefExcept
+
+  # Unspecified: Cascade preference for a utility is not specified and must
+  # be checked by other means (e.g. `Codex#cascade?`).
+  defrecord CascadePrefUnset
+
+  # Target subtree: Utility wants to participate in the cascade.
+  defrecord CascadePrefAll
+
+  # Target subtree excluding: Utility wants to participate in the cascade,
+  # but nodes in the subtree whose head is listed in *exceptions* must
+  # ignore it.
+  defrecord CascadePrefExcept, exceptions : Slice(Term::Sym)
 
   defrecord AliasDefn,
     ref : Term,
@@ -343,17 +358,19 @@ module Ww::Microfold
               defns << ShorthandDefn.new(item_ref, parser, name, calls.to_readonly_slice)
             end
 
-            matchpi %{(defn (box_ name_) (utility form_ contrib_ ⍊ cascade⋮ false))} do
+            matchpi %{(defn (box_ name_) defn←[utility form_ contrib_])} do
               next unless parser = acc.unwrap(Parser.of?(form).at(item_key))
 
-              defns << UtilityDefn.new(item_ref, parser, box, name, contrib, cascade.to(Bool))
+              cascade_pref = acc.unwrap(cascade_pref(defn).at(item_ref, 1))
+              defns << UtilityDefn.new(item_ref, parser, box, name, contrib, cascade_pref)
             end
 
-            matchpi %{(for box_ (utility form_ contrib_ ⍊ cascade⋮ false))} do
+            matchpi %{(for box_ defn←[utility form_ contrib_])} do
               next unless parser = acc.unwrap(Parser.of?(form).at(item_key))
 
               name = nil
-              defns << UtilityDefn.new(item_ref, parser, box, name, contrib, cascade.to(Bool))
+              cascade_pref = acc.unwrap(cascade_pref(defn).at(item_ref, 1))
+              defns << UtilityDefn.new(item_ref, parser, box, name, contrib, cascade_pref)
             end
 
             matchpi %{(for box_ (property key_ as: dst_))} do
@@ -395,6 +412,26 @@ module Ww::Microfold
         end
 
         Outcome.ok(defns)
+      end
+    end
+
+    private def self.cascade_pref(defn : Term) : Outcome::Accepted(CascadePref)
+      Term.case(defn) do
+        matchpi %{{¦ -cascade}} do
+          Outcome.ok(CascadePrefUnset.new.as(CascadePref))
+        end
+
+        matchpi %{{¦ cascade: true}} do
+          Outcome.ok(CascadePrefAll.new.as(CascadePref))
+        end
+
+        matchpi %{{¦ cascade: (except exceptions_symbol*)}} do
+          Outcome.ok(CascadePrefExcept.new(exceptions.items.to_readonly_slice(&.as_sym)).as(CascadePref))
+        end
+
+        otherwise do
+          Outcome.ok_despite(CascadePrefUnset.new.as(CascadePref), "unrecognized `cascade` setting on utility")
+        end
       end
     end
 

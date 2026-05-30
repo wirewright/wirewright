@@ -968,6 +968,20 @@
         size: 16
         color: (oklch 1 0 0)))))
 
+;; Icon must not inherit font from the cascade
+(µfold=
+  (box style: "font-sans text-white"
+    (icon "account"))
+  (box style: "text-white"
+    (icon "account"))
+  (box
+    (icon
+      (icon
+        name: "account"
+        font: "Material Icons"
+        size: 16
+        color: (oklch 1 0 0)))))
+
 ;;
 ;; BUGS
 ;;

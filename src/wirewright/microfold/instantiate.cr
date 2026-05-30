@@ -2,21 +2,53 @@ module Ww::Microfold
   alias UpboundDesignation = RootDesignation
   alias DownboundDesignation = ItemDesignation | CascadingDesignation
 
-  private def selfbound(dnflow : Slice(DownboundDesignation), received : Slice(DirectedDesignation)) : Hash(Term, Term::Dict)
+  # Just so I don't forget:
+  #
+  # - *Downflow* is the flow of *downbound* designations from parent(s).
+  # - *Upflow* is the flow of *upbound* designations from children.
+  # - *Owned* refers to designations assigned by the node to itself (e.g.
+  #   in `(n style: "bg-neutral")`, `bg-neutral` will produce an
+  #   owned designation)
+  #
+  # Then:
+  #
+  # - Finding selfbound() designations means finding designations for
+  #   the current node, from the current node's point of view, according
+  #   to the downflow and owned designations.
+  # - Finding upbound() designations means finding designations for
+  #   the parent node(s), from the current node's point of view, according
+  #   to the downflow and owned designations.
+  # - Finding downbound() designations means finding designations for
+  #   children nodes, according to the downflow and owned designations.
+  #
+  # selfbound(), upbound(), and downbound() designations are *undirected*
+  # (they are simply `Designation`s rather than `DirectedDesignation`s)
+  # because the whole point of finding them is to strip them of their
+  # direction. That is, the act of finding, as described here, is as
+  # much an act of *filtering* (or *selection*) as that of finding; as is
+  # evident from the code.
+
+  private def selfbound(head : Term::Sym, dnflow : Slice(DownboundDesignation), owned : Slice(DirectedDesignation)) : Hash(Term, Term::Dict)
     seq = Pf::Kit.stack_array(Designation)
 
-    dnflow.each do |downbound_designation|
-      case downbound_designation
+    dnflow.each do |dn_designation|
+      case dn_designation
       in ItemDesignation
-        seq << downbound_designation.payload.successor
+        seq << dn_designation.payload.successor
       in CascadingDesignation
-        seq << downbound_designation.successor
+        next if head.in?(dn_designation.exceptions)
+
+        seq << dn_designation.successor
       end
     end
 
-    received.each do |directed_designation|
+    owned.each do |directed_designation|
       case directed_designation
       in SelfDesignation, CascadingDesignation
+        # CascadingDesignations here are *our* ones, ones *we* introduce
+        # & expect to apply on children as well as on ourselves if possible.
+        # Importantly, CascadingDesignation#exceptions are only about *receiving*
+        # such designations, i.e., *accepting them from above*.
         seq << directed_designation.successor
       in ItemDesignation, RootDesignation
       end
@@ -25,6 +57,10 @@ module Ww::Microfold
     # See `StyleOrigin`.
     seq.sort_by!(&.origin)
 
+    # Merge designations targeting the same box using `Term.union`, following
+    # first `StyleOrigin` order (as in inherited text color loses to owned text
+    # color), then user-order (as in `text-neutral text-red`, where neutral
+    # loses to red).
     designations = {} of Term => Term::Dict
 
     seq.each do |designation|
@@ -36,10 +72,10 @@ module Ww::Microfold
     designations
   end
 
-  private def upbound(received : Slice(DirectedDesignation)) : Slice(UpboundDesignation)
+  private def upbound(owned : Slice(DirectedDesignation)) : Slice(UpboundDesignation)
     seq = Pf::Kit.stack_array(UpboundDesignation, 4)
 
-    received.each do |directed_designation|
+    owned.each do |directed_designation|
       case directed_designation
       in SelfDesignation, CascadingDesignation, ItemDesignation
       in RootDesignation
@@ -50,7 +86,9 @@ module Ww::Microfold
     seq.to_unsafe_readonly_slice!
   end
 
-  private def downbound(dnflow : Slice(DownboundDesignation), received : Slice(DirectedDesignation)) : Slice(DownboundDesignation)
+  # NOTE: downbound() lets CascadingDesignations through even if the head of
+  # the current node is an exception according to CascadingDesignation#exceptions.
+  private def downbound(dnflow : Slice(DownboundDesignation), owned : Slice(DirectedDesignation)) : Slice(DownboundDesignation)
     seq = Pf::Kit.stack_array(DownboundDesignation, 8)
 
     dnflow.each do |designation|
@@ -67,12 +105,12 @@ module Ww::Microfold
         end
       in CascadingDesignation
         # A cascading designation such as `... font-bold ...` continues its descent
-        # down the tree unless overridden by something in *received*.
+        # down the tree unless overridden by something in *owned*.
         seq << designation
       end
     end
 
-    received.each do |designation|
+    owned.each do |designation|
       case designation
       in SelfDesignation, RootDesignation
       in CascadingDesignation, ItemDesignation
@@ -87,11 +125,18 @@ module Ww::Microfold
     properties = nil
 
     designations = pass do
-      unless received_designations = mu.designations
+      unless owned = mu.designations
         next {selfbound: {} of Term => Term::Dict,
               downbound: dnflow,
               upbound:   Slice(UpboundDesignation).empty}
       end
+
+      # We'll do it the easy way ("trust me bro") instead of passing head through
+      # the intermediate trees to prove the following is always true to the compiler.
+      # During recognize, we only generate features if the head is a symbol, and
+      # features end up as designations; so if there are designations, then there
+      # were zero or more features, and thus, the head was a symbol.
+      head = node[0].as_sym
 
       # We can't do this in designate() because designate() doesn't have access
       # to the node dict. We also don't want to nuke cache hits by letting it
@@ -107,7 +152,7 @@ module Ww::Microfold
 
         if codex.cascade?(defn.box)
           designation = Designation.new(defn.box, settings, :style)
-          directed_designation = CascadingDesignation.new(designation)
+          directed_designation = CascadingDesignation.new(designation, exceptions: Slice(Term::Sym).empty)
         elsif defn.box == SYM_ROOT_BOX
           directed_designation = RootDesignation.new(settings)
         else
@@ -115,12 +160,12 @@ module Ww::Microfold
           directed_designation = SelfDesignation.new(designation)
         end
 
-        received_designations = received_designations.append(directed_designation)
+        owned = owned.append(directed_designation)
       end
 
-      {selfbound: selfbound(dnflow, received_designations),
-       downbound: downbound(dnflow, received_designations),
-       upbound:   upbound(received_designations)}
+      {selfbound: selfbound(head, dnflow, owned),
+       downbound: downbound(dnflow, owned),
+       upbound:   upbound(owned)}
     end
 
     upflow = Slice(UpboundDesignation).empty
