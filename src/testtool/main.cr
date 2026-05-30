@@ -140,30 +140,6 @@ module Testtool
     ArgConf.new(index_path, focused, ignored, stats_path, interactive, display_assertion, assets)
   end
 
-  # Constructs a Microfold theme based on definitions from *index*, if any.
-  def theme?(index : Term::Dict, base : NormalPath) : Microfold::Theme?
-    theme_path = index[:microfold, :theme]?.try(&.to?(Path))
-    theme_rem = index[:microfold, :rem]?.try(&.as_n?)
-    return unless theme_path && theme_rem
-
-    log("Loading Microfold theme #{theme_path}, rem: #{theme_rem}")
-
-    begin
-      pipe(
-        NormalPath[base / theme_path],
-        ResourceService.file,
-        ResourceService.read_string,
-        ML.document,
-        Microfold.theme(rem: theme_rem),
-      )
-    rescue e : ResourceService::Error
-      err(e.message || "???")
-    rescue e : ML::SyntaxError
-      err("Syntax error in #{(base / theme_path).normalize}")
-      dump(e.humanize)
-    end
-  end
-
   def mu_codex?(index : Term::Dict) : Microfold2::SyncCodex?
     theme_query = index[:microfold2, :codex]?.try { |query| ResourceService.query?(query) }
     theme_rem = index[:microfold2, :rem]?.as_n?
@@ -241,11 +217,6 @@ module Testtool
         log("DwUIR server running")
 
         if conf.assets
-          unless theme = theme?(index, base: conf.tests_path)
-            err("Microfold theme path or rem not recognized or undefined, aborting")
-            return
-          end
-
           unless mu_codex = mu_codex?(index)
             err("Microfold2 codex query or rem not recognized or undefined, aborting")
             return
@@ -262,7 +233,7 @@ module Testtool
           end
         end
 
-        yield AssertionAssets.new(theme, mu_codex, editR, uiR, dw)
+        yield AssertionAssets.new(mu_codex, editR, uiR, dw)
       end
     ensure
       server.close

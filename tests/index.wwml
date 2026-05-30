@@ -1,12 +1,7 @@
 ;; `testtool` uses this file to figure out the tests it needs to run and
 ;; their assets.
 
-;; Theme and rem that should be used for running Microfold tests.
-microfold: {
-  theme: "../theme.ufold.wwml",
-  rem: 16,
-}
-
+;; Codex and rem to use for Microfold tests.
 microfold2: {codex: (codex "ufold"), rem: 16}
 
 ;; Path to editR codex.
@@ -43,10 +38,6 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 (test "alloy.test.wwml"
   color: (oklch 0.7 0.1 yellow)
   tags: (alloy))
-
-(test "ufold.test.wwml"
-  color: (oklch 0.7 0.1 blue)
-  tags: (ufold))
 
 (test "rack.test.wwml"
   color: (oklch 0.7 0.1 violet)

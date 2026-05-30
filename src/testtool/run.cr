@@ -1,6 +1,5 @@
 module Testtool
   alias Leaf = AlloyTest |
-               MicrofoldTest |
                Microfold2Test |
                MLeq |
                MLpos |
@@ -131,53 +130,6 @@ module Testtool
       next if issues.any? { |issue| Term.of(issue.detail) == detail }
 
       complaints << complaint("Missing Alloy issue in template", issue: detail)
-    end
-  end
-
-  defrecord MicrofoldTest, variants : Array(Term), problems : Term::Dict
-
-  def run(test : MicrofoldTest, assets, stat, complaints) : Nil
-    unless theme = assets.theme
-      complaints << complaint("missing theme (did you run with `--assets-none`?)")
-      return
-    end
-
-    ok = true
-    renders = [] of Term
-
-    test.variants.each do |variant|
-      render, issues = measure(stat) { Microfold.render_with_issues(theme, variant, severity: :minor) }
-      if issues.present?
-        ok = false
-      end
-
-      issues.each do |issue|
-        problem = Term.of(Term::Sym.new(issue.severity.to_s.underscore), issue.detail)
-        next if problem.in?(test.problems.items)
-
-        complaints << complaint("Unexected Microfold render problem", problem: problem)
-      end
-
-      renders << render
-    end
-
-    # Test expects problems but we haven't found any.
-    if ok && test.problems.nonempty?
-      complaints << complaint("Microfold render did not detect any problems")
-    end
-
-    reference = renders[0]
-    (1...renders.size).each do |index|
-      render = renders[index]
-      next if render == reference
-
-      variant = test.variants[index]
-
-      complaints << complaint("Microfold render mismatch",
-        reference: reference,
-        variant: variant,
-        render: render,
-      )
     end
   end
 

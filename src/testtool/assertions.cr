@@ -172,33 +172,17 @@ module Testtool
         end
       end
 
-      # |@ testtool.decl.µfold, testtool.decl.microfold
+      # |@ testtool.decl.µfold
       #
       # |@pattern
-      # (⸨µ,micro⸩fold variants_+ ¦ problems⋮ ())
+      # (µfold= nodes_+)
       #
-      # |@key variants
-      # Variants whose equality should be checked.
-      #
-      # |@key problems
-      # Expected issues (strings). Applies to all of *variants*.
+      # |@key nodes
+      # Nodes whose expansion equality should be checked.
       #
       # |@block
-      # Use `microfold`/`µfold` to check for equality across one or more
-      # Microfold variants, possibly with issues.
-      matchpi %{[microfold _*]}, %{[µfold _*]} do
-        M0.schema(decl) do |s|
-          s.on_mismatch { continue }
-
-          problems = s.key(:problems, value: Term::Dict, default: Term[])
-          variants = decl.items.move(1)
-          continue if variants.empty?
-
-          test = MicrofoldTest.new(variants.to_a, problems)
-          annotated(assertions(test), decl, srcmap)
-        end
-      end
-
+      # Use `µfold=` to check for equality of expansions of one or more
+      # Microfold nodes.
       matchpi %{[µfold= _*]} do
         variants = decl.items.move(1)
         continue if variants.empty?
@@ -206,6 +190,7 @@ module Testtool
         test = Microfold2Test.new(variants.to_a)
         annotated(assertions(test), decl, srcmap)
       end
+
       # |@ testtool.decl.ml
       #
       # |@pattern

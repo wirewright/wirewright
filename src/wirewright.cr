@@ -42,7 +42,6 @@ require "./wirewright/microfold_2"
 
 require "./wirewright/dwuir"
 require "./wirewright/soma"
-require "./wirewright/microfold"
 
 module Ww
 end
