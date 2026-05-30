@@ -51,9 +51,9 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 pink)
   tags: (graphics scenery))
 
-(test "ufold2.test.wwml"
+(test "ufold.test.wwml"
   color: (oklch 0.7 0.1 teal)
-  tags: (ufold2))
+  tags: (ufold))
 
 (comparison "DwUIR regressions"
   (dwuir "dwuir.in.wwml" wheel: 0 mouse-x: 0 mouse-y: 0)

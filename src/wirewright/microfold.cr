@@ -154,10 +154,10 @@ module Ww::Microfold
   end
 end
 
-require "./microfold2/feature"
-require "./microfold2/parser"
-require "./microfold2/codex"
-require "./microfold2/recognize"
-require "./microfold2/propagate"
-require "./microfold2/designate"
-require "./microfold2/instantiate"
+require "./microfold/feature"
+require "./microfold/parser"
+require "./microfold/codex"
+require "./microfold/recognize"
+require "./microfold/propagate"
+require "./microfold/designate"
+require "./microfold/instantiate"
