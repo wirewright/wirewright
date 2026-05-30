@@ -115,6 +115,7 @@ PRIMITIVES = ProcRuleset.build do
       prefix.stitch(suffix)
     end
   end
+
   rulepi1 %[(~* arg_dict)] do
     arg.items.reduce(Term[""]) do |prefix, arg|
       suffix = arg.as_s? || Term[ML.display(arg, endl: false)]
@@ -195,10 +196,6 @@ PRIMITIVES = ProcRuleset.build do
     Term.merge(xs, ys)
   end
 
-  rulepi1 %[(intersects? xs_dict ys_dict)] do
-    xs.as_d.intersects?(ys.as_d)
-  end
-
   rulepi1 %[(intersection xs_dict mask_dict)] do
     Term.intersection(xs.as_d, mask.as_d)
   end
@@ -245,14 +242,6 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(value xs_dict keys_* ⍊ default_)] do
     xs.as_d.follow?(keys.items) || default
-  end
-
-  rulepi1 %[(value? xs_dict key_)] do
-    if value = xs[key]?
-      Term.of(:some, value)
-    else
-      Term.of(:none)
-    end
   end
 
   rulepi1 %[(hashcode term_)] do
@@ -316,14 +305,8 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(ceil arg_number)] { arg.as_n.ceil }
   rulepi1 %[(round arg_number)] { arg.as_n.round }
 
-  # TODO: floor/ceil/round args_number+ is mass-floor
-  # TODO: floor/ceil/round on list of numbers
-
   rulepi1 %[(upcase arg_string)] { arg.upcase }
   rulepi1 %[(dncase arg_string)] { arg.downcase }
-
-  # TODO: upcase/dncase args_string is mass-upcase/dncase
-  # TODO: upcase/dncase on list of strings
 
   # TODO: Rename to `size`
   rulepi1 %[(tally args_dict+)] do
@@ -360,6 +343,7 @@ PRIMITIVES = ProcRuleset.build do
 
   rulepi1 %[(words s_string)] do
     words = Term::Dict.build do |commit|
+      # TODO: Since we depend on libunibreak we should use it here!
       s.to(StringView).split_and_rest(' ') do |word, _, _|
         next if word.empty? # But *can* it be empty?
         commit << word
@@ -389,19 +373,6 @@ PRIMITIVES = ProcRuleset.build do
     view = s.to(StringView)
     l, sep, r = view.rpartition('\n')
     l + sep
-  end
-
-  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ellipsis⋮ "…")} do
-    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
-
-    wrap(s.to(String), maxw: maxw32, ellipsis: ellipsis.to(String))
-  end
-
-  rulepi1 %{(wrap s_string ¦ () max-w⋮ 60 ±max-h ellipsis⋮ "…")} do
-    maxw32 = max_w.to(Float64).clamp(0..Int32::MAX).to_i
-    maxh32 = max_h.to(Float64).clamp(0..Int32::MAX).to_i
-
-    wrap(s.to(String), maxw: maxw32, maxh: maxh32, ellipsis: ellipsis.to(String))
   end
 
   rulepi1 %{(includes? haystack_string needle_string)} do
@@ -450,11 +421,6 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  # TODO: Most of the functions below are ancestors of what I suspect will be
-  # the central data structure of Nitrene: (_string mask_dict) and (_dict mask_dict).
-  # Most stuff if not everything will be about this data structure (the former optimized
-  # for strings, the latter for general dicts).
-
   rulepi1 %{(mask pattern_ d_dict)} do
     Term::Dict.build do |commit|
       d.each_item_with_index do |item, index|
@@ -492,155 +458,8 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %{(mismatches d_dict mask_dict)} do
-    Term::Dict.build do |commit|
-      d.items.each_with_index do |item, index|
-        next if index.in?(mask)
-        commit << item
-      end
-      d.each_entry(in: Term::Dict.pairspart) do |key, value|
-        next if key.in?(mask)
-        commit.with(key, value)
-      end
-    end
-  end
-
-  rulepi1 %{(matches (d_dict mask_dict))} do
-    Term::Dict.build do |commit|
-      d.items.each_with_index do |item, index|
-        next unless index.in?(mask)
-        commit << item
-      end
-      d.each_entry(in: Term::Dict.pairspart) do |key, value|
-        next unless key.in?(mask)
-        commit.with(key, value)
-      end
-    end
-  end
-
-  # TODO: better naming!
-  rulepi1 %{(pick d_dict key_)} do
-    Term::Dict.build do |commit|
-      d.each_entry do |_, value|
-        next unless value.type.dict?
-        next unless needle = value[key]?
-
-        commit << needle
-      end
-    end
-  end
-
-  rulepi1 %{(broadcast (d_dict mask_dict) value_)} do
-    d.transaction do |commit|
-      mask.each_entry do |key, _|
-        commit.with(key, value)
-      end
-    end
-  end
-
   rulepi1 %{(backmap d_dict pattern_ backspec_)} do
     M1.backmap(pattern, backspec, d)
-  end
-
-  # Groups contiguous runs of masked values from left to right. Only item
-  # indices are considered.
-  rulepi1 %[(runs (d_dict mask_dict))] do
-    indices = [] of Int32
-
-    mask.each_entry do |key, _|
-      next unless index = d.index?(key)
-      next unless index32 = index.to?(Int32) # ?!
-
-      indices << index32
-    end
-
-    indices.sort!
-
-    Term::Dict.build do |groups|
-      while index = indices.shift?
-        group = Term::Dict.build do |commit|
-          commit << d[index]
-
-          while index + 1 == indices.first?
-            index = indices.shift
-            commit << d[index]
-          end
-        end
-
-        groups << group
-      end
-    end
-  end
-
-  rulepi1 %{(instances d_dict pattern_)} do
-    mask1 = Term::Dict.build do |commit|
-      d.each_entry do |key, value|
-        next unless M1.probe?(pattern, value)
-
-        commit.with(key, true)
-      end
-    end
-
-    {d, mask1}
-  end
-
-  # Gives dicts that contain items between masked values. Masked values
-  # are dropped.
-  rulepi1 %{(complement (d_dict mask_dict))} do
-    mask1 = Term::Dict.build do |commit|
-      d.each_entry do |key, value|
-        next if key.in?(mask)
-
-        commit.with(key, true)
-      end
-    end
-
-    {d, mask1}
-  end
-
-  # todo: segments dict
-
-  # Produces a list of substrings delimited by *mask*, including delimiters
-  # themselves as distinct substrings.
-  rulepi1 %{(segments (s_string mask_dict))} do
-    view = s.to(StringView)
-
-    indices = [] of Int32
-
-    mask.each_entry do |index, _|
-      next unless index32 = index.to?(Int32) # ?!
-
-      indices << index32
-    end
-
-    indices.sort!
-
-    Term::Dict.build do |commit|
-      (0...view.size).segments(indices) do |range|
-        commit << view.subview(range)
-      end
-    end
-  end
-
-  # Produces a list of substrings delimited by *mask*, excluding delimiters.
-  rulepi1 %{(splits (s_string mask_dict))} do
-    view = s.to(StringView)
-
-    indices = Pf::USet32.transaction do |commit|
-      mask.each_entry do |index, _|
-        next unless index32 = index.to?(UInt32) # ?!
-
-        commit << index32
-      end
-    end
-
-    Term::Dict.build do |commit|
-      (0...view.size).segments(indices) do |range|
-        next if range.begin.to_u32.in?(indices)
-
-        commit << view.subview(range.begin.to_i, range.end.to_i)
-      end
-    end
   end
 end
 
