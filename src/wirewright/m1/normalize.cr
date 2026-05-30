@@ -356,7 +356,7 @@ module Ww::M1
       # constraint) helps. You can also use `%gap/min`, `%gap/max` wrapped in
       # e.g. `(%group zs_ ⏏)` to provide more complex numeric constraints on the
       # size of *zs*; or specify the constraints on the group's successor itself
-      # (as in, e.g., `(%group zs←(%pipe tally 4) (%plural/max type:
+      # (as in, e.g., `(%group zs←(%pipe size 4) (%plural/max type:
       # _number))`).
       #
       # ### Shapes
@@ -1664,14 +1664,14 @@ module Ww::M1
         # |@ m1.operator.pipe
         #
         # |@pattern
-        # (%'%pipe tally _)
+        # (%'%pipe size _)
         #
         # |@block
         # Transforms a dictionary matchee into the number of entries in it: e.g.,
-        # `(%pipe tally 3)` matches dictionaries which have exactly three entries
+        # `(%pipe size 3)` matches dictionaries which have exactly three entries
         # (items, e.g. `(+ 1 2)`, pairs, e.g. `{x: 10, y: 20, z: 30}`, or both, e.g.
         # `(point x: 10 y: 20)`).
-        %{(%'%pipe fn←tally successor_)},
+        %{(%'%pipe fn←size successor_)},
         # |@ m1.operator.pipe
         #
         # |@pattern
@@ -1738,7 +1738,7 @@ module Ww::M1
         %{(%'%pipe fn←(prepend _*) successor_)},
         cue: :"%pipe",
         cues: {:+, :-, :*, :/, :div, :mod, :**, :clamp, :map, :charcount,
-               :tally, :type, :ml, :untracked, :prepend}
+               :size, :type, :ml, :untracked, :prepend}
       ) do
         Normalize.sealed(Term.of(:"%pipe", {:"%payload", fn}, normalize(Π.pattern(successor))))
       end

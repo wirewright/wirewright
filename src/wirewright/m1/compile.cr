@@ -515,8 +515,8 @@ module Ww::M1
         Op::Charcount.new(compile(Π.pattern(successor)))
       end
 
-      matchpi %{[%'%pipe [%'%payload tally] successor_]}, cue: {:"%pipe", :tally} do
-        Op::Tally.new(compile(Π.pattern(successor)))
+      matchpi %{[%'%pipe [%'%payload size] successor_]}, cue: {:"%pipe", :size} do
+        Op::Size.new(compile(Π.pattern(successor)))
       end
 
       matchpi %{[%'%pipe [%'%payload type] successor_]}, cue: {:"%pipe", :type} do

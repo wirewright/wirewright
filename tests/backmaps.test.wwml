@@ -984,7 +984,7 @@
     (= {a: qux, b: qix} (seen {a: qix, b: {a: qux, b: qix}})))
 
   (backmap ((%all x_dict
-                  (%pipe tally 2)
+                  (%pipe size 2)
                   (%layer _ a: a_number))
             {a: ^(up x)})
     (= {a: 100, b: 200} {a: {a: 100, b: 200}, b: 200})

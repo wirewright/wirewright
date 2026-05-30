@@ -347,7 +347,7 @@
     (+ "John Doe")
     (- 1 qux true ()))
 
-  (pattern (%pipe tally n_)
+  (pattern (%pipe size n_)
     (= () {n: 0})
     (= (1 "John Doe" qux) {n: 3})
     (= {x: 1, y: 1} {n: 2})
@@ -2361,7 +2361,7 @@
       {kvs: ({k: a, v: 2}, {k: b, v: 4}, {k: c, v: 6})})
     (- () (a) (a 2 b) (a 2 b 4 c)))
 
-  (pattern (((%many (%all (%pipe tally n_) (%filter (k) {¦ k_ v_} (%all (%pipe tally n_) (%pluck (_ v) vs_)))) k_ v_)) k_)
+  (pattern (((%many (%all (%pipe size n_) (%filter (k) {¦ k_ v_} (%all (%pipe size n_) (%pluck (_ v) vs_)))) k_ v_)) k_)
     (= ((a 1 a 2 a 3) a)
       {k: a, n: 3, vs: ({v: 1} {v: 2} {v: 3})})
     (- (() a)  ((a) a) ((a 2 a) a) ((a 2 a 4 a) a) ((a 1 b 2) a)))

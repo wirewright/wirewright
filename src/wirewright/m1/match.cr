@@ -1557,8 +1557,8 @@ module Ww::M1
 
   # :nodoc:
   #
-  # (%pipe tally 3) -- match entry count of dict
-  def match(ctx, op : Op::Tally, matchee : Tzip, plan)
+  # (%pipe size 3) -- match entry count of dict
+  def match(ctx, op : Op::Size, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_d?
 
     cons(ctx, op.successor, Tzip.new(Term.of(a.size), Log.none), plan)

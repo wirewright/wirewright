@@ -300,8 +300,7 @@ PRIMITIVES = ProcRuleset.build do
   rulepi1 %[(upcase arg_string)] { arg.upcase }
   rulepi1 %[(dncase arg_string)] { arg.downcase }
 
-  # TODO: Rename to `size`
-  rulepi1 %[(tally args_dict+)] do
+  rulepi1 %[(size args_dict+)] do
     args.items.sum(0, &.size)
   end
 

@@ -1849,11 +1849,11 @@ scroll: {}
 
 (TimePosition (behind←(_*) I ahead←(_*) _ _))
   => (p style: "text-xs leading-none font-mono font-medium text-theme-subtle"
-       ^"⸢(tally behind)⸣ … I … ⸢(tally ahead)⸣")
+       ^"⸢(size behind)⸣ … I … ⸢(size ahead)⸣")
 
 (TimePosition (behind←(_*) I * _ _))
   => (p style: "text-xs leading-none font-mono font-medium text-theme-subtle"
-       ^"⸢(tally behind)⸣ … I (end-of-time)")
+       ^"⸢(size behind)⸣ … I (end-of-time)")
 
 (TimeTooltip (behind_dict I ahead_dict _ _))
   => (Markup

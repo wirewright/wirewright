@@ -3,7 +3,7 @@ module Ww::M1
   # compiled operators and associated groups/categories of operators (represented
   # using aliases).
   module Op
-    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean | Dict | Blob | Itemsonly | Pairsonly | Guard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Charcount | Tally | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef | Prepend | Mime
+    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean | Dict | Blob | Itemsonly | Pairsonly | Guard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Charcount | Size | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef | Prepend | Mime
 
     # TODO: Inline, this is not used anywhere!!
     alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
@@ -107,7 +107,7 @@ module Ww::M1
     defcase ValueLiteral, key : Term, successor : Any
 
     defcase Charcount, successor : Any
-    defcase Tally, successor : Any
+    defcase Size, successor : Any
     defcase Type, successor : Any
     defcase ParseML, successor : Any
     defcase Untracked, successor : Any
