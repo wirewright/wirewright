@@ -1348,9 +1348,8 @@ module Ww
       Term.of(union(Term[a], Term[b]))
     end
 
-    # Intersects a dictionary with a *mask*: if *mask* contains a key, then
-    # the intersection of *a* with the *mask* contains the key.
-    def self.intersection(a : Dict, mask : Dict) : Dict
+    # Strips *a* of all keys but the ones in *mask*.
+    def self.pluck(a : Dict, mask : Dict) : Dict
       Dict.build do |commit|
         a.each_entry do |key, value|
           next unless key.in?(mask)

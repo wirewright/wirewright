@@ -138,7 +138,8 @@ PRIMITIVES = ProcRuleset.build do
     end
   {% end %}
 
-  rulepi1 %[(escaped s_string)] do
+  # x
+  rulepi1 %[(escape s_string)] do
     Term::Str.new(s.as_s.escaped)
   end
 
@@ -188,8 +189,9 @@ PRIMITIVES = ProcRuleset.build do
     Term.merge(xs, ys)
   end
 
-  rulepi1 %[(intersection xs_dict mask_dict)] do
-    Term.intersection(xs.as_d, mask.as_d)
+  # x
+  rulepi1 %[(pluck xs_dict mask_dict)] do
+    Term.pluck(xs.as_d, mask.as_d)
   end
 
   # FIXME: This shouldn't exist. It's just that our mask stuff is degenerate.

@@ -1332,7 +1332,7 @@ vantage: ""
                  end-t: ^gradient-end-t))
             (when {¦ fill_}
               ^fill))
-        ^… (intersection settings
+        ^… (pluck settings
              {+ radius-tl radius-tr radius-bl radius-br
                 stroke thickness-l thickness-r thickness-t thickness-b
                 min-w min-h}))
