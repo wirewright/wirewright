@@ -172,7 +172,7 @@ module Ww::Scenery
       end
     end
 
-    # Waits for all assets to load (or fail) and returns the resulting `Scene`.
+    # Waits for all assets to load (or fail loading) and returns the resulting `Scene`.
     def wait(cache : CacheSet, scenesrc : SceneSource) : Outcome::Accepted(Scene)
       scenesrc.pending.each(&.promise.wait)
 
