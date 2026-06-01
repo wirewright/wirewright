@@ -1,23 +1,13 @@
 module Ww::Alloy
-  # The eval function attempts to evaluate an Alloy expression just before
-  # it is passed to `PRIMITIVES`. If the function succeeds, Alloy does not
-  # evaluate the returned term any futher. If the function fails, Alloy proceeds
-  # to `PRIMITIVES`.
-
-  # The first argument is the expression to be evaluated. The second argument
-  # is a continuation which can be used for evaluating the original expression,
-  # for evaluating sub-expressions, or both. The third arg is an issue sink where
-  # issues must be sent.
-  alias Eval = Term, EvalDefault, EvalSubexpr, Issue::Sink -> Term
-
-  alias EvalDefault = Issue::Sink -> Term
-  alias EvalSubexpr = Term, Issue::Sink -> Term
-
   # The refine function runs on a node after it is recursively expanded by Alloy.
   alias Refine = Term, Issue::Sink -> Term::Rep
 
   # :nodoc:
-  record RenderContext, vars : Term::Dict, eval : Eval, refine : Refine
+  record RenderContext,
+    vars : Term::Dict,
+    composite : Nitrene::CompositeEval,
+    primitive : Nitrene::PrimitiveEval,
+    refine : Refine
 
   # Returns an empty rep if no such var exists.
   private def get_var(ctx : RenderContext, name : Term, issues : Issue::Sink, & : Term, Issue::Sink -> T) : T forall T
@@ -47,17 +37,12 @@ module Ww::Alloy
 
   # Evaluates an Alloy value expression *expr*. Reports any issues found during
   # evaluation to *issues*. Returns the resulting value.
-  private def eval(ctx : RenderContext, expr : Term, issues : Issue::Sink, *, index : Int32? = nil) : Term
-    issues.adjoin("while evaluating", expr) do |issues|
-      Term.of_case(expr) do
-        # |@ alloy.expr.literal
-        #
-        # |@pattern
-        # 'term_ ;; (literal term_)
-        #
-        # |@block
-        # Returns *term* without further evaluation.
-        matchpi %{'term_} { term }
+  private def eval(ctx : RenderContext, expr : Term) : Term
+    composite = ->(it : Nitrene::Interpreter, vars : Term::Dict, expr : Term) do
+      Term.case(expr) do
+        # NOTE: Writing e.g. (^ ^x) is one of the valid ways of escaping. ML will
+        # read stuff like ^^^x  as (^ (^ ^x)), which evaluates here to (^ ^x),
+        # removing one level of escaping -- exactly what we want.
 
         # |@ alloy.expr.literal
         #
@@ -68,88 +53,28 @@ module Ww::Alloy
         # Returns itself without further evaluation.
         matchpi %{(^ _)} { expr }
 
-        matchpi %{(pipe state_ seq_*)} do
-          memo = eval(ctx, state, issues, index: 1)
-
-          seq.items.each_with_index(offset: 2) do |step, index|
-            Term.case(step) do
-              matchpi %{(head_ args_* ¦ pairs_)} do
-                call = pairs.transaction do |commit|
-                  commit << head << Term.of(:literal, memo)
-                  commit.concat(args.items)
-                end
-
-                memo = eval(ctx, Term.of(call), issues, index: index)
-              end
-
-              otherwise do
-                issues.minor("unexpected step in `pipe` sequence")
-              end
-            end
-          end
-
-          memo
-        end
-
-        matchpi %{(args_* ¦ kwargs_)} do
-          default = ->(issues : Issue::Sink) do
-            # On the way in.
-            value = expr.transaction do |commit|
-              # Eval arguments.
-              args.items.each_with_index do |arg, index|
-                commit.with(index, eval(ctx, arg, issues, index: index))
-              end
-
-              # Eval keyword arguments.
-              kwargs.each_entry do |key, value|
-                commit.with(key, eval(ctx, value, issues))
-              end
-            end
-
-            value = Term.of(value)
-
-            case r = PRIMITIVES.call(value)
-            in Rewrite::None then value
-            in Rewrite::One  then r.term
-            in Rewrite::Many then Term.of(r.list)
-            end
-          end
-
-          eval_subexpr = ->(subexpr : Term, issues : Issue::Sink) do
-            eval(ctx, subexpr, issues) # index: ???
-          end
-
-          ctx.eval.call(expr, default, eval_subexpr, issues)
-        end
-
-        matchpi %{_symbol} do
-          if value = ctx.vars[expr]?
+        otherwise do
+          value = ctx.composite.call(it, vars, expr)
+          unless expr == value
             return value
           end
 
-          # NOTE: Writing e.g. (^ ^x) is one of the valid ways of escaping. ML will
-          # read stuff like ^^^x  as (^ (^ ^x)), which evaluates here to (^ ^x),
-          # removing one level of escaping -- exactly what we want.
-          #
-          # NOTE: we avoid emitting an issue here if index=0, because most likely it's
-          # going to be the head of a primitive call. This is a compromise; *of course*
-          # we'd want something better. But since the primitives and this `eval` machinery
-          # is so hacky regardless, we're fine -- for now.
-          if expr.as_sym.prefixed_by?('^') || index == 0
-            return expr
-          end
-
-          # We can't say it's a major error because it might not be one; nor can we
-          # be completely silent because most of the time this branch is hit
-          # we're truly looking at a typo or something along those lines...
-          issues.minor("symbol `#{expr}` is not an Alloy variable")
-
-          expr
+          Nitrene.composite(it, vars, expr)
         end
-
-        otherwise { expr }
       end
     end
+
+    primitive = ->(expr : Term) do
+      value = ctx.primitive.call(expr)
+      unless expr == value
+        return value
+      end
+
+      Nitrene.primitive(expr)
+    end
+
+    it = Nitrene::Interpreter.new(composite, primitive)
+    Nitrene.eval(it, ctx.vars, expr)
   end
 
   private def render_many(issues : Issue::Sink, &) : Term::Rep
@@ -175,7 +100,7 @@ module Ww::Alloy
   # to use to evaluate *body*.
   private def render_each(ctx : RenderContext, iteratee : Term, body : Term::Dict, issues : Issue::Sink, &) : Term::Rep
     issues.adjoin("`^each` template expression") do |issues|
-      iteratee_value = eval(ctx, iteratee, issues)
+      iteratee_value = eval(ctx, iteratee)
 
       issues.adjoin("iteratee", iteratee_value) do |issues|
         unless iteratee_dict = iteratee_value.as_d?
@@ -278,7 +203,7 @@ module Ww::Alloy
       # Replaces itself with the result of evaluating an Alloy expression.
       matchpi %{(^ expr_)} do
         issues.adjoin(key: 1, detail: "value expression") do |issues|
-          Term.rep(eval(ctx, expr, issues))
+          Term.rep(eval(ctx, expr))
         end
       end
 
@@ -326,7 +251,7 @@ module Ww::Alloy
             # |@block
             # Use `(value _)` to match on the value of an expression.
             matchpi %{(value expr_)} do
-              matchee = eval(ctx, expr, issues)
+              matchee = eval(ctx, expr)
             end
 
             otherwise do
@@ -556,7 +481,7 @@ module Ww::Alloy
       # Replaces itself with *then* otherwise.
       matchpi %{(^br cond_ truthy_ falsey_)} do
         issues.adjoin("`^br` template expression") do |issues|
-          if eval(ctx, cond, issues) == Term[false]
+          if eval(ctx, cond) == Term[false]
             render0(ctx, falsey, issues)
           else
             render0(ctx, truthy, issues)
@@ -576,7 +501,7 @@ module Ww::Alloy
       # is not `false`.
       matchpi %{(^if cond_ body_*)} do
         issues.adjoin("`^if` template expression") do |issues|
-          if eval(ctx, cond, issues) == Term[false]
+          if eval(ctx, cond) == Term[false]
             return Term.rep
           end
 
@@ -600,7 +525,7 @@ module Ww::Alloy
       # is `false`.
       matchpi %{(^unless cond_ body_*)} do
         issues.adjoin("`^unless` template expression") do |issues|
-          unless eval(ctx, cond, issues) == Term[false]
+          unless eval(ctx, cond) == Term[false]
             return Term.rep
           end
 
@@ -625,7 +550,7 @@ module Ww::Alloy
         vars1 = ctx.vars.transaction do |commit|
           template.each_entry(in: Term::Dict.pairspart) do |key, expr|
             value = issues.adjoin("`^let` definition for", key) do |issues|
-              eval(ctx, expr, issues)
+              eval(ctx, expr)
             end
 
             commit.with(key, value)
@@ -655,7 +580,7 @@ module Ww::Alloy
             render0(ctx, child, issues)
           end
 
-          extras_value = eval(ctx, extras, issues)
+          extras_value = eval(ctx, extras)
 
           unless extras_dict = extras_value.as_pairsonly_d?
             issues.adjoin("extras", extras_value, &.major("expected a pairsonly dict"))
@@ -722,7 +647,7 @@ module Ww::Alloy
       # |@block
       # Splices the result of an Alloy value expression *expr*, expected to be a dict.
       matchpi %{(^* expr_)} do
-        value = eval(ctx, expr, issues)
+        value = eval(ctx, expr)
 
         unless dict = value.as_d?
           issues.adjoin("spliced value", value, &.major("value must be a dict"))
@@ -807,7 +732,7 @@ module Ww::Alloy
             interior = bindings.transaction do |commit|
               bindings.each_entry do |key, expr|
                 value = issues.adjoin("binding for", key) do |issues|
-                  eval(ctx, expr, issues)
+                  eval(ctx, expr)
                 end
 
                 commit.with(key, value)
@@ -865,8 +790,8 @@ module Ww::Alloy
     end
   end
 
-  # Default value for the eval function (noop).
-  DEFAULT_EVAL = Eval.new { |expr, default, _, issues| default.call(issues) }
+  DEFAULT_COMPOSITE = Nitrene::CompositeEval.new { |it, vars, expr| expr }
+  DEFAULT_PRIMITIVE = Nitrene::PrimitiveEval.new { |expr| expr }
 
   # Default value for the refine function (noop).
   DEFAULT_REFINE = Refine.new { |term, _| Term.rep(term) }
@@ -878,11 +803,12 @@ module Ww::Alloy
     vars : Term::Dict,
     template : Term,
     issues : Issue::Sink, *,
-    eval : Eval = DEFAULT_EVAL,
+    composite : Nitrene::CompositeEval = DEFAULT_COMPOSITE,
+    primitive : Nitrene::PrimitiveEval = DEFAULT_PRIMITIVE,
     refine : Refine = DEFAULT_REFINE,
   ) : Term::Rep
     issues.adjoin(Spot::Template.new(template)) do |issues|
-      render0(RenderContext.new(vars, eval, refine), template, issues)
+      render0(RenderContext.new(vars, composite, primitive, refine), template, issues)
     end
   end
 

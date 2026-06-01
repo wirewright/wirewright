@@ -3675,7 +3675,7 @@
         .)
       (backsys @world
         W←⟨⟨[cell @world (%optional () w_)]⟩⟩°
-          <> {w: ^(morph W '(backmap ⟨M←⟨[cell @id id_]⟩⟩° {M: ^id}))}
+          <> {w: ^(morph W (backmap ⟨M←⟨[cell @id id_]⟩⟩° {M: ^id}))}
         ⟨A_ B←⟨[cell @dir up]⟩⟩°
           <> {(post A): ^(up B), (post B): ^(up A)}
         ⟨A←⟨[cell @dir dn]⟩ B_⟩°
@@ -3743,7 +3743,7 @@
         .)
       (backsys @world
         W←⟨⟨[cell @world (%optional () w_)]⟩⟩°
-          <> {w: ^(morph W '(backmap ⟨M←⟨[cell @id id_]⟩⟩° {M: ^id}))}
+          <> {w: ^(morph W (backmap ⟨M←⟨[cell @id id_]⟩⟩° {M: ^id}))}
         ⟨A_ B←⟨[cell @dir up]⟩⟩°
           <> {(post A): ^(up B), (post B): ^(up A)}
         ⟨A←⟨[cell @dir dn]⟩ B_⟩°

@@ -667,7 +667,7 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 
 ;; ... otherwise we must calculate the mass.
 (group _* ⍊ styles_ -mass_)
-  <> {mass: ^(sum (select-f styles {¦ mass: ±value}))}
+  <> {mass: ^(sum (select styles {¦ mass: ±value}))}
 
 ;; If some styles are multiline, we can't be inline unless forced inline.
 (group _* ⍊ styles: ⟨[multiline]⟩ -styles-multiline_)

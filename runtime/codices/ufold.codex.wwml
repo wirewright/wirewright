@@ -1375,7 +1375,7 @@ vantage: ""
 
 (defn tag-box
   (box (children_dict settings_dict)
-    ^(union children (select-f settings true))))
+    ^(union children (select settings true))))
 
 (defn outermost-box
   (box (children_dict settings_dict)

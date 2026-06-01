@@ -336,8 +336,7 @@
     (vars ^x' ^y ^ref))
   ((sum 300)
    (msg "We're looking at 100 and 200 here")
-   (vars 100 200 z))
-  issues: ("symbol `z` is not an Alloy variable"))
+   (vars 100 200 z)))
 
 ;; ^ (expr)
 (group
@@ -455,15 +454,15 @@
 
 ;; ^*
 (group
-  (alloy {} ((^* x)) () issues: ("symbol `x` is not an Alloy variable" "value must be a dict"))
+  (alloy {} ((^* x)) () issues: ("value must be a dict"))
   (alloy {x: 100} ((^* x)) () issues: ("value must be a dict"))
   (alloy {x: (1 2 3)} ((^* x)) (1 2 3))
   (alloy {x: (1 2 3 4)}
-    ((^* (select-f x '(%pipe (mod 2) 0))))
+    ((^* (select x (%pipe (mod 2) 0))))
     (2 4))
   ;; Shorthand
   (alloy {x: (1 2 3 4)}
-    (^* (select-f x '(%pipe (mod 2) 0)))
+    (^* (select x (%pipe (mod 2) 0)))
     (2 4)))
 
 ;; ^splice

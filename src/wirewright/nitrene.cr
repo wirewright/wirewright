@@ -214,20 +214,29 @@ module Ww::Nitrene
     dict1
   end
 
-  # Represents a Nitrene evaluation context.
-  defrecord Context,
-    composite : Context, Term::Dict, Term -> Term,
-    primitive : Term -> Term
+  alias CompositeEval = Interpreter, Term::Dict, Term -> Term
+  alias PrimitiveEval = Term -> Term
 
-  struct Context
+  # Represents a Nitrene interpreter.
+  defrecord Interpreter, composite : CompositeEval, primitive : PrimitiveEval
+
+  struct Interpreter
     DEFAULT = new(
-      composite: ->Nitrene.composite(Context, Term::Dict, Term),
+      composite: ->Nitrene.composite(Interpreter, Term::Dict, Term),
       primitive: ->Nitrene.primitive(Term),
     )
   end
 
-  def eval(ctx : Context, vars : Term::Dict, expr : Term) : Term
-    value = ctx.composite.call(ctx, vars, expr)
+  def composite
+    Interpreter::DEFAULT.composite
+  end
+
+  def primitive
+    Interpreter::DEFAULT.primitive
+  end
+
+  def eval(it : Interpreter, vars : Term::Dict, expr : Term) : Term
+    value = it.composite.call(it, vars, expr)
     unless expr == value
       return value
     end
@@ -236,14 +245,14 @@ module Ww::Nitrene
     if dict = expr.as_d?
       dict = dict.transaction do |commit|
         dict.each_entry do |key, value|
-          commit.with(key, eval(ctx, vars, value))
+          commit.with(key, eval(it, vars, value))
         end
       end
 
       expr = Term.of(dict)
     end
 
-    value = ctx.primitive.call(expr)
+    value = it.primitive.call(expr)
     unless expr == value
       return value
     end
@@ -251,8 +260,8 @@ module Ww::Nitrene
     vars[expr]? || expr
   end
 
-  # See `Context`.
-  def composite(ctx : Context, vars : Term::Dict, expr : Term) : Term
+  # See `Interpreter`.
+  def composite(it : Interpreter, vars : Term::Dict, expr : Term) : Term
     Term.case(expr) do
       matchpi %{(literal subexpr_)} do
         subexpr
@@ -260,18 +269,18 @@ module Ww::Nitrene
 
       matchpi %{(and _*)} do
         subexprs = expr.items.move(1)
-        result = subexprs.none? { |subexpr| eval(ctx, vars, subexpr) == Term.of(false) }
+        result = subexprs.none? { |subexpr| eval(it, vars, subexpr) == Term.of(false) }
         Term.of(result)
       end
 
       matchpi %{(or _*)} do
         subexprs = expr.items.move(1)
-        result = !subexprs.all? { |subexpr| eval(ctx, vars, subexpr) == Term.of(false) }
+        result = !subexprs.all? { |subexpr| eval(it, vars, subexpr) == Term.of(false) }
         Term.of(result)
       end
 
       matchpi %{(attn subexpr_)} do
-        arg = eval(ctx, vars, subexpr)
+        arg = eval(it, vars, subexpr)
         unless dict = arg.as_d?
           return Term.of(:attn, Term[], Term[])
         end
@@ -280,7 +289,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(filter attnQ_ patternQ_)} do
-        attn = eval(ctx, vars, attnQ)
+        attn = eval(it, vars, attnQ)
 
         Term.case(attn) do
           matchpiT %{(attn _dict _dict)} do
@@ -312,7 +321,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(map (attnQ_ var_) bodyQ_)} do
-        attn = eval(ctx, vars, attnQ)
+        attn = eval(it, vars, attnQ)
 
         Term.case(attn) do
           matchpiT %{(attn _dict _dict)} do
@@ -325,7 +334,7 @@ module Ww::Nitrene
                   next
                 end
 
-                rep = eval(ctx, vars.with(var, value), bodyQ)
+                rep = eval(it, vars.with(var, value), bodyQ)
                 commit.with(key, rep)
               end
             end
@@ -340,8 +349,8 @@ module Ww::Nitrene
       end
 
       # TODO: Remove in favor of (-> x (attn _) (filter _ pattern_) (gather _))
-      matchpi %{(select subexpr_ pattern_)} do
-        arg = eval(ctx, vars, subexpr)
+      matchpi %{(select haystackQ_ pattern_)} do
+        arg = eval(it, vars, haystackQ)
         unless dict = arg.as_d?
           return Term.of
         end
@@ -363,8 +372,8 @@ module Ww::Nitrene
         Term.of(result)
       end
 
-      matchpi %{(morph head_ _*)} do
-        matchee = eval(ctx, vars, head)
+      matchpi %{(morph matcheeQ_ _*)} do
+        matchee = eval(it, vars, matcheeQ)
 
         subexprs = expr.items.move(2)
         backsys = subexprs.to_compact_readonly_slice do |subexpr|
@@ -381,8 +390,8 @@ module Ww::Nitrene
         M1.backmap(backsys, matchee)
       end
 
-      matchpi %{(-> head_ _*)} do
-        arg = eval(ctx, vars, head)
+      matchpi %{(-> argQ_ _*)} do
+        arg = eval(it, vars, argQ)
 
         subexprs = expr.items.move(2)
         subexprs.each do |subexpr|
@@ -400,7 +409,7 @@ module Ww::Nitrene
           end
 
           subexpr = Term.of(subdict)
-          arg = eval(ctx, vars, subexpr)
+          arg = eval(it, vars, subexpr)
         end
 
         arg
@@ -412,7 +421,7 @@ module Ww::Nitrene
     end
   end
 
-  # See `Context`.
+  # See `Interpreter`.
   def primitive(expr : Term) : Term
     Term.case(expr) do
       matchpi %{(+)} do
@@ -495,6 +504,11 @@ module Ww::Nitrene
           operands.each_cons_pair do |pred, succ|
             next if pred == succ || lt?(pred, succ)
 
+            # NOTE: This is necessary because when doing comparison, ≈0 is considered
+            # to be equal to 0 (and so on for approx-exact comparisons). `==` is
+            # too strict as it requires both parties to be approx or exact.
+            next if pred.is_a?(ArithConst) && succ.is_a?(ArithConst) && (pred.value <=> succ.value).zero?
+
             result = false
             break
           end
@@ -508,7 +522,7 @@ module Ww::Nitrene
           result = true
 
           operands.each_cons_pair do |pred, succ|
-            next if lt?(pred, succ)
+            next if lt?(succ, pred)
 
             result = false
             break
@@ -524,6 +538,11 @@ module Ww::Nitrene
 
           operands.each_cons_pair do |pred, succ|
             next if pred == succ || lt?(succ, pred)
+
+            # NOTE: This is necessary because when doing comparison, ≈0 is considered
+            # to be equal to 0 (and so on for approx-exact comparisons). `==` is
+            # too strict as it requires both parties to be approx or exact.
+            next if pred.is_a?(ArithConst) && succ.is_a?(ArithConst) && (pred.value <=> succ.value).zero?
 
             result = false
             break
@@ -985,6 +1004,6 @@ module Ww::Nitrene
   # Evaluates a Nitrene expression *expr* using the default evaluation context.
   # Returns the resulting term.
   def eval(vars : Term::Dict, expr : Term) : Term
-    eval(Context::DEFAULT, vars, expr)
+    eval(Interpreter::DEFAULT, vars, expr)
   end
 end

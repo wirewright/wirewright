@@ -896,11 +896,10 @@ module Ww::M1
     end
 
     private def rep(µ : MutContext, mut : Mut, this : Term?) : Term::Rep
-      eval = Alloy::Eval.new do |expr, default, _, issues|
+      composite = Nitrene::CompositeEval.new do |it, vars, expr|
         Term.case(expr) do
           matchpi %{(up capture_)} do
             unless value = µ.up?(Ref.sibling(mut.ref, capture)) || mut.env[capture]?
-              issues.major { "unrecognized capture #{capture} (top-down lookup)" }
               value = Term.of(:literal, expr)
             end
 
@@ -909,14 +908,13 @@ module Ww::M1
 
           matchpi %{(dn capture_)} do
             unless value = µ.dn?(Ref.sibling(mut.ref, capture)) || mut.env[capture]?
-              issues.major { "unrecognized capture #{capture} (bottom-up lookup)" }
               value = Term.of(:literal, expr)
             end
 
             value
           end
 
-          otherwise { default.call(issues) }
+          otherwise { expr }
         end
       end
 
@@ -927,7 +925,7 @@ module Ww::M1
 
       # FIXME: backmaps must support Issue::Sink I suppose. We can't just throw
       # issues out like this.
-      expansion, _ = Alloy.render0(env, mut.template, eval: eval, severity: :quiet)
+      expansion, _ = Alloy.render0(env, mut.template, composite: composite, severity: :quiet)
 
       unless term = expansion.single?
         # (x_ _ _) <> {x: (^splice a b c)}, (100 200 300) -> (a b c 200 300)

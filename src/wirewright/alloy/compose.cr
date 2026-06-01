@@ -8,16 +8,19 @@ module Ww::Alloy
     hook : ComposeHook
 
   private def compose0(ctx : ComposeContext, vars : Term::Dict, template : Term, issues : Issue::Sink) : Term::Rep
-    eval = Eval.new do |expr, default, _, issues|
-      value = default.call(issues)
-
+    primitive = Nitrene::PrimitiveEval.new do |expr|
       view = ->(ctx : ComposeContext, arg : Term) do
         Term.collapse(compose0(ctx, arg, issues))
       end
 
-      Term.case(value) do
-        matchpi %{(view arg_)} { view.call(ctx, arg) }
-        otherwise { ctx.hook.call(ctx, view, value) }
+      Term.case(expr) do
+        matchpi %{(view arg_)} do
+          view.call(ctx, arg)
+        end
+
+        otherwise do
+          ctx.hook.call(ctx, view, expr)
+        end
       end
     end
 
@@ -25,7 +28,7 @@ module Ww::Alloy
       compose0?(ctx, term, issues) || Term.rep(term)
     end
 
-    render0(Term.union(ctx.globals, vars), template, issues, eval: eval, refine: refine).as?(Term::Rep) || Term.rep
+    render0(Term.union(ctx.globals, vars), template, issues, primitive: primitive, refine: refine).as?(Term::Rep) || Term.rep
   end
 
   private def compose0?(ctx : ComposeContext, view : Term, issues : Issue::Sink) : Term::Rep?
