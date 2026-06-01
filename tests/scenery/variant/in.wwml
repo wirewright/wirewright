@@ -11,20 +11,20 @@ height: 1000
 
 (Resizable)
   => (z-stack
-       (variant if: (in-range? max-w (500 ..< ∞))
+       (variant if: (in? (500 ..< ∞) max-w)
          (text caption: "lg" color: white))
-       (variant if: (in-range? max-w (350 ..< 500))
+       (variant if: (in? (350 ..< 500) max-w)
          (text caption: "md" color: white))
-       (variant if: (in-range? max-w (200 ..< 350))
+       (variant if: (in? (200 ..< 350) max-w)
          (text caption: "sm" color: white))
-       (variant if: (in-range? max-w (-∞ ..< 200))
+       (variant if: (in? (-∞ ..< 200) max-w)
          (text caption: "xs" color: white)))
 
 (Card)
   => (z-stack
-       (variant if: (in-range? max-w (400 ..< ∞))
+       (variant if: (in? (400 ..< ∞) max-w)
          (CardLg))
-       (variant if: (in-range? max-w (-∞ ..< 400))
+       (variant if: (in? (-∞ ..< 400) max-w)
          (CardSm)))
 
 ;; Reference (loosely based on): https://tailwindcss.com/docs/responsive-design#overview
@@ -62,11 +62,11 @@ height: 1000
 
 (InnerSize node_)
   => (z-stack
-       (variant if: (in-range? w (100 ..< ∞))
+       (variant if: (in? (100 ..< ∞) w)
          (y-stack
            (text caption: ">= 100px" color: yellow)
            ^(view node)))
-       (variant if: (in-range? w (-∞ ..< 100))
+       (variant if: (in? (-∞ ..< 100) w)
          (y-stack
            (text caption: "< 100px" color: yellow)
            ^(view node))))

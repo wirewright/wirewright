@@ -1443,13 +1443,13 @@ module Ww::Scenery
       #
       # ```
       # (z-stack
-      #   (variant if: (in-range? max-w (500 ..< ∞))
+      #   (variant if: (in? (500 ..< ∞) max-w)
       #     (text caption: "lg"))
-      #   (variant if: (in-range? max-w (350 ..< 500))
+      #   (variant if: (in? (350 ..< 500) max-w)
       #     (text caption: "md"))
-      #   (variant if: (in-range? max-w (200 ..< 350))
+      #   (variant if: (in? (200 ..< 350) max-w)
       #     (text caption: "sm"))
-      #   (variant if: (in-range? max-w (-∞ ..< 200))
+      #   (variant if: (in? (-∞ ..< 200) max-w)
       #     (text caption: "xs")))
       # ```
       #
