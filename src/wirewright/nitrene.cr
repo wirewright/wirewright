@@ -178,6 +178,95 @@ module Ww::Nitrene
     yield operands
   end
 
+  # TODO: Since we depend on libunibreak anyway we should use it here!
+  module WordTokenizer
+    extend self
+
+    # Reference: https://github.com/microsoft/vscode/blob/7dd556f54d68b8ac6c15ca27566acc6d0f3c1f9a/src/vs/editor/common/config/editorOptions.ts#L101
+    #
+    # Added WwML-specific delimiters.
+    #
+    # TODO: this set belongs to editR.codex.wwml, and must be read from the kernel
+    # and configurable.
+    def wsep?(char : Char)
+      char.in_set?("~!@#$%^&*()\\-=+[{]}\\|;:'\",.<>/?←→↑↓¦⍊⟨⟩⟪⟫")
+    end
+
+    def wdrop(text : StringView, head : StringView -> Char, tail : StringView -> StringView)
+      initial = text
+
+      if text.nonempty? && head.call(text).vspace?
+        return tail.call(text)
+      end
+
+      # Skip whitespace at which we're currently standing, if we are, as in
+      # `hello⏏    world` -> `hello    ⏏world`, or in `hel⏏lo world` this would
+      # be noop.
+      while text.nonempty? && head.call(text).hspace?
+        text = tail.call(text)
+      end
+
+      wseps = false
+
+      # Like VSCode, skip word separators, if any.
+      while text.nonempty? && wsep?(head.call(text))
+        text = tail.call(text)
+        wseps = true
+      end
+
+      # If we managed to skip some word separators, that's it.
+      if wseps
+        return text
+      end
+
+      # Skip until word separator.
+      until text.empty? || (head.call(text).whitespace? || wsep?(head.call(text)))
+        text = tail.call(text)
+      end
+
+      text
+    end
+
+    def lwdrop(text : StringView) : StringView
+      wdrop(text, head: ->(view : StringView) { view.first_char }, tail: ->(view : StringView) { view.rest })
+    end
+
+    def rwdrop(text : StringView) : StringView
+      wdrop(text, head: ->(view : StringView) { view.last_char }, tail: ->(view : StringView) { view.prior })
+    end
+
+    def lwdrop(text : StringView, n : Int) : StringView
+      n.times { text = lwdrop(text) }
+
+      text
+    end
+
+    def rwdrop(text : StringView, n : Int) : StringView
+      n.times { text = rwdrop(text) }
+
+      text
+    end
+
+    def lwtake(text : StringView, n : Int) : StringView
+      rest = lwdrop(text, n)
+
+      StringView.between(text.before_begin, rest.before_begin)
+    end
+
+    def rwtake(text : StringView, n : Int) : StringView
+      rest = rwdrop(text, n)
+
+      StringView.between(rest.after_end, text.after_end)
+    end
+
+    # NOTE: *e* is inclusive!
+    def words(text : StringView, b : Int, e : Int)
+      text = b.negative? ? rwtake(text, b.abs) : lwdrop(text, b)
+      text = e.negative? ? rwdrop(text, e.abs - 1) : lwtake(text, e - b + 1)
+      text
+    end
+  end
+
   private def idfs(depth : UInt32, dict0 : Term::Dict, &fn : Term -> Term) : {Term::Dict, Bool}
     dict1 = dict0
     deeper = false
@@ -910,11 +999,11 @@ module Ww::Nitrene
       end
 
       matchpiT %{(word arg_string i←(%number i32))}, arg: StringView do
-        Term.of(StringSpan.words(arg, i, i))
+        Term.of(WordTokenizer.words(arg, i, i))
       end
 
       matchpiT %{(words arg_string b←(%number i32) ..= e←(%number i32))}, arg: StringView do
-        Term.of(StringSpan.words(arg, b, e))
+        Term.of(WordTokenizer.words(arg, b, e))
       end
 
       matchpiT %{(words arg_string)}, arg: StringView do
@@ -922,7 +1011,7 @@ module Ww::Nitrene
           remaining = arg
           until remaining.empty?
             l, m, r = remaining.partition do |chr|
-              chr.vspace? || chr.hspace? || StringSpan.wsep?(chr)
+              chr.vspace? || chr.hspace? || WordTokenizer.wsep?(chr)
             end
 
             commit << l
