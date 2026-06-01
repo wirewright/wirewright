@@ -1,15 +1,9 @@
+# Nitrene is an expression language for Wirewright.
+#
+# TODO: make all functions total!
+# TODO: lambdas (fns)
 module Ww::Nitrene
   extend self
-
-  alias Out = Outcome::Accepted(Term)
-
-  private def ok(object)
-    Outcome.ok(Term.of(object))
-  end
-
-  private def ok_despite(object, *args)
-    Outcome.ok_despite(Term.of(object), *args)
-  end
 
   # :nodoc:
   alias Arith = ArithConst | ArithPosInf | ArithNegInf | ArithIndet
@@ -55,7 +49,7 @@ module Ww::Nitrene
   end
 
   # NOTE: The behavior of Arith operations is mostly based on [Wolfram Mathematica](https://www.wolfram.com/mathematica/),
-  # which seems to be a good source for this kind of stuff.
+  # which seems to be a good reference for this kind of stuff.
 
   # :nodoc:
   def add(a : Arith, b : Arith) : Arith
@@ -168,143 +162,319 @@ module Ww::Nitrene
     end
   end
 
-  private def plug(dict : Term::Dict, args : Indexable(Out), keysrc, *rest)
-    Outcome.accumulate do |acc|
-      result = dict.transaction do |commit|
-        keysrc.each_with_index do |key, index|
-          value = acc.unwrap(args[index])
-          commit.with(key, value)
-        end
-      end
-
-      ok_despite(Term.of(:literal, result), *rest)
-    end
-  end
-
-  private def calc(vars : Term::Dict, op : Term::Dict, *, filter : T.class = Arith, &) forall T
-    args = Pf::Kit.stack_array(Out, 8)
+  private def calc(term : Term, args : Indexable(Term), *, allow : T.class = Arith, &) forall T
     operands = Pf::Kit.stack_array(T, 8)
 
-    # Evaluate subterms.
-    subterms = op.items.move(1)
-    subterms.each_with_index(offset: 1) do |subterm, index|
-      arg = eval(vars, subterm).at(index)
-      args << arg
+    args.each do |arg|
+      next unless operand = arith?(arg).as?(T)
+
+      operands << operand
     end
 
-    # Validate arguments.
-    args.map! do |arg|
-      arg.bind do |value|
-        if arith = arith?(value).as?(T)
-          operands << arith
-
-          ok(value)
-        else
-          ok_despite(value, "unrecognized argument")
-        end
-      end
-    end
-
-    if operands.size < args.size
-      return plug(op, args, 1...op.itemsize, "one or more of the arguments not recognized")
+    unless args.size == operands.size
+      return term
     end
 
     yield operands
   end
 
-  # Evaluates a Nitrene expression *term* using the given variables dict *vars*.
-  def eval(vars : Term::Dict, term : Term) : Out
-    Term.case(term) do
-      matchpi %{'subterm_} do
-        ok(subterm)
+  private def idfs(depth : UInt32, dict0 : Term::Dict, &fn : Term -> Term) : {Term::Dict, Bool}
+    dict1 = dict0
+    deeper = false
+
+    dict0.each_entry do |key, value0|
+      if depth.zero?
+        value1 = fn.call(value0)
+        deeper ||= value0.type.dict?
+      elsif child0 = value0.as_d?
+        child1, child_deeper = idfs(depth - 1, child0, &fn)
+        value1 = Term.of(child1)
+        deeper ||= child_deeper
+      else
+        next
       end
 
-      matchpi %{(^ _)} do
-        ok(term)
+      next if value0 == value1
+
+      dict1 = dict1.with(key, value1)
+    end
+
+    {dict1, deeper}
+  end
+
+  private def idfs(dict0 : Term::Dict, *, limit : UInt32 = UInt32::MAX, &fn : Term -> Term)
+    dict1 = dict0
+
+    limit.times do |depth|
+      dict1, deeper = idfs(depth, dict1, &fn)
+      break unless deeper
+      break unless dict0 == dict1
+    end
+
+    dict1
+  end
+
+  # Represents a Nitrene evaluation context.
+  defrecord Context,
+    composite : Context, Term::Dict, Term -> Term,
+    primitive : Term -> Term
+
+  struct Context
+    DEFAULT = new(
+      composite: ->Nitrene.composite(Context, Term::Dict, Term),
+      primitive: ->Nitrene.primitive(Term),
+    )
+  end
+
+  def eval(ctx : Context, vars : Term::Dict, expr : Term) : Term
+    value = ctx.composite.call(ctx, vars, expr)
+    unless expr == value
+      return value
+    end
+
+    # Evaluate recursively.
+    if dict = expr.as_d?
+      dict = dict.transaction do |commit|
+        dict.each_entry do |key, value|
+          commit.with(key, eval(ctx, vars, value))
+        end
       end
 
+      expr = Term.of(dict)
+    end
+
+    value = ctx.primitive.call(expr)
+    unless expr == value
+      return value
+    end
+
+    vars[expr]? || expr
+  end
+
+  # See `Context`.
+  def composite(ctx : Context, vars : Term::Dict, expr : Term) : Term
+    Term.case(expr) do
+      matchpi %{(literal subexpr_)} do
+        subexpr
+      end
+
+      matchpi %{(and _*)} do
+        subexprs = expr.items.move(1)
+        result = subexprs.none? { |subexpr| eval(ctx, vars, subexpr) == Term.of(false) }
+        Term.of(result)
+      end
+
+      matchpi %{(or _*)} do
+        subexprs = expr.items.move(1)
+        result = !subexprs.all? { |subexpr| eval(ctx, vars, subexpr) == Term.of(false) }
+        Term.of(result)
+      end
+
+      matchpi %{(attn subexpr_)} do
+        arg = eval(ctx, vars, subexpr)
+        unless dict = arg.as_d?
+          return Term.of(:attn, Term[], Term[])
+        end
+
+        Term.of(:attn, dict, dict)
+      end
+
+      matchpi %{(filter attnQ_ patternQ_)} do
+        attn = eval(ctx, vars, attnQ)
+
+        Term.case(attn) do
+          matchpiT %{(attn _dict _dict)} do
+            _, data, mask = attn
+
+            mask.each_entry do |key, _|
+              unless value = data[key]?
+                mask = mask.without(key)
+                next
+              end
+
+              unless env = M1.match?(patternQ, value)
+                mask = mask.without(key)
+                next
+              end
+
+              next unless rep = env[:value]?
+
+              data = data.with(key, rep)
+            end
+
+            Term.of(:attn, data, mask)
+          end
+
+          otherwise do
+            Term.of(:attn, Term[], Term[])
+          end
+        end
+      end
+
+      matchpi %{(map (attnQ_ var_) bodyQ_)} do
+        attn = eval(ctx, vars, attnQ)
+
+        Term.case(attn) do
+          matchpiT %{(attn _dict _dict)} do
+            _, data, mask = attn
+
+            data = data.transaction do |commit|
+              mask.each_entry do |key, _|
+                unless value = data[key]?
+                  mask = mask.without(key)
+                  next
+                end
+
+                rep = eval(ctx, vars.with(var, value), bodyQ)
+                commit.with(key, rep)
+              end
+            end
+
+            Term.of(:attn, data, mask)
+          end
+
+          otherwise do
+            Term.of(:attn, Term[], Term[])
+          end
+        end
+      end
+
+      # TODO: Remove in favor of (-> x (attn _) (filter _ pattern_) (gather _))
+      matchpi %{(select subexpr_ pattern_)} do
+        arg = eval(ctx, vars, subexpr)
+        unless dict = arg.as_d?
+          return Term.of
+        end
+
+        result = Term::Dict.build do |commit|
+          dict.items.each do |item|
+            next unless env = M1.match?(pattern, item)
+
+            commit << (env[:value]? || item)
+          end
+
+          dict.each_entry(in: Term::Dict.pairspart) do |key, value|
+            next unless env = M1.match?(pattern, value)
+
+            commit.with(key, env[:value]? || value)
+          end
+        end
+
+        Term.of(result)
+      end
+
+      matchpi %{(morph head_ _*)} do
+        matchee = eval(ctx, vars, head)
+
+        subexprs = expr.items.move(2)
+        backsys = subexprs.to_compact_readonly_slice do |subexpr|
+          next unless subexpr = subexpr.as_d?
+          next unless subexpr.size == 3
+          next unless subexpr.itemsonly?
+
+          head, pattern, backspec = subexpr
+          next unless head == Term[:backmap]
+
+          {pattern, backspec}
+        end
+
+        M1.backmap(backsys, matchee)
+      end
+
+      matchpi %{(-> head_ _*)} do
+        arg = eval(ctx, vars, head)
+
+        subexprs = expr.items.move(2)
+        subexprs.each do |subexpr|
+          unless subdict = subexpr.as_d?
+            arg = subexpr
+            next
+          end
+
+          subdict = idfs(subdict) do |value|
+            next value unless value == Term[:_]
+
+            # Since we don't want it evaluated again, we substitute 'arg rather
+            # than simply arg.
+            Term.of(:literal, arg)
+          end
+
+          subexpr = Term.of(subdict)
+          arg = eval(ctx, vars, subexpr)
+        end
+
+        arg
+      end
+
+      otherwise do
+        expr
+      end
+    end
+  end
+
+  # See `Context`.
+  def primitive(expr : Term) : Term
+    Term.case(expr) do
       matchpi %{(+)} do
-        ok(0)
+        Term.of(0)
       end
 
-      matchpi %{(+ _ _*)} do
-        calc(vars, term.as_d) do |operands|
-          ok(render(operands.reduce { |a, b| add(a, b) }))
+      matchpi %{(+ _*)} do
+        calc(expr, args: expr.items.move(1)) do |operands|
+          render(operands.reduce { |a, b| add(a, b) })
         end
       end
 
       matchpi %{(- _)} do
-        calc(vars, term.as_d) do |operands| # for some reason (operand) doesn't work here...
-          ok(render(negate(operands.first)))
+        calc(expr, args: expr.items.move(1)) do |(operand, *_)|
+          render(negate(operand))
         end
       end
 
       matchpi %{(- _ _ _*)} do
-        calc(vars, term.as_d) do |operands|
-          ok(render(operands.reduce { |a, b| sub(a, b) }))
+        calc(expr, args: expr.items.move(1)) do |operands|
+          render(operands.reduce { |a, b| sub(a, b) })
         end
       end
 
       matchpi %{(*)} do
-        ok(1)
+        Term.of(1)
       end
 
-      matchpi %{(* _ _*)} do
-        calc(vars, term.as_d) do |operands|
-          ok(render(operands.reduce { |a, b| mul(a, b) }))
+      matchpi %{(* _ _ _*)} do
+        calc(expr, args: expr.items.move(1)) do |operands|
+          render(operands.reduce { |a, b| mul(a, b) })
         end
       end
 
       matchpi %{(/ _)} do
-        calc(vars, term.as_d) do |operands|
-          ok(render(div(ArithConst.new(Term[1]), operands.first)))
+        calc(expr, args: expr.items.move(1)) do |(operand, *_)|
+          render(div(ArithConst.new(Term[1]), operand))
         end
       end
 
       matchpi %{(/ _ _ _*)} do
-        calc(vars, term.as_d) do |operands|
-          ok(render(operands.reduce { |a, b| div(a, b) }))
+        calc(expr, args: expr.items.move(1)) do |operands|
+          render(operands.reduce { |a, b| div(a, b) })
         end
       end
 
-      matchpi %{(// subterm0_ subterm1_)} do
-        Outcome.bind(eval(vars, subterm0).at(1), eval(vars, subterm1).at(2)) do |v, w|
-          unless p = v.as_n?
-            next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "not a number")
-          end
-
-          unless q = w.as_n?
-            next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "not a number")
-          end
-
-          if q.zero?
-            next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "division by zero")
-          end
-
-          ok(p // q)
-        end
+      matchpiT %{(// ±a (%all ±b (%not 0)))} do
+        Term.of(a // b)
       end
 
-      matchpi %{(mod subterm0_ subterm1_)} do
-        Outcome.bind(eval(vars, subterm0).at(1), eval(vars, subterm1).at(2)) do |v, w|
-          unless p = v.as_n?
-            next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "not a number")
-          end
+      matchpiT %{(mod ±a (%all ±b (%not 0)))} do
+        Term.of(a % b)
+      end
 
-          unless q = w.as_n?
-            next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "not a number")
-          end
-
-          if q.zero?
-            next ok_despite(Term.of(:literal, Term.morph(term, {1, v}, {2, w})), "division by zero")
-          end
-
-          ok(p % q)
-        end
+      matchpiT %{(** ±a ±b)} do
+        Term.of(a ** b)
+      rescue MathDomainError
+        continue
       end
 
       matchpi %{(< _*)} do
-        calc(vars, term.as_d, filter: ArithConst | ArithPosInf | ArithNegInf) do |operands|
+        calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
           operands.each_cons_pair do |pred, succ|
@@ -314,154 +484,507 @@ module Ww::Nitrene
             break
           end
 
-          ok(result)
+          Term.of(result)
         end
       end
 
       matchpi %{(<= _*)} do
-        calc(vars, term.as_d, filter: ArithConst | ArithPosInf | ArithNegInf) do |operands|
+        calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
           operands.each_cons_pair do |pred, succ|
             next if pred == succ || lt?(pred, succ)
-            next if pred.is_a?(ArithConst) && succ.is_a?(ArithConst) && (pred.value <=> succ.value).zero?
 
             result = false
             break
           end
 
-          ok(result)
+          Term.of(result)
         end
       end
 
       matchpi %{(> _*)} do
-        calc(vars, term.as_d, filter: ArithConst | ArithPosInf | ArithNegInf) do |operands|
+        calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
           operands.each_cons_pair do |pred, succ|
-            next if lt?(succ, pred)
+            next if lt?(pred, succ)
 
             result = false
             break
           end
 
-          ok(result)
+          Term.of(result)
         end
       end
 
       matchpi %{(>= _*)} do
-        calc(vars, term.as_d, filter: ArithConst | ArithPosInf | ArithNegInf) do |operands|
+        calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
           operands.each_cons_pair do |pred, succ|
             next if pred == succ || lt?(succ, pred)
-            next if pred.is_a?(ArithConst) && succ.is_a?(ArithConst) && (pred.value <=> succ.value).zero?
 
             result = false
             break
           end
 
-          ok(result)
+          Term.of(result)
         end
       end
 
       matchpi %{(=)} do
-        ok(true)
+        Term.of(true)
       end
 
       matchpi %{(= ref_ _*)} do
-        ok(term.items.move(1).all? { |other| ref == other })
+        args = expr.items.move(2)
+
+        Term.of(args.all? { |other| ref == other })
       end
 
-      matchpi %{(in? (arg-b_ ..< arg-e_) arg-value_)} do
-        Outcome.accumulate(amend: true) do |acc| # ?!
-          value = acc.unwrap(eval(vars, arg_value).at(2))
-          b = acc.unwrap(eval(vars, arg_b).at(1, 0))
-          e = acc.unwrap(eval(vars, arg_e).at(1, 2))
+      matchpiT %{(floor ±arg)} do
+        Term.of(arg.floor)
+      end
 
-          n = arith?(value)
-          if n.nil? || n.is_a?(ArithIndet)
-            next ok_despite(Term.of(:indet, Term.morph(term, {2, value}, {1, 0, b}, {1, 2, e})), "not a comparable arithmetic unit").at(1)
-          end
+      matchpiT %{(ceil ±arg)} do
+        Term.of(arg.ceil)
+      end
 
-          lo = arith?(b)
-          if lo.nil? || lo.is_a?(ArithIndet)
-            next ok_despite(Term.of(:indet, Term.morph(term, {2, value}, {1, 0, b}, {1, 2, e})), "not a comparable arithmetic unit").at(2, 0)
-          end
+      matchpiT %{(round ±arg)} do
+        Term.of(arg.round)
+      end
 
-          hi = arith?(e)
-          if hi.nil? || hi.is_a?(ArithIndet)
-            next ok_despite(Term.of(:indet, Term.morph(term, {2, value}, {1, 0, b}, {1, 2, e})), "not a comparable arithmetic unit").at(2, 2)
-          end
+      matchpiT %{(exact ±arg)} do
+        Term.of(Term::Num.exact(arg))
+      end
 
-          ok((lo == n || lt?(lo, n)) && lt?(n, hi))
+      matchpiT %{(approx ±arg)} do
+        Term.of(Term::Num.approx(arg))
+      end
+
+      # FIXME: These things must use Arith!
+
+      matchpi %{(sum ())} do
+        Term.of(0)
+      end
+
+      matchpi %{(sum args←(_number+))} do
+        Term.of(args.items.reduce { |a, b| a.as_n + b.as_n })
+      end
+
+      matchpi %{(product ())} do
+        Term.of(1)
+      end
+
+      matchpi %{(product args←(_number+))} do
+        Term.of(args.items.reduce { |a, b| a.as_n * b.as_n })
+      end
+
+      matchpi %{(min _number+)} do
+        args = expr.items.move(1)
+        Term.of(args.min_by(&.as_n))
+      end
+
+      matchpi %{(min args←(_number+))} do
+        Term.of(args.items.min_by(&.as_n))
+      end
+
+      matchpi %{(max _number+)} do
+        args = expr.items.move(1)
+        Term.of(args.max_by(&.as_n))
+      end
+
+      matchpi %{(max args←(_number+))} do
+        Term.of(args.items.max_by(&.as_n))
+      end
+
+      matchpi %{(abs _number+)} do
+        args = expr.items.move(1)
+        Term.of(args.reduce { |memo, arg| memo - arg }.abs)
+      end
+
+      matchpi %{(not false)} do
+        Term.of(true)
+      end
+
+      matchpi %{(not _)} do
+        Term.of(false)
+      end
+
+      matchpi %{(~ _*)} do
+        args = expr.items.move(1)
+
+        result = args.reduce(Term[""]) do |a, arg|
+          b = arg.as_s?
+          b ||= Term[ML.compact(arg)]
+          a.stitch(b)
         end
+
+        Term.of(result)
       end
 
-      matchpi %{(approx arg_)} do
-        eval(vars, arg).at(1).bind do |v|
-          if n = v.as_n?
-            ok(Term::Num.approx(n))
+      matchpiT %{(repeat a_string n←(%number +i32))} do
+        Term.of(a.to(String) * n)
+      end
+
+      matchpi %{(ml/compact arg_)} do
+        Term.of(ML.compact(arg))
+      end
+
+      matchpi %{(ml/display arg_)} do
+        Term.of(ML.display(arg, endl: false))
+      end
+
+      matchpi %{(ml/term ml_string)} do
+        Term.of(:ok, ML.term(ml.to(String)))
+      rescue e : ML::SyntaxError
+        excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+        Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+      end
+
+      matchpi %{(ml/terms ml_string)} do
+        Term.of(:ok, ML.terms(ml.to(String)))
+      rescue e : ML::SyntaxError
+        excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+        Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+      end
+
+      matchpi %{(ml/document ml_string)} do
+        Term.of(:ok, ML.document(ml.to(String)))
+      rescue e : ML::SyntaxError
+        excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+        Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+      end
+
+      matchpiT %{(escape arg_string)} do
+        Term.of(arg.escaped)
+      end
+
+      matchpi %{(charcount _*)} do
+        args = expr.items.move(1)
+
+        charcount = args.reduce(Term[0]) do |memo, arg|
+          if string = arg.as_s?
+            memo + Term[string.charcount]
           else
-            ok_despite(Term.of(:literal, Term.morph(term, {1, v})), "not a number")
+            memo
           end
         end
+
+        Term.of(charcount)
       end
 
-      matchpi %{(floor arg_)} do
-        eval(vars, arg).at(1).bind do |v|
-          if n = v.as_n?
-            ok(Term::Num.exact(n.floor))
+      matchpiT %{(upcase arg_string)} do
+        Term.of(arg.upcase)
+      end
+
+      matchpiT %{(dncase arg_string)} do
+        Term.of(arg.downcase)
+      end
+
+      matchpi %{(bytesize _*)} do
+        args = expr.items.move(1)
+
+        bytesize = args.reduce(Term[0]) do |memo, arg|
+          if blob = arg.as_blob?
+            memo + Term[blob.ubytesize64]
           else
-            ok_despite(Term.of(:literal, Term.morph(term, {1, v})), "not a number")
+            memo
           end
         end
+
+        Term.of(bytesize)
       end
 
-      matchpi %{(ceil arg_)} do
-        eval(vars, arg).at(1).bind do |v|
-          if n = v.as_n?
-            ok(Term::Num.exact(n.ceil))
+      matchpi %{(hashcode arg_)} do
+        Term.of(Term.hashcode(arg))
+      end
+
+      matchpi %{(entry key_ value_)} do
+        Term.of(Term[].with(key, value))
+      end
+
+      matchpiT %{(entries arg_dict)} do
+        Term.of(arg.ee(ordered: true))
+      end
+
+      matchpiT %{(value arg_dict key_)} do
+        continue unless value = arg[key]?
+
+        Term.of(value)
+      end
+
+      matchpiT %{(value arg_dict _* ⍊ default_)} do
+        keys = expr.items.move(2)
+        value = arg.follow?(keys)
+        value ||= default
+        Term.of(value)
+      end
+
+      matchpi %{(size _*)} do
+        args = expr.items.move(1)
+
+        size = args.reduce(Term[0]) do |memo, arg|
+          if dict = arg.as_d?
+            memo + Term[dict.usize]
           else
-            ok_despite(Term.of(:literal, Term.morph(term, {1, v})), "not a number")
+            memo
           end
         end
+
+        Term.of(size)
       end
 
-      matchpi %{(round arg_)} do
-        eval(vars, arg).at(1).bind do |v|
-          if n = v.as_n?
-            ok(Term::Num.exact(n.round))
+      matchpi %{(itemsize _*)} do
+        args = expr.items.move(1)
+
+        size = args.reduce(Term[0]) do |memo, arg|
+          if dict = arg.as_d?
+            memo + Term[dict.uitemsize]
           else
-            ok_despite(Term.of(:literal, Term.morph(term, {1, v})), "not a number")
+            memo
           end
         end
+
+        Term.of(size)
       end
 
-      matchpi %{_dict} do
-        Outcome.accumulate do |acc|
-          result = term.transaction do |commit|
-            term.each_entry do |key, value0|
-              value1 = acc.unwrap(eval(vars, value0).at(key))
-              commit.with(key, value1)
+      matchpi %{(pairsize _*)} do
+        args = expr.items.move(1)
+
+        size = args.reduce(Term[0]) do |memo, arg|
+          if dict = arg.as_d?
+            memo + Term[dict.pairsize]
+          else
+            memo
+          end
+        end
+
+        Term.of(size)
+      end
+
+      matchpiT %{(itemspart arg_dict)} do
+        Term.of(arg.itemspart)
+      end
+
+      matchpiT %{(pairspart arg_dict)} do
+        Term.of(arg.pairspart)
+      end
+
+      matchpi %{(union _*)} do
+        args = expr.items.move(1)
+        args.reduce(Term.of) { |a, b| Term.union(a, b) }
+      end
+
+      # multiset union
+      matchpiT %{(mset/union a_dict b_dict)} do
+        if a.size < b.size
+          sm, lg = {a, b}
+        else
+          sm, lg = {b, a}
+        end
+
+        result = lg.transaction do |commit|
+          sm.each_entry do |key, sm_value|
+            next unless sm_count = sm_value.as_n?
+            next unless lg_count = lg[key]? || Term.of(0)
+            next unless lg_count = lg_count.as_n?
+
+            commit.with(key, sm_count + lg_count)
+          end
+        end
+
+        Term.of(result)
+      end
+
+      matchpi %{(merge _*)} do
+        args = expr.items.move(1)
+        args.reduce(Term.of) { |a, b| Term.merge(a, b) }
+      end
+
+      matchpiT %{(pluck arg_dict mask_dict)} do
+        Term.of(Term.pluck(arg, mask))
+      end
+
+      matchpiT %{(iota arg←(%number +i32))} do
+        result = Term::Dict.build do |commit|
+          (0...arg).each do |i|
+            commit << i
+          end
+        end
+
+        Term.of(result)
+      end
+
+      matchpi %{(flatten arg_ ¦ -depth)}, %{(flatten arg_ ¦ depth: ∞)} do
+        Term.flatten(arg, depth: nil)
+      end
+
+      matchpi %{(flatten arg_ ¦ depth_: (%number +i32))}, depth: Int32 do
+        Term.flatten(arg, depth: depth)
+      end
+
+      matchpiT %{(gather (attn data_dict mask_dict))} do
+        result = Term::Dict.build do |commit|
+          data.items.each_with_index do |item, index|
+            next unless mask[index]?
+
+            commit << item
+          end
+
+          data.each_entry(in: Term::Dict.pairspart) do |key, value|
+            next unless mask[key]?
+
+            commit.with(key, value)
+          end
+        end
+
+        Term.of(result)
+      end
+
+      matchpi %{(gather _)} do
+        Term.of
+      end
+
+      matchpi %{(in? (b_ ..< e_) value_)} do
+        lo = arith?(b)
+        continue if lo.nil? || lo.is_a?(ArithIndet)
+
+        hi = arith?(e)
+        continue if hi.nil? || hi.is_a?(ArithIndet)
+
+        n = arith?(value)
+        continue if n.nil? || n.is_a?(ArithIndet)
+
+        Term.of((lo == n || lt?(lo, n)) && lt?(n, hi))
+      end
+
+      # TODO: rename to `substring?`
+      matchpi %{(any? haystack_string needle_string)}, haystack: String, needle: String do
+        Term.of(haystack.includes?(needle))
+      end
+
+      matchpiT %{(any? haystack_dict needle_)} do
+        Term.of(haystack.any?(needle))
+      end
+
+      matchpi %{(hex arg←(%number (whole _)))} do
+        Term.of(arg.to(BigInt).to_s(base: 16))
+      end
+
+      matchpiT %{(rune arg_string i←(%number i32))}, arg: String do
+        Term.of(arg[i]? || Term.of(""))
+      end
+
+      # TODO: (_ ..= _) [instead of inlining it pass it as a unit, (_ ..= _) is composite]
+      matchpiT %{(runes arg_string b←(%number i32) ..= e←(%number i32))}, arg: String do
+        Term.of(arg[b..e]? || "")
+      end
+
+      # TODO: (_ ..< _) [instead of inlining it pass it as a unit, (_ ..< _) is composite]
+      matchpiT %{(runes arg_string b←(%number i32) ..< e←(%number i32))}, arg: String do
+        Term.of(arg[b...e]? || "")
+      end
+
+      matchpiT %{(word arg_string i←(%number i32))}, arg: StringView do
+        Term.of(StringSpan.words(arg, i, i))
+      end
+
+      matchpiT %{(words arg_string b←(%number i32) ..= e←(%number i32))}, arg: StringView do
+        Term.of(StringSpan.words(arg, b, e))
+      end
+
+      matchpiT %{(words arg_string)}, arg: StringView do
+        result = Term::Dict.build do |commit|
+          remaining = arg
+          until remaining.empty?
+            l, m, r = remaining.partition do |chr|
+              chr.vspace? || chr.hspace? || StringSpan.wsep?(chr)
+            end
+
+            commit << l
+
+            pass do
+              next unless sep = m.first_char?
+              next if sep.vspace? || sep.hspace?
+
+              commit << m
+            end
+
+            remaining = r
+          end
+        end
+
+        Term.of(result)
+      end
+
+      matchpi %{(line/stem arg_string)}, arg: StringView do
+        l, _, _ = arg.partition('\n')
+        Term.of(l)
+      end
+
+      matchpi %{(line/rest arg_string)}, arg: StringView do
+        _, sep, r = arg.partition('\n')
+        Term.of(sep + r)
+      end
+
+      matchpi %{(rline/stem arg_string)}, arg: StringView do
+        _, _, r = arg.rpartition('\n')
+        Term.of(r)
+      end
+
+      matchpi %{(rline/rest arg_string)}, arg: StringView do
+        l, sep, _ = arg.rpartition('\n')
+        Term.of(l + sep)
+      end
+
+      matchpi %{(prefix-run matchee_string prefix_string)}, matchee: StringView, prefix: StringView do |matchee|
+        run = String.build do |io|
+          while matchee.starts_with?(prefix)
+            matchee = matchee.lskip(prefix.size)
+            io << prefix
+          end
+        end
+
+        Term.of(run)
+      end
+
+      matchpi %{(codepoints arg_string)}, arg: String do
+        codepoints = Term::Dict.build do |commit|
+          arg.each_char do |chr|
+            commit << chr.ord
+          end
+        end
+
+        Term.of(codepoints)
+      end
+
+      # TODO: WTF is this?
+      matchpi %{(repr ns←((%past (%number (whole _)))) (digits ¦ () alphabet_string))}, alphabet: String do
+        repr = Term::Dict.build do |commit|
+          ns.items.each do |n|
+            Int.each_digit(n, base: alphabet.size) do |digit|
+              assert digit.natural?
+
+              commit << alphabet[digit.to(Int32)]
             end
           end
-
-          ok(result)
-        end
-      end
-
-      matchpi %{_symbol} do
-        unless value = vars[term]?
-          return ok_despite(term, "unrecognized symbol", term)
         end
 
-        ok(value)
+        Term.of(repr)
       end
 
-      otherwise do
-        ok(term)
-      end
+      otherwise { expr }
     end
+  end
+
+  # Evaluates a Nitrene expression *expr* using the default evaluation context.
+  # Returns the resulting term.
+  def eval(vars : Term::Dict, expr : Term) : Term
+    eval(Context::DEFAULT, vars, expr)
   end
 end
