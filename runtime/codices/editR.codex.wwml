@@ -167,7 +167,7 @@
 ;; Tag Up and Dn arrows according to whether they're pressed at the very
 ;; top of the text.
 [[I (keyboard key ⸨up,dn⸩ dn ⍊ -top_ -bot_) _*] (l_string * r_string) _]
-  <> {top: ^(not (includes? l "\n")), bot: ^(not (includes? r "\n"))}
+  <> {top: ^(not (any? l "\n")), bot: ^(not (any? r "\n"))}
 
 ;; CURSOR Up and Dn in multiline (go to goal column in line above or below).
 [(I M←(keyboard key ⸨up,dn⸩ dn ⍊ -shift ⸨top,bot⸩: false) _* ⍊ multiline: true) ((%pipe charcount A_) * _string) A_]

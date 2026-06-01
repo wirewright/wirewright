@@ -368,7 +368,8 @@ PRIMITIVES = ProcRuleset.build do
     l + sep
   end
 
-  rulepi1 %{(includes? haystack_string needle_string)} do
+  # x
+  rulepi1 %{(any? haystack_string needle_string)} do
     haystack.to(String).includes?(needle.to(String))
   end
 
