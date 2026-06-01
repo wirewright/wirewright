@@ -896,7 +896,7 @@ module Ww::M1
     end
 
     private def rep(µ : MutContext, mut : Mut, this : Term?) : Term::Rep
-      composite = Nitrene::CompositeEval.new do |it, vars, expr|
+      composite = Nitrene::Eval.new do |it, vars, expr|
         Term.case(expr) do
           matchpi %{(up capture_)} do
             unless value = µ.up?(Ref.sibling(mut.ref, capture)) || mut.env[capture]?

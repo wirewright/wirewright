@@ -1,7 +1,4 @@
 # Nitrene is an expression language for Wirewright.
-#
-# TODO: make all functions total!
-# TODO: lambdas (fns)
 module Ww::Nitrene
   extend self
 
@@ -303,16 +300,15 @@ module Ww::Nitrene
     dict1
   end
 
-  alias CompositeEval = Interpreter, Term::Dict, Term -> Term
-  alias PrimitiveEval = Term -> Term
+  alias Eval = Interpreter, Term::Dict, Term -> Term
 
   # Represents a Nitrene interpreter.
-  defrecord Interpreter, composite : CompositeEval, primitive : PrimitiveEval
+  defrecord Interpreter, composite : Eval, primitive : Eval
 
   struct Interpreter
     DEFAULT = new(
       composite: ->Nitrene.composite(Interpreter, Term::Dict, Term),
-      primitive: ->Nitrene.primitive(Term),
+      primitive: ->Nitrene.primitive(Interpreter, Term::Dict, Term),
     )
   end
 
@@ -341,7 +337,7 @@ module Ww::Nitrene
       expr = Term.of(dict)
     end
 
-    value = it.primitive.call(expr)
+    value = it.primitive.call(it, vars, expr)
     unless expr == value
       return value
     end
@@ -354,6 +350,10 @@ module Ww::Nitrene
     Term.case(expr) do
       matchpi %{(literal subexpr_)} do
         subexpr
+      end
+
+      matchpi %{(fn _ _)} do
+        expr
       end
 
       matchpi %{(and _*)} do
@@ -398,34 +398,6 @@ module Ww::Nitrene
               next unless rep = env[:value]?
 
               data = data.with(key, rep)
-            end
-
-            Term.of(:attn, data, mask)
-          end
-
-          otherwise do
-            Term.of(:attn, Term[], Term[])
-          end
-        end
-      end
-
-      matchpi %{(map (attnQ_ var_) bodyQ_)} do
-        attn = eval(it, vars, attnQ)
-
-        Term.case(attn) do
-          matchpiT %{(attn _dict _dict)} do
-            _, data, mask = attn
-
-            data = data.transaction do |commit|
-              mask.each_entry do |key, _|
-                unless value = data[key]?
-                  mask = mask.without(key)
-                  next
-                end
-
-                rep = eval(it, vars.with(var, value), bodyQ)
-                commit.with(key, rep)
-              end
             end
 
             Term.of(:attn, data, mask)
@@ -504,6 +476,19 @@ module Ww::Nitrene
         arg
       end
 
+      matchpi %{(template template_)} do
+        Alloy.render(vars, template)
+      end
+
+      matchpi %{(let bodyQ_ ¦ assignments_)} do
+        vars1 = vars
+        assignments.each_entry do |var, valueQ|
+          vars1 = vars1.with(var, eval(it, vars, valueQ))
+        end
+
+        eval(it, vars1, bodyQ)
+      end
+
       otherwise do
         expr
       end
@@ -511,7 +496,7 @@ module Ww::Nitrene
   end
 
   # See `Interpreter`.
-  def primitive(expr : Term) : Term
+  def primitive(it : Interpreter, vars : Term::Dict, expr : Term) : Term
     Term.case(expr) do
       matchpi %{(+)} do
         Term.of(0)
@@ -936,6 +921,24 @@ module Ww::Nitrene
         Term.flatten(arg, depth: depth)
       end
 
+      matchpiT %{(map (attn data_dict mask_dict) (fn pattern_ bodyQ_))} do |data, mask|
+        data = data.transaction do |commit|
+          mask.each_entry do |key, _|
+            unless value = data[key]?
+              mask = mask.without(key)
+              next
+            end
+
+            next unless env = M1.match?(pattern, value)
+
+            rep = eval(it, Term.union(vars, env), bodyQ)
+            commit.with(key, rep)
+          end
+        end
+
+        Term.of(:attn, data, mask)
+      end
+
       matchpiT %{(gather (attn data_dict mask_dict))} do
         result = Term::Dict.build do |commit|
           data.items.each_with_index do |item, index|
@@ -1084,6 +1087,34 @@ module Ww::Nitrene
         end
 
         Term.of(repr)
+      end
+
+      matchpi %{(pigment arg_ ¦ default_⋮ transparent)} do
+        Term.of(Pigment.rgba?(arg) || Pigment.rgba?(default) || Pigment.transparent)
+      end
+
+      matchpi %{(pigment? arg_)} do
+        outcome = Pigment.eval(arg)
+        if outcome.is_a?(Outcome::Rejected)
+          return Term.of(:err, details: {"rejected"})
+        end
+
+        rgba = outcome.unwrap
+
+        details = outcome.diagnostics.to_compact_readonly_slice do |diagnostic|
+          case entity = diagnostic.entity
+          when Diagnostic::Text
+            entity.detail
+          when Diagnostic::TermRef
+            "#{entity.detail}: #{entity.term}"
+          end
+        end
+
+        if rgba
+          Term.of(:ok, rgba, details: details.present? ? details : nil)
+        else
+          Term.of(:err, details: details.present? ? details : nil)
+        end
       end
 
       otherwise { expr }

@@ -5,8 +5,8 @@ module Ww::Alloy
   # :nodoc:
   record RenderContext,
     vars : Term::Dict,
-    composite : Nitrene::CompositeEval,
-    primitive : Nitrene::PrimitiveEval,
+    composite : Nitrene::Eval,
+    primitive : Nitrene::Eval,
     refine : Refine
 
   # Returns an empty rep if no such var exists.
@@ -64,13 +64,13 @@ module Ww::Alloy
       end
     end
 
-    primitive = ->(expr : Term) do
-      value = ctx.primitive.call(expr)
+    primitive = ->(it : Nitrene::Interpreter, vars : Term::Dict, expr : Term) do
+      value = ctx.primitive.call(it, vars, expr)
       unless expr == value
         return value
       end
 
-      Nitrene.primitive(expr)
+      Nitrene.primitive(it, vars, expr)
     end
 
     it = Nitrene::Interpreter.new(composite, primitive)
@@ -790,8 +790,7 @@ module Ww::Alloy
     end
   end
 
-  DEFAULT_COMPOSITE = Nitrene::CompositeEval.new { |it, vars, expr| expr }
-  DEFAULT_PRIMITIVE = Nitrene::PrimitiveEval.new { |expr| expr }
+  DEFAULT_EVAL = Nitrene::Eval.new { |it, vars, expr| expr }
 
   # Default value for the refine function (noop).
   DEFAULT_REFINE = Refine.new { |term, _| Term.rep(term) }
@@ -803,8 +802,8 @@ module Ww::Alloy
     vars : Term::Dict,
     template : Term,
     issues : Issue::Sink, *,
-    composite : Nitrene::CompositeEval = DEFAULT_COMPOSITE,
-    primitive : Nitrene::PrimitiveEval = DEFAULT_PRIMITIVE,
+    composite : Nitrene::Eval = DEFAULT_EVAL,
+    primitive : Nitrene::Eval = DEFAULT_EVAL,
     refine : Refine = DEFAULT_REFINE,
   ) : Term::Rep
     issues.adjoin(Spot::Template.new(template)) do |issues|

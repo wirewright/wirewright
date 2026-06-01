@@ -8,7 +8,7 @@ module Ww::Alloy
     hook : ComposeHook
 
   private def compose0(ctx : ComposeContext, vars : Term::Dict, template : Term, issues : Issue::Sink) : Term::Rep
-    primitive = Nitrene::PrimitiveEval.new do |expr|
+    primitive = Nitrene::Eval.new do |_, _, expr|
       view = ->(ctx : ComposeContext, arg : Term) do
         Term.collapse(compose0(ctx, arg, issues))
       end
