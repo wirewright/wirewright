@@ -519,12 +519,12 @@ abstract struct Int
     {% end %}
   end
 
-  def self.byte_size
+  def self.bytesize
     bit_size//8
   end
 
-  def byte_size
-    self.class.byte_size
+  def bytesize
+    self.class.bytesize
   end
 
   def nonzero?
@@ -1508,8 +1508,8 @@ struct StringView
     StringView.new(@string, byte_start + byte_start_rel, byte_start + byte_end_rel, ascii_only: ascii_only?)
   end
 
-  def byte_subview(byte_start_rel, size byte_size : Int32)
-    byte_subview(byte_start_rel, byte_start_rel + byte_size)
+  def byte_subview(byte_start_rel, size bytesize : Int32)
+    byte_subview(byte_start_rel, byte_start_rel + bytesize)
   end
 
   def byte_subview(byte_start_rel, size char : Char)
@@ -2204,8 +2204,8 @@ class String
     StringView.new(self, byte_start, byte_end, single_byte_optimizable?)
   end
 
-  def view(byte_start : Int32, *, byte_size : Int32) : StringView
-    view(byte_start, byte_end: byte_start + byte_size)
+  def view(byte_start : Int32, *, bytesize : Int32) : StringView
+    view(byte_start, byte_end: byte_start + bytesize)
   end
 
   def li(*, bullet = "*", indent = 0, ws = ' ', strip_first = false) : String

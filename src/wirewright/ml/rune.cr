@@ -148,7 +148,7 @@ module Ww::ML
 
     # Returns the byte size of the underlying char.
     @[AlwaysInline]
-    def byte_size : Int32
+    def bytesize : Int32
       chr.bytesize
     end
 

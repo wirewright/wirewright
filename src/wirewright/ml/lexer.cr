@@ -68,12 +68,12 @@ module Ww::ML
 
     # Returns a view of the beginning-of-input.
     private def boi : StringView
-      @source.view(byte_start: 0, byte_size: 0)
+      @source.view(byte_start: 0, bytesize: 0)
     end
 
     # Returns a view of the end-of-input.
     private def eoi : StringView
-      @source.view(byte_start: @source.bytesize, byte_size: 0)
+      @source.view(byte_start: @source.bytesize, bytesize: 0)
     end
 
     # Returns `true` if the cursor is positioned immediately after the beginning-
@@ -90,12 +90,12 @@ module Ww::ML
 
     # Returns a view of the character ahead of the cursor (of EOI if none).
     private def ahead1 : StringView
-      eoi? ? eoi : @source.view(byte_start: @byte_index, byte_size: ahead.byte_size)
+      eoi? ? eoi : @source.view(byte_start: @byte_index, bytesize: ahead.bytesize)
     end
 
     # Returns a view of the character behind the cursor (of BOI if none).
     private def behind1 : StringView
-      boi? ? boi : @source.view(byte_start: @byte_index - behind.byte_size, byte_size: behind.byte_size)
+      boi? ? boi : @source.view(byte_start: @byte_index - behind.bytesize, bytesize: behind.bytesize)
     end
 
     private def unsafe_behind : Rune
@@ -123,7 +123,7 @@ module Ww::ML
         return false
       end
 
-      @byte_index += unsafe_ahead.byte_size
+      @byte_index += unsafe_ahead.bytesize
       @rune_index += 1
 
       true
