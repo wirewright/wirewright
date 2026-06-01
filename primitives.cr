@@ -199,16 +199,21 @@ PRIMITIVES = ProcRuleset.build do
   # How the F did we get here? It's not that I don't know how to write interpreters...
   # We should move to Nitrene. We really should !!
   rulepi1 %[(select-f xs_dict pattern_)] do
-    xs.transaction do |commit|
-      xs.each_entry do |key, value|
-        unless env = M1.match?(pattern, value)
-          commit.without(key)
-          next
-        end
+    result = Term::Dict.build do |commit|
+      xs.items.each do |item|
+        next unless env = M1.match?(pattern, item)
+
+        commit << (env[:value]? || item)
+      end
+
+      xs.each_entry(in: Term::Dict.pairspart) do |key, value|
+        next unless env = M1.match?(pattern, value)
 
         commit.with(key, env[:value]? || value)
       end
     end
+
+    Term.of(result)
   end
 
   # multiset union
@@ -415,44 +420,8 @@ PRIMITIVES = ProcRuleset.build do
     end
   end
 
-  rulepi1 %{(mask pattern_ d_dict)} do
-    Term::Dict.build do |commit|
-      d.each_item_with_index do |item, index|
-        if M1.probe?(pattern, item)
-          commit.with(index, true)
-        end
-      end
-    end
-  end
-
-  rulepi1 %{(mask charset_string s_string)} do
-    set = charset.to(String)
-
-    mask = Term::Dict.build do |commit|
-      s.to(StringView).each_char_with_index do |chr, index|
-        next unless chr.in_set?(set)
-
-        commit.with(index, true)
-      end
-    end
-
-    {s, mask}
-  end
-
-  rulepi1 %{(matches d_dict mask_dict)} do
-    Term::Dict.build do |commit|
-      d.items.each_with_index do |item, index|
-        next unless index.in?(mask)
-        commit << item
-      end
-      d.each_entry(in: Term::Dict.pairspart) do |key, value|
-        next unless key.in?(mask)
-        commit.with(key, value)
-      end
-    end
-  end
-
-  rulepi1 %{(backmap d_dict pattern_ backspec_)} do
+  # x
+  rulepi1 %{(morph d_dict (backmap pattern_ backspec_))} do
     M1.backmap(pattern, backspec, d)
   end
 end
