@@ -1013,19 +1013,11 @@ module Ww::Nitrene
         result = Term::Dict.build do |commit|
           remaining = arg
           until remaining.empty?
-            l, m, r = remaining.partition do |chr|
-              chr.vspace? || chr.hspace? || WordTokenizer.wsep?(chr)
+            l, _, r = remaining.partition do |chr|
+              chr.vspace? || chr.hspace?
             end
 
             commit << l
-
-            pass do
-              next unless sep = m.first_char?
-              next if sep.vspace? || sep.hspace?
-
-              commit << m
-            end
-
             remaining = r
           end
         end
