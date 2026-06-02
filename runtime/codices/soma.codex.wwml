@@ -414,13 +414,13 @@ history-limit: 128
 ;; age: (%let age _number) --> ±age
 [selector key_symbol (%'%let key_ %'_number)]
   => (group detail: seq
-       (atom "±" type: punct)
+       (atom "±")
        (atom ^\key type: key))
 
 ;; Example: x: (%- _) --> -x
 [selector key_symbol %'(%- _)]
   => (group detail: seq
-       (atom "-" type: punct)
+       (atom "-")
        (atom ^\key type: key))
 
 ;; Example:
@@ -429,6 +429,14 @@ history-limit: 128
   => (group detail: seq
        (atom "⋮" type: punct)
        (atom ^\key type: key))
+
+;; Example:
+;; hover: (%- _ hover) --> -hover_
+[selector key_symbol (%'%- %'_ key_)]
+  => (group detail: seq
+       (atom "-")
+       (atom ^\key type: key)
+       (atom "_" type: punct))
 
 ;; Example:
 ;; title: (%optional "Untitled" title_string) --> title⋮ "Untitled"
