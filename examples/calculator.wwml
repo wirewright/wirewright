@@ -184,8 +184,8 @@
       (rewriter (@in -> ascR -> @out)
         n_string => ^(ml/term n)
         [err] => 0
-        (ok _) => 0
-        (ok ±n) => ^n
+        [ok _] => 0
+        [ok ±n] => ^n
         (+ ±a ±b) => ^(+ a b)
         (- ±a) => ^(- 0 a)
         (- ±a ±b) => ^(- a b)

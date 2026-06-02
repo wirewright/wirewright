@@ -828,7 +828,7 @@ D←⟨C←[[I M←[unnest] _*] _*]⟩
 [I [submit result←(ml ml_string) _] _*]
   <> {(result): (^ml ^(ml/term ml))}
 
-[[I M←[submit text_string (ok term_) ⸨left,right⸩] _*] (l_string * r_string) _]
+[[I M←[submit text_string [ok term_] ⸨left,right⸩] _*] (l_string * r_string) _]
   <> {(M): ((history add ^text) (clear input) (insert (term ^term) ⸨left,right⸩) ok)}
 
 [I M←[submit _string [err] _] _*]
@@ -905,9 +905,9 @@ D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
   <> {M: (paste ^(ml/term text) ⸨left,right⸩)}
 
 ;; Paste if parsed as ML successfully.
-⟨C←[[I M←[paste (ok term_) left] _*] _*]⟩
+⟨C←[[I M←[paste [ok term_] left] _*] _*]⟩
   <> {(M): (), (C): (^term ^(up C))}
-⟨C←[[I M←[paste (ok term_) right] _*] _*]⟩
+⟨C←[[I M←[paste [ok term_] right] _*] _*]⟩
   <> {(M): (), (C): (^(up C) ^term)}
 
 ;; NOTE: the only place where the rewriter cannot go is keys. We use it as
