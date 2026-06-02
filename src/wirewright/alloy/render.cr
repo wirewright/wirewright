@@ -363,37 +363,6 @@ module Ww::Alloy
         end
       end
 
-      # |@ alloy.template.^case'
-      #
-      # |@pattern
-      # (^case' (expr_ pattern_) body_*)
-      #
-      # |@key expr alloy.expr
-      # Value expression to match on.
-      #
-      # |@key pattern m1.pattern
-      # An M1 pattern to match the value of *expr* against. Alloy vars are
-      # available in the pattern. Captures made in the pattern are exposed
-      # to the body.
-      #
-      # |@block
-      # `^case'` is a shorthand for a single-branch `^case`, as in:
-      # `(^case expr_ (when pattern_ body_*))`.
-      #
-      # On mismatch, `^case'` replaces itself with nothing (disappears).
-      matchpi %{(^case' (expr_ pattern_) body_*)} do
-        branch = Term::Dict.build do |commit|
-          commit << :when << pattern
-          commit.concat(body.items)
-        end
-
-        expansion = Term.of(:"^case", expr, branch)
-
-        issues.adjoin(Spot::Expansion.new("^case'", expansion)) do |issues|
-          render0(ctx, Term.of(expansion), issues)
-        end
-      end
-
       # |@ alloy.template.^each
       #
       # |@pattern
@@ -676,24 +645,6 @@ module Ww::Alloy
             submit.call(ctx, node, index)
           end
         end
-      end
-
-      # |@ alloy.template.^\.
-      #
-      # |@pattern
-      # (^. keys_+)
-      #
-      # |@block
-      # Follows a keypath into the variables dict, replacing itself with the value
-      # thus reached. For example, with vars `{screen: {width: 500, height: 400}}`,
-      # you can reach width using `(^. screen width)` and height `(^. screen height)`.
-      matchpi %{(^. keys_+)} do
-        unless value = ctx.vars.follow?(keys.items)
-          issues.adjoin("keypath", keys, &.major("no value at keypath"))
-          return Term.rep
-        end
-
-        Term.rep(value)
       end
 
       # |@ alloy.template.^render

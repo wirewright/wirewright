@@ -241,16 +241,7 @@
       (when {¦ x} ^"X=⸢x⸣")
       (when {¦ y} ^"Y=⸢y⸣")
       (when vars_ ^"vars=⸢vars⸣"))
-    "vars={z: 300}")
-  ;; ^case'
-  (alloy {foo: 100}
-    ((^case' (vars {¦ foo})
-       ^"Hello ⸢foo⸣"))
-    ("Hello 100"))
-  (alloy {bar: 200}
-    ((^case' (vars {¦ foo})
-       ^"Hello ⸢foo⸣"))
-    ()))
+    "vars={z: 300}"))
 
 ;; ^each
 (group
@@ -471,13 +462,6 @@
   (alloy {} ((^splice 1)) (1))
   (alloy {} ((^splice 1 2 3)) (1 2 3))
   (alloy {x: 100} ((^splice 1 ^x 3)) (1 100 3)))
-
-;; ^.
-(group
-  (alloy {} ((^. x y z)) () issues: ("no value at keypath"))
-  (alloy {x: 100} ((^. x y z)) () issues: ("no value at keypath"))
-  (alloy {x: {y: 100}} ((^. x y z)) () issues: ("no value at keypath"))
-  (alloy {x: {y: {z: 100}}} ((^. x y z)) (100)))
 
 ;; ^ in expr expands to itself
 (alloy {} ^^(+ x 1) ^(+ x 1))
