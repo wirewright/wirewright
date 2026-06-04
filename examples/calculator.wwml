@@ -68,12 +68,12 @@
                   ^b)
            (in buffer_string)
              => (p style: "text-neutral-50 bg-neutral-800 bg-min-none sel sel-aim \
-                           cursor-thick sel-violet-400 rounded-sm center-y"
+                           sel-clearance-3 cursor-thick sel-violet-400 rounded-sm center-y"
                    selection-anchor: ^(charcount buffer)
                    selection-span: 0
                   ^buffer)
            (in child_)
-             => (group style: "center-y flow-col border-b-md border-violet-400"
+             => (group style: "aim center-y flow-col border-b-md border-violet-400"
                   ^child)
            (top node_)
              => (group style: "clip right p-1"

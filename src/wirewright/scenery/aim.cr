@@ -23,23 +23,17 @@ module Ww::Scenery
           ibeam = item.selection
           next unless ibeam.aim
 
-          foci << Rect[x, y, ibeam.clearance, node.line_height]
+          foci << Rect[x - ibeam.clearance, y, ibeam.clearance*2 + ibeam.thickness, node.line_height]
         in ShapedStyledGlyph
           item.decorations.each do |decoration|
             next unless spec = decoration.spec.as?(Selection)
             next unless spec.aim
 
-            if decoration.anchor_to_left
-              start = x
-            elsif decoration.anchor_to_right
-              start = x + item.advance.x
-            else
-              # The glyph is in the middle of a selection, so we don't care
-              # about it.
-              next
-            end
+            # Skip glyphs in the middle of a selection.
+            next unless decoration.anchor_to_left || decoration.anchor_to_right
 
-            foci << Rect[start, y, spec.clearance, node.line_height]
+            # Mark the glyph rect as a focus, plus clearance.
+            foci << Rect[x - spec.clearance, y, item.advance.x + spec.clearance*2, node.line_height]
           end
 
           x += item.advance.x
