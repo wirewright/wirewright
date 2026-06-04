@@ -1,4 +1,8 @@
-@[Link(ldflags: "#{__DIR__}/../../../vendor/xxhash/lib/libxxhash.a")]
+{% if flag?(:syslibs) %}
+  @[Link("xxhash")]
+{% else %}
+  @[Link(ldflags: "#{__DIR__}/../../../vendor/xxhash/lib/libxxhash.a")]
+{% end %}
 lib LibXXH64
   type State = Void*
 

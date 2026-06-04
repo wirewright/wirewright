@@ -1,4 +1,8 @@
-@[Link(ldflags: "#{__DIR__}/../../../vendor/unibreak/lib/libunibreak.a")]
+{% if flag?(:syslibs) %}
+  @[Link("unibreak")]
+{% else %}
+  @[Link(ldflags: "#{__DIR__}/../../../vendor/unibreak/lib/libunibreak.a")]
+{% end %}
 lib Unibreak
   enum LineBreak : UInt8
     MustBreak

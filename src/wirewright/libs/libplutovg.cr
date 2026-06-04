@@ -5,7 +5,11 @@
 # WARNING: I don't know if PlutoVG is thread-safe or not (in the sense of maybe
 # using  some kind of mutable global). In any case, it's best to assume it's
 # thread-unsafe and lock appropriately.
-@[Link(ldflags: "#{__DIR__}/../../../vendor/plutovg/lib/libplutovg.a")]
+{% if flag?(:syslibs) %}
+  @[Link("plutovg")]
+{% else %}
+  @[Link(ldflags: "#{__DIR__}/../../../vendor/plutovg/lib/libplutovg.a")]
+{% end %}
 @[Link("m")]
 lib PlutoVG
   type Surface = Void*

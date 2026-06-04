@@ -1,6 +1,10 @@
 @[Link("fribidi")]
 @[Link("harfbuzz")]
-@[Link(ldflags: "#{__DIR__}/../../../vendor/raqm/lib/libraqm.a")]
+{% if flag?(:syslibs) %}
+  @[Link("raqm")]
+{% else %}
+  @[Link(ldflags: "#{__DIR__}/../../../vendor/raqm/lib/libraqm.a")]
+{% end %}
 lib Raqm
   type Handle = Void*
 
