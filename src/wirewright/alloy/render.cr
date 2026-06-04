@@ -650,15 +650,10 @@ module Ww::Alloy
       # |@ alloy.template.^render
       #
       # |@pattern
-      # (^render (pattern_ bindings←(%any° vars _dict)) subject_ body_*)
+      # (^render pattern_ subject_ body_*)
       #
       # |@key pattern m1.pattern
       # Pattern to match the expansion of *subject* against.
-      #
-      # |@key bindings alloy.expr
-      # Binds interior variable names to value expressions evaluated in the current
-      # scope (i.e. as in `alloy.template.^let`). Can be set to `vars` to import
-      # all variables.
       #
       # |@key subject alloy.template
       # The template to expand.
@@ -673,23 +668,9 @@ module Ww::Alloy
       # NOTE: For consistent return results, the expansion of *subject* is always
       # a list. If *subject* expands to one term, that's a list of one term; if to
       # zero terms, that's an empty list; if to many terms, a list of those terms.
-      matchpi %{(^render (pattern_ bindings←(%any° vars _dict)) subject_ body_*)} do
+      matchpi %{(^render pattern_ subject_ body_*)} do
         issues.adjoin("`^render` template expression") do |issues|
-          # Determine interior vars.
-          if bindings == Term.of(:vars)
-            interior = ctx.vars
-          else
-            # bindings : dict
-            interior = bindings.transaction do |commit|
-              bindings.each_entry do |key, expr|
-                value = issues.adjoin("binding for", key) do |issues|
-                  eval(ctx, expr)
-                end
-
-                commit.with(key, value)
-              end
-            end
-          end
+          interior = ctx.vars
 
           # Obtain expansion of subject with interior vars.
           expansion = issues.adjoin(key: 2, detail: "`^render` subject") do |issues|

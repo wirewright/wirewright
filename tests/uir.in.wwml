@@ -699,7 +699,7 @@
         radius-tr: 5
         radius-bl: 5
         radius-br: 5))
-    (^render ((color_) vars)
+    (^render (color_)
       (^match active
         (when true (oklch 0.95 0 0))
         (when false (oklch 0.85 0 0)))
@@ -731,7 +731,7 @@
         radius-tr: 5
         radius-bl: 5
         radius-br: 5))
-    (^render ((color_) vars)
+    (^render (color_)
       (^match active
         (when true (oklch 0.95 0 0))
         (when false (oklch 0.85 0 0)))
