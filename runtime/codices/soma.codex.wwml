@@ -1539,7 +1539,7 @@ scroll: {}
          (p ^"⸢(escape suffix)⸣\"" style: "text-theme-string")))
 
 (LongBlobWidget content_blob)
-  => (p ^"⟬…⸢(hashcode/hex content)⸣…⟭" style: "text-theme-blob")
+  => (p ^"⟬…⸢(hex (hashcode content))⸣…⟭" style: "text-theme-blob")
 
 (RuleBriefWidget doc←(_*) pattern_ arrow_string)
   => (group style: "flow-col my-1"
