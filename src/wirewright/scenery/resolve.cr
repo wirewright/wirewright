@@ -94,7 +94,7 @@ module Ww::Scenery
     font_asset_stack = node.font_stack.to_compact_readonly_slice do |query|
       next unless asset = assets[query]?
 
-      asset.as?(Asset::PvgFont)
+      asset.as?(Asset::Font)
     end
 
     if font_asset_stack.empty?
@@ -108,7 +108,7 @@ module Ww::Scenery
     font = assets[node.font]?
     codepoints = assets[node.codepoints]?
 
-    unless font.is_a?(Asset::PvgFont)
+    unless font.is_a?(Asset::Font)
       return Resn::Wait.new(Pending.new(node))
     end
 
@@ -124,7 +124,7 @@ module Ww::Scenery
       font: font,
       codepoint: codepoint,
       glyph_index: font.index(codepoint),
-      size: node.size,
+      size: Asset::Font.clamp(node.size),
       color: node.color,
     )
 

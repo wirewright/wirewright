@@ -35,32 +35,35 @@ module Ww::Scenery
     # NOTE: The logic described above is managed in `poll` and `wait`. `Asset`
     # only provides the data types for assets, and parsing (i.e., constructors
     # for those data types).
-    alias Any = PvgFont | PvgRasterImage | PvgSvgImage | CodepointsMap
+    alias Any = Font | PvgRasterImage | PvgSvgImage | CodepointsMap
+
+    # Wraps a clamped font size, acts as a proof that you called `Font.clamp`.
+    struct FontSize
+      # Returns the underlying clamped font size.
+      getter value : UInt32
+
+      protected def initialize(@value)
+      end
+    end
 
     # Represents a font.
-    class PvgFont
+    class Font
       getter digest
 
       # :nodoc:
-      def initialize(@pvg_face : PlutoVG::FontFace, @ft_face : FreeType::Face, @digest : Bytes)
-        @metrics = LRU(Int32, FontMetrics).new(16)
-        @indices = LRU(Char, Int32).new(256)
-        @measurements = LRU({Int32, Int32}, GlyphMeasurement).new(256)
+      def initialize(@ft_face : FreeType::Face, @digest : Bytes)
+        @metrics = LRU(FontSize, FontMetrics).new(16)
+        @indices = LRU(Char, UInt32).new(256)
+        @measurements = LRU({UInt32, FontSize}, GlyphMeasurement).new(256)
       end
 
       # Clamps *size* into acceptable bounds.
-      def self.clamp(size : Magnitude) : Magnitude
-        size.clamp(Magnitude.new(5)..Magnitude.new(1024)).floor
+      def self.clamp(size : Magnitude) : FontSize
+        FontSize.new(size.clamp(Magnitude.new(5)..Magnitude.new(1024)).floor.to_u32)
       end
 
       def finalize
-        PlutoVG.face_destroy(@pvg_face)
         FreeType.done_face(@ft_face)
-      end
-
-      # :nodoc:
-      def as_pvg : PlutoVG::FontFace
-        @pvg_face
       end
 
       # :nodoc:
@@ -68,40 +71,57 @@ module Ww::Scenery
         @ft_face
       end
 
+      def load_glyph(index : UInt32, size : FontSize) : Nil
+        assert FreeType.set_char_size(@ft_face, size.value * FT_UNIT, 0, 0, 0).zero?
+        assert FreeType.load_glyph(@ft_face, index, FreeType::LOAD_NO_BITMAP | FreeType::LOAD_NO_HINTING).zero?
+      end
+
       # Returns the index of the glyph for *codepoint*. Returns `0` if there is no
       # such glyph.
-      def index(codepoint : Char) : Int32
+      def index(codepoint : Char) : UInt32
         @indices.put_if_absent(codepoint) do
-          PlutoVG.font_face_get_glyph_index(@pvg_face, codepoint.ord.to_u32)
+          FreeType.get_char_index(@ft_face, codepoint.ord)
         end
       end
 
       # Measures the glyph with the given *index* at *size*.
-      def measure(index : Int32, size : Magnitude) : GlyphMeasurement
-        size = PvgFont.clamp(size)
+      def measure(index : UInt32, size : FontSize) : GlyphMeasurement
+        @measurements.put_if_absent({index, size}) do
+          load_glyph(index, size)
 
-        @measurements.put_if_absent({index, size.to_i}) do
-          PlutoVG.font_face_get_glyph_metrics_by_index(@pvg_face, size, index, out advance, nil, out extents)
+          FreeType.get_glyph_metrics(@ft_face, out advance, out extents_x, out extents_y, out extents_w, out extents_h)
 
-          GlyphMeasurement.new(advance, Rect[extents.x, extents.y, extents.w, extents.h])
+          GlyphMeasurement.new(
+            advance: (advance/FT_UNIT).to_f32,
+            extents: Rect[
+              x: extents_x/FT_UNIT,
+              y: -(extents_y/FT_UNIT),
+              w: extents_w/FT_UNIT,
+              h: extents_h/FT_UNIT,
+            ],
+          )
         end
       end
 
       # Calculates the *spacing* for this font at *size*, which is defined as
       # the width (advance) of the whitespace character at that size.
-      def spacing(size : Magnitude) : Magnitude
+      def spacing(size : FontSize) : Magnitude
         measurement = measure(index(' '), size)
         measurement.advance
       end
 
       # Returns the `FontMetrics` for this font at *size*.
-      def metrics(size : Magnitude) : FontMetrics
-        size = PvgFont.clamp(size)
+      def metrics(size : FontSize) : FontMetrics
+        @metrics.put_if_absent(size) do
+          assert FreeType.set_char_size(@ft_face, size.value * FT_UNIT, 0, 0, 0).zero?
 
-        @metrics.put_if_absent(size.to_i) do
-          PlutoVG.font_face_get_metrics(@pvg_face, size, out ascent, out descent, out line_gap, nil)
+          FreeType.get_font_metrics(@ft_face, out ascent, out descent, out line_gap)
 
-          FontMetrics.new(ascent, descent, line_gap)
+          FontMetrics.new(
+            (ascent / FT_UNIT).to_f32,
+            (descent / FT_UNIT).to_f32,
+            (line_gap / FT_UNIT).to_f32,
+          )
         end
       end
 
@@ -207,35 +227,18 @@ module Ww::Scenery
       def_equals_and_hash @digest
     end
 
-    # Media types supported by `PvgFont`.
+    # Media types supported by `Font`. See also: `PantoMIME`.
     MEDIA_TYPES_FONT = {
-      # TTF/OTF (?)
-      #
-      # See e.g. https://www.iana.org/assignments/media-types/font/sfnt
-      #
-      # I'm not going to pretend I understand a word of what's being said there though . . .
-      Term["font/sfnt"],
-
-      # TTF
       Term["font/ttf"],
-      Term["application/x-font-ttf"],
-      Term["application/x-font-truetype"],
-
-      # OTF
       Term["font/otf"],
-      Term["application/vnd.ms-opentype"],
-      Term["application/x-font-opentype"],
     }
 
     @@ft : FreeType::Library? = nil
 
     # :nodoc:
-    def parse(query : FontQuery, blob : Term::Blob) : Outcome::Accepted(PvgFont?)
+    def parse(query : FontQuery, blob : Term::Blob) : Outcome::Accepted(Font?)
       response = pass do
         next unless blob.classif.media_type.in?(MEDIA_TYPES_FONT)
-
-        ttcindex = 0
-        next unless pvg_face = PlutoVG.face_from_data(blob.bytes, blob.bytes.size, ttcindex, destroy_func: nil, closure: nil)
 
         ft = @@ft ||= begin
           status = FreeType.init_freetype(out library)
@@ -245,23 +248,24 @@ module Ww::Scenery
           library
         end
 
+        ttcindex = 0
         status = FreeType.new_memory_face(ft, blob.bytes, blob.bytes.size, ttcindex, out ft_face)
         next unless status.zero?
 
-        PvgFont.new(pvg_face, ft_face, blob.digest)
+        Font.new(ft_face, blob.digest)
       end
 
       unless response
-        return Outcome.ok_despite(nil.as(PvgFont?), <<-MSG)
+        return Outcome.ok_despite(nil.as(Font?), <<-MSG)
         unrecognized or malformed font with media type #{blob.classif.media_type.to(String)}; \
         expected one of: #{MEDIA_TYPES_FONT.join(", ", &.to(String))}
         MSG
       end
 
-      Outcome.ok(response.as(PvgFont?))
+      Outcome.ok(response.as(Font?))
     end
 
-    # Media types supported by `PvgRasterImage`.
+    # Media types supported by `PvgRasterImage`. See also: `PantoMIME`.
     MEDIA_TYPES_RASTER = {
       Term["image/png"],
       Term["image/jpeg"],
@@ -289,7 +293,7 @@ module Ww::Scenery
       Outcome.ok(response.as(PvgRasterImage?))
     end
 
-    # Media types supported by `PvgSvgImage`.
+    # Media types supported by `PvgSvgImage`. See also: `PantoMIME`.
     MEDIA_TYPES_SVG = {Term["image/svg+xml"]}
 
     # Constructs a `PvgSvgImage` asset from an in-memory *blob*. Returns `nil` if

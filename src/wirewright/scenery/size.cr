@@ -250,7 +250,7 @@ module Ww::Scenery
   private def min_size!(cache, node : IconGlyph) : Point
     measurement = node.font.measure(node.glyph_index, node.size)
 
-    Point[measurement.advance, node.size]
+    Point[measurement.advance, node.size.value]
   end
 
   private def min_size!(cache, node : ShapedText) : Point

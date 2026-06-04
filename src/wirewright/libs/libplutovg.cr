@@ -90,6 +90,7 @@ lib PlutoVG
   fun surface_load_from_image_data = plutovg_surface_load_from_image_data(data : Void*, length : LibC::Int) : Surface
   fun surface_destroy = plutovg_surface_destroy(surface : Surface)
   fun surface_write_to_png = plutovg_surface_write_to_png(surface : Surface, filename : UInt8*) : Bool
+  fun surface_write_to_png_stream = plutovg_surface_write_to_png_stream(surface : Surface, write_func : Void*, Void*, LibC::Int ->, Void*) : Bool
   fun surface_create_for_data = plutovg_surface_create_for_data(data : UInt8*, width : LibC::Int, height : LibC::Int, stride : LibC::Int) : Surface
 
   fun surface_get_data = plutovg_surface_get_data(surface : Surface) : UInt8*
@@ -179,6 +180,8 @@ lib PlutoVG
   fun canvas_clip_rect = plutovg_canvas_clip_rect(canvas : Canvas, x : LibC::Float, y : LibC::Float, w : LibC::Float, h : LibC::Float)
   fun canvas_move_to = plutovg_canvas_move_to(canvas : Canvas, x : LibC::Float, y : LibC::Float)
   fun canvas_line_to = plutovg_canvas_line_to(canvas : Canvas, x : LibC::Float, y : LibC::Float)
+  fun canvas_quad_to = plutovg_canvas_quad_to(canvas : Canvas, x1 : LibC::Float, y1 : LibC::Float, x2 : LibC::Float, y2 : LibC::Float)
+  fun canvas_cubic_to = plutovg_canvas_cubic_to(canvas : Canvas, x1 : LibC::Float, y1 : LibC::Float, x2 : LibC::Float, y2 : LibC::Float, x3 : LibC::Float, y3 : LibC::Float)
   fun canvas_arc_to = plutovg_canvas_arc_to(canvas : Canvas, rx : LibC::Float, ry : LibC::Float, angle : LibC::Float, large_arc_flag : Bool, sweep_flag : Bool, x : LibC::Float, y : LibC::Float)
   fun canvas_clip = plutovg_canvas_clip(canvas : Canvas)
   fun canvas_clip_preserve = plutovg_canvas_clip_preserve(canvas : Canvas)

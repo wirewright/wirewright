@@ -39,7 +39,7 @@ module Ww::Scenery
 
   # Draws a glyph using *font* of the given pixel *size* at origin.
   #
-  # - *index* is the glyph index in the font. See for instance `Asset::PvgFont#glyph_index`.
+  # - *index* is the glyph index in the font. See for instance `Asset::Font#glyph_index`.
   # - *color* is the color to paint the glyph with.
   #
   # Notably:
@@ -49,9 +49,9 @@ module Ww::Scenery
   #   includes things like the overhang in an italic, serif "f". *bounds* is used
   #   to do hit testing and visibility testing.
   defcase DrawGlyph,
-    font : Asset::PvgFont,
-    index : Int32,
-    size : Magnitude,
+    font : Asset::Font,
+    index : UInt32,
+    size : Asset::FontSize,
     color : Pigment::RGBA,
     pen : Point,
     bounds : Rect,

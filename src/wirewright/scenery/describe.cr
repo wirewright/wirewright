@@ -129,7 +129,7 @@ module Ww::Scenery
         commit.with(:font, node.font.digest)
         commit.with(:codepoint, node.codepoint)
         commit.with(:glyph, node.glyph_index)
-        commit.with(:size, node.size)
+        commit.with(:size, node.size.value)
 
         annotate(commit, box)
         annotate(commit, hit)

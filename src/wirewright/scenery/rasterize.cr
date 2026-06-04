@@ -397,14 +397,59 @@ module Ww::Scenery
   private def rasterize(canvas, command : DrawGlyph, dirty : Rect)
     return unless command.bounds.intersects?(dirty)
 
+    face = command.font.as_ft
     color = command.color.to_pvg
 
+    command.font.load_glyph(command.index, command.size)
+
+    fn_move_to = ->(to : FreeType::Vector*, user : Void*) do
+      PlutoVG.canvas_move_to(user.as(PlutoVG::Canvas), to.value.x/FT_UNIT, -(to.value.y/FT_UNIT))
+
+      0
+    end
+
+    fn_line_to = ->(to : FreeType::Vector*, user : Void*) do
+      PlutoVG.canvas_line_to(user.as(PlutoVG::Canvas), to.value.x/FT_UNIT, -(to.value.y/FT_UNIT))
+
+      0
+    end
+
+    fn_conic_to = ->(control : FreeType::Vector*, to : FreeType::Vector*, user : Void*) do
+      PlutoVG.canvas_quad_to(user.as(PlutoVG::Canvas),
+        control.value.x/FT_UNIT, -(control.value.y/FT_UNIT),
+        to.value.x/FT_UNIT, -(to.value.y/FT_UNIT),
+      )
+
+      0
+    end
+
+    fn_cubic_to = ->(control1 : FreeType::Vector*, control2 : FreeType::Vector*, to : FreeType::Vector*, user : Void*) do
+      PlutoVG.canvas_cubic_to(user.as(PlutoVG::Canvas),
+        control1.value.x/FT_UNIT, -(control1.value.y/FT_UNIT),
+        control2.value.x/FT_UNIT, -(control2.value.y/FT_UNIT),
+        to.value.x/FT_UNIT, -(to.value.y/FT_UNIT),
+      )
+
+      0
+    end
+
+    funcs = FreeType::OutlineFuncs.new(
+      move_to: fn_move_to,
+      line_to: fn_line_to,
+      conic_to: fn_conic_to,
+      cubic_to: fn_cubic_to,
+      shift: 0,
+      delta: 0,
+    )
+
     PlutoVG.canvas_save(canvas)
-    PlutoVG.canvas_set_font(canvas, command.font.as_pvg, command.size)
+
     PlutoVG.canvas_set_color(canvas, pointerof(color))
-    PlutoVG.canvas_add_glyph_by_index(canvas, command.index, command.pen.x, command.pen.y)
+    PlutoVG.canvas_translate(canvas, command.pen.x, command.pen.y)
+    assert FreeType.outline_decompose_face(face, pointerof(funcs), canvas.as(Void*)).zero?
     PlutoVG.canvas_fill(canvas)
 
+    # PlutoVG.canvas_translate(canvas, -command.pen.x, -command.pen.y)
     # PlutoVG.canvas_set_rgba(canvas, 1.0, 0, 0, 0.8)
     # PlutoVG.canvas_stroke_rect(canvas, command.bounds.x, command.bounds.y, command.bounds.w, command.bounds.h)
 

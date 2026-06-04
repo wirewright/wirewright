@@ -42,7 +42,7 @@ module Ww::Scenery
                     Img(Asset::PvgRasterImage) |
                     Svg(Asset::PvgSvgImage) |
                     IconGlyph |
-                    Text(Asset::PvgFont) |
+                    Text(Asset::Font) |
                     Content(AssetNode) |
                     Floating(AssetNode) |
                     Limit(AssetNode) |
@@ -363,13 +363,13 @@ module Ww::Scenery
   # NOTE: *cluster* is absolute, meaning it refers into the full text
   # string (`Text#caption`) as opposed to, say, `ShapedParagraph#text`.
   defrecord ShapedStyledGlyph,
-    font : Asset::PvgFont,
+    font : Asset::Font,
     grapheme_index : Int32,
-    glyph_index : Int32,
+    glyph_index : UInt32,
     break_policy : BreakPolicy,
     advance : Point,
     offset : Point,
-    size : Magnitude,
+    size : Asset::FontSize,
     measurement : GlyphMeasurement,
     color : Pigment::RGBA,
     decorations : Slice(GlyphDecoration)
@@ -424,10 +424,10 @@ module Ww::Scenery
     caches_hash: true
 
   defcase IconGlyph,
-    font : Asset::PvgFont,
+    font : Asset::Font,
     codepoint : Char,
-    glyph_index : Int32,
-    size : Magnitude,
+    glyph_index : UInt32,
+    size : Asset::FontSize,
     color : Pigment::RGBA,
     caches_hash: true
 

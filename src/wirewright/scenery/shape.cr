@@ -8,7 +8,7 @@ module Ww::Scenery
   # :nodoc:
   defrecord ShapedGlyph,
     cluster : Int32,
-    index : Int32,
+    index : UInt32,
     advance : Point,
     offset : Point
 
@@ -26,8 +26,8 @@ module Ww::Scenery
   # WARNING: Both *raqm* and *font* are modified while this function runs. It's
   # more convenient to think of each of them as a machine with knobs, and this function
   # is allowed to turn them.
-  private def shape(raqm : Raqm::Handle, font : Asset::PvgFont, size : Magnitude, tracking : Unit?, item : Pf::GraphemeSeln) : Slice(ShapedGlyph)
-    assert FreeType.set_char_size(font.as_ft, size * FT_UNIT, 0, 0, 0).zero?
+  private def shape(raqm : Raqm::Handle, font : Asset::Font, size : Asset::FontSize, tracking : Unit?, item : Pf::GraphemeSeln) : Slice(ShapedGlyph)
+    assert FreeType.set_char_size(font.as_ft, size.value * FT_UNIT, 0, 0, 0).zero?
 
     Raqm.clear_contents(raqm)
 
@@ -38,9 +38,10 @@ module Ww::Scenery
     assert Raqm.set_ft_face(raqm, font.as_ft)
 
     if tracking
-      letter_spacing = (tracking.resolve? || tracking.resolve(font.spacing(size))) * FT_UNIT
+      letter_spacing = tracking.resolve?
+      letter_spacing ||= tracking.resolve(font.spacing(size))
 
-      assert Raqm.set_letter_spacing_range(raqm, letter_spacing, 0, item.bytesize)
+      assert Raqm.set_letter_spacing_range(raqm, letter_spacing*FT_UNIT, 0, item.bytesize)
     end
 
     assert Raqm.layout(raqm)
@@ -53,7 +54,7 @@ module Ww::Scenery
       ShapedGlyph.new(
         # ... so we have to offset the cluster manually.
         cluster: item.byte_start + glyph.cluster,
-        index: glyph.index.to_i,
+        index: glyph.index,
         advance: Point[
           Magnitude.new(glyph.x_advance) / FT_UNIT,
           Magnitude.new(glyph.y_advance) / FT_UNIT,
@@ -72,11 +73,11 @@ module Ww::Scenery
   # :nodoc:
   defrecord ShapedSemiStyledGlyph,
     info : ShapedGlyph,
-    font : Asset::PvgFont,
-    size : Magnitude,
+    font : Asset::Font,
+    size : Asset::FontSize,
     measurement : GlyphMeasurement
 
-  private def shape(raqm : Raqm::Handle, fonts : Slice(Asset::PvgFont), size : Magnitude, tracking : Unit?, item : Pf::GraphemeSeln, &fn : ShapedSemiStyledGlyph ->)
+  private def shape(raqm : Raqm::Handle, fonts : Slice(Asset::Font), size : Asset::FontSize, tracking : Unit?, item : Pf::GraphemeSeln, &fn : ShapedSemiStyledGlyph ->)
     assert fonts.present?
 
     return if item.empty?
@@ -130,7 +131,7 @@ module Ww::Scenery
     end
   end
 
-  private def shape!(raqm : Raqm::Handle, fonts : Slice(Asset::PvgFont), size : Magnitude, tracking : Unit?, item : String) : Slice(ShapedSemiStyledGlyph)
+  private def shape!(raqm : Raqm::Handle, fonts : Slice(Asset::Font), size : Asset::FontSize, tracking : Unit?, item : String) : Slice(ShapedSemiStyledGlyph)
     glyphs = Pf::Kit.stack_array(ShapedSemiStyledGlyph, 8)
 
     shape(raqm, fonts, size, tracking, Pf::GraphemeSeln.new(item)) do |glyph|
@@ -144,8 +145,8 @@ module Ww::Scenery
   #
   # A high-level representation for the input to the shaping algorithm.
   defrecord ShapeInput,
-    fonts : Slice(Asset::PvgFont),
-    size : Magnitude,
+    fonts : Slice(Asset::Font),
+    size : Asset::FontSize,
     tracking : Unit?,
     item : String
 
@@ -200,10 +201,12 @@ module Ww::Scenery
   end
 
   private def shape(cache, raqm : Raqm::Handle, node : Text) : ShapedNode
+    size = Asset::Font.clamp(node.size)
+
     # Process the caption into a sequence of glyph fragments or [line]
     # break fragments.
     frags = [] of GlyphFrag | EndlFrag
-    metrics = node.font_stack.first.metrics(node.size)
+    metrics = node.font_stack.first.metrics(size)
 
     # Split caption by lines.
     node.caption.byte_mask_split(node.unibreaks, :must_break) do |line, br|
@@ -215,7 +218,7 @@ module Ww::Scenery
         repr = pretty_repr(frag)
         repr_seln = Pf::GraphemeSeln.new(repr)
 
-        shape_input = ShapeInput.new(node.font_stack, Asset::PvgFont.clamp(node.size), node.tracking, repr)
+        shape_input = ShapeInput.new(node.font_stack, size, node.tracking, repr)
 
         glyphs = shape(cache, raqm, shape_input)
         glyphs.each do |glyph|
