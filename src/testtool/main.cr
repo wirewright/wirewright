@@ -206,39 +206,55 @@ module Testtool
       log("HTTP server for #{conf.tests_path / "public"} is down")
     end
 
-    begin
-      dw_platform = DwUIR::PvgPlatform.new
-      dw_compositor = DwUIR::Compositor.new
-      dw_ctx = DwUIR::Viewer::Context.new(dw_compositor, dw_platform)
+    {% if flag?(:dwuir) %}
+      begin
+        dw_platform = DwUIR::PvgPlatform.new
+        dw_compositor = DwUIR::Compositor.new
+        dw_ctx = DwUIR::Viewer::Context.new(dw_compositor, dw_platform)
 
-      log("Starting DwUIR server")
+        log("Starting DwUIR server")
 
-      DwUIR.serve(dw_ctx) do |dw|
-        log("DwUIR server running")
+        DwUIR.serve(dw_ctx) do |dw|
+          log("DwUIR server running")
 
-        if conf.assets
-          unless mu_codex = mu_codex?(index)
-            err("Microfold codex query or rem not recognized or undefined, aborting")
-            return
+          if conf.assets
+            unless mu_codex = mu_codex?(index)
+              err("Microfold codex query or rem not recognized or undefined, aborting")
+              return
+            end
+
+            unless editR = editR?(index, base: conf.tests_path)
+              err("editR codex not recognized or undefined, aborting")
+              return
+            end
+
+            unless uiR = uiR?(index, dw, base: conf.tests_path)
+              err("uiR codex not recognized or undefined, aborting")
+              return
+            end
           end
 
-          unless editR = editR?(index, base: conf.tests_path)
-            err("editR codex not recognized or undefined, aborting")
-            return
-          end
-
-          unless uiR = uiR?(index, dw, base: conf.tests_path)
-            err("uiR codex not recognized or undefined, aborting")
-            return
-          end
+          yield AssertionAssets.new(mu_codex, editR, uiR, dw)
+        end
+      ensure
+        server.close
+        server_ctx.wait
+      end
+    {% else %}
+      if conf.assets
+        unless mu_codex = mu_codex?(index)
+          err("Microfold codex query or rem not recognized or undefined, aborting")
+          return
         end
 
-        yield AssertionAssets.new(mu_codex, editR, uiR, dw)
+        unless editR = editR?(index, base: conf.tests_path)
+          err("editR codex not recognized or undefined, aborting")
+          return
+        end
       end
-    ensure
-      server.close
-      server_ctx.wait
-    end
+
+      yield AssertionAssets.new(mu_codex, editR)
+    {% end %}
   end
 
   # Returns `true` if one of *tags* is enabled according to *conf*.

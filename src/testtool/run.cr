@@ -549,29 +549,35 @@ module Testtool
     a : ImageComparand,
     b : ImageComparand
 
-  def run(test : ImageComparison, assets, stat, complaints) : Nil
-    unless uiR = assets.uiR
-      complaints << complaint("missing uiR (did you run with `--assets-none`?)")
-      return
+  {% if flag?(:dwuir) %}
+    def run(test : ImageComparison, assets, stat, complaints) : Nil
+      unless uiR = assets.uiR
+        complaints << complaint("missing uiR (did you run with `--assets-none`?)")
+        return
+      end
+
+      lhs, rhs = measure(stat) do
+        {ppmcmp(assets.dw, uiR, test.a), ppmcmp(assets.dw, uiR, test.b)}
+      end
+
+      return if lhs == rhs # ok
+
+      results = { {test.a, lhs}, {test.b, rhs} }
+      results.each do |(comparand, ppm)|
+        next unless comparand.is_a?(ImageComparandWithTemp)
+
+        tempdst = Path[Dir.tempdir] / "#{comparand.temp}.out.ppm"
+
+        warn("Oops, images are different. Writing artifact to #{tempdst}")
+
+        PathService.write(NormalPath[tempdst], Term::Blob.new(ppm)).wait
+      end
+
+      complaints << complaint("Images are different")
     end
-
-    lhs, rhs = measure(stat) do
-      {ppmcmp(assets.dw, uiR, test.a), ppmcmp(assets.dw, uiR, test.b)}
+  {% else %}
+    def run(test : ImageComparison, assets, stat, complaints) : Nil
+      complaints << complaint("Skipped")
     end
-
-    return if lhs == rhs # ok
-
-    results = { {test.a, lhs}, {test.b, rhs} }
-    results.each do |(comparand, ppm)|
-      next unless comparand.is_a?(ImageComparandWithTemp)
-
-      tempdst = Path[Dir.tempdir] / "#{comparand.temp}.out.ppm"
-
-      warn("Oops, images are different. Writing artifact to #{tempdst}")
-
-      PathService.write(NormalPath[tempdst], Term::Blob.new(ppm)).wait
-    end
-
-    complaints << complaint("Images are different")
-  end
+  {% end %}
 end

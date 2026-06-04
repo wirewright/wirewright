@@ -29,11 +29,17 @@ module Testtool
 
   alias Comparison::Any = TermComparison | ImageComparison
 
-  defcase AssertionAssets,
-    mu_codex : Microfold::SyncCodex?,
-    editR : Rho::Rewriter?,
-    uiR : Rewriter?,
-    dw : Channel(DwUIR::Request)
+  {% if flag?(:dwuir) %}
+    defcase AssertionAssets,
+      mu_codex : Microfold::SyncCodex?,
+      editR : Rho::Rewriter?,
+      uiR : Rewriter?,
+      dw : Channel(DwUIR::Request)
+  {% else %}
+    defcase AssertionAssets,
+      mu_codex : Microfold::SyncCodex?,
+      editR : Rho::Rewriter?
+  {% end %}
 
   alias AssertionNode = AssertionLoc | AssertionTerm | AssertionFn
   alias AssertionFn = AssertionAssets -> AssertionResult

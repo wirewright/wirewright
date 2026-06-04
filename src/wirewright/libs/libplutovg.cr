@@ -87,30 +87,25 @@ lib PlutoVG
   end
 
   fun surface_create = plutovg_surface_create(width : LibC::Int, height : LibC::Int) : Surface
-  fun surface_load_from_image_data = plutovg_surface_load_from_image_data(data : Void*, length : LibC::Int) : Surface
   fun surface_destroy = plutovg_surface_destroy(surface : Surface)
+  fun surface_load_from_image_data = plutovg_surface_load_from_image_data(data : Void*, length : LibC::Int) : Surface
   fun surface_write_to_png = plutovg_surface_write_to_png(surface : Surface, filename : UInt8*) : Bool
   fun surface_write_to_png_stream = plutovg_surface_write_to_png_stream(surface : Surface, write_func : Void*, Void*, LibC::Int ->, Void*) : Bool
   fun surface_create_for_data = plutovg_surface_create_for_data(data : UInt8*, width : LibC::Int, height : LibC::Int, stride : LibC::Int) : Surface
-
   fun surface_get_data = plutovg_surface_get_data(surface : Surface) : UInt8*
   fun surface_get_stride = plutovg_surface_get_stride(surface : Surface) : LibC::Int
   fun surface_get_width = plutovg_surface_get_width(surface : Surface) : LibC::Int
   fun surface_get_height = plutovg_surface_get_height(surface : Surface) : LibC::Int
   fun surface_clear = plutovg_surface_clear(surface : Surface, color : Color*)
 
-  fun face_from_file = plutovg_font_face_load_from_file(filename : UInt8*, ttcindex : LibC::Int) : FontFace
-  fun face_from_data = plutovg_font_face_load_from_data(data : UInt8*, length : LibC::Int, ttcindex : LibC::Int, destroy_func : Void*, closure : Void*) : FontFace
-  fun face_destroy = plutovg_font_face_destroy(face : FontFace)
-
-  fun font_face_get_metrics = plutovg_font_face_get_metrics(face : FontFace, size : LibC::Float, ascent : LibC::Float*, descent : LibC::Float*, line_gap : LibC::Float*, extents : Rect*)
-  fun font_face_get_glyph_index = plutovg_font_face_get_glyph_index(face : FontFace, codepoint : UInt32) : LibC::Int
-  fun font_face_get_glyph_metrics_by_index = plutovg_font_face_get_glyph_metrics_by_index(face : FontFace, size : LibC::Float, index : LibC::Int, advance_width : Float32*, left_side_bearing : Float32*, extents : Rect*)
-
-  fun face_pixels_to_scale = plutovg_font_face_pixels_to_scale(face : FontFace, pixels : LibC::Float, scale : LibC::Float*)
-
-  fun face_get_glyph_metrics = plutovg_font_face_get_glyph_metrics(face : FontFace, size : LibC::Float, codepoint : UInt32, advance_width : Float32*, left_side_bearing : Float32*, extents : Rect*)
-  fun face_get_kerning = plutovg_font_face_get_kerning(face : FontFace, size : LibC::Float, codepoint1 : UInt32, codepoint2 : UInt32, kerning : Int32*)
+  {% if flag?(:dwuir) %}
+    fun face_from_file = plutovg_font_face_load_from_file(filename : UInt8*, ttcindex : LibC::Int) : FontFace
+    fun face_from_data = plutovg_font_face_load_from_data(data : UInt8*, length : LibC::Int, ttcindex : LibC::Int, destroy_func : Void*, closure : Void*) : FontFace
+    fun face_destroy = plutovg_font_face_destroy(face : FontFace)
+    fun font_face_get_metrics = plutovg_font_face_get_metrics(face : FontFace, size : LibC::Float, ascent : LibC::Float*, descent : LibC::Float*, line_gap : LibC::Float*, extents : Rect*)
+    fun face_get_glyph_metrics = plutovg_font_face_get_glyph_metrics(face : FontFace, size : LibC::Float, codepoint : UInt32, advance_width : Float32*, left_side_bearing : Float32*, extents : Rect*)
+    fun face_get_kerning = plutovg_font_face_get_kerning(face : FontFace, size : LibC::Float, codepoint1 : UInt32, codepoint2 : UInt32, kerning : Int32*)
+  {% end %}
 
   fun canvas_create = plutovg_canvas_create(surface : Surface) : Canvas
   fun canvas_destroy = plutovg_canvas_destroy(canvas : Canvas)
