@@ -347,6 +347,10 @@ module Ww::Nitrene
 
   # See `Interpreter`.
   def composite(it : Interpreter, vars : Term::Dict, expr : Term) : Term
+    unless expr.type.dict?
+      return expr
+    end
+
     Term.case(expr) do
       matchpi %{(literal subexpr_)} do
         subexpr
@@ -497,6 +501,10 @@ module Ww::Nitrene
 
   # See `Interpreter`.
   def primitive(it : Interpreter, vars : Term::Dict, expr : Term) : Term
+    unless expr.type.dict?
+      return expr
+    end
+
     Term.case(expr) do
       matchpi %{(+)} do
         Term.of(0)
