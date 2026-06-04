@@ -28,7 +28,7 @@ module Testtool
 
       {entry.path,
        {in:  PathService.read(NormalPath[entry.path / "in.wwml"]),
-        out: PathService.read(NormalPath[entry.path / "out.ppm"]),
+        out: PathService.read(NormalPath[entry.path / "out.png"]),
         hit: PathService.read(NormalPath[entry.path / "hit.wwml"])}}
     end
 
@@ -54,7 +54,7 @@ module Testtool
       out_blob = test_case[:out]
       hit_blob = test_case[:hit]
       unless in_blob && out_blob
-        warn("Skipping malformed test: must contain in.wwml and out.ppm", path)
+        warn("Skipping malformed test: must contain in.wwml and out.png", path)
         next
       end
 
@@ -77,7 +77,7 @@ module Testtool
           test = SceneryTest.new(
             path: test_case[:path],
             in: test_case[:in],
-            out_ppm: test_case[:out],
+            out_png: test_case[:out],
             hit: test_case[:hit],
             width: width.to(Magnitude),
             height: height.to(Magnitude),

@@ -174,7 +174,7 @@ module Testtool
   defrecord SceneryTest,
     path : NormalPath,
     in : Term,
-    out_ppm : Term::Blob,
+    out_png : Term::Blob,
     hit : Term?,
     width : Magnitude,
     height : Magnitude,
@@ -198,19 +198,19 @@ module Testtool
 
     cache = Scenery::Safe.cache
 
-    scene_out, ppm = measure(stat) do
+    scene_out, png = measure(stat) do
       scene_out = Scenery::Safe.scene(cache, scenery_in, test.width, test.height)
       raster = Scenery::Safe.rasterize(cache, scene_out.unwrap, backdrop: test.backdrop)
-      {scene_out, raster.to_ppm}
+      {scene_out, raster.to_png}
     end
 
-    unless ppm == test.out_ppm
-      fail_path = NormalPath["/tmp/scenery.#{test.path.stem}.fail.ppm"]
-      complaints << complaint("in.wwml does not match out.ppm (writing to #{fail_path})")
+    unless png == test.out_png
+      fail_path = NormalPath["/tmp/scenery.#{test.path.stem}.fail.png"]
+      complaints << complaint("in.wwml does not match out.png (writing to #{fail_path})")
       scene_out.diagnostics.each do |diagnostic|
         complaints << complaint("diagnostic: #{diagnostic.inspect}")
       end
-      PathService.write(fail_path, ppm).wait
+      PathService.write(fail_path, png).wait
       return
     end
 

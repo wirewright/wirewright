@@ -42,7 +42,7 @@ module Ww::Scenery
       end
     end
 
-    # Returns a blob representing the content of this pixel rect as a PPM image.
+    # Converts this pixel rect to a PPM image.
     def to_ppm : Term::Blob
       Term::Blob.build do |io|
         io << "P3\n"
@@ -53,6 +53,26 @@ module Ww::Scenery
           r, g, b, _ = pixel.rgba
           io << r << " " << g << " " << b << "\n"
         end
+      end
+    end
+
+    # Converts this pixel rect to a PNG image.
+    def to_png : Term::Blob
+      surfaceptr = PlutoVG.surface_create_for_data(@pixels, @width, @height, @stride)
+
+      begin
+        write_func = ->(closure : Void*, data : Void*, size : Int32) do
+          chunk = Bytes.new(data.as(UInt8*), size, read_only: true)
+          ioptr = closure.as(IO*)
+          ioptr.value.write(chunk)
+        end
+
+        Term::Blob.build do |io|
+          # pointerof(io) is valid for the duration of surface_write_to_png_stream.
+          assert PlutoVG.surface_write_to_png_stream(surfaceptr, write_func, pointerof(io))
+        end
+      ensure
+        PlutoVG.surface_destroy(surfaceptr)
       end
     end
 
