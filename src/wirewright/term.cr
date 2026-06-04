@@ -1892,7 +1892,7 @@ module Ww
     end
 
     # Concatenates `Rep`s returned by the block for each object.
-    def self.flatten(objects : Indexable, &) : Rep
+    def self.flatten(objects : Enumerable, &) : Rep
       sink = Pf::Kit.stack_array(Term)
 
       objects.each_with_index do |object, index|
