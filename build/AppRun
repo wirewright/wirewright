@@ -1,0 +1,5 @@
+#!/bin/sh
+APPIMAGE_DIR=$(dirname "$APPIMAGE")
+export WW_RUNTIME="${APPIMAGE_DIR}/runtime"
+export LD_LIBRARY_PATH="${APPDIR}/usr/lib:${LD_LIBRARY_PATH}"
+exec "${APPDIR}/usr/bin/musoma" "$@"

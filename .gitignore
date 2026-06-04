@@ -16,6 +16,7 @@ _*
 !VERSION
 !AUTHORS
 !NEWS
+!AppRun
 
 ### Above combination will ignore all files without extension ###
 /junk/
