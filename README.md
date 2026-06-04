@@ -114,37 +114,24 @@ Wirewright currently only runs on Linux.
 This is probably the easiest way to build Wirewright. Note that I'm not an expert
 on Docker, so the Dockerfiles may not be the best ones on the planet.
 
-Go to the build directory:
+You can use the `build-mu` shell script:
 
 ```console
-cd build
+sh build-mu.sh
 ```
 
-Build the Wirewright environment image:
-
-```console
-docker build -f wirewright-env.Dockerfile -t wirewright-env:latest .
-```
-
-Build the Wirewright base image (which you can run tests on or do general Wirewright work):
-
-```console
-docker build -f wirewright.Dockerfile -t wirewright-base:latest .
-```
-
-Build the MuSoma AppImage:
-
-```console
-docker build -f musoma.Dockerfile --output type=local,dest=. .
-```
-
-It will eventually dump musoma-dist.tar.gz into the build/ dir. The archive contains
-the AppImage and miscellaneous files.
+It will eventually output musoma-dist.tar.gz. The archive contains the AppImage and
+miscellaneous files.
 
 > [!NOTE]
-> The Dockerfiles are very poorly written right now and are not suitable for development.
-> You currently have to rebuild too much (`wirewright-base`). This makes fast iteration
-> nearly impossible. Improving the Dockerfiles remains future work.
+> AppImages built this way may produce a bunch of strange OpenSSL errors on
+> some distros, which prevent networking from working in Wirewright. I'm not
+> sure what the errors are caused by yet, but it feels like something is getting
+> hard-coded somewhere at build-time, in the container, that is then incompatible
+> with the distro the AppImage is run on. In my case, it's Manjaro vs. the standard
+> Crystal Debian Docker image. The whole point of AppImages is destroyed by this,
+> I guess; but that's the state of software in 2026; *obviously* we're mere steps
+> from "artificial superintelligence", huh?
 
 ### Building without Docker
 
