@@ -15,7 +15,7 @@ module MuSoma
   # None of the methods do IO; IO is done deep in the internals of `PathService`,
   # `HTTPService` and so on, on dedicated fibers. You are simply performing or
   # calling for "rendezvous" here, with `ExtrinsicMap` and various other facilities
-  # "cushioning" your calls while the rendezvous is arranged.
+  # "cushioning" your calls while the rendezvous is being arranged.
   class ExtrinsicMap
     Log = ::Log.for(self)
 
