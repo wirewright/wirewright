@@ -73,7 +73,7 @@ module Ww::Rack
 
         next unless env = M1.match?(pattern, Term.of(matchee))
 
-        expansion, _ = Alloy.render0(env, template, severity: :quiet)
+        expansion = Alloy2.render_rep(template, locals: env)
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
@@ -218,7 +218,7 @@ module Ww::Rack
           next D7.patch(dst, {2, nil})
         end
 
-        expansion, _ = Alloy.render0(env, template, severity: :quiet)
+        expansion = Alloy2.render_rep(template, locals: env)
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
@@ -257,7 +257,7 @@ module Ww::Rack
           next D7.patch(dst, {2, nil})
         end
 
-        expansion, _ = Alloy.render0(env, template, severity: :quiet)
+        expansion = Alloy2.render_rep(template, locals: env)
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end
@@ -308,7 +308,7 @@ module Ww::Rack
         matchee = Term.of(src_terms, dst_term)
         next unless env = M1.match?(pattern, Term.of(matchee))
 
-        expansion, _ = Alloy.render0(env, template, severity: :quiet)
+        expansion = Alloy2.render_rep(template, locals: env)
         unless expansion.empty?
           instance = Term.collapse(expansion)
         end

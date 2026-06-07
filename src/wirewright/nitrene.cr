@@ -303,21 +303,31 @@ module Ww::Nitrene
   alias Eval = Interpreter, Term::Dict, Term -> Term
 
   # Represents a Nitrene interpreter.
+  #
+  # FIXME: Flip order
   defrecord Interpreter, composite : Eval, primitive : Eval
 
   struct Interpreter
-    DEFAULT = new(
-      composite: ->Nitrene.composite(Interpreter, Term::Dict, Term),
-      primitive: ->Nitrene.primitive(Interpreter, Term::Dict, Term),
-    )
+    DEFAULT = new(Nitrene.composite, Nitrene.primitive)
   end
 
   def composite
-    Interpreter::DEFAULT.composite
+    ->Nitrene.composite(Interpreter, Term::Dict, Term)
   end
 
   def primitive
-    Interpreter::DEFAULT.primitive
+    ->Nitrene.primitive(Interpreter, Term::Dict, Term)
+  end
+
+  def either(a : Eval, b : Eval) : Eval
+    ->(it : Interpreter, vars : Term::Dict, expr : Term) do
+      value = a.call(it, vars, expr)
+      unless value == expr
+        return value
+      end
+
+      b.call(it, vars, expr)
+    end
   end
 
   def eval(it : Interpreter, vars : Term::Dict, expr : Term) : Term
@@ -481,7 +491,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(template template_)} do
-        Alloy.render(vars, template)
+        Alloy2.render(vars, template)
       end
 
       matchpi %{(let bodyQ_ ¦ assignments_)} do
@@ -762,7 +772,7 @@ module Ww::Nitrene
       end
 
       matchpiT %{(escape arg_string)} do
-        Term.of(arg.escaped)
+        Term.of(arg.escaped.to_s)
       end
 
       matchpi %{(charcount _*)} do

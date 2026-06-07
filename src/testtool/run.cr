@@ -111,26 +111,13 @@ module Testtool
     end
   end
 
-  defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term, issues : Term::Dict
+  defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term
 
   def run(test : AlloyTest, assets, stat, complaints) : Nil
-    actual, issues = measure(stat) { Alloy.render_with_issues(test.vars, test.template) }
+    actual = measure(stat) { Alloy2.render(test.vars, test.template) }
+    return if actual == test.expansion # ok
 
-    unless actual == test.expansion
-      complaints << complaint("Alloy template expansion mismatch", expansion: actual)
-    end
-
-    issues.each do |issue|
-      next if test.issues.items.any? { |detail| Term.of(issue.detail) == detail }
-
-      complaints << complaint("Unexpected Alloy issue in template", issue: Term.of(issue.detail))
-    end
-
-    test.issues.items.each do |detail|
-      next if issues.any? { |issue| Term.of(issue.detail) == detail }
-
-      complaints << complaint("Missing Alloy issue in template", issue: detail)
-    end
+    complaints << complaint("Alloy template expansion mismatch", expansion: actual)
   end
 
   defrecord MicrofoldTest, variants : Array(Term)
@@ -182,8 +169,7 @@ module Testtool
     microfold : Bool
 
   def run(test : SceneryTest, assets, stat, complaints) : Nil
-    in_ruleset, in_rest = Ruleset.ruleset_and_rest(Ruleset::DEFAULT_SELECTOR, test.in)
-    in_instance = Alloy.compose(in_ruleset, Term[], Alloy.template(Term[], Term.of(in_rest)))
+    in_instance = Alloy2.render(Alloy2.sheet(test.in))
 
     if test.microfold
       unless codex = assets.mu_codex

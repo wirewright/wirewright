@@ -990,10 +990,11 @@ module Ww
       end
 
       def self.new(& : IO ->) : H256
+        buffer = uninitialized UInt8[8192]
         digest = ALGORITHM.new
-        io = IO::ByteStream.new { |slice| digest.update(slice) }
-
+        io = IO::BufferedWriteDigest.new(buffer.to_slice, digest)
         yield io
+        io.flush
 
         scratch = uninitialized UInt8[32]
         blks = scratch.to_slice.unsafe_slice_of(UInt64)
@@ -1043,6 +1044,18 @@ module Ww
         blks[3] = blk3
 
         {scratch[0], scratch[1]}
+      end
+
+      def write(io)
+        scratch = uninitialized UInt8[32]
+
+        blks = scratch.to_slice.unsafe_slice_of(UInt64)
+        blks[0] = blk0
+        blks[1] = blk1
+        blks[2] = blk2
+        blks[3] = blk3
+
+        io.write(scratch.to_slice)
       end
 
       def <=>(other : H256)
@@ -1391,7 +1404,11 @@ module Ww
 
     # Returns a copy of the dict *a* with keys in *keys*. *keys* are converted
     # to `Term` using `Term.of`.
-    def self.select(a : Dict, keys : Enumerable) : Dict
+    def self.select(a : Dict, in keys : Enumerable) : Dict
+      if (keys.is_a?(Indexable) || keys.is_a?(Set)) && keys.empty? # Fast path
+        return Term[]
+      end
+
       Dict.build do |commit|
         keys.each do |key|
           commit.with(key, a[key]?)

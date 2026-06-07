@@ -2,7 +2,7 @@
 (group
   (alloy {x: 100} ^x 100)
   (alloy {x: 100} ^\x "100")
-  (alloy {x: 100} ^*x () issues: ("value must be a dict"))
+  (alloy {x: 100} ^*x ())
 
   (alloy {x: (1 2 3)} ^x (1 2 3))
   (alloy {x: (1 2 3)} ^\x "(1 2 3)")
@@ -13,14 +13,14 @@
     (100 (1 2 3) "hello world"))
   (alloy {x: 100, y: (1 2 3), z: "hello world"}
     (^*x ^*y ^*z)
-    (1 2 3) ;; ^*X and ^*z were omitted
-    issues: ("value must be a dict"))
+    (1 2 3)) ;; ^*X and ^*z were omitted
   (alloy {x: 100, y: (1 2 3), z: "hello world"}
     (^\x ^\y ^\z)
     ("100" "(1 2 3)" "\"hello world\""))
 
-  (alloy {} ^x () issues: ("variable `x` does not exist"))
-  (alloy {} ^*x () issues: ("variable `x` does not exist"))
+  ;; not found
+  (alloy {} ^x ())
+  (alloy {} ^*x ())
 
   (alloy {x: 100}
     (^let x: 200
@@ -434,8 +434,8 @@
 
 ;; ^*
 (group
-  (alloy {} ((^* x)) () issues: ("value must be a dict"))
-  (alloy {x: 100} ((^* x)) () issues: ("value must be a dict"))
+  (alloy {} ((^* x)) ())
+  (alloy {x: 100} ((^* x)) ())
   (alloy {x: (1 2 3)} ((^* x)) (1 2 3))
   (alloy {x: (1 2 3 4)}
     ((^* (select x (%pipe (mod 2) 0))))

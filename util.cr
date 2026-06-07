@@ -589,19 +589,6 @@ class IO::BytesizeCounter < IO
   end
 end
 
-class IO::ByteStream < IO
-  def initialize(&@fn : Bytes ->)
-  end
-
-  def read(slice : Bytes)
-    0
-  end
-
-  def write(slice : Bytes) : Nil
-    @fn.call(slice)
-  end
-end
-
 class IO
   def self.empty
     Empty::INSTANCE
@@ -614,6 +601,38 @@ class IO::Memory
   end
 end
 
+class IO::BufferedWriteDigest < IO
+  def initialize(@buffer : Bytes, @digest : ::Digest)
+    @size = 0
+  end
+
+  def read(slice : Bytes) : Int32
+    0
+  end
+
+  def flush : Nil
+    @digest.update(@buffer.trim(@size))
+    @size = 0
+  end
+
+  def write(slice : Bytes) : Nil
+    if @size + slice.size > @buffer.size
+      flush
+    end
+
+    # If slice is larger than buffer size, update the digest immediately
+    # without buffering.
+    if @size + slice.size > @buffer.size
+      assert @size.zero?
+      @digest.update(slice)
+      return
+    end
+
+    # Otherwise, buffer.
+    slice.copy_to(@buffer + @size)
+    @size += slice.size
+  end
+end
 
 module TextWrap
   extend self

@@ -587,7 +587,7 @@ history-limit: 128
 ;;
 ;; TODO: if parent or gnd head is a symbol, highlight it differently (emphasis)
 
-(parent/dict ((inert l0←(%all _symbol (%not group window))) (inert l1_dict) m_* r_) {})
+(parent (inert l0←(%all _symbol (%not group window))) (inert l1_dict) m_* r_)
   => (group detail: (dict block)
             multiline: true
        (term ^l0)
@@ -597,7 +597,7 @@ history-limit: 128
            ^(view item)))
        ^(view r))
 
-(parent/dict (l_ m_* r_) pairs_dict)
+(parent l_ m_* r_ ¦ pairs_)
   => (group detail: (dict group)
             multiline: true
        ^(view l)
@@ -610,17 +610,11 @@ history-limit: 128
            (pair ^key ^value))))
 
 ;; Edge case
-(parent/dict (head_) pairs_dict)
+(parent head_ ¦ pairs_)
   => (group detail: (dict generic)
        ^(view head)
        (^each (pairs entry as (key_ value_))
          (pair ^key ^value)))
-
-;; FIXME: We can't follow the same form because ^extend doesn't interact nicely
-;; with Alloy.compose. The left-hand side is composed prematurely before being
-;; extended with pairs.
-(parent items_* ¦ pairs_)
-  => (parent/dict ^items ^pairs)
 
 ;; Root
 
@@ -1516,8 +1510,8 @@ scroll: {}
 (Expander addr_ ⍊ icon_string center⋮ false)
   => (vantage id: (hoverable (expander ^addr)) active: if-hit
        (icon style: "-dl-1/2 font-lg text-theme-subtle rounded-sm center:center-y \
-                     -center:content-y hover:bg-theme-overlay hover:text-theme-text \
-                     hover:cursor-pointer"
+                     -center:content-y bg-transparent hover:bg-theme-overlay \
+                     hover:text-theme-text hover:cursor-pointer"
              hover: ^(any? hover-over ('expander addr))
              ^:center
          ^icon))
@@ -1943,7 +1937,9 @@ scroll: {}
            (TimePosition ^timeline)
            (TimeTooltip ^timeline))
          (box style: "fr-1"
-           (StatusMessage ^log)))
+           (^case vars
+             (when {¦ log}
+               (StatusMessage ^log)))))
        (group style: "flow-row gap-3 pr-2/3"
          (box style: "fr-1"
            (SeedStatus))
@@ -2044,8 +2040,6 @@ scroll: {}
              (gate
                (transform scale: ^scale
                  (box style: "p-7 content"
-                   ;; circuit-µ is in Microfold, so we leave it as-is. It also depends on the cues
-                   ;; that we send in the pane style above.
                    ^(view circuit-µ))))))))
 
 ;;

@@ -923,9 +923,7 @@ module Ww::M1
         env = env.with(:it, this)
       end
 
-      # FIXME: backmaps must support Issue::Sink I suppose. We can't just throw
-      # issues out like this.
-      expansion, _ = Alloy.render0(env, mut.template, composite: composite, severity: :quiet)
+      expansion = Alloy2.render_rep(mut.template, locals: env, composite: composite)
 
       unless term = expansion.single?
         # (x_ _ _) <> {x: (^splice a b c)}, (100 200 300) -> (a b c 200 300)

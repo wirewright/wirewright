@@ -320,8 +320,7 @@ module Ww::Microfold
                 next
               end
 
-              # TODO: Use acc once Alloy is ported to Outcomes.
-              rhs = Alloy.render(globals, table_expr)
+              rhs = Alloy2.render(globals, table_expr)
 
               tables[{table_name, lhs.to(String)}] = rhs
             end
@@ -513,13 +512,13 @@ module Ww::Microfold
           return base
         end
 
-        Alloy.render(vars, defn.template)
+        Alloy2.render(vars, defn.template)
       in .surround?
         unless vars = M1.match?(defn.pattern, Term.of({base}, designations))
           return base
         end
 
-        result = Alloy.render(vars, defn.template)
+        result = Alloy2.render(vars, defn.template)
         return base unless response = result.as_d?
         return base unless node = response[0]?
 
@@ -533,7 +532,7 @@ module Ww::Microfold
           return base
         end
 
-        result = Alloy.render(vars, defn.template)
+        result = Alloy2.render(vars, defn.template)
 
         Term.of(Term.union(result.prepend(head), dict.pairspart))
       end

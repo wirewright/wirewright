@@ -97,7 +97,6 @@ module Ww::M1
         envtab = EnvMap.new
 
         # NOTE: in the vast majority of cases *env* is empty. No work is done here.
-        # The only major supplier of nonempty *env*s is `Alloy.render`.
         env.each_entry do |key, value|
           envtab = EnvMap.assoc(envtabs, envtab, key, Tzip.new(value, Log.none))
         end

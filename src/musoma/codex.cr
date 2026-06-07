@@ -64,40 +64,68 @@ module MuSoma
 
   class Codex::Pretty
     # :nodoc:
-    def initialize(@sema : Ruleset, @prettyR : Rho::Rewriter)
-      @cache = GenerationalCache({Rho::RewriterId, Term}, Term::Rep).new
+    def initialize(@sema_old : Ruleset, @sema : Alloy2::Rewriter, @prettyR : Rho::Rewriter)
+      @render_cache = GenerationalCache(Alloy2::RenderKey, Term::Rep).new
+      @rho_cache = GenerationalCache({Rho::RewriterId, Term}, Term::Rep).new
     end
 
     def self.new(codex : Term::Dict) : Pretty
-      sema = Ruleset.select(Ruleset::DEFAULT_SELECTOR, codex[:"pretty/sema"]? || Term.of)
+      sema = Alloy2.rewriter(codex[:"pretty/sema"]? || Term.of)
+      sema_old = Ruleset.select(Ruleset::DEFAULT_SELECTOR, codex[:"pretty/sema"]? || Term.of)
       prettyR = Rho.rewriter(Term.of(codex), section: Term.of(:prettyR))
 
-      new(sema, prettyR)
+      new(sema_old, sema, prettyR)
     end
 
     # Converts a circuit *repr* (see `MuSoma.repr`) to Microfold.
     def rewrite(repr : Term) : Term
-      sema_out = Alloy.compose(@sema, Term[], Alloy.component(repr))
+      sema_out_new = @render_cache.epoch do
+        Alloy2.rewrite(@sema, repr, cache: @render_cache)
+      end
 
-      Rho.rewrite(@prettyR, sema_out, cache: @cache)
+      # sema_out_old = Alloy.compose(@sema_old, Term[], Alloy.component(repr))
+
+      # unless sema_out_old == sema_out_new
+      #   puts ML.display(repr)
+      #   puts ML.display(sema_out_old)
+      #   puts ML.display(sema_out_new)
+      #   raise ""
+      # end
+
+      Rho.rewrite(@prettyR, sema_out_new, cache: @rho_cache)
     end
   end
 
   class Codex::App
     # :nodoc:
-    def initialize(@ruleset : Ruleset, @template : Term)
+    def initialize(@ruleset : Ruleset, @template_old : Term, @template : Alloy2::CompiledTemplate)
+      @cache = GenerationalCache(Alloy2::RenderKey, Term::Rep).new
     end
 
     def self.new(codex : Term::Dict) : App
       ruleset, rest = Ruleset.ruleset_and_rest(Ruleset::DEFAULT_SELECTOR, codex[:app]? || Term.of)
-      template = rest.items.first? || Term.of
+      template_old = rest.items.first? || Term.of
+      template = Alloy2.compile(Alloy2.sheet(codex[:app]? || Term.of))
 
-      new(ruleset, template)
+      new(ruleset, template_old, template)
     end
 
     # Computes the UI of the app (Microfold) from the current *state*.
     def render(state : Term::Dict) : Term
-      Alloy.compose(@ruleset, state, Alloy.template(Term[], @template))
+      # render_old = Alloy.compose(@ruleset, state, Alloy.template(Term[], @template_old))
+      render_new = @cache.epoch do
+        Alloy2.render(@template, globals: state, cache: @cache)
+      end
+
+      render_new = render_new.items.last # ?!
+
+      # unless render_old == render_new
+      #   puts ML.display(render_old)
+      #   puts ML.display(render_new)
+      #   raise ""
+      # end
+
+      render_new
     end
   end
 

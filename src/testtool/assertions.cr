@@ -145,7 +145,7 @@ module Testtool
       # |@ testtool.decl.alloy
       #
       # |@pattern
-      # (alloy vars_dict template_ expansion_ ¦ issues⋮ ())
+      # (alloy vars_dict template_ expansion_)
       #
       # |@key vars
       # Variables to instantiate the template with.
@@ -156,18 +156,13 @@ module Testtool
       # |@key expansion
       # Expected expansion of the template.
       #
-      # |@key issues
-      # Lists expected issues (strings). Issues not in this list (unexpected issues)
-      # will cause your test to fail.
-      #
       # |@block
       # Use `alloy` to test Alloy template expansion (Crystal-side `Alloy.render`).
       matchpiT %{[alloy vars_dict template_ expansion_]} do
         M0.schema(decl) do |s|
           s.on_mismatch { continue }
 
-          issues = s.key(:issues, value: Term::Dict, default: Term[])
-          test = AlloyTest.new(vars, template, expansion, issues)
+          test = AlloyTest.new(vars, template, expansion)
           annotated(assertions(test), decl, srcmap)
         end
       end
