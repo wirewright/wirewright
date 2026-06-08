@@ -79,7 +79,7 @@ module Testtool
 
   def ppmcmp(dw, uiR, comparand : DwDoc) : Bytes
     doc = ML.document(comparand.source, doc: false)
-    dwuir = Alloy2.render(comparand.vars, doc)
+    dwuir = Alloy.render(comparand.vars, doc)
 
     conf = Term.matchpiT(dwuir, %[{¦ initial-w: w←(%number +i32) initial-h: h←(%number +i32) backdrop_}]) do
       DwUIR::ShowConf.new(w, h,
@@ -95,7 +95,7 @@ module Testtool
 
   def ppmcmp(dw, uiR, comparand : UIRdoc) : Bytes
     doc = ML.document(comparand.source, doc: false)
-    uir = Alloy2.render(Alloy2.sheet(doc), globals: comparand.globals)
+    uir = Alloy.render(Alloy.sheet(doc), globals: comparand.globals)
     dwuir = rewrite(uir, uiR)
 
     conf = Term.matchpiT(dwuir, %[{¦ content-w: w←(%number +i32) content-h: h←(%number +i32) fill_}]) do

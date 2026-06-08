@@ -1,4 +1,4 @@
-module Ww::Alloy2
+module Ww::Alloy
   # Like `Ruleset` but for Alloy `Component`s.
   #
   # NOTE: Headed components (`M1.head?`) are considered more specific than
@@ -105,9 +105,9 @@ module Ww::Alloy2
         {% end %}
         }.max.to_u64
 
-        base = Alloy2.weigh(@template)
+        base = Alloy.weigh(@template)
         @components.each do |component|
-          base += Alloy2.weigh(component.template)
+          base += Alloy.weigh(component.template)
         end
 
         k * base

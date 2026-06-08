@@ -1,4 +1,4 @@
-module Ww::Alloy2
+module Ww::Alloy
   alias Ref = Term::Sym
 
   private def refsum?(reftab, path, components, templates : Enumerable)

@@ -450,7 +450,7 @@ module Ww::Rack::Assembler
 
   # Instantiates the given *recipe*.
   def instantiate(vars : Term::Dict, recipe : AlloyRecipe) : Term
-    Alloy2.render(vars, recipe.template)
+    Alloy.render(vars, recipe.template)
   end
 
   # :ditto:
@@ -462,7 +462,7 @@ module Ww::Rack::Assembler
       if surface = recipe.surface
         # (surface (⏏@edge_⏏ (#Button msg_))
         #   ⏏(#Button ^msg)⏏)
-        surface_instance = Alloy2.render(vars, surface.template)
+        surface_instance = Alloy.render(vars, surface.template)
 
         commit << :device << {surface.edge, surface_instance}
       else
@@ -498,7 +498,7 @@ module Ww::Rack::Assembler
     Term.case(node) do
       # E.g. (template (cell @x ^100)) => (cell @x 100)
       matchpi %{(template expr_)} do
-        Alloy2.render(vars, expr)
+        Alloy.render(vars, expr)
       end
 
       # E.g.
@@ -510,7 +510,7 @@ module Ww::Rack::Assembler
       #     (cell @x 100)
       #     (cell @y 200))
       matchpi %{(template _+)} do
-        Alloy2.render(vars, Term.morph(node, {0, :group}))
+        Alloy.render(vars, Term.morph(node, {0, :group}))
       end
 
       matchpi %{[surface (@_ _) _]} do

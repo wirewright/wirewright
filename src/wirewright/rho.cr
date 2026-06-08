@@ -84,7 +84,7 @@ module Ww
         in Rule::Template
           next unless env = M1.match?(Term[], pattern, input)
 
-          rep = Alloy2.render_rep(rule.body, locals: env)
+          rep = Alloy.render_rep(rule.body, locals: env)
         in Rule::Backmap
           next unless rep = M1.backmapR?(pattern, rule.backspec, input)
         end
@@ -115,7 +115,7 @@ module Ww
             in Rule::Template
               next unless env = M1.match?(Term[], pattern, offspring)
 
-              rep = Alloy2.render_rep(rule.body, locals: env)
+              rep = Alloy.render_rep(rule.body, locals: env)
             in Rule::Backmap
               next unless rep = M1.backmapR?(pattern, rule.backspec, offspring)
             end

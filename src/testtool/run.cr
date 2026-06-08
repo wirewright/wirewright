@@ -114,7 +114,7 @@ module Testtool
   defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term
 
   def run(test : AlloyTest, assets, stat, complaints) : Nil
-    actual = measure(stat) { Alloy2.render(test.vars, test.template) }
+    actual = measure(stat) { Alloy.render(test.vars, test.template) }
     return if actual == test.expansion # ok
 
     complaints << complaint("Alloy template expansion mismatch", expansion: actual)
@@ -169,7 +169,7 @@ module Testtool
     microfold : Bool
 
   def run(test : SceneryTest, assets, stat, complaints) : Nil
-    in_instance = Alloy2.render(Alloy2.sheet(test.in))
+    in_instance = Alloy.render(Alloy.sheet(test.in))
 
     if test.microfold
       unless codex = assets.mu_codex

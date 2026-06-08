@@ -1,4 +1,4 @@
-module Ww::Alloy2
+module Ww::Alloy
   extend self
 
   defcase CompiledTemplate, unit : Unit, reftab : Reftab do

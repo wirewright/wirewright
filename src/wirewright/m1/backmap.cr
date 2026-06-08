@@ -923,7 +923,7 @@ module Ww::M1
         env = env.with(:it, this)
       end
 
-      expansion = Alloy2.render_rep(mut.template, locals: env, composite: composite)
+      expansion = Alloy.render_rep(mut.template, locals: env, composite: composite)
 
       unless term = expansion.single?
         # (x_ _ _) <> {x: (^splice a b c)}, (100 200 300) -> (a b c 200 300)

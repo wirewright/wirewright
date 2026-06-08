@@ -75,7 +75,7 @@ module Ww::Microfold
   SYM_ROOT_BOX = Term.of(:"root-box")
 
   private def designate(codex : Codex, vars : Term::Dict, defn : UtilityDefn, origin : StyleOrigin) : Slice(NonItemDesignation)
-    settings = Alloy2.render(Term.union(codex.globals, vars), defn.contrib)
+    settings = Alloy.render(Term.union(codex.globals, vars), defn.contrib)
     unless settings = settings.as_d?
       return Slice(NonItemDesignation).empty
     end
@@ -103,7 +103,7 @@ module Ww::Microfold
     defn.calls.each do |call|
       next unless target = codex.find_by_name?(call.callee)
 
-      args = Alloy2.render(Term.union(codex.globals, vars), Term.of(call.args))
+      args = Alloy.render(Term.union(codex.globals, vars), Term.of(call.args))
       designations.concat(designate(codex, args.as_d, target, origin))
     end
 

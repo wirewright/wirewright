@@ -491,7 +491,7 @@ module Ww::Nitrene
       end
 
       matchpi %{(template template_)} do
-        Alloy2.render(vars, template)
+        Alloy.render(vars, template)
       end
 
       matchpi %{(let bodyQ_ ¦ assignments_)} do

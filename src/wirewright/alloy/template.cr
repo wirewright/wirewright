@@ -1,4 +1,4 @@
-module Ww::Alloy2
+module Ww::Alloy
   # :nodoc:
   defrecord Pattern,
     term : Term,
@@ -158,74 +158,74 @@ module Ww::Alloy2
   # Smart constructors.
 
   def NiExpr.new(term : Term) : NiExpr
-    NiExpr.new(Alloy2.seq256(NiExpr, term), term)
+    NiExpr.new(Alloy.seq256(NiExpr, term), term)
   end
 
   def Var.new(name : Term::Sym) : Var
-    Var.new(Alloy2.seq256(Var, name), name)
+    Var.new(Alloy.seq256(Var, name), name)
   end
 
   def DisplayVar.new(name : Term::Sym) : DisplayVar
-    DisplayVar.new(Alloy2.seq256(DisplayVar, name), name)
+    DisplayVar.new(Alloy.seq256(DisplayVar, name), name)
   end
 
   def SpliceVar.new(name : Term::Sym) : SpliceVar
-    SpliceVar.new(Alloy2.seq256(SpliceVar, name), name)
+    SpliceVar.new(Alloy.seq256(SpliceVar, name), name)
   end
 
   def NiSplice.new(expr : NiExpr) : NiSplice
-    NiSplice.new(Alloy2.seq256(NiSplice, expr), expr)
+    NiSplice.new(Alloy.seq256(NiSplice, expr), expr)
   end
 
   def Literal.new(term : Term) : Literal
-    Literal.new(Alloy2.seq256(Literal, term), term)
+    Literal.new(Alloy.seq256(Literal, term), term)
   end
 
   def Splice.new(children : Slice(Template)) : Splice
-    Splice.new(Alloy2.seq256(Splice, children), children.sum(0u64) { |child| Alloy2.weigh(child) }, children)
+    Splice.new(Alloy.seq256(Splice, children), children.sum(0u64) { |child| Alloy.weigh(child) }, children)
   end
 
   def Module.new(bindings : Slice({Term::Sym, Term::Sym}), body : Splice) : Module
-    Module.new(Alloy2.seq256(Module, bindings, body), bindings, body)
+    Module.new(Alloy.seq256(Module, bindings, body), bindings, body)
   end
 
   def Case.new(expr : NiExpr, branches : Slice(CaseWhen)) : Case
-    Case.new(Alloy2.seq256(Case, expr, branches), expr, branches)
+    Case.new(Alloy.seq256(Case, expr, branches), expr, branches)
   end
 
   def CaseWhen.new(pattern : Pattern, body : Splice) : CaseWhen
-    CaseWhen.new(Alloy2.seq256(CaseWhen, pattern, body), pattern, body)
+    CaseWhen.new(Alloy.seq256(CaseWhen, pattern, body), pattern, body)
   end
 
   def VarsCase.new(branches : Slice(CaseWhen)) : VarsCase
-    VarsCase.new(Alloy2.seq256(VarsCase, branches), branches)
+    VarsCase.new(Alloy.seq256(VarsCase, branches), branches)
   end
 
   def Cond.new(expr : NiExpr, truthy : Template, falsey : Template) : Cond
-    Cond.new(Alloy2.seq256(Cond, expr, truthy, falsey), expr, truthy, falsey)
+    Cond.new(Alloy.seq256(Cond, expr, truthy, falsey), expr, truthy, falsey)
   end
 
   {% for cls in %w[EachItem EachItemEntry EachPairEntry EachEntry] %}
     def {{cls.id}}.new(iterable : NiExpr, pattern : Pattern, body : Splice) : {{cls.id}}
-      {{cls.id}}.new(Alloy2.seq256({{cls.id}}, iterable, pattern, body), iterable, pattern, body)
+      {{cls.id}}.new(Alloy.seq256({{cls.id}}, iterable, pattern, body), iterable, pattern, body)
     end
   {% end %}
 
   def Let.new(bindings : Slice({Term::Sym, NiExpr}), body : Splice) : Let
-    Let.new(Alloy2.seq256(Let, bindings, body), bindings, body)
+    Let.new(Alloy.seq256(Let, bindings, body), bindings, body)
   end
 
   def Site.new(dict : Term::Dict, parts : Hash(Term, Template)) : Site
     # See `Site` to learn why we don't hash *dict* in.
-    Site.new(Alloy2.seq256(Site, parts), parts.sum { |_, part| Alloy2.weigh(part) }, dict, parts)
+    Site.new(Alloy.seq256(Site, parts), parts.sum { |_, part| Alloy.weigh(part) }, dict, parts)
   end
 
   def Extend.new(child : Template, extension : NiExpr) : Extend
-    Extend.new(Alloy2.seq256(Extend, child, extension), child, extension)
+    Extend.new(Alloy.seq256(Extend, child, extension), child, extension)
   end
 
   def Render.new(pattern : Pattern, subordinate : Template, body : Splice) : Render
-    Render.new(Alloy2.seq256(Render, pattern, subordinate, body), pattern, subordinate, body)
+    Render.new(Alloy.seq256(Render, pattern, subordinate, body), pattern, subordinate, body)
   end
 
   # :nodoc:

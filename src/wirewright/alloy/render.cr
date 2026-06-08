@@ -1,4 +1,4 @@
-module Ww::Alloy2
+module Ww::Alloy
   defrecord Env, globals : Term::Dict, vars : Term::Dict
 
   defrecord RuleData,

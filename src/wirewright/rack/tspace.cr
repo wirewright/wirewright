@@ -93,7 +93,7 @@ module Ww::Rack::Tspace
           next unless M1.probably_matches?(sensor.pattern, appearance.matchee)
           next unless env = M1.match?(sensor.pattern, appearance.matchee)
 
-          expansion = Alloy2.render_rep(sensor.template, locals: env)
+          expansion = Alloy.render_rep(sensor.template, locals: env)
           unless counterparts.empty? || counterparts.last[0] == expansion
             # Multiple different values competing. Sensor chan is confused about
             # which one to pick, so it picks no one.
@@ -118,7 +118,7 @@ module Ww::Rack::Tspace
           next unless M1.probably_matches?(sensor.pattern, appearance.matchee)
           next unless env = M1.match?(sensor.pattern, appearance.matchee)
 
-          expansion = Alloy2.render_rep(sensor.template, locals: env)
+          expansion = Alloy.render_rep(sensor.template, locals: env)
           expansions ||= [] of Term::Rep
           expansions << expansion
         end
