@@ -57,13 +57,13 @@ class Ww::Term::Dict
   #
   # - `empty : R`
   # - `summary(root : R) : Summary`
-  # - `at?(root : R, key : UInt32) : Term?``
-  # - `nth?(root : R, n : UInt32) : {Term, Term}?``
-  # - `each(root : R, & : UInt32, Term ->) : Nil`
-  # - `guided_each(root : R, guide : Summary, & : UInt32, Term ->) : Nil`
-  # - `seqsize(root : R) : UInt32`
-  # - `assoc(root : R, key : UInt32, value : Term, *, cookie : Cookie = Cookie.none) : R`
-  # - `dissoc(root : R, key : UInt32, *, cookie : Cookie = Cookie.none) : R`
+  # - `at?(root : R, key : Key) : Term?``
+  # - `nth?(root : R, n : Key) : {Term, Term}?``
+  # - `each(root : R, & : Key, Term ->) : Nil`
+  # - `guided_each(root : R, guide : Summary, & : Key, Term ->) : Nil`
+  # - `seqsize(root : R) : Key`
+  # - `assoc(root : R, key : Key, value : Term, *, cookie : Cookie = Cookie.none) : R`
+  # - `dissoc(root : R, key : Key, *, cookie : Cookie = Cookie.none) : R`
   # - (absent) `gte(root : R, lo : UInt32, *, cookie : Cookie = Cookie.none) : R`
   # - (absent) `lt(root : R, hi : UInt32, *, cookie : Cookie = Cookie.none) : R`
   module UTermTrie32
@@ -74,7 +74,7 @@ class Ww::Term::Dict
     # We want a hashcode that depends on order (kind of). The easiest way is to include
     # the key when summarizing stuff. So this structure stores a key along the term so
     # that summarize() calls know the global key when recalculating summaries.
-    defrecord Item, key : UInt32, term : Term
+    defrecord Item, key : Key, term : Term
 
     alias Root = Leaf | Node
 
@@ -99,7 +99,30 @@ class Ww::Term::Dict
     EMPTY_NODE5 = Node5.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node4, UInt16).empty)
     EMPTY_NODE6 = Node6.new(Summary.zero, 0u32, Cookie.none, SmallMap(Node5, UInt16).empty)
 
-    def capacity(node : Leaf | Node | Leaf.class | Node.class)
+    # Acts as a proof that you called `key?`.
+    struct Key
+      # The maximum key is `UInt32::MAX - 1` because we store sizes as `UInt32`s.
+      # Even though the true maximum key is `UInt32::MAX` (all ones), we wouldn't
+      # be able to fit the size of a trie with this key in a `UInt32`-- it would be
+      # `UInt32::MAX + 1`, too much for a `UInt32`.
+      MAX = UInt32::MAX - 1
+
+      # Returns the `UInt32` value of the key.
+      getter repr : UInt32
+
+      protected def initialize(@repr)
+      end
+    end
+
+    # Returns the `Key` corresponding to *value*. Returns `nil` if there is no
+    # such key.
+    def key?(value : Int) : Key?
+      return unless 0u32 <= value <= Key::MAX
+
+      Key.new(value.to_u32)
+    end
+
+    def capacity(node : Leaf | Node | Leaf.class | Node.class) : UInt32
       case node
       in Leaf, Leaf.class   then 16u32**1
       in Node0, Node0.class then 16u32**2
@@ -108,12 +131,12 @@ class Ww::Term::Dict
       in Node3, Node3.class then 16u32**5
       in Node4, Node4.class then 16u32**6
       in Node5, Node5.class then 16u32**7
-      in Node6, Node6.class then 16u32**8
+      in Node6, Node6.class then UInt32::MAX
       end
     end
 
     private def summarize(children : ItemMap16) : Summary
-      Summary.union(children.ix) { |item| Summary.of(item.key, item.term) }
+      Summary.union(children.ix) { |item| Summary.of(item.key.repr, item.term) }
     end
 
     private def summarize(children : SmallMap) : Summary
@@ -179,7 +202,9 @@ class Ww::Term::Dict
     defrecord NodeKey5, value : UInt8, successor : NodeKey4
     defrecord NodeKey6, value : UInt8, successor : NodeKey5
 
-    def decompose(key : UInt32)
+    def decompose(key : Key)
+      key = key.repr
+
       component = key & 0xfu32
       result = LeafKey.new(component.to_u8)
       key >>= 4
@@ -302,7 +327,7 @@ class Ww::Term::Dict
       # When we're inserting, we don't have to recalculate the summary. We
       # can just union the inserted child into the existing summary.
       if size0 < children1.size
-        summary = Summary.union(node.summary, Summary.of(item1.key, item1.term))
+        summary = Summary.union(node.summary, Summary.of(item1.key.repr, item1.term))
 
         return leaf(cookie, summary, children1, prototype: node), true
       end
@@ -365,7 +390,7 @@ class Ww::Term::Dict
       end
     end
 
-    def assoc(root : Leaf | Node, key : UInt32, value : Term, *, cookie : Cookie = Cookie.none)
+    def assoc(root : Leaf | Node, key : Key, value : Term, *, cookie : Cookie = Cookie.none)
       root1, _ = assoc(cookie, root, decompose(key), Item.new(key, value))
       root1
     end
@@ -416,7 +441,7 @@ class Ww::Term::Dict
       end
     end
 
-    def dissoc(root : Leaf | Node, key : UInt32, *, cookie : Cookie = Cookie.none)
+    def dissoc(root : Leaf | Node, key : Key, *, cookie : Cookie = Cookie.none)
       root1, _ = dissoc(cookie, root, decompose(key))
       root1
     end
@@ -456,17 +481,17 @@ class Ww::Term::Dict
       at?(node, key)
     end
 
-    def at?(node : Leaf | Node, key : UInt32) : Term?
+    def at?(node : Leaf | Node, key : Key) : Term?
       at?(node, decompose(key))
     end
 
-    def nth?(node : Leaf, n : UInt32) : {UInt32, Term}?
+    def nth?(node : Leaf, n : UInt32) : {Key, Term}?
       return unless item = node.children.ix[n]?
 
       {item.key, item.term}
     end
 
-    def nth?(node : Node, n : UInt32) : {UInt32, Term}?
+    def nth?(node : Node, n : UInt32) : {Key, Term}?
       node.children.each_entry do |_, child|
         size = child.summary.size
         if n < size
@@ -477,14 +502,14 @@ class Ww::Term::Dict
       end
     end
 
-    private def each(prefix : UInt32, node : Leaf, & : UInt32, Term ->) : Nil
+    private def each(prefix : UInt32, node : Leaf, & : Key, Term ->) : Nil
       node.children.each_entry do |key, item|
-        yield (prefix << 4) | key, item.term
+        yield Key.new((prefix << 4) | key), item.term
       end
     end
 
     {% for level in 0..6 %}
-      private def each(prefix : UInt32, node : Node{{level}}, & : UInt32, Term ->)
+      private def each(prefix : UInt32, node : Node{{level}}, & : Key, Term ->)
         node.children.each_entry do |key, child|
           each((prefix << 4) | key, child) do |full_key, value|
             yield full_key, value
@@ -494,20 +519,20 @@ class Ww::Term::Dict
     {% end %}
 
     # Order: ascending by key.
-    def each(node : Leaf | Node, & : UInt32, Term ->)
+    def each(node : Leaf | Node, & : Key, Term ->)
       each(0u32, node) { |key, value| yield key, value }
     end
 
-    private def guided_each(prefix : UInt32, node : Leaf, guideptr : Summary*, & : UInt32, Term ->) : Nil
+    private def guided_each(prefix : UInt32, node : Leaf, guideptr : Summary*, & : Key, Term ->) : Nil
       return unless guideptr.value.subset_of?(node.summary)
 
       node.children.each_entry do |key, item|
-        yield (prefix << 4) | key, item.term
+        yield Key.new((prefix << 4) | key), item.term
       end
     end
 
     {% for level in 0..6 %}
-      private def guided_each(prefix : UInt32, node : Node{{level}}, guideptr : Summary*, & : UInt32, Term ->)
+      private def guided_each(prefix : UInt32, node : Node{{level}}, guideptr : Summary*, & : Key, Term ->)
         return unless guideptr.value.subset_of?(node.summary)
 
         node.children.each_entry do |key, child|
@@ -519,10 +544,12 @@ class Ww::Term::Dict
     {% end %}
 
     # Order: ascending by key.
-    def guided_each(node : Leaf | Node, guide : Summary, & : UInt32, Term ->)
+    def guided_each(node : Leaf | Node, guide : Summary, & : Key, Term ->)
       guideptr = pointerof(guide)
 
-      guided_each(0u32, node, guideptr) { |key, value| yield key, value }
+      guided_each(0u32, node, guideptr) do |key, value|
+        yield key, value
+      end
     end
 
     # We call *the sequence* a view of *node* that is empty, or starts

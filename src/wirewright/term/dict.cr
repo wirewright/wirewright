@@ -388,7 +388,7 @@ module Ww
     # If *term* exists in this dict's itemspart, returns it as a `UInt32`.
     # Returns `nil` otherwise.
     #
-    # NOTE: Dict itemspart does not include indices larger than `UInt32`.
+    # NOTE: Dict itemspart does not include indices larger than `UTermTrie32::Key::MAX`.
     @[Dncast]
     def index32?(term) : UInt32?
       return unless index = Term[term].as?(Term::Num)
@@ -417,8 +417,8 @@ module Ww
     # :ditto:
     def nth?(n : UInt32) : {Term, Term}?
       if entry = UTermTrie32.nth?(@utrie, n)
-        index, value = entry
-        return Term.of(index), value
+        key, value = entry
+        return Term.of(key.repr), value
       end
 
       # Note that this isn't the same as seqsize! Up to @utrie's seqsize,
@@ -453,19 +453,18 @@ module Ww
     end
 
     # :nodoc:
-    @[Dncast]
-    def []?(key : UInt32) : Term?
+    private def []?(key : UTermTrie32::Key) : Term?
       UTermTrie32.at?(@utrie, key)
     end
 
     # :nodoc:
     @[Dncast]
-    def []?(key : Int32) : Term?
-      if key < 0
+    def []?(key : Int32 | UInt32) : Term?
+      unless ukey = UTermTrie32.key?(key)
         return self[Term.of(key)]?
       end
 
-      self[key.to_u32]?
+      self[ukey]?
     end
 
     # Returns the value associated with the given *key*, or nil if *key*
@@ -514,7 +513,7 @@ module Ww
     @[Dncast]
     def each_entry(& : Term, Term ->) : Nil
       UTermTrie32.each(@utrie) do |key, value|
-        yield Term.of(key), Term.of(value)
+        yield Term.of(key.repr), Term.of(value)
       end
 
       TermTrie.each(@ttrie) do |key, value|
@@ -524,7 +523,7 @@ module Ww
 
     def each_entry(guide : Summary, & : Term, Term ->) : Nil
       UTermTrie32.guided_each(@utrie, guide) do |key, value|
-        yield Term.of(key), Term.of(value)
+        yield Term.of(key.repr), Term.of(value)
       end
 
       TermTrie.guided_each(@ttrie, guide) do |key, value|
@@ -543,7 +542,7 @@ module Ww
 
     def each_entry(guide : Summary, *, in part : Part::Items, & : Term, Term ->) : Nil
       UTermTrie32.guided_each(@utrie, guide) do |key, value|
-        yield Term.of(key), Term.of(value)
+        yield Term.of(key.repr), Term.of(value)
       end
     end
 
@@ -650,8 +649,8 @@ module Ww
       hi = itemsize
 
       UTermTrie32.each(@utrie) do |key, value|
-        next unless key < hi
-        yield value, key.to_i
+        next unless key.repr < hi
+        yield value, key.repr.to_i
       end
     end
 
@@ -719,7 +718,7 @@ module Ww
     end
 
     # :nodoc:
-    def with!(key : UInt32, value, cookie : Cookie) : Dict
+    private def with!(key : UTermTrie32::Key, value, cookie : Cookie) : Dict
       if value.nil?
         return without!(key, cookie)
       end
@@ -735,12 +734,12 @@ module Ww
     end
 
     # :nodoc:
-    def with!(key : Int32, value, cookie : Cookie) : Dict
-      if key < 0
+    def with!(key : Int32 | UInt32, value, cookie : Cookie) : Dict
+      unless ukey = UTermTrie32.key?(key)
         return with!(Term.of(key), value, cookie)
       end
 
-      with!(key.to_u32, value, cookie)
+      with!(ukey, value, cookie)
     end
 
     # :nodoc:
@@ -770,7 +769,7 @@ module Ww
     end
 
     # :nodoc:
-    def without!(key : UInt32, cookie : Cookie) : Dict
+    private def without!(key : UTermTrie32::Key, cookie : Cookie) : Dict
       utrie1 = UTermTrie32.dissoc(@utrie, key, cookie: cookie)
       if @utrie.same?(utrie1)
         return self
@@ -780,12 +779,12 @@ module Ww
     end
 
     # :nodoc:
-    def without!(key : Int32, cookie : Cookie) : Dict
-      if key < 0
+    def without!(key : Int32 | UInt32, cookie : Cookie) : Dict
+      unless ukey = UTermTrie32.key?(key)
         return without!(Term.of(key), cookie)
       end
 
-      without!(key.to_u32, cookie)
+      without!(ukey, cookie)
     end
 
     # :nodoc:
