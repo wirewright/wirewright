@@ -406,9 +406,11 @@ module Ww
       Term[index32?(term)]
     end
 
-    # Near constant-time Nth entry in `each_entry`-order.
+    # Returns *n*-th entry in `each_entry`-order.
     @[Dncast]
     def nth?(n : Int32) : {Term, Term}?
+      return if n < 0
+
       nth?(n.to_u32)
     end
 
@@ -433,21 +435,21 @@ module Ww
       nth?(n) || raise IndexError.new
     end
 
-    # Near constant-time Nth entry in `items` followed by `Part::PairsOrd`-order.
+    # Returns *n*th entry in `items` followed by `Part::PairsOrd`-order.
     @[Dncast]
-    def ordnth?(index : Int32) : {Term, Term}?
-      if 0 <= index < itemsize
-        item = self[index]? || return
+    def ordnth?(n : Int32) : {Term, Term}?
+      if 0 <= n < itemsize
+        item = self[n]? || return
 
-        {Term.of(index), item}
-      elsif itemsize <= index < size
-        pairs_ord[index - itemsize]
+        {Term.of(n), item}
+      elsif itemsize <= n < size
+        pairs_ord[n - itemsize]
       end
     end
 
     @[Dncast]
-    def ordnth(index : Int32) : {Term, Term}
-      ordnth?(index) || raise IndexError.new
+    def ordnth(n : Int32) : {Term, Term}
+      ordnth?(n) || raise IndexError.new
     end
 
     # :nodoc:
@@ -459,6 +461,10 @@ module Ww
     # :nodoc:
     @[Dncast]
     def []?(key : Int32) : Term?
+      if key < 0
+        return self[Term.of(key)]?
+      end
+
       self[key.to_u32]?
     end
 
@@ -730,6 +736,10 @@ module Ww
 
     # :nodoc:
     def with!(key : Int32, value, cookie : Cookie) : Dict
+      if key < 0
+        return with!(Term.of(key), value, cookie)
+      end
+
       with!(key.to_u32, value, cookie)
     end
 
@@ -771,6 +781,10 @@ module Ww
 
     # :nodoc:
     def without!(key : Int32, cookie : Cookie) : Dict
+      if key < 0
+        return without!(Term.of(key), cookie)
+      end
+
       without!(key.to_u32, cookie)
     end
 
