@@ -167,6 +167,29 @@ module Testtool
         end
       end
 
+      # |@ testtool.decl.alloy
+      #
+      # |@pattern
+      # (alloy/sheet sheet_ expansion_)
+      #
+      # |@key sheet
+      # Alloy sheet to expand.
+      #
+      # |@key expansion
+      # Expected expansion of the document.
+      #
+      # |@block
+      # Use `alloy/sheet` to test Alloy sheet expansion (Crystal-side `Alloy.render`
+      # with `Alloy.sheet`).
+      matchpiT %{[alloy/sheet sheet_ expansion_]} do
+        M0.schema(decl) do |s|
+          s.on_mismatch { continue }
+
+          test = AlloySheetTest.new(sheet, expansion)
+          annotated(assertions(test), decl, srcmap)
+        end
+      end
+
       # |@ testtool.decl.µfold
       #
       # |@pattern

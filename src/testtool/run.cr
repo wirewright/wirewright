@@ -1,5 +1,6 @@
 module Testtool
   alias Leaf = AlloyTest |
+               AlloySheetTest |
                MicrofoldTest |
                MLeq |
                MLpos |
@@ -118,6 +119,15 @@ module Testtool
     return if actual == test.expansion # ok
 
     complaints << complaint("Alloy template expansion mismatch", expansion: actual)
+  end
+
+  defrecord AlloySheetTest, sheet : Term, expansion : Term
+
+  def run(test : AlloySheetTest, assets, stat, complaints) : Nil
+    actual = measure(stat) { Alloy.render(Alloy.sheet(test.sheet)) }
+    return if actual == test.expansion # ok
+
+    complaints << complaint("Alloy sheet expansion mismatch", expansion: actual)
   end
 
   defrecord MicrofoldTest, variants : Array(Term)
