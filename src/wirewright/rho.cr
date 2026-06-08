@@ -449,7 +449,7 @@ module Ww
         #
         # - If the pattern captures `pattern` and `template`, the ruleset creates
         #   a *template rule*. The ruleset interprets the captured `pattern` as
-        #   an `m1.operator`, and the `template` as `alloy.template`.
+        #   an `m1.operator`, and the `template` as `alloy`.
         #
         # - If the pattern captures `pattern` and `backspec`, the ruleset creates
         #   a *backmap rule* (or simply a *backmap*). The ruleset interprets *pattern*

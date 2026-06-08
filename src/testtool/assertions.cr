@@ -150,7 +150,7 @@ module Testtool
       # |@key vars
       # Variables to instantiate the template with.
       #
-      # |@key alloy.template
+      # |@key template alloy
       # Alloy template to instantiate.
       #
       # |@key expansion

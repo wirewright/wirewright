@@ -264,7 +264,7 @@ module Ww::Alloy
         NiSplice.new(NiExpr.new(Term.of(:literal, body)))
       end
 
-      # |@ alloy.template.splice
+      # |@ alloy.splice
       #
       # |@pattern
       # (^splice body_*)
