@@ -172,6 +172,117 @@ module MuSoma
       end
     end
 
+    private def self.repr(tree : D7::InertLeaf, addr : D7::NodeAddr) : Term
+      repr = Term::Dict.build do |commit|
+        commit << :inert << tree.feature.node
+
+        tree.feature.annotations.each do |ann|
+          case ann
+          when .incomplete? then commit.with(:incomplete, true)
+          end
+        end
+      end
+
+      Term.of(repr)
+    end
+
+    private def self.repr(tree : D7::GndLeaf, addr) : Term
+      node = tree.feature.node
+
+      Term.case(node) do
+        matchpi %{(device (@_ surface_) _* ⍊ -open)} do
+          Term.of(:"closed-device-widget", addr, surface)
+        end
+
+        matchpi %{(backsys header_dict _* ⍊ -open)} do
+          Term.of(:"closed-backsys-widget", addr, header)
+        end
+
+        matchpi %{(backsys _* ⍊ open)} do
+          Term.of(:"open-backsys-widget", addr, node)
+        end
+
+        matchpi %{(slot call_ _ ⍊ -open)} do
+          Term.of(:"closed-slot-widget", addr, call)
+        end
+
+        matchpi %{[path-reading path_string _]} do
+          Term.of(:"path-reading-widget", addr, node)
+        end
+
+        matchpi %{[path-report path_string _]} do
+          Term.of(:"path-report-widget", addr, node)
+        end
+
+        matchpi %{(section title_string _* ⍊ -open)} do
+          Term.of(:"closed-section-widget", addr, title)
+        end
+
+        matchpi %{(rule pattern_ _ ⍊ doc⋮ () -open)} do
+          Term.of(:"closed-rule-widget", addr, doc, pattern)
+        end
+
+        otherwise do
+          Term.of(:gnd, node)
+        end
+      end
+    end
+
+    private def self.repr(tree : D7::UnaugmentedParentNode, addr) : Term
+      parent = tree.feature
+
+      repr = parent.node.pairspart.transaction do |commit|
+        commit << :parent
+
+        parent.node.items.each_with_index do |item, key|
+          key = key.to_u32
+
+          unless key.in?(parent.range)
+            commit << Term.of(:inert, item)
+            next
+          end
+
+          index = key - parent.range.begin
+          child = tree.children[index]
+
+          commit << repr(child, addr.append(key))
+        end
+      end
+
+      Term.case(parent.node) do
+        matchpi %{[slot _ _]} do
+          Term.of(:"open-slot-widget", addr, repr)
+        end
+
+        matchpi %{[device _ _*]} do
+          Term.of(:"open-device-widget", addr, repr)
+        end
+
+        matchpi %{[section title_string _*]} do
+          Term.of(:"open-section-widget", addr, title, repr)
+        end
+
+        matchpi %{(rule _ _ ⍊ doc⋮ () open)} do
+          Term.of(:"open-rule-widget", addr, doc, repr)
+        end
+
+        otherwise do
+          Term.of(repr)
+        end
+      end
+    end
+
+    # Returns the representation tree for *tree*. This tree is ready for
+    # pretty-printing.
+    def self.repr(tree : D7::UnaugmentedParseTree) : Term
+      repr = repr(tree, D7::NodeAddr.empty)
+
+      # Mark the topmost parent as root for styling in prettyR.
+      Term.matchpi(repr, %{[parent _*]}) do
+        Term.morph(repr, {0, :root})
+      end
+    end
+
     def present(ws : Workspace) : Nil
       force = Var.pending?(ws.codex)
       return unless Var.pending?({ws.state, :timeline}, or_if: force)
@@ -208,7 +319,7 @@ module MuSoma
         D7.parse(PrettyAgent.fbclf, circuit, reply: D7::UnaugmentedParseTree, cache: @cache)
       end
 
-      repr = MuSoma.repr(tree)
+      repr = PrettyAgent.repr(tree)
 
       # Fast path if the representation did not change. This accounts for
       # things like folds (e.g. `section` or `device`). If something is inside
