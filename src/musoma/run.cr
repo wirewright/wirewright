@@ -334,7 +334,7 @@ module MuSoma
     input_ref = ReadingRef.new(NormalPath[input_arg])
     # TODO: Use ResourceRef instead of manually resolving runtime!
     library_ref = ReadingRef.new(NormalPath[runtime / "soma.lib.wwml"])
-    codex_ref = ReadingRef.new(NormalPath[runtime / "codices/soma.codex.wwml"])
+    codex_ref = ReadingRef.new(NormalPath[runtime / "codices/musoma.codex.wwml"])
     editR_ref = ReadingRef.new(NormalPath[runtime / "codices/editR.codex.wwml"])
     microfold_ref = ReadingRef.new(NormalPath[runtime / "codices/ufold.codex.wwml"])
 
