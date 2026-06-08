@@ -463,3 +463,12 @@
   (alloy {x: 200, y: 100}
     (^br (< x y) ^x ^y)
     100))
+
+;; ^module
+(alloy {}
+  (^let a: 100
+        b: 200
+        c: 300
+    (^module {foo: a, :b}
+      (qux ^(+ foo b) ^c)))
+  (qux 300))

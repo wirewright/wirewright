@@ -329,12 +329,12 @@ module Ww::Alloy
       #       b: 200
       #       c: 300
       #   ;; :b is a shorthand for b: b
-      #   (^module {a: foo, :b}
+      #   (^module {foo: a, :b}
       #     (qux ^(+ foo b) ^c)))
       #
-      # ;; => (qux 300 c)
+      # ;; => (qux 300)
       # ;;
-      # ;; Notice how `c` remains unevaluated.
+      # ;; Notice how `c` disappeared as there's no value for it inside the module.
       # ```
       matchpi %{(^module bindings_dict body_*)} do
         children = body.items.to_readonly_slice { |item| recognize(item, filter) }
