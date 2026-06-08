@@ -706,23 +706,9 @@ module Ww
 
     # Constructs a term representing the given enum *object*.
     #
-    # - `Issue::Severity` is encoded with a symbol.
-    # - All other enums are encoded using their numeric value.
+    # Enums are currently encoded using their numeric value.
     def self.[](object : Enum) : Sym | Num
-      case object
-      when Issue::Severity
-        case object
-        when .note?   then Term[:note]
-        when .minor?  then Term[:minor]
-        when .major?  then Term[:major]
-        when .severe? then Term[:severe]
-        when .fatal?  then Term[:fatal]
-        else
-          raise ArgumentError.new("no term representation for severity #{object}")
-        end
-      else
-        Num.exact(object.value)
-      end
+      Num.exact(object.value)
     end
 
     {% for spec in { {:UUID, "UUID"},

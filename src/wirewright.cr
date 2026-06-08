@@ -31,7 +31,6 @@ require "./wirewright/path_server"
 require "./wirewright/uri_server"
 require "./wirewright/resource_server"
 
-require "./wirewright/issue"
 require "./wirewright/ml"
 require "./wirewright/lr"
 
