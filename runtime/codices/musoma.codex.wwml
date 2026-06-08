@@ -501,15 +501,20 @@ history-limit: 128
 (inert (comment caption_string) ⍊ -incomplete)
   => (group detail: (comment ^caption))
 
-(inert (rule pattern_ _ ⍊ doc⋮ ()) ⍊ -incomplete)
-  => (group detail: (rule-brief ^doc)
-       (term ^pattern))
-
-(inert (backmap pattern_ _ ⍊ doc⋮ ()) ⍊ -incomplete)
-  => (group detail: (backmap-brief ^doc)
-       (term ^pattern))
-
 (gnd term_) => (inert ^term)
+
+;; Rule widget
+
+(open-rule-widget addr_ doc_ [parent _ pattern_ body_])
+  => (group detail: (rule-widget ^:doc)
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       ^(view pattern)
+       ^(view body))
+
+(closed-rule-widget addr_ doc_ pattern_)
+  => (group detail: (rule-widget ^:doc)
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (term ^pattern))
 
 ;; Slot widget
 
@@ -932,6 +937,23 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
              ^infix
              ^rhs))))
 
+(group expander_ pattern_ ⍊ detail: (rule-widget ⍊ doc_dict))
+  => (col
+       (^each (doc as doc-line_string)
+         (atom ^doc-line type: comment))
+       (row ^expander ^pattern))
+
+(group expander_ pattern_ body_ ⍊ detail: (rule-widget ⍊ doc_dict))
+  => (col
+       (^each (doc as doc-line_string)
+         (atom ^doc-line type: comment))
+       (col
+         (row ^expander ^pattern)
+         (indent
+           (row gap: 1
+             (atom "=>" type: punct)
+             ^body))))
+
 
 --- pretty/concat ;; Evaluate cats & minor reductions
 
@@ -1028,12 +1050,6 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 (group l_ op_ r_ ⍊ detail: infix)
   => (group style: "flow-row gap-1/3"
        ^l ^op ^r)
-
-(group pattern_ ⍊ detail: (rule-brief doc←(_*)))
-  => (RuleBriefWidget ^doc ^pattern "=>")
-
-(group pattern_ ⍊ detail: (backmap-brief doc←(_*)))
-  => (RuleBriefWidget ^doc ^pattern "<>")
 
 (group surface_ ⍊ detail: device)
   => (BlockWidget "memory" ^surface)
@@ -1534,15 +1550,6 @@ scroll: {}
 
 (LongBlobWidget content_blob)
   => (p ^"⟬…⸢(hex (hashcode content))⸣…⟭" style: "text-theme-blob")
-
-(RuleBriefWidget doc←(_*) pattern_ arrow_string)
-  => (group style: "flow-col my-1"
-       (^each (doc as line_)
-         (group style: "flow-row gap-1 text-theme-muted leading-none"
-           (p ";;" style: "text-xs")
-           (p ^line style: "font-sans max-w-xs")))
-       (group style: "flow-row gap-2"
-         ^pattern (p ^"⸢arrow⸣ …" style: "text-theme-muted")))
 
 (MuStyleWidget style_string)
   => (group style: "content flow-row gap-1"

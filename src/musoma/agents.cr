@@ -124,14 +124,10 @@ module MuSoma
 
       ->(node : Term) do
         feature = successor.call(node)
-        if feature.is_a?(D7::Inert)
-          return feature
-        end
 
-        # This classifier can only be happy if clf recognizes the node, so it's
-        # a post-condition!
         Term.case(node) do
           matchpi %{(device (@_ _?) _* ⍊ -open)} do
+            continue if feature.is_a?(D7::Inert)
             # Do not draw collapsed form of if the editor is in it, even if
             # it is at passable spots.
             continue if MuSoma.editing?(node)
@@ -140,26 +136,42 @@ module MuSoma
           end
 
           matchpi %{[device (@_ _?) _*]} do
+            continue if feature.is_a?(D7::Inert)
+
             D7.parent(node.as_d, 2u32...node.uitemsize)
           end
 
           matchpi %{(slot _ _? ⍊ -open)} do
-            # Do not draw collapsed form of if the cursor is in it, even if
-            # at passable spots.
+            continue if feature.is_a?(D7::Inert)
             continue if MuSoma.editing?(node)
 
             D7.gnd(node)
           end
 
           matchpi %{[slot _ _?]} do
+            continue if feature.is_a?(D7::Inert)
+
             D7.parent(node.as_d, 2u32...node.uitemsize)
           end
 
           matchpi %{(section _string _* ⍊ open)} do
+            continue if feature.is_a?(D7::Inert)
+
             D7.parent(node.as_d, 2u32...node.uitemsize)
           end
 
           matchpi %{(section _string _* ⍊ -open)} do
+            continue if feature.is_a?(D7::Inert)
+            continue if MuSoma.editing?(node)
+
+            D7.gnd(node)
+          end
+
+          matchpi %{(rule _ _ ⍊ open)} do
+            D7.parent(node.as_d, 2u32...3u32)
+          end
+
+          matchpi %{(rule _ _ ⍊ -open)} do
             continue if MuSoma.editing?(node)
 
             D7.gnd(node)
