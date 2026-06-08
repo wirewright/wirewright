@@ -316,6 +316,8 @@ module Ww::Alloy2
   # than this are left as-is.
   MAXDEPTH = 128u32
 
+  # TODO: We should probably not use the call stack for recursion, since on
+  # deep trees we can SEGFAULT, and SEGFAULTs aren't fun.
   private def render(ctx : RenderContext, globals : Term::Dict, locals : Term::Dict, unit : Unit) : Term::Rep
     rdata = RuleData.new(unit.components, MAXDEPTH)
     env = Env.new(globals, Term.union(globals, locals))

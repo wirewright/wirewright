@@ -55,7 +55,6 @@ require "../baz5"
 require "./wirewright/d7"
 require "../libtermbox2"
 
-require "./wirewright/alloy"
 require "./wirewright/alloy2"
 require "./wirewright/rack"
 
