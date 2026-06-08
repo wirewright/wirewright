@@ -55,7 +55,7 @@ require "../baz5"
 require "./wirewright/d7"
 require "../libtermbox2"
 
-require "./wirewright/alloy2"
+require "./wirewright/alloy"
 require "./wirewright/rack"
 
 Log.setup_from_env(default_level: :warn, backend: Log::IOBackend.new(STDERR))

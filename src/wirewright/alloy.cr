@@ -157,7 +157,7 @@ module Ww::Alloy2
   end
 end
 
-require "./alloy2/template"
-require "./alloy2/recognize"
-require "./alloy2/register"
-require "./alloy2/render"
+require "./alloy/template"
+require "./alloy/recognize"
+require "./alloy/register"
+require "./alloy/render"
