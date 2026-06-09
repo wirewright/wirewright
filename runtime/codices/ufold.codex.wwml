@@ -527,9 +527,9 @@ vantage: ""
 
 (alias "sel-rounded" "sel-rounded-md")
 
-;; E.g. cursor-thin
+;; E.g. beam-thin
 (for text-box
-  (utility (prefix "cursor-" (one-of cursor-thicknesses thickness))
+  (utility (prefix "beam-" (one-of cursor-thicknesses thickness))
     {selection-thickness: ^thickness}))
 
 (for text-box
@@ -559,7 +559,7 @@ vantage: ""
     {selection-radius: ^radius}))
 
 (for x-sel-box
-  (utility (prefix "x-cursor-" (one-of cursor-thicknesses thickness))
+  (utility (prefix "x-beam-" (one-of cursor-thicknesses thickness))
     {selection-thickness: ^thickness}))
 
 (for x-sel-box

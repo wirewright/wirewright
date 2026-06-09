@@ -166,7 +166,7 @@
 ;; Selection
 
 (µfold=
-  (el "A" style: "sel sel-white sel-text-black sel-rounded cursor-thick sel-aim")
+  (el "A" style: "sel sel-white sel-text-black sel-rounded beam-thick sel-aim")
   (el
     (text
       caption: "A"
