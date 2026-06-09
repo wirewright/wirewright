@@ -501,6 +501,12 @@ vantage: ""
   (utility "-sel" {selection: false}))
 
 (for text-box
+  (utility "sel-endl" {selection-endl: true}))
+
+(for text-box
+  (utility "-sel-endl" {selection-endl: true}))
+
+(for text-box
   (utility (prefix "sel-clearance-" (number value))
     {selection-clearance: ^(* value spacing)}))
 
