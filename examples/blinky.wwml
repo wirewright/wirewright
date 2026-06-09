@@ -4,7 +4,7 @@
       (> true)
       false))
   (node @text
-    (p style: "p-5 leading-tight on:sel sel-white cursor-thick"
+    (p style: "p-5 leading-tight on:sel sel-white beam-thick"
        selection-anchor: 0
        selection-span: 0
       "Kaixo mundua" ))
