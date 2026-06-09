@@ -1,0 +1,10 @@
+(window style: "p-5 flow-col gap-5"
+  (comment "Input without placeholder")
+  (slot (Input initial: ""))
+  (slot (Input placeholder: "Input with placeholder"))
+  (slot (Input label: "Input with label" initial: ""))
+  (slot (Input label: "Input with label" initial: "" placeholder: "...and placeholder"))
+  (slot (Input initial: "Initial value")))
+
+((I modify: true structural: true multiline: true compose: true) ("" * "") 0)
+

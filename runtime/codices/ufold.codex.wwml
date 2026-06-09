@@ -1534,6 +1534,7 @@ vantage: ""
 
 --- (table cursor-thicknesses)
 
+"transparent": 0
 "thin": 1
 "thick": 2
 "thicker": 3

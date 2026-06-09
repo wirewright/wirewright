@@ -32,8 +32,303 @@
          ;; Mouse left released while over the button.
          {¦ mouse: [mouse], desc: (figure {¦ hit-hover}) view: {¦ active: true} msg_ msgs: (_* `>msg)}
            <> {>msg: ^msg}
+         ;; Mouse left released while **not** over the button.
          {¦ mouse: [mouse] view: {¦ active_: true}}
            <> {(active): ()}
+         ;; End tap on the next tick.
          {¦ view: {¦ active_: tap}}
            <> {(active): ()}))
 
+;; |@ musoma.input
+;;
+;; |@pattern
+;; (Input view_ ⍊ initial⋮ "" ⋮name)
+;;
+;; |@key view
+;; Nodes comprising the input's view. Importantly, a node with `value: _`
+;; is required in *view*, of the form `(_ _string ⍊ value)`. This is the node
+;; that the input is going to manipulate. It is found using breadth-first search.
+;;
+;; |@key initial
+;; The initial value for the input field.
+;;
+;; |@key name
+;; Used to identify this input's surface among several adjacent inputs.
+;;
+;; |@block
+;; View-independent "brain" for an input field. See the view-less overload for
+;; stock view/styling.
+;;
+;; Exposes the surface (#Input value_string) if no *name* is given.
+;; Exposes the surface (#Input name_ value_string) otherwise.
+(Input view_ ¦ props_ initial⋮ "")
+  => (component
+       (group
+         (comment "The following cells comprise this input's state.")
+         (template
+           (cell @state (^initial "")))
+         (cell @unit rune)
+         (cell @motions ())
+         (comment
+           "The input also contains reflections of the keyboard and the mouse, \
+            since it is interested in both of them. The input wants to \
+            watch the keyboard for, well... keys that you press, but only when \
+            the input is focused; as for the mouse, the input wants to know \
+            about it to detect things like hover, to let you click to focus & move \
+            cursor, and so on.")
+         (node @input (input))
+         (node @mouse (mouse))
+         (figure {@:desc @:node}
+           (template ^view))
+         (comment
+           "This is the input's *surface*. While you, presumably a human, see the input \
+            *graphically*, for the program itself that's quite hard; it doesn't have eyes, \
+            you see, and Wirewright isn't advanced enough to do inverse graphics (yet!). \
+            Instead, the program prefers to observe the input (and other widgets) *symbolically*.")
+         (node @surface
+           (template
+             (^match props
+               (when {¦ name_}
+                 (surface (#Input ^name ^initial)))
+               (when _
+                 (surface (#Input ^initial))))))
+         (comment
+           "The following massive rewriter is where the \"symbolic physics\" of the input \
+            field is described. A bit less pretentiously, these are the rewrite rules that \
+            are responsible for the input's behavior.")
+         (rewriter ((rulesetR exh: true) <-> {@:state @:surface @:unit @:desc @:node @:input @:mouse @:motions})
+           ;; Input focused.
+           {¦ input: {¦ focus: true} node: {¦ -focus_}}
+             <> {focus: true}
+           ;; Input blurred.
+           {¦ input: {¦ -focus} node: {¦ focus_: true}}
+             <> {(focus): ()}
+           ;; Input hovered while inactive, make sure no buttons are down,
+           ;; otherwise they're dragging from somewhere else and happen to
+           ;; land on top of us.
+           {¦ desc: [figure {¦ hit-hover}] mouse: [mouse] node: {¦ -hover_ -active}}
+             <> {hover: true}
+           ;; Input hovered while active, means they've returned from dragging
+           ;; back to us.
+           {¦ desc: [figure {¦ hit-hover}] node: {¦ -hover_ active}}
+             <> {hover: true}
+           ;; Input unhovered.
+           {¦ desc: [figure {¦ -hit-hover}] node: {¦ hover_}}
+             <> {(hover): ()}
+           ;; Mouse down while hovered and not focused makes the input ask for focus.
+           {¦ mouse: [mouse left] node: {¦ hover} input: {¦ -focus_}}
+             <> {focus: wanted}
+           ;; Pressing left button while hovered makes the input active.
+           {¦ mouse: [mouse left] node: {¦ hover -active_}}
+             <> {active: true}
+           ;; Releasing the button while active makes the input inactive.
+           {¦ mouse: [mouse] node: {¦ active_}}
+             <> {(active): ()}
+           ;; Sync mouse hit-anchor and hit-focus on the text which has selection
+           ;; enabled, which is presumably the content text, while the input is active.
+           ;; For customizability of the view we don't hard-code anything here, working
+           ;; off of the "cue" that the only text in the view that has selection
+           ;; enabled is the content text.
+           {¦ mouse: [mouse left]
+              node: {¦ active}
+              desc: ⟪{¦ selection ±hit-anchor ±hit-focus}⟫
+              state: (l_string r_string ⍊ ⋮anchor)}
+             <> {(l): ^(let text: (~ l r)
+                         ((runes text 0 ..< hit-focus)
+                          (runes text hit-focus ..= -1))),
+                 (r): (),
+                 anchor: ^hit-anchor}
+           ;; Sync state with anchor.
+           {¦ state: (l_string r_string ⍊ ±anchor),
+              node: ⟪(_ caption_string ⍊ value ⋮selection-anchor ⋮selection-span) ⍊ ⋮empty⟫,
+              surface: (surface (#Input _* value_string))}
+             <> {(forall caption value): ^(~ l r),
+                 selection-anchor: ^(charcount l),
+                 selection-span: ^(- anchor (charcount l)),
+                 empty: ^(= (charcount l r) 0)}
+           ;; Sync state without anchor.
+           {¦ state: (l_string r_string ⍊ -anchor),
+              node: ⟪(_ caption_string ⍊ value ⋮selection-anchor ⋮selection-span) ⍊ ⋮empty⟫,
+              surface: (surface (#Input _* value_string))}
+             <> {(forall caption value): ^(~ l r),
+                 selection-anchor: ^(charcount l),
+                 selection-span: 0,
+                 empty: ^(= (charcount l r) 0)}
+          ;; Zip selection without an active selection.
+          {¦ state: (l_string r_string ⍊ -anchor) motions: (M←(zip selection) _*)}
+            <> {(M): (), (l): (^l "")}
+          ;; Zip selection with an active selection.
+          {¦ state: (l_string r_string ⍊ ±anchor) motions: (M←(zip selection) _*)}
+            <> {(M): (),
+                (l): (),
+                (r):
+                  ^(let* ((lcount (charcount l))
+                          (lo (min lcount anchor))
+                          (hi (max lcount anchor))
+                          (text (~ l r)))
+                     ((runes l 0 ..< lo)
+                      (runes text lo ..< hi)
+                      (runes text hi ..= -1)))}
+          ;; Zip rune left.
+          {¦ state: [l_string _] motions: (M←(zip rune left) _*)}
+            <> {(M): (), (l): ^((runes l 0 ..= -2) (rune l -1))}
+          ;; Zip rune right.
+          {¦ state: [_ r_string] motions: (M←(zip rune right) _*)}
+            <> {(M): (), (r): ^((rune r 0) (runes r 1 ..= -1))}
+          ;; Zip word left.
+          {¦ state: [l_string _] motions: (M←(zip word left) _*)}
+            <> {(M): (), (l): ^((words l 0 ..= -2) (word l -1))}
+          ;; Zip word right.
+          {¦ state: [_ r_string] motions: (M←(zip word right) _*)}
+            <> {(M): (), (r): ^((word r 0) (words r 1 ..= -1))}
+          ;; Zip line left.
+          {¦ state: [l_string _] motions: (M←(zip line left) _*)}
+            <> {(M): (), (l): ^((rline/rest l) (rline/stem l))}
+          ;; Zip line right.
+          {¦ state: [_ r_string] motions: (M←(zip line right) _*)}
+            <> {(M): (), (r): ^((line/stem r) (line/rest r))}
+          ;; Partition by newlines, on both sides, on line up/dn.
+          {¦ state: [l_string r_string] motions: ((zip line (%any up dn)) _*)}
+            <> {l: ^(rpartition l "\n"), r: ^(partition r "\n")}
+          ;; Partition behind into rest of lines above and line above.
+          {¦ state: [(behind_string _ _) _] motions: ((zip line up) _*)}
+            <> {behind: ^((rline/rest behind) (rline/stem behind))}
+          ;; Partition ahead into line below and rest of lines below.
+          {¦ state: [_ (_ _ ahead_string)] motions: ((zip line dn) _*)}
+            <> {ahead: ^((line/stem ahead) (line/rest ahead))}
+          ;; Split line above into before and after current column.
+          {¦ state: [((_ above_string) _ stem_string) _] motions: ((zip line up) _*)}
+            <> {above:
+                  ^(let col: (charcount stem)
+                     ((runes above 0 ..< col)
+                      (runes above col ..= -1)))}
+          ;; Split line below into before and after current column.
+          {¦ state: [(_ _ stem_string) (_ _ (below_string _))] motions: ((zip line dn) _*)}
+            <> {below:
+                  ^(let col: (charcount stem)
+                     ((runes below 0 ..< col)
+                      (runes below col ..= -1)))}
+          ;; Produce l-m-r for line up.
+          {¦ state: [l←((behind_string (above-l_string above-r_string)) sep_string stem_string) _]
+             motions: (M←(zip line up) _*)}
+            <> {(M): (), (l): ^((~ behind above-l) (~ above-r sep stem))}
+          ;; Produce l-m-r for line dn.
+          {¦ state: [_ r←(suffix_string sep_string ((below-l_string below-r_string) ahead_string))]
+             motions: (M←(zip line dn) _*)}
+            <> {(M): (), (r): ^((~ suffix sep below-l) (~ below-r ahead))}
+          ;; Join line partition on left side if right side is joined after zip.
+          {¦ state: [l←(behind_string sep_string stem_string) _string _string]}
+            <> {l: ^(~ behind sep stem)}
+          ;; Join line partition on right side if left side is joined after zip.
+          {¦ state: [_string _string r←(suffix_string sep_string ahead_string)]}
+            <> {r: ^(~ suffix sep ahead)}
+          ;; Remove anchor during unzip if Shift is not held.
+          {¦ state: (l_string m_string _ ⍊ ±anchor)
+             input: (%items () (key (shift _)) min: 0)
+             motions: (M←unzip _*)}
+            <> {(M): (), l: ^(~ l m), (m): (), (anchor): ()}
+          ;; Keep anchor during unzip if Shift held.
+          {¦ state: [l_string m_string _] motions: (M←unzip _*)}
+            <> {(M): (), l: ^(~ l m), (m): ()}
+          ;; Motion: Replace middle.
+          {¦ state: [_ m_string _] motions: (M←(replace rune_string) _*)}
+            <> {(M): (), m: ^rune}
+          ;; Motion: delete middle.
+          {¦ state: [_ m_string _] motions: (M←delete _*)}
+            <> {(M): (), m: ""}
+          ;; Motion: expel [to the] left.
+          {¦ state: [_ m_string r_string] motions: (M←(expel left) _*)}
+            <> {(M): (), m: "", r: ^(~ m r)}
+          ;; Motion: expel [to the] right.
+          {¦ state: [l_string m_string _] motions: (M←(expel right) _*)}
+            <> {(M): (), l: ^(~ l m), m: ""}
+          ;; Motion: select text.
+          {¦ state: (l_string r_string ⍊ ⋮anchor) motions: (M←(select text) _*)}
+            <> {(M): (), anchor: 0, l: ^(~ l r), r: ""}
+          ;; Handle typing.
+          {¦ input: ⟨K←(rune rune_string)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip selection) (replace ^rune) unzip)}
+          ;; Handle Enter.
+          {¦ input: ⟨K←(key enter)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip selection) (replace "\n") unzip)}
+          ;; Handle backspace.
+          {¦ state: {¦ -anchor} unit_ input: ⟨K←(key backspace)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip ^unit left) delete unzip)}
+          ;; Handle delete.
+          {¦ state: {¦ -anchor} unit_ input: ⟨K←(key delete)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip ^unit right) delete unzip)}
+          ;; Handle backspace/delete.
+          {¦ input: ⟨K←(key (%any backspace delete))⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip selection) delete unzip)}
+          ;; Handle left.
+          {¦ unit_ input: ⟨K←(key left)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip ^unit left) (expel left) unzip)}
+          ;; Handle right.
+          {¦ unit_ input: ⟨K←(key right)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip ^unit right) (expel right) unzip)}
+          ;; Handle up.
+          {¦ input: ⟨K←(key up)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip line up) (expel left) unzip)}
+          ;; Handle down.
+          {¦ input: ⟨K←(key dn)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip line dn) (expel right) unzip)}
+          ;; Handle Ctrl-A.
+          {¦ input: ⟨& (key (ctrl _)) K←(key "a")⟩ motions: (_* `M)}
+            <> {(K): (), M: (select text)}
+          ;; Handle Home.
+          {¦ input: ⟨K←(key home)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip line left) (expel left) unzip)}
+          ;; Handle End.
+          {¦ input: ⟨K←(key end)⟩ motions: (_* `M)}
+            <> {(K): (), (M): ((zip line right) (expel right) unzip)}
+          ;; While Ctrl is held, the navigation unit is word.
+          {¦ unit_: rune input: (%items (_) (key (ctrl _)))}
+            <> {unit: word}
+          ;; Otherwise, the navigation unit is word.
+          {¦ unit_: word input: (%items () (key (ctrl _)) min: 0)}
+            <> {unit: rune}
+          ;; While Shift is held, and no runes exist, define anchor if not defined already.
+          {¦ state: (l_string _ ⍊ -anchor_) input: (%items (_) (key (shift _)))}
+            <> {anchor: ^(charcount l)})))
+
+;; |@ musoma.input
+;;
+;; |@pattern
+;; (Input ¦ props_ label⋮ "" placeholder⋮ "")
+;;
+;; |@key props
+;; Properties passed to the underlying `Input` component.
+;;
+;; |@key label
+;; Text to display above the input field.
+;;
+;; |@key placeholder
+;; Text to display in the input field while it is empty.
+;;
+;; |@block
+;; Stock view/styling for an Input field based on the current MuSoma theme.
+(Input ¦ props_ label⋮ "" placeholder⋮ "")
+  => (slot
+       (Input
+         (box style: "flow-col gap-2/3 membrane hover:cue-hover active:cue-active \
+                      focus:cue-focus focus:input empty:cue-empty"
+           ;; Render the label, if any.
+           (^when (label (%string nonempty))
+             (p style: "content upcase font-condensed text-sm leading-none \
+                        text-theme-muted in-hover:text-theme-subtle \
+                        in-focus:text-theme-selection-bg"
+               ^label))
+           (box style: "fr-1 flow-none content-clip border-xs border-theme-highlight-low \
+                        rounded px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
+                        in-focus:border-theme-selection-bg"
+             ;; Display placeholder, but only in an empty field.
+             (p style: "absent in-empty:present text-theme-muted leading-none"
+               ^placeholder)
+             (p style: "sel sel-endl sel-aim sel-clearance-0 sel-text-theme-muted \
+                        in-focus:sel-text-theme-selection-fg sel-theme-highlight-low \
+                        in-hover:sel-theme-highlight-med text-theme-text leading-tight \
+                        beam-transparent in-hover:beam-thick in-focus:beam-thick \
+                        in-focus:sel-theme-selection-bg"
+                value: true
+               "")))
+         ^… props))
