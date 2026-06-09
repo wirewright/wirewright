@@ -136,7 +136,7 @@ module Ww::D7
   #
   # NOTE: Assumes 1:1 correspondence. Extra items in *src*, *goal*, or
   # both raise.
-  def permutation(src : MatchGroup, capture, goal : Indexable(Term)) : Slice(Int32) forall T
+  def permutation(src : MatchGroup, capture, arranged_like_in goal : Indexable(Term)) : Slice(Int32) forall T
     assert src.size == goal.size
 
     if src.size < 8 # Fast path

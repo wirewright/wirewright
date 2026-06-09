@@ -490,7 +490,7 @@ module Ww::Rack::Feed
     patches = Pf::Kit.stack_array(D7::Patch, 4)
     values = Pf::Kit.stack_array(Term, 4)
 
-    permutation = D7.permutation(src, :src, goal: edges(spec.from))
+    permutation = D7.permutation(src, :src, arranged_like_in: edges(spec.from))
     permutation.each do |index|
       src_spec = spec.from[index]
       src_match = src[index]
@@ -526,7 +526,7 @@ module Ww::Rack::Feed
 
     patches = Pf::Kit.stack_array(D7::Patch, 4)
 
-    permutation = D7.permutation(dst, :dst, goal: edges(spec.to))
+    permutation = D7.permutation(dst, :dst, arranged_like_in: edges(spec.to))
     permutation.each do |index|
       dst_spec = spec.to[index]
       dst_match = dst[index]
@@ -551,7 +551,7 @@ module Ww::Rack::Feed
     patches = Pf::Kit.stack_array(D7::Patch, 8)
     values = Pf::Kit.stack_array(Term, 8)
 
-    src_permutation = D7.permutation(src, :src, goal: edges(spec.from))
+    src_permutation = D7.permutation(src, :src, arranged_like_in: edges(spec.from))
     src_permutation.each do |index|
       src_spec = spec.from[index]
       src_match = src[index]
@@ -564,7 +564,7 @@ module Ww::Rack::Feed
 
     return unless patches.size == src.size # get?() must succeed for all nodes
 
-    dst_permutation = D7.permutation(dst, :dst, goal: edges(spec.to))
+    dst_permutation = D7.permutation(dst, :dst, arranged_like_in: edges(spec.to))
     dst_permutation.each do |index|
       dst_spec = spec.to[index]
       dst_match = dst[index]

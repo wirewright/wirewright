@@ -62,7 +62,7 @@ module Ww::Rack
       WWML
         srcs, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
 
-        permutation = D7.permutation(src, :src, goal: srcs.items)
+        permutation = D7.permutation(src, :src, arranged_like_in: srcs.items)
 
         matchee = Term::Dict.build do |commit|
           permutation.each do |index|
@@ -93,7 +93,7 @@ module Ww::Rack
       WWML
         src_edges, restab, rules = D7.fetch(dev, :srcs, :restab, :rules)
 
-        permutation = D7.permutation(src, :src, goal: src_edges.items)
+        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
 
         res_env = {} of Term => Term
 
@@ -184,7 +184,7 @@ module Ww::Rack
       WWML
         itemsrcs, pairtab, rules = D7.fetch(dev, :itemsrcs, :pairtab, :rules)
         spec_term = D7.fetch(spec, :term)
-        permutation = D7.permutation(itemcell, :itemsrc, goal: itemsrcs.items)
+        permutation = D7.permutation(itemcell, :itemsrc, arranged_like_in: itemsrcs.items)
 
         rewriter = Rho.rewriter(spec_term, rules)
         next unless rewriter.finite?
@@ -296,7 +296,7 @@ module Ww::Rack
         assert src.size == src_edges.size
 
         # Fetch src values.
-        permutation = D7.permutation(src, :src, goal: src_edges.items)
+        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
 
         src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
@@ -335,7 +335,7 @@ module Ww::Rack
         assert src.size == src_edges.size
 
         # Fetch src values.
-        permutation = D7.permutation(src, :src, goal: src_edges.items)
+        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
 
         src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
@@ -383,7 +383,7 @@ module Ww::Rack
         assert src.size == src_edges.size
 
         # Fetch src values.
-        permutation = D7.permutation(src, :src, goal: src_edges.items)
+        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
 
         src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
