@@ -503,6 +503,20 @@ module Ww::Nitrene
         eval(it, vars1, bodyQ)
       end
 
+      matchpi %{(let* assignments←(_*) bodyQ_)} do
+        vars1 = vars
+        assignments.items.each do |assignment|
+          # (_ _)
+          next unless assignment = assignment.as_d?
+          next unless assignment.itemsonly? && assignment.size == 2
+
+          var, valueQ = assignment
+          vars1 = vars1.with(var, eval(it, vars1, valueQ))
+        end
+
+        eval(it, vars1, bodyQ)
+      end
+
       otherwise do
         expr
       end
@@ -1041,6 +1055,14 @@ module Ww::Nitrene
         end
 
         Term.of(result)
+      end
+
+      matchpi %{(partition text_string sep_string)}, text: String, sep: String do
+        Term.of(text.partition(sep))
+      end
+
+      matchpi %{(rpartition text_string sep_string)}, text: String, sep: String do
+        Term.of(text.rpartition(sep))
       end
 
       matchpi %{(line/stem arg_string)}, arg: StringView do
