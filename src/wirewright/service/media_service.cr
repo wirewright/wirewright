@@ -807,14 +807,32 @@ module Ww
       end
 
       def handle(event : SDL::TextEntered) : Nil
+        modifiers = SDL.modifiers
+
         session(event) do |session_key, session|
           entity = Term.of(:rune, event.rune)
 
           # Press
+
+          # Suppress active modifiers before rune press.
+          modifiers.each do |modifier|
+            next unless name = modifier_name?(modifier)
+
+            session.input = session.input.delete(Term.of(:key, name))
+          end
+
           session.input = session.input.add(entity)
           tick(session_key, session)
 
           # Release
+
+          # Reintroduce the modifiers we've suppressed.
+          modifiers.each do |modifier|
+            next unless name = modifier_name?(modifier)
+
+            session.input = session.input.add(Term.of(:key, name))
+          end
+
           session.input = session.input.delete(entity)
           tick(session_key, session)
         end
@@ -1124,11 +1142,29 @@ module Ww
 
       # This overload is here primarily to support CapsLock->Escape mapping,
       # which is my muscle memory; I rely on it very much. Notice how we don't
-      # handle the CapsLock scancode. So if CapsLock=Escape, scancode is left
+      # handle the CapsLock scancode above. So if CapsLock=Escape, scancode is left
       # unhandled, but we pick up the keycode.
       def key_name?(code : SDL::Keycode) : Term?
         case code
         when .escape? then Term.of(:escape)
+        end
+      end
+
+      def modifier_name?(modifier : SDL::KeyModifier) : Term?
+        case modifier
+        in .l_shift? then Term.of(:shift, :left)
+        in .r_shift? then Term.of(:shift, :right)
+        in .level5?
+        in .l_ctrl? then Term.of(:ctrl, :left)
+        in .r_ctrl? then Term.of(:ctrl, :right)
+        in .l_alt?  then Term.of(:alt, :left)
+        in .r_alt?  then Term.of(:alt, :right)
+        in .l_win?
+        in .r_win?
+        in .num_lock?
+        in .caps_lock?
+        in .alt_gr?
+        in .scroll_lock?
         end
       end
     end
