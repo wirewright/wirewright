@@ -161,6 +161,10 @@ module Ww::Scenery
         commit.with(:caption, node.caption.to_s)
         commit.with(:"line-h", describe(node.line_height))
 
+        if node.selections.present?
+          commit.with(:selection, true)
+        end
+
         if selection = node.selections.first?
           seln = node.caption.select(selection.range)
           selection_anchor, selection_span = rel_annotate(selection, node.caption, seln)
@@ -489,6 +493,7 @@ module Ww::Scenery
 
     hit_anchor, hit_span = rel_annotate(hit, hit.seln.expand, hit.seln)
     commit.with(:"hit-anchor", hit_anchor)
+    commit.with(:"hit-focus", hit_anchor + hit_span)
     commit.with(:"hit-span", hit_span)
   end
 end
