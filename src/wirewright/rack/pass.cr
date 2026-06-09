@@ -95,26 +95,23 @@ module Ww::Rack
 
         permutation = D7.permutation(src, :src, goal: src_edges.items)
 
+        res_env = {} of Term => Term
+
+        res.each do |match|
+          Term.matchpi?(match.node.term, %{[cell @edge_ value_]}) do
+            res_env[edge] = value
+          end
+        end
+
         matchee = Term::Dict.build do |commit|
           permutation.each do |index|
             commit << D7.fetch(src[index], :value)
           end
-        end
 
-        res_env = {} of Term => Term
-
-        res.each do |match|
-          Term.case(match.node.term) do
-            matchpi %{[cell @dst_ value_]} do
-              res_env[dst] = value
-            end
-
-            matchpi %{[cell @dst_]} { }
+          restab.each_entry do |key, value_local|
+            value = D7.resolve(value_local, wrt: dev.single)
+            commit.with(key, res_env[value]?)
           end
-        end
-
-        restab.each_entry do |key, value|
-          matchee = matchee.with(key, res_env[value]?)
         end
 
         backsys = rules.items.compact_map do |rule|
@@ -129,7 +126,8 @@ module Ww::Rack
         patches = Pf::Kit.stack_array(D7::Patch, 8)
 
         # Generate patches for the itemspart.
-        src_edges.items.zip(rep.items) do |edge, item|
+        src_edges.items.zip(rep.items) do |edge_local, item|
+          edge = D7.resolve(edge_local, wrt: dev.single)
           dst = D7.find(src, where: :src, eq: edge)
           patches << D7.patch(dst, {2, item})
         end
@@ -140,7 +138,8 @@ module Ww::Rack
         # a pair is filling its cell. Removing a resource is removing its pair
         # its emptying its cell. Modifying a pair works like in the itemspart:
         # the cell's content is modified.
-        restab.each_entry do |key, edge|
+        restab.each_entry do |key, edge_local|
+          edge = D7.resolve(edge_local, wrt: dev.single)
           value0 = res_env[edge]?
           value1 = rep[key]?
 
@@ -172,6 +171,99 @@ module Ww::Rack
             # Fill/modify cell
             patches << D7.patch(dst, {2, value1})
           end
+        end
+
+        D7.patches(patches)
+      end
+
+      rule(<<-WWML) do |dev, spec, itemcell, paircell|
+      [rewriter @spec_ itemsrcs←((%past @_ min: 0)) pairsrcs←((%past @_ min: 0)) pairtab_dict rules_dict] dev
+        -> (one spec) [cell @spec_ term_] {name: spec}
+        -> (many itemsrcs itemsrc) [cell @itemsrc_ value_] {name: itemcell}
+        -> (many pairsrcs pairsrc) [cell @pairsrc_ _?] {name: paircell, min: 0}
+      WWML
+        itemsrcs, pairtab, rules = D7.fetch(dev, :itemsrcs, :pairtab, :rules)
+        spec_term = D7.fetch(spec, :term)
+        permutation = D7.permutation(itemcell, :itemsrc, goal: itemsrcs.items)
+
+        rewriter = Rho.rewriter(spec_term, rules)
+        next unless rewriter.finite?
+
+        # Record which cells from pairsrc were found.
+        pair_values = {} of Term => Term
+
+        paircell.each do |match|
+          Term.matchpi?(match.node.term, %{[cell @pairsrc_ value_]}) do
+            pair_values[pairsrc] = value
+          end
+        end
+
+        # Prepare the input term.
+        input = Term::Dict.build do |commit|
+          permutation.each do |index|
+            commit << D7.fetch(itemcell[index], :value)
+          end
+
+          # For example, in pairtab entry `x: @foo`, `x` is the input key we want
+          # to define, and `@foo` is the edge whose value we should use.
+          pairtab.each_entry do |key, local_pairsrc|
+            pairsrc = D7.resolve(local_pairsrc, wrt: dev.single)
+            commit.with(key, pair_values[pairsrc]?)
+          end
+        end
+
+        # Rewrite the input term.
+        output = Rho.rewrite(rewriter, Term.of(input))
+
+        # Returning a non-dict or removing one of items is something we simply can't
+        # handle in any sensible way, it's quite late but we still can bail out.
+        next unless output = output.as_d?
+        next unless output.itemsize == input.itemsize
+
+        # Unpack the output term and produce the appropriate patches to itemsrc
+        # and paircell(s).
+
+        patches = Pf::Kit.stack_array(D7::Patch, 8)
+
+        # Prepare patches for the itemspart.
+        itemsrcs.items.zip(output.items) do |itemsrc_local, item|
+          itemsrc = D7.resolve(itemsrc_local, wrt: dev.single)
+          target = D7.find(itemcell, where: :itemsrc, eq: itemsrc)
+          patches << D7.patch(target, {2, item})
+        end
+
+        # Prepare patches for the pairspart.
+        pairtab.each_entry do |key, local_pairsrc|
+          pairsrc = D7.resolve(local_pairsrc, wrt: dev.single)
+          value0 = pair_values[pairsrc]?
+          value1 = output[key]?
+
+          case {value0, value1}
+          in {Nil, Nil}
+            # Absent in both, no change.
+          in {Term, Nil}
+            # It may happen that the pair cell does not actually exist, as in
+            # the example below:
+            #
+            #   (cell @x 100)
+            #   (backsys {@:x @:y}
+            #     {¦ x_ -y_} <> {y: ^x})
+            #
+            # Note how @y is absent, -y_ succeeds and sets y: 100 which we read with
+            # rep[key] above. However, we don't actually have anywhere to write! We
+            # skip such writes.
+            target = D7.find?(paircell, where: :pairsrc, eq: pairsrc)
+          in {Nil, Term}, {Term, Term}
+            next if value0 == value1 # No change
+
+            # Ditto: the pair cell may not actually exist and we must handle
+            # that gracefully.
+            target = D7.find?(paircell, where: :pairsrc, eq: pairsrc)
+          end
+
+          next unless target
+
+          patches << D7.patch(target, {2, value1})
         end
 
         D7.patches(patches)

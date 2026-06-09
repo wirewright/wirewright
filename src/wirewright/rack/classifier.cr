@@ -466,6 +466,73 @@ module Ww::Rack
         D7.mixture(node, defn) { node }
       end
 
+      matchpi %{[rewriter (@spec_ <-> ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) body_*]} do
+        edges = [spec]
+        edges.concat(itemsrcs.items)
+
+        res_edges, restab = Term::Dict.build do |res_edges, restab|
+          pairsrcs.each_entry do |key, value|
+            # Ignore numbers to avoid tricky cases where the resources dict is like
+            # (@a @b @c), which would invalidate the disjointedness of
+            # <src values dict> | <res dict>.
+            next if key.type.number?
+            next unless Term.edge?(value)
+
+            edges << value
+
+            res_edges << value
+            restab.with(key, value)
+          end
+        end
+
+        D7.gnd(node, edges, defn: Term.of(:rewriter, spec, itemsrcs, res_edges, restab, body))
+      end
+
+      matchpi %{[rewriter (spec_ <-> srcs_dict) _*]} do
+        # For example, the following rewriter:
+        #
+        #   (rewriter ((rulesetR) <-> {@:n @:m})
+        #     {¦ ±n} <> {n: ^(+ n 1)}
+        #     {¦ ±m} <> {n: ^(+ n 1)})
+        #
+        # ... should expand to:
+        #
+        #   (module {@n: @(local n), @m: @(local m)}
+        #     (cell @spec (rulesetR))
+        #     (rewriter (@spec <-> {n: @(local n), m: @(local m)})
+        #       {¦ ±n} <> {n: ^(+ n 1)}
+        #       {¦ ±m} <> {n: ^(+ n 1)}))
+        #
+
+        bindings, local_srcs = Term::Dict.build do |bindings_commit, local_srcs_commit|
+          srcs.items.each_with_index do |value, key|
+            next unless Term.edge?(value)
+
+            local = Term.of(:edge, {:local, key})
+            bindings_commit.with(local, value)
+            local_srcs_commit.with(key, local)
+          end
+
+          srcs.each_entry(in: Term::Dict.pairspart) do |key, value|
+            next if key.type.number?
+
+            local = Term.of(:edge, {:local, key})
+            bindings_commit.with(local, value)
+            local_srcs_commit.with(key, local)
+          end
+        end
+
+        defn = Term.of(:module, bindings,
+          {:cell, {:edge, :spec}, spec},
+          Term.morph(node,
+            {1, 0, {:edge, :spec}},
+            {1, 2, local_srcs},
+          ),
+        )
+
+        D7.mixture(node, defn) { node }
+      end
+
       matchpi %{[slot _]} do
         D7.gnd(node)
       end

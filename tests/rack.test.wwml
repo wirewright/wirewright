@@ -5673,3 +5673,56 @@
       (backsys @x  (_* `back) <> {back: 200})
       (backsys @x  {¦ -flag_} <> {flag: true}))
     end))
+
+;; Cell rewriting
+(group
+  (rack
+    (frame
+      (cell @spec (rulesetR))
+      (cell @n 0)
+      (rewriter (@spec <-> {@:n})
+        {¦ ±n} <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟨(cell @n 1)⟩)
+    (frame pattern: true
+      ⟨(cell @n 2)⟩))
+    ;; ...
+
+  (rack
+    (frame
+      (cell @n 0)
+      (rewriter ((rulesetR) <-> {@:n})
+        {¦ ±n} <> {n: ^(+ n 1)}))
+    (frame pattern: true
+      ⟨(cell @n 1)⟩)
+    (frame pattern: true
+      ⟨(cell @n 2)⟩))
+    ;; ...
+
+  (rack
+    (frame
+      (cell @n 0)
+      (cell @m)
+      (rewriter ((rulesetR) <-> {@:n @:m})
+        {¦ ±n -m_} <> {m: (counter ^n)}
+        {¦ ±n m: (counter ±m)} <> {n: ^(+ n 1), m: ^n}
+        {¦ ±n m_: (counter 3)} <> {(n): (), (m): ()}))
+    (frame pattern: true
+      ⟨& (cell @n 0)
+         (cell @m (counter 0))⟩)
+    (frame pattern: true
+      ⟨& (cell @n 1)
+         (cell @m (counter 0))⟩)
+    (frame pattern: true
+      ⟨& (cell @n 2)
+         (cell @m (counter 1))⟩)
+    (frame pattern: true
+      ⟨& (cell @n 3)
+         (cell @m (counter 2))⟩)
+    (frame pattern: true
+      ⟨& (cell @n 4)
+         (cell @m (counter 3))⟩)
+    (frame pattern: true
+      ⟨& (cell @n)
+         (cell @m)⟩)
+    end))

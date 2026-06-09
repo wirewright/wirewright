@@ -3,7 +3,11 @@ module Ww::D7
   # usually hypergraph-bounded rendition of circuit-bounded `NodeAddr`.
   alias NodeId = UInt32
 
-  defrecord Node, id : NodeId, addr : NodeAddr, term : Term
+  defrecord Node,
+    id : NodeId,
+    addr : NodeAddr,
+    scope : NodeScope,
+    term : Term
 
   # Represents an absolute edge.
   #
@@ -143,8 +147,8 @@ module Ww::D7
 
     # Yields nodes of this hypergraph.
     def each_node(& : Node ->) : Nil
-      @node_terms.each_with_index do |node, id|
-        yield Node.new(NodeId.new(id), @node_addrs[id], node)
+      @node_terms.each_with_index do |node, node_id|
+        yield Node.new(NodeId.new(node_id), @node_addrs[node_id], @node_scopes[node_id], node)
       end
     end
 
@@ -157,7 +161,7 @@ module Ww::D7
     def each_node_with_head(& : Node, Term ->) : Nil
       @head_index.each do |head, bucket|
         bucket.each do |node_id|
-          yield Node.new(node_id, @node_addrs[node_id], @node_terms[node_id]), head
+          yield Node.new(node_id, @node_addrs[node_id], @node_scopes[node_id], @node_terms[node_id]), head
         end
       end
     end
@@ -167,7 +171,7 @@ module Ww::D7
       return unless bucket = @head_index[head]?
 
       bucket.each do |node_id|
-        yield Node.new(node_id, @node_addrs[node_id], @node_terms[node_id]), head
+        yield Node.new(node_id, @node_addrs[node_id], @node_scopes[node_id], @node_terms[node_id]), head
       end
     end
 
@@ -183,7 +187,7 @@ module Ww::D7
       return unless member_ids = @edge_nodes[edge]?
 
       member_ids.each do |member_id|
-        yield Node.new(member_id, @node_addrs[member_id], @node_terms[member_id])
+        yield Node.new(member_id, @node_addrs[member_id], @node_scopes[member_id], @node_terms[member_id])
       end
     end
 

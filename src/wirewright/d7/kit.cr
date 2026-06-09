@@ -161,6 +161,22 @@ module Ww::D7
     goal.to_readonly_slice { |term| table[term] }
   end
 
+  # Resolves *edge* with respect to *node*. This is necessary in cases
+  # where you read an edge from a node (e.g. using pattern matching)
+  # inside a regime. You can't use the edge as-is because the actual
+  # cell (or node) it refers to can be different due to modules. You
+  # must first pass the edge through `resolve` with respect to the node
+  # that you read it from.
+  def resolve(edge : Term, *, wrt node : Node) : Term
+    _, resn = node.scope[edge]
+    resn
+  end
+
+  # :ditto:
+  def resolve(edge : Term, *, wrt match : Match) : Term
+    resolve(edge, wrt: match.node)
+  end
+
   # An immutable map of node ids to replacement terms.
   #
   # Disjoint changes to the same node are supported and will be properly merged.
