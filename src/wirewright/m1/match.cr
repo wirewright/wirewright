@@ -957,6 +957,12 @@ module Ww::M1
   end
 
   private def eligible?(op : Op::Dfs | Op::Bfs, matchee : Term) : Bool
+    # If self: true, then the matchee is not required to be a dictioanry.
+    # For example, consider the pattern:
+    #
+    #   (%leaf qux self: true)
+    #
+    # It can match `qux` itself but also `(a qux b)`, `(a (qux) b)` and so on.
     return true if op.alg.mindepth.zero?
     return false unless dict = matchee.as_d?
 

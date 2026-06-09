@@ -2602,6 +2602,12 @@
     (= (x: 100 y: 200) {})
     (- (a) (a b c) (a x: 100) (a b c d)))
 
+  ;; BUG: %items must be sealed when min: 0
+  (pattern (%items () (key (ctrl _)) min: 0)
+    (+ ())
+    (+ (a b c) (a (key foo) b))
+    (- 100 "qux" foo ((key (ctrl left))) (a (key (ctrl left)) c)))
+
   (pattern ((%items (%filter (b) {¦ a_ b_} Bs_) {¦ a_ b_}) b_)
     (= (({a: 100, b: 200} a b {a: 123, b: 456} c {a: 100, b: 200}) 200)
        {Bs: ({a: 100, b: 200} {a: 100, b: 200}), b: 200}))
@@ -2916,9 +2922,9 @@
        {id: b}
        {id: c})))
 
-;; %leaf all
+;; %leaves
 (group
-  ;; %leaf all dfs
+  ;; %leaves dfs
   (pattern (%leaves xs_ x_symbol)
     (= (((1 2) a (4 5) b (quux)) ((foo 7) bar (8) (baz)) (boo) a ((9) (10 11) ((12))))
        {xs: ({x: a} {x: b}
@@ -2937,7 +2943,7 @@
              {x: boo}
              {x: a})}))
 
-  ;; %leaves all bfs
+  ;; %leaves bfs
   (pattern (%leaves xs_ x_symbol order: bfs)
     (= (((1 2) a (4 5) b (quux)) ((foo 7) bar (8) (baz)) (boo) a ((9) (10 11) ((12))))
        {xs: ({x: a}
@@ -2948,6 +2954,14 @@
              {x: quux}
              {x: foo}
              {x: baz})}))
+
+  ;; BUG: %leaves must be sealed when min: 0
+  (pattern (%leaves () (key (ctrl _)) min: 0 self: true)
+    (+ () (a b c) ((a) ((key foo)) (c)))
+    (- (key (ctrl left)))
+    (- ((key (ctrl left))))
+    (- (a (key (ctrl left)) b c))
+    (- (a (b c (key (ctrl left)) d e) f)))
 
   (pattern (%leaves (%flat (_ v) vs_) (assoc k_ v_) order: dfs)
     (- (assoc x 100))
@@ -3506,6 +3520,11 @@
     (= (a b 1 c d 2) {fst: 1, lst: 2})
     (= (a b 1 c d 2 e f) {fst: 1, lst: 2})
     (= (a b 1 c d 2 e f 3) {fst: 1, lst: 3}))
+
+  ;; BUG: %matches with min: 0 must be sealed
+  (pattern (%matches () ⟨(key (ctrl _))⟩)
+    (+ a "hello" () (a b c) (a (key qux) b))
+    (- ((key (ctrl left))) (a (key (ctrl left)) b)))
 
   ;; TODO: min bound
 

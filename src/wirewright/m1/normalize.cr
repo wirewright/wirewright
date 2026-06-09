@@ -2484,6 +2484,8 @@ module Ww::M1
             commit.with(:guarded, true)
             if min > 0
               commit.with(:depth, {:+, {:max, :member, :min}, 1})
+            else # min == 0
+              # Everything is already sealed, we don't have to do anything here.
             end
           end
 
@@ -2646,12 +2648,14 @@ module Ww::M1
 
           normal = opts.transaction do |commit|
             commit << :"%items" << Normalize.sealed(Π.pattern(successor))
-            commit.concat(members) { |member| normalize(Π.pattern(member)) }
 
             commit.with(:guarded, true)
             if min > 0
+              commit.concat(members) { |member| normalize(Π.pattern(member)) }
               commit.with(:depth, {:+, {:max, :member, :min}, 1})
               commit.with(:bounds, {members.size, :"..=", :"∞"})
+            else # min == 0
+              commit.concat(members) { |member| Normalize.sealed(Π.pattern(member)) }
             end
           end
 
@@ -2821,15 +2825,17 @@ module Ww::M1
 
           normal = opts.transaction do |commit|
             commit << :"%leaves" << Normalize.sealed(Π.pattern(successor))
-            commit.concat(members) { |member| normalize(Π.pattern(member)) }
 
             commit.with(:guarded, true)
             if min > 0
+              commit.concat(members) { |member| normalize(Π.pattern(member)) }
               if depth0
                 commit.with(:depth, {:max, :member, :min})
               else
                 commit.with(:depth, {:+, {:max, :member, :min}, 1})
               end
+            else # min == 0
+              commit.concat(members) { |member| Normalize.sealed(Π.pattern(member)) }
             end
           end
 
@@ -2895,10 +2901,14 @@ module Ww::M1
 
           normal = opts.transaction do |commit|
             commit << :"%matches" << Normalize.sealed(Π.pattern(successor))
-            commit << normalize(Π.pattern(subpattern))
 
             commit.with(:guarded, true)
-            commit.with(:depth, :envelope)
+            if min > 0
+              commit << normalize(Π.pattern(subpattern))
+              commit.with(:depth, :envelope)
+            else # min == 0
+              commit << Normalize.sealed(Π.pattern(subpattern))
+            end
           end
 
           Term.of(normal)
