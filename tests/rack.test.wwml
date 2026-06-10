@@ -5002,7 +5002,7 @@
   (rack
     (frame
       (Foo a_)
-        => (component
+        => (component {}
              (template (slot (Bar ^a)))
              (slot (Baz))
              (slot (Boo)))
@@ -5045,7 +5045,7 @@
   (rack
     (frame
       (Counter value_)
-        => (component
+        => (component {}
              (cell @foo
                (template ^value))
              (node @bar
@@ -5069,7 +5069,7 @@
   (rack
     (frame
       (Foo value_)
-        => (component
+        => (component {}
              (template
                (cell @a ^(+ value 0))
                (cell @b ^(+ value 1))
@@ -5104,7 +5104,7 @@
   (rack
     (frame
       (Counter ±initial)
-        => (component
+        => (component {}
              (surface (@surface (#Counter ±count))
                (#Counter ^initial))
              (backsys @count
@@ -5132,7 +5132,7 @@
   (rack
     (frame
       (Button caption_ action_)
-        => (component
+        => (component {}
              (surface (@surface (#Button action_ actions←(_*)))
                (#Button ^action ()))
              (node @view
@@ -5154,7 +5154,7 @@
   (rack
     (frame
       (Foo)
-        => (component
+        => (component {}
              (surface (@first (foo a_))
                (foo 100))
              (surface (@second (bar b_))
@@ -5180,7 +5180,7 @@
   (rack
     (frame
       (Foo)
-        => (component
+        => (component {}
              (cell @x 100)
              (surface (@surface foobar)
                foobar)

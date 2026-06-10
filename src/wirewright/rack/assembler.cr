@@ -23,7 +23,10 @@ module Ww::Rack::Assembler
   #      ;; @msgs is available and refers into the surface
   #      ...)
   # ```
-  defrecord ComponentRecipe, surface : DeviceSurface?, tree : D7::ParseTree
+  defrecord ComponentRecipe,
+    surface : DeviceSurface?,
+    bindings : Term::Dict,
+    tree : D7::ParseTree
 
   # Represents a device surface definition. See `ComponentRecipe` for an example.
   defrecord DeviceSurface,
@@ -38,12 +41,12 @@ module Ww::Rack::Assembler
   # into `Recipe`s that can be instantiated at slots.
   def recipe(clf : D7::Classifier, body : Term) : Recipe
     Term.case(body) do
-      matchpi %{[component interior_*]} do
+      matchpi %{[component bindings_dict interior_*]} do
         tree = D7.parse(clf, interior, reply: D7::ParseTree)
         surfaces = surfaces(tree)
         surface = surfaces.single?
 
-        ComponentRecipe.new(surface, tree)
+        ComponentRecipe.new(surface, bindings.as_d, tree)
       end
 
       otherwise do
@@ -483,7 +486,16 @@ module Ww::Rack::Assembler
         #
         # If the user tries to confuse a component by giving it multiple surfaces,
         # it, too, will have no surfaces, and will be instantiated like this.
-        commit << :module << Term[]
+        commit << :module
+
+        bindings = Term::Dict.build do |commit|
+          recipe.bindings.each_entry do |capture, inner|
+            outer = vars[capture]?
+            commit.with(inner, outer)
+          end
+        end
+
+        commit << bindings
       end
 
       commit.concat(interior_instance.items)

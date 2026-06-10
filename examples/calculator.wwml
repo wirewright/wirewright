@@ -1,6 +1,6 @@
-(TextButton ⍊ caption_string msg_ accent⋮ none key_)
+(TextButton (@msgs_ msg_) ⍊ caption_string accent⋮ none key_)
   => (slot
-       (Button ^:msg ^:key
+       (Button (^msgs ^msg) ^:key
          (p style: "py-3 content-center text-xl leading-tight text-neutral-200 \
                     accent/bright:text-blue-300 accent/control:text-purple-300 \
                     hover:bg-neutral-800 hover:cursor-pointer active:bg-neutral-700 \
@@ -8,9 +8,9 @@
             ^:accent
            ^caption)))
 
-(IconButton ⍊ icon_string msg_ accent⋮ none key_)
+(IconButton (@msgs_ msg_) ⍊ icon_string accent⋮ none key_)
   => (slot
-       (Button ^:msg ^:key
+       (Button (^msgs ^msg) ^:key
          (icon style: "py-3 content-center text-xl leading-none text-neutral-200 \
                        accent/bright:text-blue-300 hover:bg-neutral-800 \
                        accent/control:text-purple-300 hover:cursor-pointer \
@@ -84,41 +84,38 @@
   (section "Keypad"
     (group style: "flow-col min-h-md item-fr-1"
       (group style: "flow-row item-fr-1"
-        (slot (TextButton caption: "C" msg: clear accent: bright key: (key delete)))
-        (slot (IconButton icon: "backspace" msg: backspace accent: bright key: (key backspace)))
-        (slot (TextButton caption: "%" msg: % accent: bright key: (rune "%")))
-        (slot (TextButton caption: "÷" msg: / accent: bright key: (rune "/"))))
+        (slot (TextButton (@actions clear) caption: "C" accent: bright key: (key delete)))
+        (slot (IconButton (@actions backspace) icon: "backspace" accent: bright key: (key backspace)))
+        (slot (TextButton (@actions %) caption: "%" accent: bright key: (rune "%")))
+        (slot (TextButton (@actions /) caption: "÷" accent: bright key: (rune "/"))))
       (group style: "flow-row item-fr-1"
-        (slot (TextButton caption: "7" msg: "7" key: (rune "7")))
-        (slot (TextButton caption: "8" msg: "8" key: (rune "8")))
-        (slot (TextButton caption: "9" msg: "9" key: (rune "9")))
-        (slot (TextButton caption: "×" msg: * accent: bright key: (rune "*"))))
+        (slot (TextButton (@actions "7") caption: "7" key: (rune "7")))
+        (slot (TextButton (@actions "8") caption: "8" key: (rune "8")))
+        (slot (TextButton (@actions "9") caption: "9" key: (rune "9")))
+        (slot (TextButton (@actions *) caption: "×" accent: bright key: (rune "*"))))
       (group style: "flow-row item-fr-1"
-        (slot (TextButton caption: "4" msg: "4" key: (rune "4")))
-        (slot (TextButton caption: "5" msg: "5" key: (rune "5")))
-        (slot (TextButton caption: "6" msg: "6" key: (rune "6")))
-        (slot (TextButton caption: "-" msg: - accent: bright key: (rune "-"))))
+        (slot (TextButton (@actions "4") caption: "4" key: (rune "4")))
+        (slot (TextButton (@actions "5") caption: "5" key: (rune "5")))
+        (slot (TextButton (@actions "6") caption: "6" key: (rune "6")))
+        (slot (TextButton (@actions -) caption: "-" accent: bright key: (rune "-"))))
       (group style: "flow-row item-fr-1"
-        (slot (TextButton caption: "1" msg: "1" key: (rune "1")))
-        (slot (TextButton caption: "2" msg: "2" key: (rune "2")))
-        (slot (TextButton caption: "3" msg: "3" key: (rune "3")))
-        (slot (TextButton caption: "+" msg: + accent: bright key: (rune "+"))))
+        (slot (TextButton (@actions "1") caption: "1" key: (rune "1")))
+        (slot (TextButton (@actions "2") caption: "2" key: (rune "2")))
+        (slot (TextButton (@actions "3") caption: "3" key: (rune "3")))
+        (slot (TextButton (@actions +) caption: "+" accent: bright key: (rune "+"))))
       (group style: "flow-row item-fr-1"
-        (slot (TextButton caption: "±" msg: sign key: (rune "s")))
-        (slot (TextButton caption: "0" msg: "0" key: (rune "0")))
-        (slot (IconButton icon: "keyboard_arrow_up" msg: up accent: control key: (key up)))
-        (slot (TextButton caption: "=" msg: eq accent: bright key: (rune "="))))
+        (slot (TextButton (@actions sign) caption: "±" key: (rune "s")))
+        (slot (TextButton (@actions "0") caption: "0" key: (rune "0")))
+        (slot (IconButton (@actions up) icon: "keyboard_arrow_up" accent: control key: (key up)))
+        (slot (TextButton (@actions eq) caption: "=" accent: bright key: (rune "="))))
       (group style: "flow-row item-fr-1"
-        (slot (TextButton caption: "." msg: "." key: (rune ".")))
-        (slot (IconButton icon: "keyboard_arrow_left" msg: left accent: control key: (key left)))
-        (slot (IconButton icon: "keyboard_arrow_down" msg: dn accent: control key: (key dn)))
-        (slot (IconButton icon: "keyboard_arrow_right" msg: right accent: control key: (key right))))))
+        (slot (TextButton (@actions ".") caption: "." key: (rune ".")))
+        (slot (IconButton (@actions left) icon: "keyboard_arrow_left" accent: control key: (key left)))
+        (slot (IconButton (@actions dn) icon: "keyboard_arrow_down" accent: control key: (key dn)))
+        (slot (IconButton (@actions right) icon: "keyboard_arrow_right" accent: control key: (key right))))))
 
-  (section "Message transfer"
-    (comment "Transfer messages from button queues to a centralized action queue.")
-    (control @msg (#Button _ (msg_ _*)))
-    (feed @msg @actions)
-    (queue (@action @actions) ()))
+  (comment "Buttons from the Keypad report actions to a centralized queue.")
+  (queue (@action @actions) ())
 
   (section "Control"
     (comment
