@@ -150,6 +150,27 @@ in that case you can use your favorite editor. To do so:
   how I wrote most of the complex examples. Unfortunately (for me...?) the built-in editor
   isn't as robust yet, nor is pretty printing.
 
+Again, I must remind you to run the AppImage from terminal; because eventually, you'd
+need to Ctrl-C it.
+
+### Basic controls
+
+- In the right pane (the circuit pane) you can pan around by pressing
+  the Left button and dragging.
+- You can also zoom in/out using the mouse wheel while over the circuit
+  pane. Use the Middle button to reset zoom.
+- In Normal mode, *you* control the pan. In Insert mode, *the editor* in
+  the circuit controls the pan. Imagine the circuit pane as a "camera", which
+  follows your instructions in Normal mode, but tracks/follows the editor
+  in Insert mode. You can still pan/zoom in Insert mode, but the "camera"
+  will force the editor to remain in focus, preventing you from zooming or
+  panning it out of view.
+- Use `+` and `-` in Normal mode to increase / decrease REM, which is the root
+  font size on which most of the UI depends. Note, however, that certain designs/
+  examples may start overflowing & get clipped as you increase the size,
+  in particular because the window size in the left pane is defined in pixels...
+  but, I digress, I know.
+
 ### Osc
 
 If you're brave enough to experiment with Wirewright "from scratch", here are some Hello Worlds
@@ -215,7 +236,7 @@ Similarly, you can try:
 (path-reading "/path/to/file")
 ```
 
-Which is basically the closest Wirewright gets to something like Python's `read()`.
+Which is basically the closest Wirewright gets to something like Python's `open(_, "r")`.
 It's live, too, so if you edit the file, you'll see the content change in MuSoma too.
 
 ## Building Wirewright
