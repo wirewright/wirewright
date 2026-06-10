@@ -13,7 +13,8 @@ Wirewright is an experimental symbolic physics environment.
 
 I am excited to announce a new front-end for Wirewright (with the old name :^), MuSoma.
 
-<img width="1200" height="932" alt="musoma-shot" src="https://github.com/user-attachments/assets/ae2701f5-284c-474c-b8b4-95d5e4857dec" />
+<img width="1200" height="986" alt="An image of the MuSoma app showing a calculator dividing by zero" src="https://github.com/user-attachments/assets/bd7f8462-b4da-4a79-b97c-437f84692b44" />
+
 
 ## Introduction
 
