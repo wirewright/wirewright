@@ -316,7 +316,9 @@ according to the VERSION file. Afterwards, simply replace the `.a`s shipped
 with Wirewright with your ones.
 
 An alternative route for you is to inspect Dockerfiles in build/ and see what you
-have to install and do.
+have to install and do. One notable detail is that you can build with the `syslibs`
+flag (`dev g <preset>; dev flag syslibs`) to use system libraries instead of
+the vendored ones unconditionally, which may be helpful if you want most control.
 
 ### Installing shards
 
