@@ -71,13 +71,11 @@ module MuSoma
     end
 
     def step(ws : Workspace) : Nil
-      return unless Var.pending?({ws.state, :motions})
-
       ws.state.update do |state|
         # If the circuit is running, and we are at the end of history, accept
         # motions and rewrite the circuit.
         #
-        # If the circuit is paused and we are at the end of history, allow to edit.
+        # If the circuit is paused and we are at the end of history, allow to edit it.
         #
         # Otherwise, discard motions and do not edit. The UI should prevent
         # this from ever being reached, with a helpful message. This is simply
