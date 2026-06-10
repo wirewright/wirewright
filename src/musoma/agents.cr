@@ -791,6 +791,27 @@ module MuSoma
     end
   end
 
+  class CircuitParser
+    def initialize
+      @cache = GenerationalCache(Term, D7::ParseTree).new
+    end
+
+    # NOTE: Assumes the caller will deduplicate consecutive frames.
+    def step(circuit : Term, prepass) : Slice(Term)
+      @cache.epoch do
+        subframes = Rack::Tspace.step(MuSoma.clf, circuit, prepass, cache: @cache)
+        subframes += Rack.step(MuSoma.clf, subframes.last, prepass, cache: @cache)
+        subframes
+      end
+    end
+
+    def parse(circuit : Term) : D7::ParseTree
+      @cache.epoch do
+        D7.parse(MuSoma.clf, circuit, reply: D7::ParseTree, cache: @cache)
+      end
+    end
+  end
+
   class CircuitAgent
     def initialize(@seed_ref : ReadingRef)
       @vantages = VarHash(D7::NodeAddr, Term).new
@@ -870,12 +891,15 @@ module MuSoma
     def step(ws : Workspace)
       return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.codex) || @vantages.pending?
 
+      history_limit = ws.codex.get.history_limit
+
       ws.state.update do |state|
         Term.case(state) do
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
             prepass = FigurePrepass.new(@vantages, successor: Rack::Prepass)
-            # TODO: add intermediate states to the timeline (?)
-            draft1 = ws.parser.step(draft, prepass)
+
+            drafts1 = ws.parser.step(draft, prepass)
+            draft1 = drafts1.last
 
             status1 = status
             if status == Term.of(:".")
@@ -887,15 +911,17 @@ module MuSoma
               # the draft and move on.
               next unless ahead == Term.of(:"*")
 
-              # Do not duplicate history frames.
-              next if behind.items.last? == draft1
+              # Time is running.
 
-              limit = ws.codex.get.history_limit
+              drafts1.each do |subframe|
+                # Do not insert duplicate consecutive entries.
+                next if behind.items.last? == subframe
 
-              if behind.itemsize < limit
-                behind = behind.append(draft1)
-              else
-                behind = behind.rest.append(draft1)
+                if behind.itemsize < history_limit
+                  behind = behind.append(subframe)
+                else
+                  behind = behind.rest.append(subframe)
+                end
               end
             end
 

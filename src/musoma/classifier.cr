@@ -1,22 +1,4 @@
 module MuSoma
-  class CircuitParser
-    def initialize
-      @cache = GenerationalCache(Term, D7::ParseTree).new
-    end
-
-    def step(circuit : Term, prepass) : Term
-      @cache.epoch do
-        Rack.step(MuSoma.clf, circuit, prepass, cache: @cache).last
-      end
-    end
-
-    def parse(circuit : Term) : D7::ParseTree
-      @cache.epoch do
-        D7.parse(MuSoma.clf, circuit, reply: D7::ParseTree, cache: @cache)
-      end
-    end
-  end
-
   # MuSoma classifier.
   #
   # This is the central place where MuSoma-specific nodes are defined and documented
