@@ -96,14 +96,126 @@ Then you can run MuSoma.
 If you hit `Shift-R` in normal mode (the app starts in it), you'll be able to edit `/tmp/example.wwml`
 and MuSoma will live-reload. Any running state will be lost on reload, however.
 
-Hover over things to learn more about them (or, well, about things I've bothered implementing tooltips for).
-The main things of interest are the examples. You probably won't be able to program much in MuSoma
-unless you're an exploratory type of person; there are barely any docs, and I have more interesting things
-to do than writing them, uhmm, sorry, I guess. The whole thing is so exciting I don't want to look back
-and trace my steps.
-
 > [!NOTE]
-> Wirewright doesn't yet quit when you close the window. You'll have to Ctrl-C it by hand. Sorry.
+> Wirewright doesn't yet quit when you close the window. You'll have to Ctrl-C by hand. Sorry.
+> This isn't exactly a bug, more of a "design complication". MuSoma can be thought of as a "server"
+> which "watches" the file you give it. When you close the window, well, you close the window... One
+> action among many, that's it. If the program wanted to react to that, it should be able to, since
+> the window, like many other things in Wirewright, is too a symbolic object, which the program
+> can observe.
+
+## [State of the] Docs
+
+Hover over things to learn more about them in the MuSoma app (or, well, at least about things I've
+bothered implementing tooltips for...)
+
+The main things of interest right now are the examples. See the `examples/` directory.
+
+If you want to see even more bizarre APLish / symbolic notation-ish incantations, feel free
+to visit the `runtime/codices` directory. If you're interested in how those "incantations"
+do (or relate to?) interactivity, go to `runtime/soma.lib.wwml`.
+
+For the latter, you are advised to use MuSoma, by the way, so that everything renders nicely.
+Consider opening MuSoma with the input example `examples/input.wwml`; then click the arrows &
+pan around; this should get you acquainted with symbolic hell! On the latter, now, look, I *love*
+the notation, but from the outside, it probably looks like a bizarre mix of APL and Lisp. Wha te ver, huh?
+
+Hit `?` in MuSoma in Normal mode to open the help pane. Right now it's pretty much empty, but
+in the future, I hope to make it into a help center with access to the *doctool*.
+
+The *doctool* is a "mythical" thing that some comments in the source code refer to. Right now,
+it basically doesn't exist. However, I do write docs that the doctool will eventually be able
+to find. The best way to find them right now is to be the doctool yourself; you can search for
+`# |@ ` (for Crystal files) or `;; |@ ` (for WwML files) to learn more.
+
+You probably won't be able to program much using MuSoma for now, so again, you can look at
+the examples. I will try to write tutorials but I'm pretty bad at writing, and I'm not a native
+speaker, so I'm not sure how that'll go. Note that the videos on the YouTube channel are highly
+outdated at this point, and are only of project-historical relevance.
+
+## Hello World(s)
+
+If you're afraid of the MuSoma editor, and you probably should be given the amount of
+shorthands it has accreted, just look into `runtime/codices/editR.codex.wwml`, well,
+in that case you can use your favorite editor. To do so:
+
+- Create a `.wwml` file anywhere and open it with your editor.
+- Open MuSoma: `./musoma-x86_64.AppImage path/to/file.wwml`.
+- Hit Shift-R to enable live-reload. It's disabled by default because it can lead to
+  losing runtime state. In Wirewright, we have "seeds" and evolutions of those seeds.
+  Think Minecraft or Game of Life. If you change the "seed" in Minecraft, all your buildings
+  are gone. Doing live-reload is similar in MuSoma.
+- Now you can edit the file and see the changes reflected in MuSoma. This is, by the way,
+  how I wrote most of the complex examples. Unfortunately (for me...?) the built-in editor
+  isn't as robust yet, nor is pretty printing.
+
+### Osc
+
+If you're brave enough to experiment with Wirewright "from scratch", here are some Hello Worlds
+that you can type.
+
+Open an empty file like I described above. Hit l in Normal mode to type (the use of keys h-l
+for left-right is from the Vim tradition, since it's in my muscle memory). You can hit Esc
+to escape Normal mode.
+
+Type the following (note that copy-paste doesn't yet work, probably for the better :^)
+
+```wwml
+(cell @x 0)
+(cell @y)
+(feed @x @y @x)
+```
+
+Hit space to escape from dictionaries: `I)` (`I` denoting the editor), hit space,
+the editor will go to `)I`.
+
+When you exit the feed node, assuming you've been writing stuff in the same order,
+you should be able to see *oscillation*: `0` going back and forth.
+
+Hit Esc to go to Normal mode. Hit Space to pause time. Hit Space to unpause time.
+You can navigate history using `,` and `.` in Normal mode.
+
+### Traditional
+
+Type:
+
+```wwml
+(window
+  (p "Kaixo, mundua!"))
+```
+
+You'll see a window appear to the left containing the text.
+
+### Files
+
+Type (replacing /any/path with some path, e.g. `/tmp`):
+
+```wwml
+(path-report "/any/path")
+```
+
+**PLEASE hit Esc to go to Normal mode if you have epilepsy at this point**,
+the thing sometimes gets into a feedback loop that I'm yet to debug, related
+to how MuSoma pans around to follow the editor automatically.
+
+This "Hello World" shows a live file system view. You can try to add files/
+directories and see MuSoma display the changes, live. If you go to Insert
+mode (`l`) and navigate with the arrow keys (if you're following this letter-by-
+letter that should be just Left), you'll see that the view is just a huge (or
+small, depending on the directory you picked) symbolic object, which is updated
+live by Wirewright.
+
+You can use Ctrl-Backspace to remove the term before the editor in Insert mode.
+For example: `a (path-report "/tmp" ...) I b`, hit C-backspace, `a I b`.
+
+Similarly, you can try:
+
+```wwml
+(path-reading "/path/to/file")
+```
+
+Which is basically the closest Wirewright gets to something like Python's `read()`.
+It's live, too, so if you edit the file, you'll see the content change in MuSoma too.
 
 ## Building Wirewright
 
