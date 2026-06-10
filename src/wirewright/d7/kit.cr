@@ -117,13 +117,12 @@ module Ww::D7
     captures.map { |capture| fetch(object, capture) }
   end
 
-  # Returns the first `Match` whose *capture* is equal to *needle*. Returns
-  # `nil` if not found.
-  def find?(match_group : MatchGroup, *, where capture, eq needle) : Match?
+  def find?(match_group : MatchGroup, *, where capture : Term | Symbol, eq needle : AbsEdge) : Match?
     capture = Term.of(capture)
-    needle = Term.of(needle)
 
-    match_group.find { |match| fetch(match, capture) == needle }
+    match_group.find do |match|
+      D7.resolve(fetch(match, capture), wrt: match) == needle
+    end
   end
 
   # Same as `find?`, but raises `Enumerable::NotFoundError` if no matches
@@ -132,22 +131,24 @@ module Ww::D7
     find?(*args, **kwargs) || raise Enumerable::NotFoundError.new
   end
 
-  # Maps each term in *goal* to its index in *src*.
-  #
-  # NOTE: Assumes 1:1 correspondence. Extra items in *src*, *goal*, or
-  # both raise.
-  def permutation(src : MatchGroup, capture, arranged_like_in goal : Indexable(Term)) : Slice(Int32) forall T
+  # FIXME: Not sure what this function is doing. Is there a better name?
+  def permutation(dev : Match, src : MatchGroup, capture, arranged_like_in goal : Indexable(Term)) : Slice(Int32) forall T
     assert src.size == goal.size
 
     if src.size < 8 # Fast path
-      return src.to_readonly_slice { |match| goal.index!(fetch(match, capture)) }
+      permutation = src.to_readonly_slice do |match|
+        goal.index! do |candidate|
+          D7.resolve(candidate, wrt: dev) == D7.resolve(fetch(match, capture), wrt: match)
+        end
+      end
+      return permutation
     end
 
     #  src  a c b
     # goal  b a c
-    table = {} of Term => Int32
+    table = {} of AbsEdge => Int32
     src.each_with_index do |match, index|
-      table[fetch(match, capture)] = index
+      table[D7.resolve(fetch(match, capture), wrt: match)] = index
     end
 
     # table
@@ -158,7 +159,7 @@ module Ww::D7
     # b a c
     # -->
     # 2 0 1
-    goal.to_readonly_slice { |term| table[term] }
+    goal.to_readonly_slice { |term| table[D7.resolve(term, wrt: dev)] }
   end
 
   # Resolves *edge* with respect to *node*. This is necessary in cases
@@ -167,13 +168,14 @@ module Ww::D7
   # cell (or node) it refers to can be different due to modules. You
   # must first pass the edge through `resolve` with respect to the node
   # that you read it from.
-  def resolve(edge : Term, *, wrt node : Node) : Term
-    _, resn = node.scope[edge]
-    resn
+  def resolve(edge : Term, *, wrt node : Node) : AbsEdge
+    scope, resn = node.scope[edge]
+
+    AbsEdge.new(scope, resn)
   end
 
   # :ditto:
-  def resolve(edge : Term, *, wrt match : Match) : Term
+  def resolve(edge : Term, *, wrt match : Match) : AbsEdge
     resolve(edge, wrt: match.node)
   end
 

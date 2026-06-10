@@ -51,7 +51,7 @@ module Ww::Rack
         assert spec = Feed.spec?(node)
         assert spec.is_a?(Feed::WithoutInhibitors)
 
-        Feed.patch?(spec.variant, src, dst)
+        Feed.patch?(spec.variant, dev.single, src, dst)
       end
 
       rule(<<-WWML) do |dev, src, dst|
@@ -60,9 +60,9 @@ module Ww::Rack
         -> (many srcs src) [cell @src_ value_] {name: src}
         -> (one dst) cell←[cell @dst_] {name: dst}
       WWML
-        srcs, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
+        dev_srcs, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
 
-        permutation = D7.permutation(src, :src, arranged_like_in: srcs.items)
+        permutation = D7.permutation(dev.single, src, :src, arranged_like_in: dev_srcs.items)
 
         matchee = Term::Dict.build do |commit|
           permutation.each do |index|
@@ -91,15 +91,15 @@ module Ww::Rack
         -> (many srcs src) [cell @src_ value_] {name: src}
         -> (many resources resource) [cell @resource_ _?] {name: res, min: 0}
       WWML
-        src_edges, restab, rules = D7.fetch(dev, :srcs, :restab, :rules)
+        dev_srcs, restab, rules = D7.fetch(dev, :srcs, :restab, :rules)
 
-        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
+        permutation = D7.permutation(dev.single, src, :src, arranged_like_in: dev_srcs.items)
 
-        res_env = {} of Term => Term
+        res_env = {} of D7::AbsEdge => Term
 
         res.each do |match|
           Term.matchpi?(match.node.term, %{[cell @edge_ value_]}) do
-            res_env[edge] = value
+            res_env[D7.resolve(edge, wrt: match)] = value
           end
         end
 
@@ -126,7 +126,7 @@ module Ww::Rack
         patches = Pf::Kit.stack_array(D7::Patch, 8)
 
         # Generate patches for the itemspart.
-        src_edges.items.zip(rep.items) do |edge_local, item|
+        dev_srcs.items.zip(rep.items) do |edge_local, item|
           edge = D7.resolve(edge_local, wrt: dev.single)
           dst = D7.find(src, where: :src, eq: edge)
           patches << D7.patch(dst, {2, item})
@@ -184,17 +184,17 @@ module Ww::Rack
       WWML
         itemsrcs, pairtab, rules = D7.fetch(dev, :itemsrcs, :pairtab, :rules)
         spec_term = D7.fetch(spec, :term)
-        permutation = D7.permutation(itemcell, :itemsrc, arranged_like_in: itemsrcs.items)
 
+        permutation = D7.permutation(dev.single, itemcell, :itemsrc, arranged_like_in: itemsrcs.items)
         rewriter = Rho.rewriter(spec_term, rules)
         next unless rewriter.finite?
 
         # Record which cells from pairsrc were found.
-        pair_values = {} of Term => Term
+        pair_values = {} of D7::AbsEdge => Term
 
         paircell.each do |match|
           Term.matchpi?(match.node.term, %{[cell @pairsrc_ value_]}) do
-            pair_values[pairsrc] = value
+            pair_values[D7.resolve(pairsrc, wrt: match)] = value
           end
         end
 
@@ -286,17 +286,17 @@ module Ww::Rack
         -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
         -> (one dst) [cell @dst_ _?] {name: dst}
       WWML
-        src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
-        if src.size < src_edges.size
+        dev_srcs, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
+        if src.size < dev_srcs.size
           # Less edges than we require. This means the view is invalid now
           # since some source cells have disappeared. So we empty the dst cell.
           next D7.patch(dst, {2, nil})
         end
 
-        assert src.size == src_edges.size
+        assert src.size == dev_srcs.size
 
         # Fetch src values.
-        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
+        permutation = D7.permutation(dev.single, src, :src, arranged_like_in: dev_srcs.items)
 
         src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
@@ -325,17 +325,17 @@ module Ww::Rack
         -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
         -> (one dst) [cell @dst_ _?] {name: dst}
       WWML
-        src_edges, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
-        if src.size < src_edges.size
+        dev_srcs, pattern, template = D7.fetch(dev, :srcs, :pattern, :template)
+        if src.size < dev_srcs.size
           # Less edges than we require. This means the extension is invalid now
           # now since some source cells have disappeared. So we empty the dst cell.
           next D7.patch(dst, {2, nil})
         end
 
-        assert src.size == src_edges.size
+        assert src.size == dev_srcs.size
 
         # Fetch src values.
-        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
+        permutation = D7.permutation(dev.single, src, :src, arranged_like_in: dev_srcs.items)
 
         src_terms = Term::Dict.build do |commit|
           permutation.each do |index|
@@ -368,7 +368,7 @@ module Ww::Rack
         -> (many srcs src) [cell @src_ term_] {name: src, min: 0}
         -> (one dst) [cell @dst_ term_] {name: dst}
       WWML
-        src_edges, src_pattern, dst_pattern, template = D7.fetch(dev, :srcs, :"src-pattern", :"dst-pattern", :template)
+        dev_srcs, src_pattern, dst_pattern, template = D7.fetch(dev, :srcs, :"src-pattern", :"dst-pattern", :template)
 
         # NOTE: As opposed to the dst pattern-less extension variant above, this one simply
         # abstains if the pattern does not match or if too few edges. This seems reasonable
@@ -378,12 +378,12 @@ module Ww::Rack
         # that takes into account both the inputs and the output of the node. Only if
         # all checks out is the extension free to modify the dst cell arbitrarily.
 
-        next if src.size < src_edges.size
+        next if src.size < dev_srcs.size
 
-        assert src.size == src_edges.size
+        assert src.size == dev_srcs.size
 
         # Fetch src values.
-        permutation = D7.permutation(src, :src, arranged_like_in: src_edges.items)
+        permutation = D7.permutation(dev.single, src, :src, arranged_like_in: dev_srcs.items)
 
         src_terms = Term::Dict.build do |commit|
           permutation.each do |index|

@@ -470,7 +470,7 @@ module Ww::Rack::Feed
   {% end %}
 
   # :nodoc:
-  def patch?(spec : Transfer, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
+  def patch?(spec : Transfer, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
     assert src.size == 1
     assert dst.size == 1
     return unless get_response = get?(spec.from, src.first.node)
@@ -482,7 +482,7 @@ module Ww::Rack::Feed
   end
 
   # :nodoc:
-  def patch?(spec : Aggregate, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
+  def patch?(spec : Aggregate, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
     return unless spec.from.size == src.size
 
     assert dst.size == 1
@@ -490,7 +490,7 @@ module Ww::Rack::Feed
     patches = Pf::Kit.stack_array(D7::Patch, 4)
     values = Pf::Kit.stack_array(Term, 4)
 
-    permutation = D7.permutation(src, :src, arranged_like_in: edges(spec.from))
+    permutation = D7.permutation(dev, src, :src, arranged_like_in: edges(spec.from))
     permutation.each do |index|
       src_spec = spec.from[index]
       src_match = src[index]
@@ -513,7 +513,7 @@ module Ww::Rack::Feed
   end
 
   # :nodoc:
-  def patch?(spec : Broadcast, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
+  def patch?(spec : Broadcast, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
     return unless spec.to.size == dst.size
 
     assert src.size == 1
@@ -526,7 +526,7 @@ module Ww::Rack::Feed
 
     patches = Pf::Kit.stack_array(D7::Patch, 4)
 
-    permutation = D7.permutation(dst, :dst, arranged_like_in: edges(spec.to))
+    permutation = D7.permutation(dev, dst, :dst, arranged_like_in: edges(spec.to))
     permutation.each do |index|
       dst_spec = spec.to[index]
       dst_match = dst[index]
@@ -544,14 +544,14 @@ module Ww::Rack::Feed
   end
 
   # :nodoc:
-  def patch?(spec : ParallelTransfer, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
+  def patch?(spec : ParallelTransfer, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
     return unless spec.from.size == src.size
     return unless spec.to.size == dst.size
 
     patches = Pf::Kit.stack_array(D7::Patch, 8)
     values = Pf::Kit.stack_array(Term, 8)
 
-    src_permutation = D7.permutation(src, :src, arranged_like_in: edges(spec.from))
+    src_permutation = D7.permutation(dev, src, :src, arranged_like_in: edges(spec.from))
     src_permutation.each do |index|
       src_spec = spec.from[index]
       src_match = src[index]
@@ -564,7 +564,7 @@ module Ww::Rack::Feed
 
     return unless patches.size == src.size # get?() must succeed for all nodes
 
-    dst_permutation = D7.permutation(dst, :dst, arranged_like_in: edges(spec.to))
+    dst_permutation = D7.permutation(dev, dst, :dst, arranged_like_in: edges(spec.to))
     dst_permutation.each do |index|
       dst_spec = spec.to[index]
       dst_match = dst[index]
