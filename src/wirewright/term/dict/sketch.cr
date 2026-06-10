@@ -77,11 +77,36 @@ class Ww::Term::Dict
       symbol(Term[term], hashcode)
     end
 
+    # :nodoc:
+    SYM_I = Term[:I]
+
     # :ditto:
     def self.symbol(term : Term::Any, hashcode : UInt64) : Sketch
       case term
       in Term::Sym
-        one(hashcode)
+        # We hard-code a slot for the symbol `I` (maybe we'll have other symbols
+        # here in the future).
+        #
+        # Wirewright as a whole is completely oblivious to this (as it should be!).
+        # However, this matters enormously for the performance of editR and MuSoma.
+        #
+        # The main reason is editR. Even though editR almost always relies on `I`,
+        # which is quite rare a symbol, in very large terms, `I` is almost guaranteed
+        # to collide with other symbols; therefore, editR is forced to take a number of
+        # slow paths before it descends deep enough that collisions disappear, of leaves
+        # are hit. Notice how this is exactly what we *don't* want editR to do: editR is
+        # very, very expensive, and simultaneously, `I`s are very, very rare and often
+        # singular. Most terms (including huge terms) do not contain `I` in practice.
+        #
+        # It is thus beneficial to hard-code a slot for `I`, so that editR isn't forced
+        # to search for `I` in very large terms, but instead gets a precise answer every
+        # time. Therefore, editR can basically "follow the trail" to `I`s instead of
+        # visiting very large subterms.
+        if term == SYM_I
+          new(Repr.new(1) << 63)
+        else
+          new(Repr.new(1) << (hashcode % (Repr.bit_width - 1)))
+        end
       in Term::Num, Term::Str, Term::Boolean, Term::Blob
         empty
       in Term::Dict

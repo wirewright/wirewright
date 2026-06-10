@@ -140,8 +140,7 @@ class Ww::Term::Dict
     end
 
     # Returns the sum total of accounted terms. This method may return
-    # `Magnitude::INFINITY` (aka unknown, aka too many to keep track of)
-    # if one of the counts is infinite.
+    # `Magnitude::INFINITY` (aka "too many to count").
     def total : Magnitude
       numbers + strings + symbols + trues + falses + blobs
     end
