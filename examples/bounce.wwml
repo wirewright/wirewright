@@ -1,0 +1,39 @@
+(backsys @world
+  ;; Clear above view if nothing above.
+  (⟪(cell @above (%plural view min: 0 max: 1))⟫ _*)
+    <> {(view): ()}
+  ;; Clear below view if nothing below.
+  (_* ⟪(cell @below (%plural view min: 0 max: 1))⟫)
+    <> {(view): ()}
+  ;; Update above views.
+  ⟨x_ ⟪(cell @above (%plural view min: 0 max: 1))⟫⟩°
+    <> {view: ^x}
+  ;; Update below views.
+  ⟨⟪(cell @below (%plural view min: 0 max: 1))⟫ x_⟩°
+    <> {view: ^x}
+  ⟪(cell @force dir_)⟫
+    <> {(dir): ()}
+  ;; Move up.
+  ⟨x←. X←⟪(cell @force up)⟫⟩
+    <> {x: ^(up X), X: ^(up x)}
+  ;; Move down.
+  ⟨X←⟪(cell @force dn)⟫ x←.⟩
+    <> {x: ^(up X), X: ^(up x)})
+
+(circuit @world
+  .
+  .
+  (module {}
+    (cell @above)
+    (cell @below)
+    (cell @force)
+    (cell @state up)
+    (backsys {@:above @:below @:force @:state}
+      {¦ state_: up -above below: .} <> {state: dn}
+      {¦ state_: dn above: . -below} <> {state: up}
+      {¦ state: up above: . -force_} <> {force: up}
+      {¦ state: dn below: . -force_} <> {force: dn}))
+  .
+  .
+  .
+  .)
