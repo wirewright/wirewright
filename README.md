@@ -134,6 +134,13 @@ the examples. I will try to write tutorials but I'm pretty bad at writing, and I
 speaker, so I'm not sure how that'll go. Note that the videos on the YouTube channel are highly
 outdated at this point, and are only of project-historical relevance.
 
+Note also that you check out the tests in `tests/` to get a feel of what the system is capable of
+at the moment, and the approximate scope of the project. The names may all sound a little bit weird,
+but that's not something I can control, unfortunately; the names work, they're short, and have nice
+abbreviations; so I'm all for them. Referring to things with foo, bar, X, Y, or Greek letters is
+more or less in the past at this point, although some components of the project are still named
+this way.
+
 ## Hello World(s)
 
 If you're afraid of the MuSoma editor, and you probably should be given the amount of
