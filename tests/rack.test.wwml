@@ -5726,3 +5726,19 @@
       ⟨& (cell @n)
          (cell @m)⟩)
     end))
+
+;; BUG: Make sure D7.resolve() is used in D7.permutation()
+(rack
+  (frame
+    (cell @x 0)
+    (module {@xs: @x}
+      (cell @x 100)
+      (cell @y)
+      (feed @xs @y)))
+  (frame
+    (cell @x)
+    (module {@xs: @x}
+      (cell @x 100)
+      (cell @y 0)
+      (feed @xs @y)))
+  end)
