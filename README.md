@@ -5,7 +5,12 @@
 
 # Wirewright
 
-Wirewright is an experimental symbolic physics environment.
+Wirewright aims to express computation as the evolution of symbolic structure inside an immutable
+world, and attempts to push that model as far as possible: into UI, I/O, audio, symbolic AI, and beyond.
+
+In Wirewright, buttons and input fields have insides (the same way a real-world button is a box
+with a mechanism inside it), programs can move, and some of the core distinctions of modern
+programming do not exist. In Wirewright, the same term can act as data, state, code, and UI.
 
 ## Gallery
 
@@ -51,7 +56,7 @@ Notably, self-embodiedness vanishes unless you situate yourself inside the world
 
 Wirewright is primarily for me and is a playground for some of my ideas. Other than that, Wirewright is for anyone interested in symbolic physics, including its applications to deterministic, symbolic AI.
 
-Currently, Wirewright lets you build very simple *circuits* using MuSoma, with its graphical *front-end*. You can look at some examples in the Gallery section below. See the `examples/` directory for more. We can do basic graphics and interactivity. Components other than `Button` remain future work as of now, although implementing them is more or less trivial based on my experience implementing the MuSoma app (which itself uses Wirewright, although in a slightly different way). The problem with buttons, input fields, and other UI widgets is that compared with the core of the project (which is more or less there), they take a very long time to make, while also being incredibly boring and unrewarding ("who cares if you made your own input field, we have input fields already").
+Currently, Wirewright lets you build very simple *circuits* using MuSoma, with its graphical *front-end*. You can look at some examples in the Gallery section above. See the `examples/` directory for more. We can do basic graphics and interactivity. Components other than `Button` and `Input` remain future work as of now, although implementing them is more or less trivial based on my experience implementing the MuSoma app (which itself uses Wirewright, although in a slightly different way). The problem with buttons, input fields, and other UI widgets is that compared with the core of the project (which is more or less there), they take a very long time to make, while also being incredibly boring and unrewarding ("who cares if you made your own input field, we have input fields already").
 
 ## References
 
