@@ -15,6 +15,14 @@ I am excited to announce a new front-end for Wirewright (with the old name :^), 
 
 <img width="1200" height="986" alt="An image of the MuSoma app showing a calculator dividing by zero" src="https://github.com/user-attachments/assets/bd7f8462-b4da-4a79-b97c-437f84692b44" />
 
+### Bounce
+
+This is an example of a "moving" program. The `circuit` defines the boundaries of a "symbolic world". The backsystem
+`backsys` defines some "laws". And the `module` inside the world implements a basic bouncing behavior. The module is
+subject to a mix of "laws" defined in the `backsys`, and the laws of Rack, which is the "ultimate" physics here,
+responsible for animating `backsys`, `circuit`, etc. themselves.
+
+https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
 
 ## Introduction
 
