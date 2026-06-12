@@ -806,28 +806,33 @@ module Ww
         end
       end
 
-      def handle(event : SDL::TextEntered) : Nil
-        modifiers = SDL.modifiers
+      # :nodoc:
+      KEY_LSHIFT = Term.of(:key, {:shift, :left})
+      # :nodoc:
+      KEY_RSHIFT = Term.of(:key, {:shift, :right})
 
+      def handle(event : SDL::TextEntered) : Nil
         session(event) do |session_key, session|
           entity = Term.of(:rune, event.rune)
 
           # Press
 
-          # Suppress active modifiers before rune press.
-          suppressed = false
-          modifiers.each do |modifier|
-            next unless name = modifier_name?(modifier)
+          suppressed = Pf::Kit.stack_array(Term, 2)
 
-            session.input = session.input.delete(Term.of(:key, name))
-            suppressed = true
+          # Suppress Shift before rune press. This is necessary to avoid confusion
+          # between Shift as a modifier key (e.g. Shift-Left) and Shift as a way to
+          # go uppercase.
+          {KEY_LSHIFT, KEY_RSHIFT}.each do |modifier|
+            next unless modifier.in?(session.input)
+
+            session.input = session.input.delete(modifier)
           end
 
           # Publish with modifiers suppressed before we add the rune to let the clients
           # adapt their state to the absence of the modifier. Otherwise, their processing
           # order (which may as well be arbitrary) will decide whether the rune is interpreted
           # with or without the modifier; we don't want that.
-          if suppressed
+          if suppressed.present?
             tick(session_key, session)
           end
 
@@ -837,10 +842,8 @@ module Ww
           # Release
 
           # Reintroduce the modifiers we've suppressed.
-          modifiers.each do |modifier|
-            next unless name = modifier_name?(modifier)
-
-            session.input = session.input.add(Term.of(:key, name))
+          suppressed.each do |modifier|
+            session.input = session.input.add(modifier)
           end
 
           session.input = session.input.delete(entity)
