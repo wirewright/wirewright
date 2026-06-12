@@ -111,12 +111,12 @@ module MuSoma
     # with step. For example, some visually closed parent nodes (e.g. `section`)
     # are classified as ground nodes to avoid pointless processing their insides.
     #
-    # Moreover, some nodes are mixtures, e.g., `device`, so they are "ephemeral":
-    # they aren't actual nodes, just "bidi macros". That's a problem if we want
-    # to deliver something to e.g. `device` or more importantly, to something inside
-    # it; not the thing(s) it expands to. For this reason fbclf re-classifies `device`
-    # and similar nodes as ground or parent nodes, if possible. If this is impossible,
-    # then that node can't be interactive; it's as simple as that.
+    # Moreover, some nodes are mixtures, so they are "ephemeral": they aren't actual
+    # nodes, just "bidi macros". That's a problem if we want to deliver something
+    # to such a node, or, more importantly, to something inside it; and not the thing(s)
+    # it expands to. For this reason fbclf re-classifies such nodes as ground or
+    # parent nodes, if possible. If this is impossible, then that node can't be
+    # interactive; it's as simple as that.
     def self.fbclf : D7::Classifier
       successor = MuSoma.clf
 
@@ -124,21 +124,6 @@ module MuSoma
         feature = successor.call(node)
 
         Term.case(node) do
-          matchpi %{(device (@_ _?) _* ⍊ -open)} do
-            continue if feature.is_a?(D7::Inert)
-            # Do not draw collapsed form of if the editor is in it, even if
-            # it is at passable spots.
-            continue if MuSoma.editing?(node)
-
-            D7.gnd(node)
-          end
-
-          matchpi %{[device (@_ _?) _*]} do
-            continue if feature.is_a?(D7::Inert)
-
-            D7.parent(node.as_d, 2u32...node.uitemsize)
-          end
-
           matchpi %{(slot _ _? ⍊ -open)} do
             continue if feature.is_a?(D7::Inert)
             continue if MuSoma.editing?(node)
@@ -200,10 +185,6 @@ module MuSoma
       node = tree.feature.node
 
       Term.case(node) do
-        matchpi %{(device (@_ surface_) _* ⍊ -open)} do
-          Term.of(:"closed-device-widget", addr, surface)
-        end
-
         matchpi %{(backsys header_dict _* ⍊ -open)} do
           Term.of(:"closed-backsys-widget", addr, header)
         end
@@ -262,10 +243,6 @@ module MuSoma
       Term.case(parent.node) do
         matchpi %{[slot _ _]} do
           Term.of(:"open-slot-widget", addr, repr)
-        end
-
-        matchpi %{[device _ _*]} do
-          Term.of(:"open-device-widget", addr, repr)
         end
 
         matchpi %{[section title_string _*]} do
@@ -332,7 +309,7 @@ module MuSoma
       repr = PrettyAgent.repr(tree)
 
       # Fast path if the representation did not change. This accounts for
-      # things like folds (e.g. `section` or `device`). If something is inside
+      # things like folds (e.g. `section`, `slot`). If something is inside
       # a fold, and it changed, then we don't care, because no one will see
       # it anyway.
       if !force && @seen_repr == repr

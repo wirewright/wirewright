@@ -8,9 +8,7 @@ module Ww::Rack
     extend self
 
     def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
-      ControlSpace.prepass(hg) do |hg|
-        Part.prepass(hg, &fn)
-      end
+      Part.prepass(hg, &fn)
     end
   end
 

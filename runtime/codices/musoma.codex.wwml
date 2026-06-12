@@ -534,19 +534,6 @@ history-limit: 128
        (atom type: (expander ^addr icon: "chevron_right") mass: 0)
        (term ^call))
 
-;; Device widget
-
-(open-device-widget addr_ node_)
-  => (group detail: seq
-       (atom type: (expander ^addr icon: "expand_more") mass: 0)
-       ^(view node))
-
-(closed-device-widget addr_ surface_)
-  => (group detail: seq
-       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
-       (group detail: device
-          (term ^surface)))
-
 ;; Backsys widget
 
 (open-backsys-widget addr_ node_)
@@ -1057,9 +1044,6 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
   => (group style: "flow-row gap-1/3"
        ^l ^op ^r)
 
-(group surface_ ⍊ detail: device)
-  => (BlockWidget "memory" ^surface)
-
 (group header_ ⍊ detail: backsys)
   => (BlockWidget "rule" ^header)
 
@@ -1538,7 +1522,7 @@ scroll: {}
              ^:center
          ^icon))
 
-;; Used for `closed-device-widget`, `closed-backsys-widget` etc.
+;; Used for `closed-backsys-widget` etc.
 (BlockWidget icon_ term_)
   => (group style: "content flow-row gap-1/2 px-2/3 rounded-sm border border-b-sm \
                     bg-theme-surface border-theme-overlay text-theme-muted"

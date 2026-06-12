@@ -8,32 +8,13 @@ module Ww::Rack::Assembler
   # Represents Alloy recipes, e.g. `(Text caption_string) => (p ^caption)`.
   defrecord AlloyRecipe, template : Term
 
-  # Represents component recipes. Component recipes usually, but not always,
-  # construct `rack.device`s; this happens if a component is equipped with
-  # exactly one *surface* definition.
-  #
-  # ```wwml
-  # (Button msg_ caption_string)
-  # => (component
-  #      (surface (@edge (#Button msg_ msgs←()))
-  #        (#Button ^msg ()))
-  #      (template
-  #        ...)
-  #      ;; @msg is available and refers into the surface.
-  #      ;; @msgs is available and refers into the surface
-  #      ...)
-  # ```
+  # Represents a component recipe. Component recipes construct a module.
+  # Component recipes introduce an auxiliary node, `template`, which can
+  # be used anywhere a normal Rack node can be used, for islands of templating
+  # (as opposed to Alloy recipes which introduce templating everywhere).
   defrecord ComponentRecipe,
-    surface : DeviceSurface?,
     bindings : Term::Dict,
     tree : D7::ParseTree
-
-  # Represents a device surface definition. See `ComponentRecipe` for an example.
-  defrecord DeviceSurface,
-    edge : Term,
-    pattern : Term,
-    captures : Set(Term),
-    template : Term
 
   # Constructs a recipe from a rule *body*.
   #
@@ -43,37 +24,14 @@ module Ww::Rack::Assembler
     Term.case(body) do
       matchpi %{[component bindings_dict interior_*]} do
         tree = D7.parse(clf, interior, reply: D7::ParseTree)
-        surfaces = surfaces(tree)
-        surface = surfaces.single?
 
-        ComponentRecipe.new(surface, bindings.as_d, tree)
+        ComponentRecipe.new(bindings.as_d, tree)
       end
 
       otherwise do
         AlloyRecipe.new(body)
       end
     end
-  end
-
-  # Finds and parses device surfaces in a D7 feature *tree*. Surfaces are nodes
-  # of the form `(surface (@_ _) _)`. They define the device surface for
-  # the enclosing component. They are treated as inert by Rack, so we don't
-  # have to remove them.
-  def surfaces(tree : D7::ParseTree) : Slice(DeviceSurface)
-    surfaces = Pf::Kit.stack_array(DeviceSurface)
-
-    D7.each_flat_feature(tree) do |feature|
-      next unless feature.is_a?(D7::Inert)
-
-      Term.matchpi?(feature.node, %{[surface (@edge_ pattern_) template_]}) do
-        normp = M1.normal(pattern)
-        captures = M1.capture_names(normp)
-        surface = DeviceSurface.new(edge, pattern, captures, template)
-        surfaces << surface
-      end
-    end
-
-    surfaces.to_unsafe_readonly_slice!
   end
 
   # Holds **mutable** state for the assembler pass.
@@ -462,42 +420,33 @@ module Ww::Rack::Assembler
     interior_instance = D7.collapse(repair_tree)
 
     instance = Term::Dict.build do |commit|
-      if surface = recipe.surface
-        # (surface (⏏@edge_⏏ (#Button msg_))
-        #   ⏏(#Button ^msg)⏏)
-        surface_instance = Alloy.render(vars, surface.template)
+      # Components can be without a surface, such as:
+      #
+      #   (component
+      #     (cell @a 0)
+      #     (cell @b 0)
+      #     (template
+      #       (cell @c ^n)))
+      #
+      # This should be instantiated as (e.g., with n=123):
+      #
+      #   (module {}
+      #     (cell @a 0)
+      #     (cell @b 0)
+      #     (cell @c 123))
+      #
+      # If the user tries to confuse a component by giving it multiple surfaces,
+      # it, too, will have no surfaces, and will be instantiated like this.
+      commit << :module
 
-        commit << :device << {surface.edge, surface_instance}
-      else
-        # Components can be without a surface, such as:
-        #
-        #   (component
-        #     (cell @a 0)
-        #     (cell @b 0)
-        #     (template
-        #       (cell @c ^n)))
-        #
-        # This should be instantiated as (e.g., with n=123):
-        #
-        #   (module {}
-        #     (cell @a 0)
-        #     (cell @b 0)
-        #     (cell @c 123))
-        #
-        # If the user tries to confuse a component by giving it multiple surfaces,
-        # it, too, will have no surfaces, and will be instantiated like this.
-        commit << :module
-
-        bindings = Term::Dict.build do |commit|
-          recipe.bindings.each_entry do |capture, inner|
-            outer = vars[capture]?
-            commit.with(inner, outer)
-          end
+      bindings = Term::Dict.build do |commit|
+        recipe.bindings.each_entry do |capture, inner|
+          outer = vars[capture]?
+          commit.with(inner, outer)
         end
-
-        commit << bindings
       end
 
+      commit << bindings
       commit.concat(interior_instance.items)
     end
 
@@ -535,25 +484,6 @@ module Ww::Rack::Assembler
       #     (cell @y 200))
       matchpi %{(template _+)} do
         Alloy.render(vars, Term.morph(node, {0, :group}))
-      end
-
-      matchpi %{[surface (@_ _) _]} do
-        continue unless surface = recipe.surface
-
-        if surface.captures.size == 1
-          capture = surface.captures.first
-
-          Term.of(:part, {surface.edge, {:edge, capture}}, surface.pattern)
-        else
-          parts = Term::Dict.build do |commit|
-            commit << :group
-            surface.captures.each do |capture|
-              commit << Term.of(:part, {surface.edge, {:edge, capture}}, surface.pattern)
-            end
-          end
-
-          Term.of(parts)
-        end
       end
 
       otherwise do
