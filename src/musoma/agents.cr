@@ -999,13 +999,15 @@ module MuSoma
           matchpi %{(input _* ⍊ focus_⋮ false)} do |focus|
             next unless focus = InputFocus.parse?(focus)
 
-            @exchange = @exchange.register(addr, InputModel.new(focus, node.items.move(1).to_pf_set))
+            keys = node.items.move(1)
+            @exchange = @exchange.register(addr, InputModel.new(focus, keys.to_pf_set))
           end
 
           matchpi %{(keyboard _* ⍊ focus_⋮ false)} do |focus|
             next unless focus = InputFocus.parse?(focus)
 
-            @exchange = @exchange.register(addr, KeyboardModel.new(focus, node.items.move(1).to_pf_set))
+            keys = node.items.move(1)
+            @exchange = @exchange.register(addr, KeyboardModel.new(focus, keys.to_pf_set))
           end
 
           otherwise { }
@@ -1025,12 +1027,6 @@ module MuSoma
 
       ws.state.update do |state|
         exchange0 = @exchange
-
-        input_known = state[:input].items.to_pf_set
-        keyboard_known = state[:keyboard].items.to_pf_set
-        state = state
-          .with(:input, @input.update(input_known))
-          .with(:keyboard, @keyboard.update(keyboard_known))
 
         case state[:mode]
         when Term.of(:insert)
@@ -1090,22 +1086,28 @@ module MuSoma
           end
         when Term.of(:grab)
           @input = @input.handle({Term.of(:key, {:shift, :left})}, Term.of(:key, :tab)) do
-            # current_keyboard ...
+            @keyboard = @keyboard.handle(Term.of(:key, :tab))
             @exchange = @exchange.backward
           end
 
           @input = @input.handle(Term.of(:key, :tab)) do
-            # current_keyboard ...
+            @keyboard = @keyboard.handle(Term.of(:key, :tab))
             @exchange = @exchange.forward
           end
 
           if @exchange.active?
             @input = @input.handle(Term.of(:key, :escape)) do
-              # current_keyboard ...
+              @keyboard = @keyboard.handle(Term.of(:key, :escape))
               @exchange = @exchange.blur
             end
           end
         end
+
+        input_known = state[:input].items.to_pf_set
+        keyboard_known = state[:keyboard].items.to_pf_set
+        state = state
+          .with(:input, @input.update(input_known))
+          .with(:keyboard, @keyboard.update(keyboard_known))
 
         # Perform focus exchange regardless of mode.
         @exchange = @exchange.step

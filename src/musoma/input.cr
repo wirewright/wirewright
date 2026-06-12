@@ -249,6 +249,10 @@ module MuSoma
       InputTransition.new(@succ, @succ, @handled)
     end
 
+    def handle(key : Term) : InputTransition
+      InputTransition.new(@pred, @succ, @handled.add(key))
+    end
+
     def handle(mods : Enumerable(Term) | Tuple, key : Term, &) : InputTransition
       # Already handled this key. It must be released first.
       if key.in?(@handled)
