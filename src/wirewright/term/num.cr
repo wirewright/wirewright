@@ -16,15 +16,19 @@ module Ww
   #
   # - *exact* 61-bit signed integer (known as `i61`, `Int61`, arithmetic done using `Int64`).
   # - *exact* rational (known as `rat`, arithmetic done using `BigRational`).
-  # - *approximate* 61-bit float (known as `f61`, arithmetic done using `Float64`).
+  # - *approximate* 32-bit float (known as `f32`, arithmetic done using `Float32`).
   #
   # 61-bit signed integer is used because `Term` can only fit 61 bits in the pointer;
   # the three remaining bits it uses as a tag. See `Term` for more info on how term
   # instances are encoded.
   #
+  # 32-bit float is used because doing a 61-bit float is harder than I thought, and
+  # I am not interested in solving this problem at the moment. Reference:
+  # https://stackoverflow.com/questions/23112627/truncating-64-bit-ieee-doubles-to-61-bits-in-a-safe-fashion
+  #
   # Outside of `Term`, `Num` is a tagged union; it occupies 16 bytes (4 bytes for type
   # id, 4 bytes padding, and 8 bytes for the number itself). The number is stored as
-  # an `Int64`, a `Float64`, or a pointer to `BigRational`.
+  # an `Int64`, a `Float32`, or a pointer to `BigRational`.
   #
   # `BigRational` is behind a pointer because it is a large struct, occupying 32 bytes.
   # Most numbers will never be rationals, so it would be a waste of space to include those
@@ -44,7 +48,7 @@ module Ww
     # :nodoc:
     alias Exact = Int64 | BigRational*
     # :nodoc:
-    alias Approx = Float64
+    alias Approx = Float32
 
     # Utilities and constants for working with i61 numbers.
     module Int61
@@ -81,36 +85,6 @@ module Ww
         end
 
         bits.unsafe_as(Int64)
-      end
-    end
-
-    # Utilities and constants for working with f61 numbers.
-    #
-    # Three least significant bits of the mantissa are omitted, rounding to
-    # nearest, ties to even.
-    #
-    # NOTE: This was written based on suggestions from ChatGPT. I have absolutely
-    # no idea what I'm doing here wrt floating-point semantics.
-    module Float61
-      extend self
-
-      # Returns f61 bits for an f64 *n*.
-      def bits(value : Float64) : UInt64
-        raw = value.unsafe_as(UInt64)
-        trunk = raw & ~0b111u64
-        lost = raw & 0b111u64
-
-        # Round to nearest, ties to even.
-        if lost > 0b100u64 || (lost == 0b100 && ((trunk >> 3) & 1))
-          trunk &+= 0b1000
-        end
-
-        trunk >> 3
-      end
-
-      # Returns an f64 decoded from f61 *bits*.
-      def value(bits : UInt64) : Float64
-        (bits << 3).unsafe_as(Float64)
       end
     end
 
@@ -191,12 +165,12 @@ module Ww
         raise MathDomainError.new("#{n}")
       end
 
-      new(n.to_f64)
+      new(n.to_f32)
     end
 
     # Converts another number term *n* into an approximate number term.
     def self.approx(n : Num)
-      approx(f64(n.@k))
+      approx(f32(n.@k))
     end
 
     # Returns the number zero.
@@ -206,19 +180,19 @@ module Ww
 
     # :nodoc:
     @[AlwaysInline]
-    def self.f64(n : Int64) : Float64
-      n.to_f64
+    def self.f32(n : Int64) : Float32
+      n.to_f32
     end
 
     # :nodoc:
     @[AlwaysInline]
-    def self.f64(n : BigRational*) : Float64
-      n.value.to_f64
+    def self.f32(n : BigRational*) : Float32
+      n.value.to_f32
     end
 
     # :nodoc:
     @[AlwaysInline]
-    def self.f64(n : Float64) : Float64
+    def self.f32(n : Float32) : Float32
       n
     end
 
@@ -240,7 +214,7 @@ module Ww
         return yield k.value
       end
 
-      # k : Int64 | Float64
+      # k : Int64 | Float32
       yield k
     end
 
@@ -248,7 +222,7 @@ module Ww
     #
     # - For exact numbers, this always gives the true result.
     # - For inexact numbers, the result depends on the bits of the floating-point
-    #   representation. Here in particular we use `Float64`. This method does *not*
+    #   representation. Here in particular we use `Float32`. This method does *not*
     #   perform approximate equality.
     #
     # This should never return `nil` since we guard against `NaN`s during
@@ -375,7 +349,7 @@ module Ww
     # `false` otherwise.
     #
     # NOTE: Like R7RS, this method returns `true` on an inexact number if
-    # it is an integer (see also: `Float64#integer?`).
+    # it is an integer (see also: `Float32#integer?`).
     @[Dncast]
     def integer? : Bool
       if @k.is_a?(Int64)
@@ -398,7 +372,7 @@ module Ww
     @[Dncast]
     def finite10? : Bool
       unless ratptr = @k.as?(BigRational*)
-        return true # finite, @k : Int64 | Float64
+        return true # finite, @k : Int64 | Float32
       end
 
       ratptr.value.denominator.each_prime_factor do |factor|
@@ -432,7 +406,7 @@ module Ww
       case a = @k
       in Int64                then Num.exact(a.abs)
       in Pointer(BigRational) then Num.exact(a.value.abs)
-      in Float64              then Num.approx(a.abs)
+      in Float32              then Num.approx(a.abs)
       end
     end
 
@@ -459,8 +433,8 @@ module Ww
         %c = pass(%a.value, %b.value) {{block}}
 
         Num.exact(%c)
-      in {_, Float64}, {Float64, _}
-        %c = pass({{@type}}.f64(%a), {{@type}}.f64(%b)) {{block}}
+      in {_, Float32}, {Float32, _}
+        %c = pass({{@type}}.f32(%a), {{@type}}.f32(%b)) {{block}}
 
         Num.approx(%c)
       end
@@ -535,8 +509,8 @@ module Ww
         Num.exact(a.value / b.to_big_r)
       in {Pointer(BigRational), Pointer(BigRational)}
         Num.exact(a.value / b.value)
-      in {Float64, _}, {_, Float64}
-        Num.approx(Num.f64(a) / Num.f64(b))
+      in {Float32, _}, {_, Float32}
+        Num.approx(Num.f32(a) / Num.f32(b))
       end
     end
 
@@ -603,8 +577,8 @@ module Ww
       end
 
       # Approx path.
-      if a.is_a?(Float64) || b.is_a?(Float64)
-        return Num.approx(Num.f64(a) ** Num.f64(b))
+      if a.is_a?(Float32) || b.is_a?(Float32)
+        return Num.approx(Num.f32(a) ** Num.f32(b))
       end
 
       # Rat path.
@@ -612,7 +586,7 @@ module Ww
         return Num.exact(Num.rat(a) ** b)
       end
 
-      Num.approx(Num.f64(a) ** Num.f64(b))
+      Num.approx(Num.f32(a) ** Num.f32(b))
     end
 
     # Returns the result of raising this number to the power of *other*.
@@ -664,7 +638,7 @@ module Ww
         raise MathDomainError.new
       end
 
-      Num.approx(Math.sqrt(f64(@k)))
+      Num.approx(Math.sqrt(f32(@k)))
     end
 
     # Returns the approximate integer square root of this number term.
@@ -682,10 +656,10 @@ module Ww
       case a = @k
       in Int64
         Num.exact(Math.isqrt(a))
-      in Pointer(BigRational), Float64
-        # Math.sqrt(BigRational) : BigFloat, so let's just do it on f64, I don't
+      in Pointer(BigRational), Float32
+        # Math.sqrt(BigRational) : BigFloat, so let's just do it on f32, I don't
         # see the point of going through BigFloat.
-        Num.approx(Math.sqrt(f64(a)).floor)
+        Num.approx(Math.sqrt(f32(a)).floor)
       end
     end
 
@@ -696,7 +670,7 @@ module Ww
       case a = @k
       in Int64                then self
       in Pointer(BigRational) then Num.exact(a.value.floor)
-      in Float64              then Num.approx(a.floor)
+      in Float32              then Num.approx(a.floor)
       end
     end
 
@@ -706,7 +680,7 @@ module Ww
       case a = @k
       in Int64                then self
       in Pointer(BigRational) then Num.exact(a.value.round(:ties_even))
-      in Float64              then Num.approx(a.round(:ties_even))
+      in Float32              then Num.approx(a.round(:ties_even))
       end
     end
 
@@ -717,7 +691,7 @@ module Ww
       case a = @k
       in Int64                then self
       in Pointer(BigRational) then Num.exact(a.value.ceil)
-      in Float64              then Num.approx(a.ceil)
+      in Float32              then Num.approx(a.ceil)
       end
     end
 
@@ -776,7 +750,7 @@ module Ww
     @[Dncast]
     def decimal(io)
       case a = @k
-      in Int64, Float64
+      in Int64, Float32
         io << a
       in Pointer(BigRational)
         unless finite10?
@@ -796,20 +770,18 @@ module Ww
       ML.compact(io, self)
     end
 
-    # :nodoc:
-    DISTURBANCE_APPROX = 0x9cf73af68e953u64
-
     def hashrepr : UInt64
-      case @k
+      case k = @k
       in Int64
-        bits = @k.unsafe_as(UInt64)
-      in Float64
-        # Distrurb approx values with DISTURBANCE_APPROX so that our hashcode doesn't collide
-        # with Int64 and BigRational as readily but most importantly so that hashcode behaves
-        # like equality, which requires both parties to be of the approximate kind.
-        bits = Int.mix(DISTURBANCE_APPROX, @k.unsafe_as(UInt64))
+        bits = k.unsafe_as(UInt64)
+      in Float32
+        # Mix the bits from the float so that our hashcode doesn't collide with
+        # Int64 and BigRational as readily but most importantly so that hashcode
+        # behaves like equality, which requires both parties to be of
+        # the approximate kind.
+        bits = Int.mix(k.unsafe_as(UInt32).to_u64)
       in Pointer(BigRational)
-        bits = to(Float64).unsafe_as(UInt64)
+        bits = k.value.to_f64.to_f32!.unsafe_as(UInt32).to_u64
       end
 
       # Numbers use plain bit mixing.
@@ -828,7 +800,7 @@ module Ww
       case {l, r}
       when {Int64, Int64}
         l == r
-      when {Float64, Float64}
+      when {Float32, Float32}
         l == r # Repeat ourselves for stricter restrictions on l and r
       when {Pointer(BigRational), Pointer(BigRational)}
         l.value == r.value

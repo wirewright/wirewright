@@ -306,8 +306,8 @@ module Ww
       in Int64
         bits = Num::Int61.bits(a) # 61 bit, 3 MSB clear
         address = (bits << 3) | Tag::NumInt.value
-      in Float64
-        bits = Num::Float61.bits(a)
+      in Float32
+        bits = a.unsafe_as(UInt32).to_u64
         address = (bits << 3) | Tag::NumFlt.value
       in Pointer(BigRational)
         address = a.address | Tag::NumRat.value
@@ -326,7 +326,7 @@ module Ww
         Num.unsafe_new(value)
       when .num_flt?
         bits = @mem.address >> 3
-        value = Num::Float61.value(bits)
+        value = bits.to_u32.unsafe_as(Float32)
 
         Num.unsafe_new(value)
       when .num_rat?
