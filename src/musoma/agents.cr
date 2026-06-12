@@ -1202,7 +1202,7 @@ module MuSoma
       @seen = Bytes.empty
     end
 
-    RE_CONTROL = /^;;\h+\/control\h+(?<head>[^\v]*)\v(?<body>(?:;;[^\v]*(?:\v|$))*)/m
+    RE_CONTROL = /^;;\h+\\control\h+(?<head>[^\v]*)\v(?<body>(?:;;[^\v]*(?:\v|$))*)/m
 
     def self.control_docs(source : String) : Term::Dict
       Term::Dict.build do |commit|
