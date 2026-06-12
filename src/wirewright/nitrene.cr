@@ -300,7 +300,18 @@ module Ww::Nitrene
     dict1
   end
 
-  alias Eval = Interpreter, Term::Dict, Term -> Term
+  alias Eval = Interpreter, Term::Dict, Term -> Evaln
+
+  # Represents an *evaluation*, the result of evaluating a term. It is
+  # either another term or a special value, `Inert`.
+  alias Evaln = Term | Inert
+
+  # Signals to Nitrene that it should try other evaluators.
+  defrecord Inert
+
+  def inert : Inert
+    Inert.new
+  end
 
   # Represents a Nitrene interpreter.
   #
@@ -311,28 +322,32 @@ module Ww::Nitrene
     DEFAULT = new(Nitrene.composite, Nitrene.primitive)
   end
 
-  def composite
+  def composite : Eval
     ->Nitrene.composite(Interpreter, Term::Dict, Term)
   end
 
-  def primitive
+  def primitive : Eval
     ->Nitrene.primitive(Interpreter, Term::Dict, Term)
   end
 
   def either(a : Eval, b : Eval) : Eval
     ->(it : Interpreter, vars : Term::Dict, expr : Term) do
       value = a.call(it, vars, expr)
-      unless value == expr
-        return value
+      if value.is_a?(Term)
+        return value.as(Evaln)
       end
 
       b.call(it, vars, expr)
     end
   end
 
+  def either(a : Eval, b : Eval, *cs : Eval) : Eval
+    either(a, either(b, *cs))
+  end
+
   def eval(it : Interpreter, vars : Term::Dict, expr : Term) : Term
     value = it.composite.call(it, vars, expr)
-    unless expr == value
+    if value.is_a?(Term)
       return value
     end
 
@@ -348,7 +363,7 @@ module Ww::Nitrene
     end
 
     value = it.primitive.call(it, vars, expr)
-    unless expr == value
+    if value.is_a?(Term)
       return value
     end
 
@@ -356,9 +371,9 @@ module Ww::Nitrene
   end
 
   # See `Interpreter`.
-  def composite(it : Interpreter, vars : Term::Dict, expr : Term) : Term
+  def composite(it : Interpreter, vars : Term::Dict, expr : Term) : Evaln
     unless expr.type.dict?
-      return expr
+      return Inert.new
     end
 
     Term.case(expr) do
@@ -518,15 +533,15 @@ module Ww::Nitrene
       end
 
       otherwise do
-        expr
+        Inert.new
       end
     end
   end
 
   # See `Interpreter`.
-  def primitive(it : Interpreter, vars : Term::Dict, expr : Term) : Term
+  def primitive(it : Interpreter, vars : Term::Dict, expr : Term) : Evaln
     unless expr.type.dict?
-      return expr
+      return Inert.new
     end
 
     Term.case(expr) do
@@ -1149,7 +1164,7 @@ module Ww::Nitrene
         end
       end
 
-      otherwise { expr }
+      otherwise { Inert.new }
     end
   end
 

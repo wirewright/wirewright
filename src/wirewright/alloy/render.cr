@@ -16,7 +16,7 @@ module Ww::Alloy
     primitive : Nitrene::Eval,
     composite : Nitrene::Eval
 
-  def primitive(ctx : RenderContext, rdata : RuleData, globals : Term::Dict) : Nitrene::Eval
+  protected def primitive(ctx : RenderContext, rdata : RuleData, globals : Term::Dict) : Nitrene::Eval
     Nitrene::Eval.new do |it, vars, expr|
       Term.case(expr) do
         matchpi %{(view term_)} do
@@ -25,6 +25,20 @@ module Ww::Alloy
 
         otherwise do
           ctx.primitive.call(it, vars, expr)
+        end
+      end
+    end
+  end
+
+  protected def composite : Nitrene::Eval
+    ->(it : Nitrene::Interpreter, vars : Term::Dict, expr : Term) do
+      Term.case(expr) do
+        matchpi %{(^ _)} do
+          expr
+        end
+
+        otherwise do
+          Nitrene.inert
         end
       end
     end
@@ -43,7 +57,7 @@ module Ww::Alloy
       next unless summary.size_set.includes?(2) # (view _)
       next unless VIEW_SKETCH.subset_of?(summary.symbol_sketch)
 
-      primitive = primitive(ctx, rdata, env.globals)
+      primitive = Alloy.primitive(ctx, rdata, env.globals)
     end
 
     it = Nitrene::Interpreter.new(ctx.composite, primitive)

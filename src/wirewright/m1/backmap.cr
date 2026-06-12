@@ -914,7 +914,9 @@ module Ww::M1
             value
           end
 
-          otherwise { expr }
+          otherwise do
+            Nitrene.inert
+          end
         end
       end
 

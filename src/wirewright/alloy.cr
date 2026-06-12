@@ -128,15 +128,32 @@ module Ww::Alloy
     globals : Term::Dict = Term[],
     locals : Term::Dict = Term[],
     cache : RenderCache = Uncached(RenderKey, Term::Rep).new,
-    primitive : Nitrene::Eval = Nitrene::Eval.new { |_, _, expr| expr },
-    composite : Nitrene::Eval = Nitrene::Eval.new { |_, _, expr| expr },
+    primitive : Nitrene::Eval = Nitrene::Eval.new { Nitrene.inert },
+    composite : Nitrene::Eval = Nitrene::Eval.new { Nitrene.inert },
   ) : Term::Rep
     ctx = RenderContext.new(cache, template.reftab,
       Nitrene.either(primitive, Nitrene.primitive),
-      Nitrene.either(composite, Nitrene.composite),
+      Nitrene.either(Alloy.composite, composite, Nitrene.composite),
     )
 
     render(ctx, globals, locals, template.unit)
+  end
+
+  # Alloy's contribution to the composite eval of Nitrene. In particular,
+  # here we make `(^ _)` not evaluate so that expressions such as `^^(+ x 1)`
+  # evaluate to `^(+ x 1)`, "peeling off" `^`s.
+  protected def composite : Nitrene::Eval
+    ->(it : Nitrene::Interpreter, vars : Term::Dict, expr : Term) do
+      Term.case(expr) do
+        matchpi %{(^ _)} do
+          expr
+        end
+
+        otherwise do
+          Nitrene.inert
+        end
+      end
+    end
   end
 
   # A shorthand for `render_rep` that compiles *template* before rendering it
