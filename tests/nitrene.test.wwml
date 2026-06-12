@@ -1,0 +1,86 @@
+;; +
+(group
+  ;; Basic
+  (ni= (+) 0)
+  (ni= (+ 2) 2)
+  (ni= (+ 2 2) 4)
+  (ni= (+ 1 2 3) 6)
+  (ni= (+ a) 0)
+  (ni= (+ a b c) 0)
+  (ni= (+ a 1 b c) 1)
+  (ni= (+ a 1 b 2 3 c) 6)
+
+  ;; Frac
+  (ni= (+ 1/3 2/3) 1)
+  (ni= (+ -1/3 2/3) 1/3)
+  (ni= (+ 0.1 0.2) 0.3)
+
+  ;; Approx
+  (ni= (+ ≈0.1 ≈0.2) ≈0.3)
+
+  ;; Infinity
+  (ni= (+ ∞ 100) ∞)
+  (ni= (+ 100 ∞) ∞)
+  (ni= (+ ∞ ∞) ∞)
+
+  ;; Negative infinity
+  (ni= (+ -∞ 100) -∞)
+  (ni= (+ 100 -∞) -∞)
+  (ni= (+ -∞ -∞) -∞)
+
+  ;; Indet
+  (ni= (+ ∞ -∞) indet)
+  (ni= (+ -∞ ∞) indet)
+  (ni= (+ indet 100) indet)
+  (ni= (+ -∞ indet) indet)
+  (ni= (+ indet indet) indet)
+
+  ;; Symbolic, more arguments
+  (ni= (+ 1 2 3 ∞) ∞)
+  (ni= (+ 1 2 -∞ 3) -∞)
+  (ni= (+ indet 1 2 -∞ 3) indet)
+  (ni= (+ ∞ 1 2 -∞ 3) indet))
+
+;; -
+(group
+  ;; Basic
+  (ni= (-) 0)
+  (ni= (- 1) -1) ;; negate
+  (ni= (- 1 2 3) -4) ;; subtract
+  (ni= (- a) 0)
+  (ni= (- a 1) -1) ;; negate
+  (ni= (- a 1 b c) -1) ;; negate
+  (ni= (- a 1 b 2) -1) ;; subtract
+  (ni= (- a 1 b 2 3) -4)
+  (ni= (- a 1 b 2 3 c) -4)
+
+  ;; Frac
+  (ni= (- -1/3 1/5) -8/15)
+
+  ;; Approx
+  (ni= (- ≈-10 ≈5.3) ≈-15.3)
+
+  ;; Infinity
+  (ni= (- ∞) -∞)
+  (ni= (- ∞ 100) ∞)
+  (ni= (- 100 -∞) ∞)
+  (ni= (- ∞ -∞) ∞)
+
+  ;; Negative infinity
+  (ni= (- -∞) ∞)
+  (ni= (- 100 ∞) -∞)
+  (ni= (- -∞ 100) -∞)
+  (ni= (- -∞ ∞) -∞)
+
+  ;; Indet
+  (ni= (- indet) indet)
+  (ni= (- ∞ ∞) indet)
+  (ni= (- -∞ -∞) indet)
+  (ni= (- indet 3) indet)
+  (ni= (- -∞ indet) indet)
+
+  ;; Symbolic, more arguments
+  (ni= (- 1 2 ∞) -∞)
+  (ni= (- 1 -∞ 2 3) ∞)
+  (ni= (- 0 5 indet) indet))
+

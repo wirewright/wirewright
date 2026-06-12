@@ -209,6 +209,25 @@ module Testtool
         annotated(assertions(test), decl, srcmap)
       end
 
+      # |@ testtool.decl.nitrene
+      #
+      # |@pattern
+      # (ni= expr_ value_)
+      #
+      # |@key expr nitrene
+      # Expression to evaluate.
+      #
+      # |@key value
+      # Expected result of *expr*.
+      #
+      # |@block
+      # Use `ni=` to check for equality of a Nitrene expression value.
+      matchpi %{[ni= expr_ value_]} do
+        vars = decl.pairspart
+        test = NitreneTest.new(vars, expr, value)
+        annotated(assertions(test), decl, srcmap)
+      end
+
       # |@ testtool.decl.ml
       #
       # |@pattern

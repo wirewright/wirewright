@@ -21,16 +21,57 @@ module Ww::Nitrene
   # :nodoc:
   SYM_INDET = Term.of(:indet)
 
+  # |@ nitrene.arith
+  #
+  # |@block
+  # Arithmetic units recognized by the arithmetic operators of Nitrene.
+  #
+  # NOTE: The behavior of Arith operations is based on Wolfram Mathematica.
+  #
+  # Reference: https://www.wolfram.com/mathematica/
+  # See in particular:
+  #   - https://reference.wolfram.com/language/ref/Infinity.html
+  #   - https://reference.wolfram.com/language/ref/Indeterminate.html
+
   # :nodoc:
   def arith?(term : Term) : Arith?
     case term
     when .subtype?(:number)
+      # |@ nitrene.arith
+      #
+      # |@pattern
+      # _number
+      #
+      # |@block
+      # A number constant.
       ArithConst.new(term.as_n)
     when SYM_INFINITY
+      # |@ nitrene.arith
+      #
+      # |@pattern
+      # ∞
+      #
+      # |@block
+      # Represents positive infinity.
       ArithPosInf.new
     when SYM_NEG_INFINITY
+      # |@ nitrene.arith
+      #
+      # |@pattern
+      # -∞
+      #
+      # |@block
+      # Represents negative infinity.
       ArithNegInf.new
     when SYM_INDET
+      # |@ nitrene.arith
+      #
+      # |@pattern
+      # indet
+      #
+      # |@block
+      # Represents an indeterminate result. `indet` is the result of expressions
+      # such as `(+ ∞ -∞)`.
       ArithIndet.new
     end
   end
@@ -44,9 +85,6 @@ module Ww::Nitrene
     in ArithIndet  then SYM_INDET
     end
   end
-
-  # NOTE: The behavior of Arith operations is mostly based on [Wolfram Mathematica](https://www.wolfram.com/mathematica/),
-  # which seems to be a good reference for this kind of stuff.
 
   # :nodoc:
   def add(a : Arith, b : Arith) : Arith
@@ -166,10 +204,6 @@ module Ww::Nitrene
       next unless operand = arith?(arg).as?(T)
 
       operands << operand
-    end
-
-    unless args.size == operands.size
-      return term
     end
 
     yield operands
@@ -545,25 +579,60 @@ module Ww::Nitrene
     end
 
     Term.case(expr) do
-      matchpi %{(+)} do
-        Term.of(0)
-      end
-
+      # |@ nitrene.sum
+      #
+      # |@pattern
+      # (+ args_*)
+      #
+      # |@block
+      # Returns the sum of arithmetic units (see `nitrene.arith`) in *args*.
+      #
+      # If *args* contains no arithmetic units, the sum is zero.
+      #
+      # ```wwml
+      # (+ 1 2)  ;; => 3
+      # (+ ∞ -∞) ;; => indet
+      # ```
       matchpi %{(+ _*)} do
         calc(expr, args: expr.items.move(1)) do |operands|
-          render(operands.reduce { |a, b| add(a, b) })
+          if operands.empty?
+            Term.of(0)
+          else
+            render(operands.reduce { |a, b| add(a, b) })
+          end
         end
       end
 
-      matchpi %{(- _)} do
-        calc(expr, args: expr.items.move(1)) do |(operand, *_)|
-          render(negate(operand))
-        end
-      end
-
-      matchpi %{(- _ _ _*)} do
+      # |@ nitrene.difference
+      #
+      # |@pattern
+      # (- args_*)
+      #
+      # |@block
+      # Returns the difference of arithmetic units (see `nitrene.arith`) in *args*.
+      #
+      # - If *args* contains no arithmetic units, the difference is zero.
+      # - If *args* contains one arithmetic unit, the difference is the result
+      #   of negating that unit.
+      # - If *args* contains two or more arithmetic units, the difference is
+      #   the result of subtracting those units in order.
+      #
+      # ```wwml
+      # (-)       ;; => 0
+      # (- a b c) ;; => 0
+      # (- 1)     ;; => -1
+      # (- 1 2 3) ;; => -6
+      # ```
+      matchpi %{(- _*)} do
         calc(expr, args: expr.items.move(1)) do |operands|
-          render(operands.reduce { |a, b| sub(a, b) })
+          case operands.size
+          when 0
+            Term.of(0)
+          when 1
+            render(negate(operands.first))
+          else
+            render(operands.reduce { |a, b| sub(a, b) })
+          end
         end
       end
 

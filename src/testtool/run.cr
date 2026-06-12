@@ -20,6 +20,7 @@ module Testtool
                RackTest |
                EditTest |
                SceneryTest |
+               NitreneTest |
                TermComparison |
                ImageComparison
 
@@ -225,6 +226,15 @@ module Testtool
         otherwise { }
       end
     end
+  end
+
+  defrecord NitreneTest, vars : Term::Dict, expr : Term, value : Term
+
+  def run(test : NitreneTest, assets, stat, complaints) : Nil
+    value = measure(stat) { Nitrene.eval(test.vars, test.expr) }
+    return if value == test.value # ok
+
+    complaints << complaint("Nitrene value mismatch", expected: test.value, got: value)
   end
 
   def match(pattern : Term, matchee : Term) : Slice(Term::Dict)
