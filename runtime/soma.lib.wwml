@@ -27,15 +27,13 @@
        (node @mouse (mouse))
        (figure {@:desc, node: @view}
          (template ^view))
-       ;; FIXME: Template must expand into group in this case anyway!..
        (template
-         (group
-           (^when (opts {¦ key_})
-             (node @input
-               (input focus: always))
-             (backsys {@:input @:view @:msg @:msgs}
-               {¦ input: ⟨K←^key⟩ msg_ view: {¦ -active_} -msgs_}
-                 <> {(K): (), active: tap, msgs: ^^msg}))))
+         (^when (opts {¦ key_})
+           (node @input
+             (input focus: always))
+           (backsys {@:input @:view @:msg @:msgs}
+             {¦ input: ⟨K←^key⟩ msg_ view: {¦ -active_} -msgs_}
+               <> {(K): (), active: tap, msgs: ^^msg})))
        (backsys {@:mouse @:keyboard @:desc @:view @:msg @:msgs}
          ;; Mouse enters the button.
          {¦ mouse: [mouse] desc: (figure {¦ hit-hover}) view: {¦ hover_: (%optional false false)}}

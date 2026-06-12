@@ -5742,3 +5742,46 @@
       (cell @y 0)
       (feed @xs @y)))
   end)
+
+;; BUG: Single-expression template must expand into group on plural
+;; top-level splice.
+(group
+  ;; zero
+  (rack
+    (frame
+      (Qux) =>
+        (component {}
+          (template
+            (^splice)))
+        (slot (Qux)))
+    (frame/tail
+      (slot (Qux)
+        (module {}
+          (group))))
+    end)
+  ;; one
+  (rack
+    (frame
+      (Qux) =>
+        (component {}
+          (template
+            (^splice 1)))
+        (slot (Qux)))
+    (frame/tail
+      (slot (Qux)
+        (module {}
+          1)))
+    end)
+  ;; many
+  (rack
+    (frame
+      (Qux) =>
+        (component {}
+          (template
+            (^splice 1 2 3)))
+        (slot (Qux)))
+    (frame/tail
+      (slot (Qux)
+        (module {}
+          (group 1 2 3))))
+    end))

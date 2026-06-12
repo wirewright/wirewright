@@ -509,8 +509,20 @@ module Ww::Rack::Assembler
 
     Term.case(node) do
       # E.g. (template (cell @x ^100)) => (cell @x 100)
+      #
+      # But (template (^splice 1 2 3)) => (group 1 2 3)
       matchpi %{(template expr_)} do
-        Alloy.render(vars, expr)
+        rep = Alloy.render_rep(expr, locals: vars)
+        if result = rep.single?
+          return result
+        end
+
+        result = Term::Dict.build do |commit|
+          commit << :group
+          commit.concat(rep)
+        end
+
+        Term.of(result)
       end
 
       # E.g.
