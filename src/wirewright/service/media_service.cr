@@ -815,10 +815,20 @@ module Ww
           # Press
 
           # Suppress active modifiers before rune press.
+          suppressed = false
           modifiers.each do |modifier|
             next unless name = modifier_name?(modifier)
 
             session.input = session.input.delete(Term.of(:key, name))
+            suppressed = true
+          end
+
+          # Publish with modifiers suppressed before we add the rune to let the clients
+          # adapt their state to the absence of the modifier. Otherwise, their processing
+          # order (which may as well be arbitrary) will decide whether the rune is interpreted
+          # with or without the modifier; we don't want that.
+          if suppressed
+            tick(session_key, session)
           end
 
           session.input = session.input.add(entity)

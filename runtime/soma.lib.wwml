@@ -4,12 +4,10 @@
 ;; (Button (@msgs_ msg_) view_ ⍊ ⋮key)
 ;;
 ;; |@key msgs
-;; Edge referring to the cell where messages should be placed when
-;; the button is pressed. Must be empty (the cell at that edge unoccupied)
-;; for *msg* to be put. This provides a kind of backpressure.
+;; Edge where *msg* should be placed on click.
 ;;
 ;; |@key msg
-;; Message to place in *msgs* when the button is pressed.
+;; Term to place in *msgs*.
 ;;
 ;; |@key view
 ;; Subtree comprising the button's view. The Button component augments
@@ -20,17 +18,33 @@
 ;;
 ;; |@block
 ;; View-agnostic "brain" for a button. See other overloads for stock view/styling.
-(Button (@msgs_ msg_) view_ ¦ opts_)
+(Button (@msgs_ msg_) view_ ¦ props_)
   => (component {@:msgs}
        (template
          (cell @msg ^msg))
+       (comment
+         "Buttons are interested in which mouse buttons are currently pressed, \
+          so inside a button is its \"personal\" representation of the mouse \
+          which it can watch.")
        (node @mouse (mouse))
+       (comment
+         "Buttons are also interested in their own visual reflection. While you can see \
+          the button as a rectangle with centered text, the button itself cannot see \
+          that; instead, it sees a symbolic, visual reflection of itself, something akin \
+          to SVG in spirit, annotated with information such as what the mouse is currently \
+          hovering over.")
        (figure {@:desc, node: @view}
          (template ^view))
+       (comment
+         "Optionally, the button also watches the input (i.e., the keyboard). If you \
+          see an empty group here, this means the button isn't interested in the keyboard.")
        (template
-         (^when (opts {¦ key_})
+         (^when (props {¦ key_})
            (cell @key ^key)
            (node @input (input focus: always))))
+       (comment
+         "The backsystem below then relates everything together. The rewrite rules \
+          below are responsible for the button's behavior.")
        (backsys {@:mouse @:input @:key @:desc @:view @:msg @:msgs}
          ;; The key that this button is watching for was pressed.
          {¦ input: ⟨K'←K_⟩ key: K_ msg_ view: {¦ -active_} -msgs_}
@@ -58,6 +72,32 @@
          {¦ view: {¦ active_: tap}}
            <> {(active): ()}))
 
+;; |@ musoma.button
+;;
+;; |@pattern
+;; (Button (@msgs_ msg_) caption_string ¦ props_)
+;;
+;; |@key msgs
+;; Edge where *msg* should be placed on click.
+;;
+;; |@key msg
+;; Term to place in *msgs*.
+;;
+;; |@key caption
+;; Text to display on the button.
+;;
+;; |@key props
+;; Properties to pass to the main `musoma.button` overload.
+;;
+;; |@block
+;; Renders a button with stock styling based on the MuSoma theme.
+;;
+;; ```wwml
+;; (window style: "flow-col center gap-3"
+;;   (queue (@action @actions) ())
+;;   (slot (Button (@actions inc) "Increment"))
+;;   (slot (Button (@actions dec) "Decrement")))
+;; ```
 (Button head←(@_ _) caption_string ¦ props_)
   => (slot
        (Button ^head
@@ -297,7 +337,12 @@
           <> {unit: rune}
         ;; While Shift is held, and no runes exist, define anchor if not defined already.
         {¦ state: (l_string _ ⍊ -anchor_) input: (%items (_) (key (shift _)))}
-          <> {anchor: ^(charcount l)}))
+          <> {anchor: ^(charcount l)}
+        ;; Clear the anchor if it is at the same position as the cursor, and
+        ;; Shift is not pressed.
+        {¦ state: (l←(%pipe charcount anchor_) _ ⍊ anchor_)
+           input: (%items () (key (shift _)) min: 0)}
+          <> {(anchor): ()}))
 
 ;; |@ musoma.input
 ;;
