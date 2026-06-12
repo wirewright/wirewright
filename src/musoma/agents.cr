@@ -160,6 +160,12 @@ module MuSoma
             D7.gnd(node)
           end
 
+          matchpi %{[rewriter _*]} do
+            continue if feature.is_a?(D7::Inert)
+
+            D7.gnd(node)
+          end
+
           otherwise do
             feature
           end
@@ -191,6 +197,14 @@ module MuSoma
 
         matchpi %{(backsys _* ⍊ open)} do
           Term.of(:"open-backsys-widget", addr, node)
+        end
+
+        matchpi %{(rewriter header_dict _* ⍊ -open)} do
+          Term.of(:"closed-rewriter-widget", addr, header)
+        end
+
+        matchpi %{(rewriter _* ⍊ open)} do
+          Term.of(:"open-rewriter-widget", addr, node)
         end
 
         matchpi %{(slot call_ _ ⍊ -open)} do

@@ -534,6 +534,18 @@ history-limit: 128
        (atom type: (expander ^addr icon: "chevron_right") mass: 0)
        (term ^call))
 
+;; Rewriter widget
+
+(open-rewriter-widget addr_ node_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       (term ^node))
+
+(closed-rewriter-widget addr_ header_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (term (rewriter ^header)))
+
 ;; Backsys widget
 
 (open-backsys-widget addr_ node_)
