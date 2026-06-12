@@ -29,12 +29,12 @@
          (template ^view))
        (template
          (^when (opts {¦ key_})
-           (node @input
-             (input focus: always))
-           (backsys {@:input @:view @:msg @:msgs}
-             {¦ input: ⟨K←^key⟩ msg_ view: {¦ -active_} -msgs_}
-               <> {(K): (), active: tap, msgs: ^^msg})))
-       (backsys {@:mouse @:keyboard @:desc @:view @:msg @:msgs}
+           (cell @key ^key)
+           (node @input (input focus: always))))
+       (backsys {@:mouse @:input @:key @:desc @:view @:msg @:msgs}
+         ;; The key that this button is watching for was pressed.
+         {¦ input: ⟨K'←K_⟩ key: K_ msg_ view: {¦ -active_} -msgs_}
+           <> {(K'): (), active: tap, msgs: ^msg}
          ;; Mouse enters the button.
          {¦ mouse: [mouse] desc: (figure {¦ hit-hover}) view: {¦ hover_: (%optional false false)}}
            <> {hover: true}
