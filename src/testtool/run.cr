@@ -228,13 +228,14 @@ module Testtool
     end
   end
 
-  defrecord NitreneTest, vars : Term::Dict, expr : Term, value : Term
+  defrecord NitreneTest, vars : Term::Dict, lhs : Term, rhs : Term
 
   def run(test : NitreneTest, assets, stat, complaints) : Nil
-    value = measure(stat) { Nitrene.eval(test.vars, test.expr) }
-    return if value == test.value # ok
+    lhs_value = measure(stat) { Nitrene.eval(test.vars, test.lhs) }
+    rhs_value = measure(stat) { Nitrene.eval(test.vars, test.rhs) }
+    return if lhs_value == rhs_value # ok
 
-    complaints << complaint("Nitrene value mismatch", expected: test.value, got: value)
+    complaints << complaint("Nitrene value mismatch", lhs: lhs_value, rhs: rhs_value)
   end
 
   def match(pattern : Term, matchee : Term) : Slice(Term::Dict)

@@ -212,19 +212,19 @@ module Testtool
       # |@ testtool.decl.nitrene
       #
       # |@pattern
-      # (ni= expr_ value_)
+      # (ni= lhs_ rhs_)
       #
-      # |@key expr nitrene
+      # |@key lhs nitrene
       # Expression to evaluate.
       #
-      # |@key value
-      # Expected result of *expr*.
+      # |@key rhs nitrene
+      # Reference expression to evaluate.
       #
       # |@block
-      # Use `ni=` to check for equality of a Nitrene expression value.
-      matchpi %{[ni= expr_ value_]} do
+      # Use `ni=` to check for the equality of two Nitrene expressions.
+      matchpi %{[ni= lhs_ rhs_]} do
         vars = decl.pairspart
-        test = NitreneTest.new(vars, expr, value)
+        test = NitreneTest.new(vars, lhs, rhs)
         annotated(assertions(test), decl, srcmap)
       end
 

@@ -138,12 +138,14 @@ module Ww::Nitrene
     case {a, b}
     in {ArithConst, ArithConst}
       ArithConst.new(a.value * b.value)
-    in {ArithConst, ArithPosInf},
-       {ArithPosInf, ArithConst}
-      ArithPosInf.new
-    in {ArithConst, ArithNegInf},
-       {ArithNegInf, ArithConst}
-      ArithNegInf.new
+    in {ArithConst, ArithPosInf}
+      a.value.zero? ? ArithIndet.new : ArithPosInf.new
+    in {ArithPosInf, ArithConst}
+      b.value.zero? ? ArithIndet.new : ArithPosInf.new
+    in {ArithConst, ArithNegInf}
+      a.value.zero? ? ArithIndet.new : ArithNegInf.new
+    in {ArithNegInf, ArithConst}
+      b.value.zero? ? ArithIndet.new : ArithNegInf.new
     in {ArithPosInf, ArithPosInf}
       ArithPosInf.new
     in {ArithPosInf, ArithNegInf},
@@ -501,10 +503,10 @@ module Ww::Nitrene
 
         subexprs = expr.items.move(2)
         backsys = subexprs.to_compact_readonly_slice do |subexpr|
+          # (backmap pattern_ backspec_)
           next unless subexpr = subexpr.as_d?
           next unless subexpr.size == 3
           next unless subexpr.itemsonly?
-
           head, pattern, backspec = subexpr
           next unless head == Term[:backmap]
 
@@ -585,7 +587,7 @@ module Ww::Nitrene
       # (+ args_*)
       #
       # |@block
-      # Returns the sum of arithmetic units (see `nitrene.arith`) in *args*.
+      # Returns the sum of arithmetic units in *args* (see `nitrene.arith`).
       #
       # If *args* contains no arithmetic units, the sum is zero.
       #
@@ -609,13 +611,13 @@ module Ww::Nitrene
       # (- args_*)
       #
       # |@block
-      # Returns the difference of arithmetic units (see `nitrene.arith`) in *args*.
+      # Returns the difference of arithmetic units in *args* (see `nitrene.arith`).
       #
       # - If *args* contains no arithmetic units, the difference is zero.
       # - If *args* contains one arithmetic unit, the difference is the result
       #   of negating that unit.
       # - If *args* contains two or more arithmetic units, the difference is
-      #   the result of subtracting those units in order.
+      #   the result of subtracting those units in the order they appear in *args*.
       #
       # ```wwml
       # (-)       ;; => 0
@@ -636,13 +638,33 @@ module Ww::Nitrene
         end
       end
 
-      matchpi %{(*)} do
-        Term.of(1)
-      end
-
-      matchpi %{(* _ _ _*)} do
+      # |@ nitrene.product
+      #
+      # |@pattern
+      # (* args_*)
+      #
+      # |@block
+      # Returns the product of arithmetic units in *args* (see `nitrene.arith`).
+      #
+      # - If *args* contains no arithmetic units, returns `1`, the identity
+      #   for product.
+      # - If *args* contains one or more arithmetic unit, returns the product
+      #   of those units.
+      #
+      # ```wwml
+      # (*)           ;; => 1
+      # (* 3 5)       ;; => 15
+      # (* 1 2 3 4 5) ;; => 120
+      # (* -∞ 0)      ;; => indet
+      # ```
+      matchpi %{(* _*)} do
         calc(expr, args: expr.items.move(1)) do |operands|
-          render(operands.reduce { |a, b| mul(a, b) })
+          case operands.size
+          when 0
+            Term.of(1)
+          else
+            render(operands.reduce { |a, b| mul(a, b) })
+          end
         end
       end
 
@@ -770,6 +792,10 @@ module Ww::Nitrene
 
       matchpiT %{(approx ±arg)} do
         Term.of(Term::Num.approx(arg))
+      end
+
+      matchpiT %{(sci ±mantissa ±exponent)} do
+        Term.of(mantissa * Term[10]**exponent)
       end
 
       # FIXME: These things must use Arith!
@@ -921,6 +947,14 @@ module Ww::Nitrene
         Term.of(arg.ee(ordered: true))
       end
 
+      matchpiT %{(with subject_dict key_ value_)} do
+        Term.of(subject.with(key, value))
+      end
+
+      matchpiT %{(without subject_dict key_)} do
+        Term.of(subject.without(key))
+      end
+
       matchpiT %{(value arg_dict key_)} do
         continue unless value = arg[key]?
 
@@ -1027,6 +1061,10 @@ module Ww::Nitrene
         end
 
         Term.of(result)
+      end
+
+      matchpi %{(iota _)} do
+        Term.of
       end
 
       matchpi %{(flatten arg_ ¦ -depth)}, %{(flatten arg_ ¦ depth: ∞)} do
@@ -1149,26 +1187,31 @@ module Ww::Nitrene
         Term.of(text.rpartition(sep))
       end
 
+      # TODO: Remove in favor of partition/rpartition
       matchpi %{(line/stem arg_string)}, arg: StringView do
         l, _, _ = arg.partition('\n')
         Term.of(l)
       end
 
+      # TODO: Remove in favor of partition/rpartition
       matchpi %{(line/rest arg_string)}, arg: StringView do
         _, sep, r = arg.partition('\n')
         Term.of(sep + r)
       end
 
+      # TODO: Remove in favor of partition/rpartition
       matchpi %{(rline/stem arg_string)}, arg: StringView do
         _, _, r = arg.rpartition('\n')
         Term.of(r)
       end
 
+      # TODO: Remove in favor of partition/rpartition
       matchpi %{(rline/rest arg_string)}, arg: StringView do
         l, sep, _ = arg.rpartition('\n')
         Term.of(l + sep)
       end
 
+      # (run (prefix matcheeQ_) (charset prefixQ_))
       matchpi %{(prefix-run matchee_string prefix_string)}, matchee: StringView, prefix: StringView do |matchee|
         run = String.build do |io|
           while matchee.starts_with?(prefix)

@@ -84,3 +84,238 @@
   (ni= (- 1 -∞ 2 3) ∞)
   (ni= (- 0 5 indet) indet))
 
+;; *
+(group
+  ;; Basic
+  (ni= (*) 1)
+  (ni= (* 2) 2)
+  (ni= (* 1 2 3 4 5) 120)
+
+  ;; Frac
+  (ni= (* 1/3 2/5) 2/15)
+  (ni= (* -3/12 5/3) -5/12)
+
+  ;; Approx
+  (ni= (* ≈3 ≈5) ≈15)
+  ;; NOTE: I can't come up with a better way to test this...
+  (ni= (ml/compact (* ≈0.3 ≈0.1)) "≈0.030000001")
+  (ni= (ml/compact (* ≈0.3 0.5 ≈0.2)) "≈0.030000001")
+
+  ;; Infinity
+  (ni= (* 2 ∞) ∞)
+  (ni= (* ∞ 2) ∞)
+  (ni= (* ∞ ∞) ∞)
+  (ni= (* -∞ -∞) ∞)
+
+  ;; Negative infinity
+  (ni= (* 2 -∞) -∞)
+  (ni= (* -∞ 2) -∞)
+  (ni= (* ∞ -∞) -∞)
+  (ni= (* -∞ ∞) -∞)
+
+  ;; Indet
+  (ni= (* indet 3) indet)
+  (ni= (* -∞ indet) indet)
+  (ni= (* 0 ∞) indet)
+  (ni= (* ∞ 0) indet)
+  (ni= (* 0 -∞) indet)
+  (ni= (* -∞ 0) indet)
+  (ni= (* 0 indet) indet)
+
+  ;; Symbolic, more arguments
+  (ni= (* 3 ∞ 5) ∞)
+  (ni= (* 3 ∞ 5 -∞) -∞)
+  (ni= (* 3 ∞ 5 -∞ 0) indet)
+  (ni= (* 0 ∞ 5 -∞) indet))
+
+;; /
+
+;; //
+
+;; mod
+
+;; **
+
+;; sci
+(group
+  (ni= ≈3.40282347e+38 (* ≈3.40282347 (** 10 38)))
+  ;; ;; FIXME: crash: Infinity
+  ;; (ni= ≈3.40282347e+39 ≈inf)
+  ;; ;; FIXME: crash: -Infinity
+  ;; (ni= ≈-3.40282347e+39 ≈-inf)
+)
+
+;; <
+
+;; <=
+;; NOTE: This is necessary because when doing comparison, ≈0 is considered
+;; to be equal to 0 (and so on for approx-exact comparisons). `==` is
+;; too strict as it requires both parties to be approx or exact.
+
+;; >
+
+;; >=
+
+;; =
+
+;; floor
+
+;; ceil
+
+;; round
+
+;; exact
+
+;; approx
+
+;; min
+
+;; max
+
+;; abs
+
+;; not
+
+;; ~
+
+;; repeat
+
+;; ml/compact
+
+;; ml/display
+
+;; ml/term
+
+;; ml/terms
+
+;; ml/document
+
+;; escape
+
+;; charcount
+
+;; upcase
+
+;; dncase
+
+;; bytesize
+
+;; hashcode
+
+;; entry
+
+;; entries
+
+;; with
+
+;; without
+
+;; value
+
+;; size
+
+;; itemsize
+
+;; pairsize
+
+;; itemspart
+
+;; pairspart
+
+;; union
+
+;; merge
+
+;; pluck
+
+;; iota
+(group
+  (ni= (iota 0) ())
+  (ni= (iota 1) (0))
+  (ni= (iota 2) (0 1))
+  (ni= (iota 3) (0 1 2))
+  (ni= (iota 4) (0 1 2 3))
+  ;; ...
+  (ni= (iota 10) (0 1 2 3 4 5 6 7 8 9))
+
+  (ni= (iota -1) ())
+  (ni= (iota -100) ())
+  (ni= (iota 1.23) ())
+  (ni= (iota x) ())
+
+  (ni= (size (without (iota 100) 50)) 99)
+  (ni= (itemsize (without (iota 100) 50)) 50)
+  (ni= (pairsize (without (iota 100) 50)) 49)
+)
+
+;; flatten
+
+;; map
+
+;; gather
+
+;; in?
+
+;; substring?
+
+;; any?
+
+;; hex
+
+;; rune
+
+;; runes
+
+;; word
+
+;; words (range)
+
+;; words (all)
+
+;; partition
+
+;; rpartition
+
+;; run (prefix, charset)
+
+;; codepoints
+
+;; pigment: oklch
+
+;; pigment: oklch named
+
+;; pigment: hsl
+
+;; pigment: rgb
+
+;; pigment: rgba
+
+;; pigment: lrgb
+
+;; pigment: named
+
+;; pigment: hex
+
+;; pigment: translucent
+
+;; pigment: mix
+
+;; literal
+
+;; fn
+
+;; and
+
+;; or
+
+;; filter
+
+;; morph
+
+;; ->
+
+;; template
+
+;; let
+
+;; let*
