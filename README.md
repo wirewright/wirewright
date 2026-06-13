@@ -8,6 +8,9 @@
 Wirewright aims to express computation as the evolution of symbolic structure inside an immutable
 world, and attempts to push that model as far as possible: into UI, I/O, audio, symbolic AI, and beyond.
 
+One of the goals of Wirewright is the realization of the idea of *a program as a physical thing*,
+a kind of *symbolic mechanism*.
+
 In Wirewright, buttons and input fields have insides (the same way a real-world button is a box
 with a mechanism inside it), programs can move, and some of the core distinctions of modern
 programming do not exist. In Wirewright, the same term can act as data, state, code, and UI.
@@ -29,34 +32,100 @@ responsible for animating `backsys`, `circuit`, etc. themselves.
 
 https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
 
-## Introduction
+## So What is Wirewright?
 
-> [!WARNING]
-> This is a multi-year research playground and is highly experimental! It can, and will break more
-> than it will work! I don't know if there's any point in this! I don't know what this is "for",
-> either. Sorry.
->
-> BEWARE: Weird language ahead!
+Good question. As a software project (as opposed to a philosophical endeavor of mine), [my definition of Wirewright](https://youtu.be/rkWXB-3ReV0) an ecosystem of components which together implement a particular "style" of symbolic computation -- one that is heavily inspired by physics. I call this "style" *symbolic physics*.
+Now, if you want a short answer, Wirewright is not a single thing but an umbrella for multiple things, some of them described below, that are made to interact with each other in ways I find interesting.
 
-Most modern programming paradigms model computation as verbs (functions, procedures, processes, etc.) acting upon nouns (e.g. data structures). This isn't exactly a problem to solve, but it turns out you can reduce the number of verbs to just one, and the number of nouns to just one.  The only remaining noun is *the world*. The only remaining verb is *the physics*.
+### Data and notation
 
-Wirewright attempts to model computation as a transformation over an immutable world: `physics(world) -> world'`. The function, `physics`, is not necessarily pure. In Wirewright, *Rack* implements it purely: `Rack(world) -> world'`. *MuSoma* extends Rack with impurities for I/O; so the function becomes, conceptually, `MuSoma(world, io) -> Rack(perturb(world, plan(world, io))) -> world'`. In practice, `musoma` is *a bit* more intricate than this, of course.
+#### Terms (pure)
 
-The internals of `physics` are irrelevant philosophically. In practice, Wirewright uses (hyper)graph rewriting and simple scans here and there. Conceptually, you can think of `physics` as scanning the world, finding interesting structure in it, and rewriting the world in response (either `world` or the real world, for that matter).
+Terms are one of the core things in Wirewright. All terms are immutable. There are six types of terms: numbers, strings, booleans, symbols, dictionaries, and blobs (for binary data). Dictionaries are of most interest. Conceptually, a dictionary is a list of *entries*, where each entry is the pair `(key, value)`.  An entry can be an *item* (its key is 0 or is a number with a predecessor in the dict) or a *pair* (all other entries). Items therefore form a chain called the *itemspart* (e.g., keys 0, 0->1, 0->1->2, etc.) The rest of entries form the dictionary's *pairspart*.
 
-You do not need to write `physics`, `rack`, or `musoma`; Wirewright provides them for you, along with many other things, so all you care about is the world, and structure in it. Moreover, Wirewright encourages you to forget about the physics function altogether, and instead asks you to situate yourself *inside* the world. In this sense Wirewright is very similar to a computer game: all fun is out if all you're doing is thinking about how the game is implemented, what game engine it uses and so on. This "embedded" point-of-view is important for concepts such as *self-embodied programs*.
+#### Notation (pure)
 
-Since *world* is ultimately a *symbolic world*, `physics` is ultimately *symbolic physics*. Symbolic physics is, then, roughly, the intersection of graph rewriting, symbolic pattern matching, dataflow, logic programming, and constraint satisfaction.
+**WwML** (most often abbreviated simply as ML) is a human-readable and writable notation for expressing terms. In other words, it is a way to express terms as text.
 
-The world is modeled as a hypergraph (with slight inspiration from Stephen Wolfram's physics project, although the way we end up using the hypergraph, I suppose, differs somewhat).
+ML is based on S-expressions, extended with key-value pairs, e.g. `(/ 1 2 precision: 3)`. WwML features *a lot* of shorthands, so much so that sometimes it stops looking like S-expressions at all:
 
-Self-embodied programs (SEPs) are an important concept which eventually led me to symbolic physics. A SEP is simultaneously an algorithm (because of how physics "animates" it) and a structure (because it exists as such in the immutable world). In a sense, a SEP is a program for physics, as if physics was a computer that one could target. The resulting "instructions" are structure (matter) itself.
+```wwml
+(limit _ ⍊ up-w⫽h: (arg ±λ ⍊ -◇_) ±⟦min,max⟧-w⫽h)
+  <> {λ: ^(⟦max,min⟧ ⟦min,max⟧-w⫽h λ), ◇: true}
+```
 
-Notably, self-embodiedness vanishes unless you situate yourself inside the world, so you only see structure. If you are outside, then you can see the physics function, and so, there's no magic and no self-embodiedness; the physics is an interpreter and structure corresponding to the SEP is its state.
+### Term matching & transformation (pure)
 
-Wirewright is primarily for me and is a playground for some of my ideas. Other than that, Wirewright is for anyone interested in symbolic physics, including its applications to deterministic, symbolic AI.
+**M1** a pattern matching & *backmapping* engine for terms. If Wirewright was an organism, M1 would be its sensory organ -- its eyes and ears.
 
-Currently, Wirewright lets you build very simple *circuits* using MuSoma, with its graphical *front-end*. You can look at some examples in the Gallery section above. See the `examples/` directory for more. We can do basic graphics and interactivity. Components other than `Button` and `Input` remain future work as of now, although implementing them is more or less trivial based on my experience implementing the MuSoma app (which itself uses Wirewright, although in a slightly different way). The problem with buttons, input fields, and other UI widgets is that compared with the core of the project (which is more or less there), they take a very long time to make, while also being incredibly boring and unrewarding ("who cares if you made your own input field, we have input fields already").
+**Alloy** is a structural templating language. Structural templating is like Lisp's `unquote`. It can also be compared with Handlebars, except Alloy operates on terms rather than strings. Alloy looks like this:
+
+```wwml
+(^each (fragments as fragment_)
+ (^match fragment
+   (when (m-span text_string)
+     (^each ((words text) as word_string)
+       ^word))
+   (when (m-key key_)
+     (Key ^key))
+   (when (m-key expects-mode_ key_)
+     (^unless (= mode expects-mode)
+       (Key "Esc"))
+     (Key ^key))))
+```
+
+Here, things starting with `^` are related to Alloy.
+
+**Nitrene** is an expression language. Nitrene, too, uses terms; in Wirewright, everything uses terms. Nitrene is meant to be embedded in Alloy, but you can embed Alloy in Nitrene as well. In the Alloy example above, expressions such as `(= mode expects-mode)`, `(words text)` and so on are  Nitrene.
+
+An expression language is somewhat like Excel's in terms of its goals, allowing you to do raw computation at the "leaves" (e.g. `(+ 2 2)`).
+
+**Rulesets** let you define rules where the left-hand side is an M1 pattern and the right-hand side is an Alloy template. They also allow you to write *backmaps*: the left-hand side is also a pattern, but the right-hand side is now a list of replacements defined relative to each other. For example, `(swap a_ b_) <> {a: ^b, b: ^a}`, under some modes of evaluation, results in an oscillator which swaps *a* and *b* forever: `(swap 1 2)` is rewritten to `(swap 2 1)` and so on forever. Rulesets are one of the "hubs" in Wirewright: they bring together M1 (the pattern `(+ a_)`), Alloy (the templates `^a`, `^b`), Nitrene (the expressions immediately inside the template `a`, `b`), and then M1 backmaps `_ <> _`. Rulesets, too, are terms: dictionaries representing a list of rules.
+
+**Rho** is a collection of composable rewriters. Rho lets you write things like `(ascR (rulesetR))` (notice again how everything is a term). Running this rewriter on a term, Rho will perform an *ascending rewrite*, applying `(rulesetR)` bottom-up. `rulesetR` in turn connects to rulesets I wrote about above.
+
+### Graphics
+
+#### Styling (pure)
+
+**Microfold** is part of the UI stack. It implements Tailwind-like styling among other things (such as e.g. "cue flow", a bidirectional flow of "cues" which lets you do things like group hover).  Below is an example of Microfold (`style: "..."`) interacting with Alloy (`^` things) and Nitrene (`vertical: ^(...)` etc.)
+
+```wwml
+(group style: "flow-row vertical:flow-col px-3 py-3/2 -@only:border-b-sm -@only:border-theme-overlay in-focused:bg-theme-surface"
+       vertical: ^(= preferred-direction vertical)
+   (group style: "flow-row gap-3/2 fr-1"
+     (icon ^icon style: "center-y")
+     (p ^path style: "fr-1 leading-none"))
+   (p ^*center style: "flow-row gap-3/2 fr-2")
+   (p ^*right style: "flow-row gap-3/2"))
+```
+
+#### UI (pure-ish)
+
+**Scenery** is a vector graphics and layout engine. Microfold is lowered to Scenery, emitting descriptions of the UI containing things like `img`s, `svg`s, `text` nodes, `x-stack`s and `y-wrap`s.
+
+Scenery, from the outside, is a black box which turns those descriptions into arrays of pixels (i.e., an image) and a symbolic visual description of the scene (a term which nodes can use to ask questions such as, "am I visible?", "is the mouse over me?", "how wide am I in pixels?", etc.)
+
+I call it pure-ish because it is pure on the conceptual level (it is a function from the description of a scene to an image and a visual description); however, internally, it uses things like FreeType, schedules file reads and the like; in that sense it is impure.
+
+### Symbolic physics
+
+**D7** can be called a symbolic physics engine. It lets you define hypergraph rewrite rules; collections of such rules are called *rewrite regimes*. So D7 lets you define such regimes, and apply them to a term called the *circuit*. D7 recognizes *nodes* and edges in the circuit, builds a hypergraph, rewrites it, handles conflicts, manages caching, and so on. D7 does not implement general hypergraph rewriting, as that is too complicated computationally and is NP. It turns out most interesting stuff can be encoded using the hub and spokes topology, so D7 is more or less a matcher for that. D7 is an internal of the project at the time of writing, there's currently no user-facing interface for it.
+
+**Rack** is a rewrite regime defined using D7. It introduces concepts like `cell`s, `backsys`tems (a system of backmaps) and so on. Rack is one of the "unifying" components, a hub which connects and interacts with many other components (I'd say most components if one excludes IO).
+
+### MuSoma (impure)
+
+**MuSoma** is the "grand unifier". It groups everything together into a single, coherent thing: Scenery & Microfold for UI, Rack and D7 for symbolic physics, something called **editR** (editor rewriter), implemented using Rho, for editing inside a symbolic "world".
+In a sense, MuSoma is a "lab" which lets you watch and experiment with a symbolic world -- the circuit.
+
+MuSoma introduces impurities into an otherwise pure and sealed system defined by the components I described above. MuSoma *perturbs* the symbolic world with OS-level events, and lets the symbolic world perturb the OS. MuSoma makes it possible for the symbolic world react to various OS-level events, talk to databases, spawn windows, track the mouse & the keyboard, watch files, and so on.
+
+If you imagine the other components of Wirewright as a pure, sealed "guest world" and the OS as the "host world", then MuSoma would be the simulation layer which makes the guest world talk to the host world and vice versa.
+
+At the highest level, MuSoma looks like a hybrid between an event loop and a game loop. At lower levels it implements the "glue" so that all the components of Wirewright can communicate with each other.
+
+Somewhat orthogonally to the above, MuSoma is also an application, with a GUI, modes, key bindings, etc. It is responsible for producing projections of the circuit, including those ones used for UI. MuSoma connects nodes, through their projections, to symbolic feedback about how they look (which is one of the outputs of Scenery).
 
 ## References
 
