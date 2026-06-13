@@ -540,7 +540,11 @@ module Ww::Nitrene
       end
 
       matchpi %{(template template_)} do
-        Alloy.render(vars, template)
+        Alloy.render(template,
+          locals: vars,
+          primitive: it.primitive,
+          composite: it.composite,
+        )
       end
 
       matchpi %{(let bodyQ_ ¦ assignments_)} do
@@ -1156,6 +1160,7 @@ module Ww::Nitrene
         Term.of(WordTokenizer.words(arg, i, i))
       end
 
+      # TODO: ditto
       matchpiT %{(words arg_string b←(%number i32) ..= e←(%number i32))}, arg: StringView do
         Term.of(WordTokenizer.words(arg, b, e))
       end
