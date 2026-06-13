@@ -845,9 +845,10 @@ C←[[I M←[insert (term T_) right] _*] _ _]
 (_* `C' ¦ (%entry _ C←[[I M←[insert (term T_) ⸨left,right⸩] _*] (_string * _string) _]))
   <> {(M): (), C: ^T, C': ^(up C)}
 
-;; FIXME: WTF is going on here?
-D←⟨C←[[I [edit dict] _*] (l_string * r_string) _]⟩
-  <> {(C): (), D: ^(merge C ({1: ('select ('term (up D)) 'right)}))}
+;; Replace [edit dict] in kernel with (select (term <D without cursor>) right).
+;; Replace D with the updated editor.
+D←⟨C←[[I [edit dict] _*] (_string * _string) _]⟩
+  <> {(C): (), D: ^(merge C ({1: (template (select (term ^(up D)) right))}))}
 
 (`C' _* ¦ (%entry _ C←[[I M←[erase pair left] _*] _*]))
   <> {(M): (), C': ^(up C), (C): ()}
