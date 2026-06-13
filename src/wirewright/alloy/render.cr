@@ -30,20 +30,6 @@ module Ww::Alloy
     end
   end
 
-  protected def composite : Nitrene::Eval
-    ->(it : Nitrene::Interpreter, vars : Term::Dict, expr : Term) do
-      Term.case(expr) do
-        matchpi %{(^ _)} do
-          expr
-        end
-
-        otherwise do
-          Nitrene.inert
-        end
-      end
-    end
-  end
-
   private VIEW_SKETCH = Term::Dict::Sketch.symbol(Term[:view], Term.hashcode(Term[:view]))
 
   def eval(ctx : RenderContext, rdata : RuleData, env : Env, expr : NiExpr) : Term
