@@ -350,12 +350,10 @@ module Ww::Nitrene
   end
 
   # Represents a Nitrene interpreter.
-  #
-  # FIXME: Flip order
-  defrecord Interpreter, composite : Eval, primitive : Eval
+  defrecord Interpreter, primitive : Eval, composite : Eval
 
   struct Interpreter
-    DEFAULT = new(Nitrene.composite, Nitrene.primitive)
+    DEFAULT = new(Nitrene.primitive, Nitrene.composite)
   end
 
   def composite : Eval

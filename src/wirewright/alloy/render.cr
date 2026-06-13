@@ -46,7 +46,7 @@ module Ww::Alloy
       primitive = Alloy.primitive(ctx, rdata, env.globals)
     end
 
-    it = Nitrene::Interpreter.new(ctx.composite, primitive)
+    it = Nitrene::Interpreter.new(primitive, ctx.composite)
     Nitrene.eval(it, env.vars, expr.term)
   end
 
