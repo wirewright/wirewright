@@ -1126,8 +1126,7 @@ module Ww::Nitrene
         Term.of((lo == n || lt?(lo, n)) && lt?(n, hi))
       end
 
-      # TODO: rename to `substring?`
-      matchpi %{(any? haystack_string needle_string)}, haystack: String, needle: String do
+      matchpi %{(substring? haystack_string needle_string)}, haystack: String, needle: String do
         Term.of(haystack.includes?(needle))
       end
 
