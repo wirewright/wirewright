@@ -5,8 +5,9 @@
 
 # Wirewright
 
-Wirewright aims to express computation as the evolution of symbolic structure inside an immutable
-world, and attempts to push that model as far as possible: into UI, I/O, audio, symbolic AI, and beyond.
+Wirewright is an experimental research project aiming to express computation as the evolution of symbolic structure inside an immutable
+world. The project attempts to push that model as far as possible: into IO (including UI, audio, and the network), symbolic AI,
+and beyond.
 
 One of the goals of Wirewright is the realization of the idea of *a program as a physical thing*,
 a kind of *symbolic mechanism*.
@@ -14,6 +15,12 @@ a kind of *symbolic mechanism*.
 In Wirewright, buttons and input fields have insides (the same way a real-world button is a box
 with a mechanism inside it), programs can move, and some of the core distinctions of modern
 programming do not exist. In Wirewright, the same term can act as data, state, code, and UI.
+
+> [!NOTE]
+> Wirewright is not a solution to any practical problem. Instead, it tries to see what else
+> is there beyond & in the near neighborhood of OOP (in the Alan Key sense), pure FP, dataflow,
+> discrete simulation, cellular automata, term rewriting, and the like. Whether this endeavor
+> results in anything practically interesting is currently unknown.
 
 ## Gallery
 
@@ -34,14 +41,14 @@ https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
 
 ## So What is Wirewright?
 
-Good question. As a software project (as opposed to a philosophical endeavor of mine), [my definition of Wirewright](https://youtu.be/rkWXB-3ReV0) an ecosystem of components which together implement a particular "style" of symbolic computation -- one that is heavily inspired by physics. I call this "style" *symbolic physics*.
-Now, if you want a short answer, Wirewright is not a single thing but an umbrella for multiple things, some of them described below, that are made to interact with each other in ways I find interesting.
+Good question. As a software project (as opposed to a philosophical endeavor of mine), [my definition of Wirewright](https://youtu.be/rkWXB-3ReV0) is an ecosystem of components which together implement a particular "style" of symbolic computation -- one that is heavily inspired by physics. I call this "style" *symbolic physics*.
+Now, if you want a short answer, Wirewright is not a single thing but an umbrella of multiple things, some of them described below, that are made to interact with each other in ways I find interesting.
 
 ### Data and notation
 
 #### Terms (pure)
 
-Terms are one of the core things in Wirewright. All terms are immutable. There are six types of terms: numbers, strings, booleans, symbols, dictionaries, and blobs (for binary data). Dictionaries are of most interest. Conceptually, a dictionary is a list of *entries*, where each entry is the pair `(key, value)`.  An entry can be an *item* (its key is 0 or is a number with a predecessor in the dict) or a *pair* (all other entries). Items therefore form a chain called the *itemspart* (e.g., keys 0, 0->1, 0->1->2, etc.) The rest of entries form the dictionary's *pairspart*.
+Terms are one of the core things in Wirewright. All terms are immutable. There are six types of terms: numbers, strings, booleans, symbols, dictionaries, and blobs (for binary data). Dictionaries are of most interest. Conceptually, a dictionary is a list of *entries*, where each entry is the pair `(key, value)`. Keys are unique. An entry can be an *item* (its key is 0 or is a number with a predecessor item in the dict) or a *pair* (all other entries). Items therefore form a chain called the *itemspart* (e.g., keys 0, 0->1, 0->1->2, etc.) The rest of entries form the dictionary's *pairspart*.
 
 #### Notation (pure)
 
@@ -58,7 +65,7 @@ ML is based on S-expressions, extended with key-value pairs, e.g. `(/ 1 2 precis
 
 **M1** a pattern matching & *backmapping* engine for terms. If Wirewright was an organism, M1 would be its sensory organ -- its eyes and ears.
 
-**Alloy** is a structural templating language. Structural templating is like Lisp's `unquote`. It can also be compared with Handlebars, except Alloy operates on terms rather than strings. Alloy looks like this:
+**Alloy** is a structural templating language. Structural templating is like Lisp's `quote`, `unquote`, `quasiquote`. It can also be compared with something like Handlebars, except Alloy operates on terms rather than strings. Alloy looks like this:
 
 ```wwml
 (^each (fragments as fragment_)
