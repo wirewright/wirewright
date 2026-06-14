@@ -2213,7 +2213,81 @@
       (feed @bridge-src @bridge-dst))
     end)
 
-  ;; Legacy: like circuit but write-only and embeds, doesn't isolate.
+  (rack
+    (frame
+      (view (@count ±n @y) ^"Count: ⸢n⸣")
+      (backsys @x (cell _ ±n) <> {n: ^(+ n 1)})
+      (frag @x (cell @count 0))
+      (cell @y))
+    (frame/tail
+      (frag @x (cell @count 1))
+      (cell @y "Count: 0"))
+    (frame/tail
+      (frag @x (cell @count 2))
+      (cell @y "Count: 1"))
+    (frame/tail
+      (frag @x (cell @count 3))
+      (cell @y "Count: 2")))
+    ;; ...
+
+  ;; Self-reference
+  (rack
+    (frame
+      (frag @x
+        (group
+          (cell @count 0)
+          (backsys @x
+            ⟨(cell @count ±n)⟩ <> {n: ^(+ n 1)})))
+      (view (@count ±n @y) ^"Count: ⸢n⸣")
+      (cell @y))
+    (frame
+      (frag @x
+        (group
+          (cell @count 1)
+          (backsys @x
+            ⟨(cell @count ±n)⟩ <> {n: ^(+ n 1)})))
+      (view (@count ±n @y) ^"Count: ⸢n⸣")
+      (cell @y "Count: 0"))
+    (frame
+      (frag @x
+        (group
+          (cell @count 2)
+          (backsys @x
+            ⟨(cell @count ±n)⟩ <> {n: ^(+ n 1)})))
+      (view (@count ±n @y) ^"Count: ⸢n⸣")
+      (cell @y "Count: 1")))
+    ;; ...
+
+  ;; Recursion
+  ;; TODO: We need to limit this (depth limit) and test that it terminates at some point.
+  (rack
+    (frame
+      (frag @current
+        (module {@parent: @current}
+          (feed (copy @parent) @current)
+          (frag @current))))
+    (frame
+      (frag @current
+        (module {@parent: @current}
+          (feed (copy @parent) @current)
+          (frag @current
+            (module {@parent: @current}
+              (feed (copy @parent) @current)
+              (frag @current))))))
+    (frame
+      (frag @current
+        (module {@parent: @current}
+          (feed (copy @parent) @current)
+          (frag @current
+            (module {@parent: @current}
+              (feed (copy @parent) @current)
+              (frag @current
+                (module {@parent: @current}
+                  (feed (copy @parent) @current)
+                  (frag @current)))))))))
+    ;; ...
+
+  ;; Legacy
   (rack
     (frame
       (cell @x (delay 3 (feed @a @b)))

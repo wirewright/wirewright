@@ -123,24 +123,36 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
-      matchpi %{[frag @edge_ value_]} do
-        mix0 = Term.of(:group, {:cell, edge}, {:group, value})
+      # NOTE: I am unsure about the difference between frag and `node`/`circuit` now
+      # that we define frag as both readable and writable. The only difference I can
+      # see is that when I write to the frag's cell, the execution of that is carried over
+      # to the next tick, whereas in `circuit`, when I write to the cell it creates on the current
+      # level,  the execution continues within the same tick as the evaluator descends down
+      # to the next level, breadth-first. There's also obviously the isolation; subcircuits
+      # are completely sealed from the outside in base Rack (termspaces can be used to
+      # connect them, however). Frags, on the other hand, are simply a reference to
+      # a part or "pocket" of the current running circuit. Since we use synchronous rewriting,
+      # anything that reads the frag or stuff within it (e.g. cells defined in the frag)
+      # sees only the previous frame; so there's nothing unexpected on that end.
+      #
+      # NOTE: The empty case is handled below.
+      matchpi %{[frag @edge_ value0_]} do
+        mix0 = Term.of(:group, {:cell, edge, value0}, {:group, value0})
 
         D7.mixture(node, mix0) do |mix1|
-          Term.of_case(mix1) do
+          Term.case(mix1) do
             # New value arrived. Higher priority.
-            matchpi %{(_ (cell @_ value1_) _)} { Term.morph(node, {2, value1}) }
+            matchpi %{(group (cell @_ value1_) _)} do
+              continue if value0 == value1
+
+              Term.morph(node, {2, value1})
+            end
+
             # New value computed.
-            matchpi %{(_ _ (group value1_))} { Term.morph(node, {2, value1}) }
+            matchpi %{(group _ (group value1_))} do
+              Term.morph(node, {2, value1})
+            end
           end
-        end
-      end
-
-      matchpi %{[frag (r @edge_) value_]} do
-        mix = Term.of(:group, {:cell, edge, value}, value)
-
-        D7.mixture(node, mix) do |(_, _, value1)|
-          Term.morph(node, {2, value1})
         end
       end
 
