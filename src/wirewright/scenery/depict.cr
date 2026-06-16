@@ -218,6 +218,10 @@ module Ww::Scenery
 
   private def depict!(cache, node : Pending, box : OriginBox) : DrawCommand
     blame = node.blame
+    if blame.is_a?(Loading)
+      return DrawSeq.empty
+    end
+
     placeholder = blame.placeholder || RectShape.new(
       thickness: RectThickness.new(l: Unit.px(0.0), t: Unit.px(0.0), r: Unit.px(0.0), b: Unit.px(0.0)),
       radii: RectRadii.new(tl: Unit.px(15.0), tr: Unit.px(15.0), bl: Unit.px(15.0), br: Unit.px(15.0)),

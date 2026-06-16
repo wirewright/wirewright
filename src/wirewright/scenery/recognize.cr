@@ -14,6 +14,7 @@ module Ww::Scenery
       Term.of(:icon),
       Term.of(:svg),
       Term.of(:img),
+      Term.of(:loading),
     }
 
     # :nodoc:
@@ -1414,6 +1415,24 @@ module Ww::Scenery
         end
 
         Suspense(RecognizedNode).new(ZStack.anon(children), placeholder)
+      end
+
+      # |@ scenery.loading
+      #
+      # |@pattern
+      # [loading]
+      #
+      # |@block
+      # An auxiliary node to "poison" a subtree with the loading state, which can
+      # trigger the enclosing `suspense`.
+      #
+      # If a client doesn't know the UI yet, for reasons irrelevant to Scenery, it
+      # can insert `loading` instead of the UI. While `loading` does nothing on its
+      # own, when combined with an enclosing `suspense`, it lets you show a "loading"
+      # indicator while the UI is not available. Orthogonally, `suspense` will also
+      # catch asset loadings.
+      matchpi %{[loading]} do
+        Loading.new
       end
 
       # |@ scenery.variant

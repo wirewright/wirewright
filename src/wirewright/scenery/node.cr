@@ -30,7 +30,8 @@ module Ww::Scenery
                          Suspense(RecognizedNode) |
                          Variant(RecognizedNode) |
                          Vantage(RecognizedNode) |
-                         Gate(RecognizedNode)
+                         Gate(RecognizedNode) |
+                         Loading
 
   # `AssetNode`s know about *assets*; the queries from `RecognizedNode` having been
   # resolved, each asset-dependent node now either has a valid asset attached to it
@@ -214,7 +215,8 @@ module Ww::Scenery
     blame : Text(Asset::FontQuery) |
             Icon |
             Img(Asset::ImageQuery) |
-            Svg(Asset::SvgQuery)
+            Svg(Asset::SvgQuery) |
+            Loading
 
   defcase Img(C),
     src : C,
@@ -640,4 +642,6 @@ module Ww::Scenery
   defcase Gate(Node),
     children : Slice(Node),
     caches_hash: true
+
+  defcase Loading
 end
