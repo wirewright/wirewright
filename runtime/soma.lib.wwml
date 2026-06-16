@@ -13,8 +13,9 @@
 ;; Subtree comprising the button's view. The Button component augments
 ;; the root of *view* with the following pairs:
 ;;
-;; - `hover`: set to `true` on hover.
-;; - `active`: set to `true` while the button is pressed.
+;; - `hover`: set to `true` on hover irrespective of `enabled`.
+;; - `active`: set to `true` while the button is pressed irrespective of `enabled`.
+;; - `enabled`: set to `true` while *msgs* is empty.
 ;;
 ;; |@block
 ;; View-agnostic "brain" for a button. See other overloads for stock view/styling.
@@ -68,6 +69,10 @@
          ;; Mouse left released while **not** over the button.
          {¦ mouse: [mouse] view: {¦ active_: true}}
            <> {(active): ()}
+         ;; Target cell occupied, won't be able to send if clicked.
+         {¦ msgs view: {¦ ⋮enabled}} <> {enabled: false}
+         ;; Target cell free, we can send if clicked.
+         {¦ -msgs view: {¦ ⋮enabled}} <> {enabled: true}
          ;; End tap on the next tick.
          {¦ view: {¦ active_: tap}}
            <> {(active): ()}))
@@ -101,9 +106,10 @@
 (Button head←(@_ _) caption_string ¦ props_)
   => (slot
        (Button ^head
-         (box style: "bg-theme-surface px-3 py-2 content-center text-theme-subtle \
-                      hover:text-theme-text active:text-theme-text hover:cursor-pointer \
-                      hover:bg-theme-overlay active:bg-theme-highlight-med rounded"
+         (box style: "bg-theme-surface px-3 py-2 content-center text-theme-subtle rounded \
+                      enabled:hover:text-theme-text enabled:active:text-theme-text \
+                      enabled:hover:cursor-pointer enabled:hover:bg-theme-overlay \
+                      enabled:active:bg-theme-highlight-med -enabled:hover:cursor-not-allowed"
            ^caption)))
 
 ;; |@ musoma.input
@@ -140,6 +146,8 @@
           cursor, and so on.")
        (node @input (input))
        (node @mouse (mouse))
+       (comment
+         "Inputs are also interested in their own visual reflection, just like buttons are")
        (figure {@:desc @:node}
          (template ^view))
        (comment
