@@ -185,6 +185,10 @@ module MuSoma
     node = tree.feature.node
 
     Term.case(node) do
+      matchpi %{[slot _]} do
+        Term.rep(Term.of({:loading}))
+      end
+
       matchpi %{{¦ style}} do
         curate(node)
       end
