@@ -5511,3 +5511,21 @@
         (module {}
           (group 1 2 3))))
     end))
+
+;; BUG: part must use relative edge in replacement cell
+(rack
+  (frame
+    (feed (copy @count-parent) (atop @dbg))
+    (cell @dbg)
+    (module {@count: @count-parent}
+      (cell @counter (counter 0))
+      (part (@counter @count) (counter ±count))
+      (backsys @count ±n <> {n: ^(+ n 1)})))
+  (frame
+    (feed (copy @count-parent) (atop @dbg))
+    (cell @dbg 0)
+    (module {@count: @count-parent}
+      (cell @counter (counter 1))
+      (part (@counter @count) (counter ±count))
+      (backsys @count ±n <> {n: ^(+ n 1)}))))
+  ;; ...

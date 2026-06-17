@@ -161,7 +161,8 @@ module Ww::Rack::Part
     pattern : Term,
     capture : Term,
     from : D7::AbsEdge,
-    to : D7::AbsEdge
+    to_abs : D7::AbsEdge,
+    to_rel : Term
 
   # Since we're mutating a lot, almost everything is context...
   defcase CompleteContext,
@@ -192,7 +193,7 @@ module Ww::Rack::Part
           # TODO: this seems necessary and makes some tests pass, but why, exactly?
           next if to_abs.in?(ctx.preds)
 
-          step = PartStep.new(candidate, pattern, capture, from_abs, to_abs)
+          step = PartStep.new(candidate, pattern, capture, from_abs, to_abs, to)
           recursed = true
 
           ctx.path << step
@@ -381,9 +382,26 @@ module Ww::Rack::Part
     forest.endpoints.each do |endpoint|
       leaf = endpoint.leaf_part
 
-      hg.replace!(leaf.node.id, Term.of(:cell, leaf.to.term, endpoint.value))
+      # Importantly, we use relative edge in node and absolute edge in hypergraph.
+      # Otherwise, neighbors that first (and/or only) look at the cell, will get
+      # confused; moreover, to_abs.term may even be out of scope where this `part`
+      # is located.
+      #
+      #   (module {@count: @count-renamed}
+      #     (cell @counter (counter 0))
+      #
+      #     ;; Correct replacement:
+      #     ;;   (cell @count 0)
+      #     ;; INCORRECT replacement:
+      #     ;;   (cell @count-renamed 0) ;; < count-renamed isn't even in the scope!!
+      #     (part (@counter @count) (counter ±count))
+      #
+      #     ;; Backsys only looks at @count and then resolves it.
+      #     (backsys @count ±n <> {n: ^(+ n 1)}))
+      #
+      hg.replace!(leaf.node.id, Term.of(:cell, leaf.to_rel, endpoint.value))
       hg.leave!(leaf.node.id, leaf.from)
-      hg.join!(leaf.node.id, leaf.to)
+      hg.join!(leaf.node.id, leaf.to_abs)
     end
 
     patch = fn.call(hg)
