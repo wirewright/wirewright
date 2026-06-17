@@ -213,23 +213,20 @@ module MuSoma
     plan = Plan.new
 
     # Plan: read
-    pass do
-      next unless Var.pending?({ws.state, :timeline})
+    #
+    # NOTE: Pausing applies to entangle read but NOT entangle write. We cannot "pause"
+    # the real world & its perturbations (we can, in terms of computation, but
+    # that won't make much sense); so the latest circuit absorbs changes even
+    # if it is paused. However while paused we prevent the circuit from affecting
+    # the real world.
+    Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ (%any . ...) draft_)}}) do
+      draft_tree = ws.parser.parse(draft)
 
-      # Pausing applies to entangle read but NOT entangle write. We cannot "pause"
-      # the real world & its perturbations (we can, in terms of computation, but
-      # that won't make much sense); so the latest circuit absorbs changes even
-      # if it is paused. However while paused we prevent the circuit from affecting
-      # the real world.
-      Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ (%any . ...) draft_)}}) do
-        draft_tree = ws.parser.parse(draft)
+      EntangleContinuation.entangle(ws, plan, *agents.entangle) do |sink|
+        D7.each_flat_feature_with_addr(draft_tree) do |feature, addr|
+          next unless feature.is_a?(D7::Gnd)
 
-        EntangleContinuation.entangle(ws, plan, *agents.entangle) do |sink|
-          D7.each_flat_feature_with_addr(draft_tree) do |feature, addr|
-            next unless feature.is_a?(D7::Gnd)
-
-            sink.call(feature.node, addr)
-          end
+          sink.call(feature.node, addr)
         end
       end
     end

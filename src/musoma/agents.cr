@@ -11,7 +11,7 @@ module MuSoma
     end
 
     def self.entangle(workspace, plan, agent, &fn : (Term, D7::NodeAddr ->) ->)
-      agent.entangle(workspace, plan, new(fn))
+      _ = agent.entangle?(workspace, plan, new(fn))
     end
 
     def self.entangle(workspace, plan, agent, *agents, &fn : (Term, D7::NodeAddr ->) ->)
@@ -25,7 +25,11 @@ module MuSoma
         end
       end
 
-      agent.entangle(workspace, plan, new(cont))
+      case agent.entangle?(workspace, plan, new(cont))
+      in true  # Executed the continuation
+      in false # Did not
+        entangle(workspace, plan, *agents, &fn)
+      end
     end
 
     def each_with_addr(&fn : Term, D7::NodeAddr ->)
@@ -597,7 +601,9 @@ module MuSoma
     def receive(ws, plan, msg) : Nil
     end
 
-    def entangle(ws : Workspace, plan, nodes) : Nil
+    def entangle?(ws : Workspace, plan, nodes) : Bool
+      return false unless Var.pending?({ws.state, :timeline})
+
       wants_refs = Set(ExtrinsicRef).new
       missing_refs = false
 
@@ -647,6 +653,8 @@ module MuSoma
       if missing_refs
         plan << UpdateRefs.new(ws.extrinsics)
       end
+
+      true
     end
   end
 
@@ -658,7 +666,9 @@ module MuSoma
     def receive(ws, plan, msg) : Nil
     end
 
-    def entangle(ws : Workspace, plan, nodes)
+    def entangle?(ws : Workspace, plan, nodes) : Bool
+      return false unless Var.pending?({ws.state, :timeline})
+
       writes = {} of NormalPath => Term::Blob | Term::Str
 
       nodes.each_with_addr do |node, _|
@@ -675,12 +685,14 @@ module MuSoma
         end
       end
 
-      return unless writes.present?
+      return true unless writes.present?
 
-      schedule(ws.msgq, writes)
+      schedule(ws.msgq, ws.alarm, writes)
+
+      true
     end
 
-    def schedule(msgq, writes)
+    def schedule(msgq, alarm, writes)
       writes.each do |path, content|
         spawn do
           content_ = content
@@ -691,7 +703,9 @@ module MuSoma
           end
 
           PathService.write(path, content_).wait
+
           msgq << WriteFinished.new(path, content)
+          alarm.call
         end
       end
     end
@@ -1005,7 +1019,9 @@ module MuSoma
       @exchange = InputExchange.new
     end
 
-    def entangle(ws : Workspace, plan, nodes) : Nil
+    def entangle?(ws : Workspace, plan, nodes) : Bool
+      return false unless Var.pending?({ws.state, :timeline})
+
       @exchange = InputExchange.new
 
       nodes.each_with_addr do |node, addr|
@@ -1027,6 +1043,8 @@ module MuSoma
           otherwise { }
         end
       end
+
+      true
     end
 
     def receive(ws : Workspace, plan, msg : MediaService::WindowDescriptionChanged)
@@ -1156,7 +1174,9 @@ module MuSoma
       @periods = Set(Time::Span).new
     end
 
-    def entangle(ws : Workspace, plan, nodes)
+    def entangle?(ws : Workspace, plan, nodes) : Bool
+      return false unless Var.pending?({ws.state, :timeline})
+
       seen = Set(Time::Span).new
 
       nodes.each_with_addr do |node, _|
@@ -1187,6 +1207,8 @@ module MuSoma
       end
 
       @periods = seen
+
+      true
     end
   end
 
