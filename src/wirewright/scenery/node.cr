@@ -540,7 +540,8 @@ module Ww::Scenery
 
   defcase ZStack(Node),
     children : Slice(Node),
-    info : ZInfo?
+    info : ZInfo?,
+    caches_hash: true
 
   class ZStack(Node)
     # Constructs an _anon_ymous z-stack.

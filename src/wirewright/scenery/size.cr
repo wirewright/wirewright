@@ -336,8 +336,6 @@ module Ww::Scenery
   end
 
   private def min_size(cache, nodes : Slice(ShapedNode)) : Point
-    assert nodes.present?
-
     nodes.reduce(Point[0, 0]) do |memo, node|
       Point.max(memo, min_size(cache, node))
     end
@@ -421,11 +419,11 @@ module Ww::Scenery
       cst = Cst.new(cst.min_w, cst.max_w, 0, Magnitude::INFINITY)
     end
 
-    box_size(cache, ZStack.new(node.children, info: nil), cst)
+    box_size(cache, ZStack.anon(node.children), cst)
   end
 
   private def size!(cache, node : Floating, cst : Cst) : {SizedNode, Size}
-    z_out, size = box_size(cache, ZStack.new(node.children, info: nil), cst)
+    z_out, size = box_size(cache, ZStack.anon(node.children), cst)
 
     if node.x
       size = size.copy_with(outer: Point[0, size.outer.y])
@@ -503,11 +501,11 @@ module Ww::Scenery
 
     child_cst = Cst.new(child_min_w, child_max_w, child_min_h, child_max_h)
 
-    box_size(cache, ZStack.new(node.children, info: nil), child_cst)
+    box_size(cache, ZStack.anon(node.children), child_cst)
   end
 
   private def size!(cache, node : Clamp, cst : Cst) : {SizedNode, Size}
-    z_in = ZStack.new(node.children, info: nil)
+    z_in = ZStack.anon(node.children)
     z_out, size = box_size(cache, z_in, cst)
 
     w = size.outer.x
@@ -573,7 +571,7 @@ module Ww::Scenery
     sized_node, size = box_size(cache, node, child_cst)
 
     if node.justify && (size.inner.x > cst.max_w || size.inner.y > cst.max_h)
-      return size!(cache, ZStack.new(node.children, info: nil), cst)
+      return size!(cache, ZStack.anon(node.children), cst)
     end
 
     {sized_node, Size.expand(size.inner, cst, size.children)}
