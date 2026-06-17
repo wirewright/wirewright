@@ -141,6 +141,12 @@ module MuSoma
             D7.parent(node.as_d, 2u32...node.uitemsize)
           end
 
+          matchpi %{[frag @_ _]} do
+            continue if feature.is_a?(D7::Inert)
+
+            D7.parent(node.as_d, 2u32...node.uitemsize)
+          end
+
           matchpi %{(section _string _* ⍊ open)} do
             continue if feature.is_a?(D7::Inert)
 
