@@ -433,18 +433,24 @@ module Ww::D7
         return Patch.new
       end
 
+      # Workaround: We'd actually want to sort proposals below but unfortunately
+      # that causes a SEGFAULT which seems related to some sort of codegen/ABI bug.
+      solns.sort!
+
       # TODO: In the future we'll have long computations emit a Sync::Future or
-      # something along those lines (pun not intended!) This would move them onto
-      # another fiber, and we'll be able to process more solutions concurrently
-      # in the meantime. This is where the "scheduler" should go.
-      proposals = solns.compact_map do |soln|
+      # something along those lines. This would move them onto another fiber,
+      # and we'll be able to process more solutions concurrently in the meantime.
+      # This is where the "scheduler" should go.
+      proposals = [] of {Soln, Patch}
+
+      solns.each do |soln|
         next unless proposal = fn.call(soln.match_table, soln.query_index)
 
         assert proposal.size <= soln.degree,
           "size of proposal exceeds the number of node participants \
            (#{proposal.size} > #{soln.degree} participants)"
 
-        {soln, proposal.as(Patch)} # (cast, otherwise Crystal crashes with a compiler bug!)
+        proposals << {soln, proposal}
       end
 
       merge(hg, proposals)
@@ -454,8 +460,6 @@ module Ww::D7
       if proposals.empty?
         return Patch.new
       end
-
-      proposals.sort_by! { |soln, _| soln }
 
       # A table from node id to replacement proposals for that node along
       # with proposal index (used for ranking).
