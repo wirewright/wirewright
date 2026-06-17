@@ -1238,6 +1238,18 @@ vantage: ""
 (for bg-box
   (property µ-bg as: fill))
 
+(for transform-box
+  (property µ-dl as: dl))
+
+(for transform-box
+  (property µ-dt as: dt))
+
+(for limit-box
+  (property µ-w as: max-w))
+
+(for limit-box
+  (property µ-h as: max-h))
+
 (for root-box
   (property µ-cursor as: cursor))
 
