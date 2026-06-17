@@ -1,10 +1,15 @@
 module MuSoma
-  alias Msg = MediaService::WindowDescriptionChanged | ReloadRefs | WriteFinished | MuSoma::Scheduler::Event
-  alias Plan = Set(MuSoma::Perturbation)
+  alias Msg = MediaService::WindowDescriptionChanged | ReloadRefs | WriteFinished | Scheduler::Event | DatabaseTaskCompleted
+  alias Plan = Set(Perturbation)
 
   defrecord ReloadRefs
+
+  # Emitted for each term in state's `requests: (_*)`.
   defrecord AppRequest, term : Term
+
   defrecord WriteFinished, path : NormalPath, content : Term::Blob | Term::Str
+
+  defrecord DatabaseTaskCompleted, task : DatabaseAgent::Task, result : Term
 
   struct EntangleContinuation
     def initialize(@cont : (Term, D7::NodeAddr ->) ->)
@@ -808,10 +813,15 @@ module MuSoma
     end
 
     # NOTE: Assumes the caller will deduplicate consecutive frames.
-    def step(circuit : Term, prepass) : Slice(Term)
+    def step(clf : D7::Classifier, circuit : Term, prepass, steppers : Tuple) : Slice(Term)
       @cache.epoch do
-        subframes = Rack::Tspace.step(MuSoma.clf, circuit, prepass, cache: @cache)
-        subframes += Rack.step(MuSoma.clf, subframes.last, prepass, cache: @cache)
+        subframes = Slice(Term).empty
+
+        steppers.each do |stepper|
+          subframes += stepper.step(clf, circuit, prepass, cache: @cache)
+          circuit = subframes.last
+        end
+
         subframes
       end
     end
@@ -909,7 +919,7 @@ module MuSoma
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
             prepass = FigurePrepass.new(@vantages, successor: Rack::Prepass)
 
-            drafts1 = ws.parser.step(draft, prepass)
+            drafts1 = ws.parser.step(MuSoma.clf, draft, prepass, steppers: {Rack::Tspace, Rack})
             draft1 = drafts1.last
 
             status1 = status
@@ -1303,6 +1313,204 @@ module MuSoma
 
     private def sync(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
       ws.console.send(ErrLog.new("MuSoma codex on disk is absent, running from memory..."))
+    end
+  end
+
+  class DatabaseAgent
+    alias Stmt = Exec | Query
+
+    defrecord Exec, sql : String, args : Slice(DB::Any)
+    defrecord Query, sql : String, args : Slice(DB::Any)
+
+    def self.stmt?(query : Term) : Stmt?
+      Term.case(query) do
+        matchpi %{(exec sql_string rest_*)}, sql: String do
+          Exec.new(sql, transcribe(rest.items))
+        end
+
+        matchpi %{(query sql_string rest_*)}, sql: String do
+          Query.new(sql, transcribe(rest.items))
+        end
+
+        otherwise { }
+      end
+    end
+
+    def self.transcribe(terms : Enumerable(Term)) : Slice(DB::Any)
+      terms.to_readonly_slice { |term| transcribe(term) }
+    end
+
+    # Converts `Term` to `DB::Any`.
+    def self.transcribe(term : Term) : DB::Any
+      result = Term.case(term) do
+        matchpi %{_string} { term.to(String) }
+        matchpi %{_boolean} { term.to(Bool) }
+        matchpi %{(%number i32)} { term.to(Int32) }
+        matchpi %{(%number i64)} { term.to(Int64) }
+
+        matchpi %{_number} do
+          n = term.as_n
+          continue unless n.approx?
+
+          # There's little point going through Float64 as well because we store
+          # approx as Float32 so there's no more "precision" or anything to gain.
+          n.to(Float32)
+        end
+
+        matchpi %{_blob} do
+          term.as_blob.to_slice
+        end
+
+        otherwise do
+          ML.compact(term) # Fallback
+        end
+      end
+
+      result.as(DB::Any)
+    end
+
+    def self.transcribe?(object : DB::Any) : Term?
+      # Term.of handles all members of DB::Any.
+      Term.of(object)
+    end
+
+    defrecord Task, uri : String, stmt : Stmt
+
+    def initialize
+      @dbs = {} of String => DB::Database
+      @running = Set(Task).new
+      @running_lock = Sync::Mutex.new
+      @pending = true
+    end
+
+    def entangle?(ws : Workspace, plan : Plan, nodes) : Bool
+      return false unless @pending || Var.pending?({ws.state, :timeline})
+
+      seen_uris = Set(String).new
+      seen_stmts = Set(Task).new
+
+      nodes.each_with_addr do |node, addr|
+        Term.case(node) do
+          # This one simply asks us to keep the connection open.
+          matchpi %{[db uri_string]}, uri: String do
+            seen_uris << uri
+          end
+
+          # This one asks us to keep the connection but also, simultaneously, to
+          # execute the given *stmt* on the connection.
+          matchpi %{[db (uri_string stmtQ_)]}, uri: String do
+            seen_uris << uri
+            next unless stmt = DatabaseAgent.stmt?(stmtQ)
+
+            seen_stmts << Task.new(uri, stmt)
+          end
+
+          otherwise { }
+        end
+
+        node
+      end
+
+      # Disconnect from discarded uris.
+      @dbs.select! do |uri, db|
+        if uri.in?(seen_uris)
+          next true # keep
+        end
+
+        db.close
+
+        ws.console.send(InfoLog.new("Closed database #{uri}"))
+
+        false # reject
+      end
+
+      # Connect to new uris.
+      seen_uris.each do |uri|
+        next if @dbs.has_key?(uri)
+
+        @dbs[uri] = DB.open(uri)
+        @pending = true
+
+        ws.console.send(InfoLog.new("Opened database #{uri}"))
+      end
+
+      added = @running_lock.synchronize do
+        running0 = @running
+        running1 = seen_stmts
+        # This discards in-progress statements/fibers that were dropped in
+        # the current cycle. We rely on periodic polling from those fibers
+        # so that they know when to cancel themselves.
+        @running = running1
+
+        running1 - running0
+      end
+
+      # Schedule new statements.
+      added.each do |task|
+        next unless db = @dbs[task.uri]?
+
+        schedule(ws, db, task)
+      end
+
+      true
+    end
+
+    # :nodoc:
+    class Canceled < Exception
+      @callstack = CallStack.empty
+    end
+
+    private def schedule(ws : Workspace, db : DB::Database, task : Task)
+      spawn(name: "MuSoma database retriever") do
+        db.using_connection do |connection|
+          result = run(connection, task)
+          ws.msgq << DatabaseTaskCompleted.new(task, result)
+          ws.alarm.call
+        end
+      rescue Canceled
+        # Do nothing.
+      rescue e : DB::Error | SQLite3::Exception
+        ws.msgq << DatabaseTaskCompleted.new(task, Term.of(:err, e.message))
+        ws.alarm.call
+      end
+    end
+
+    private def run(connection : DB::Connection, task : Task) : Term
+      case stmt = task.stmt
+      in Exec
+        result = connection.exec(stmt.sql, args: stmt.args)
+
+        Term.of(:ok, result.rows_affected)
+      in Query
+        rows = Term::Dict.build do |results_commit|
+          connection.query(stmt.sql, args: stmt.args) do |rs|
+            rs.each do
+              unless @running_lock.synchronize { task.in?(@running) }
+                raise Canceled.new
+              end
+
+              result = Term::Dict.build do |result_commit|
+                (0...rs.column_count).each do |index|
+                  key = Term.of(rs.column_name(index))
+                  value = DatabaseAgent.transcribe?(rs.read)
+                  result_commit.with(key, value)
+                end
+              end
+
+              results_commit << result
+            end
+          end
+        end
+
+        Term.of(rows)
+      end
+    end
+
+    def receive(ws, plan, msg : DatabaseTaskCompleted) : Nil
+      plan << msg
+    end
+
+    def receive(ws, plan, msg : Msg) : Nil
     end
   end
 end

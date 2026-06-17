@@ -1,0 +1,88 @@
+(Contact name_string age_number)
+  => (module {:@msg}
+       (group style: "flow-row gap-2 p-2 bg-theme-surface text-theme-text content-y rounded-lg"
+         (group style: "fr-1 gap-1 item-center-y flow-row"
+           (icon "person")
+           (p style: "text-base/6 font-medium fr-1 flow-wrap gap-1"
+             ^name
+             (span style: "text-xs leading-none bottom text-theme-subtle"
+               ^\age)))
+         (slot (Button (@msg (delete ^name)) "Delete"))))
+
+(ContactList ())
+  => (p "No contacts ..." style: "content-center text-theme-muted")
+
+(ContactList rows_dict)
+  => (group style: "flow-col gap-1 content-y clip"
+       (^each (rows as {¦ "name": name_string, "age": ±age})
+         (slot (Contact ^name ^age))))
+
+(window title: "MuBook"
+        style: "bg-theme-base"
+        height: 800
+  (comment
+    "TODO: I'm not yet sure how to deal with repeated suspenses here, and \
+     in general with the need for them. Ideally we should be able to do some \
+     kind of \"symbolic double-buffering\", keeping the old stuff on screen \
+     while the new one is being built.")
+  (suspense
+    (p style: "center text-theme-muted"
+      "Loading...")
+    (group style: "flow-col p-3 gap-3"
+      (p "Do not forget to go to Grab mode first by pressing `h`" style: "text-sm text-theme-info-fg")
+      (group style: "flow-col gap-2"
+        (cell @name ("" ""))
+        (cell @age ("" ""))
+        (slot (Input @name label: "Name" placeholder: "John Doe"))
+        (slot (Input @age label: "Age" placeholder: "25"))
+        (frag @err)
+        (slot (Button (@msg insert) "Insert")))
+      (rect style: "max-h-1px bg-min-none bg-theme-highlight-med")
+      (group style: "fr-1"
+        (p "Contacts" style: "font-condensed text-theme-text upcase")
+        (group style: "fr-1 flow-none bg-transparent"
+          (suspense
+            (p style: "center text-theme-muted"
+              "Loading...")
+            (frag @contacts)))
+        (slot (Button (@msg refresh) "Refresh"))))))
+
+(comment
+  "Here we're using a kind of \"centralized\", intrinsically backpressured and \
+   synchronous architecture. So there's only one db node. And since all buttons \
+   report to @msg, you can't press buttons while it is occupied. This is what I \
+   mean by backpressure here. It is possible to decentralize everything by putting `db` \
+   nodes in every Button or component or anything else at all; it's just that \
+   here we chose not to. As they say, this is a matter of art.")
+
+(cell @msg initialize)
+
+(comment
+  "NOTE: We're ignoring several error states here and discarding others. \
+   This isn't the best ever way to do things but it works for a demo just fine.")
+(backsys {@:msg @:query @:response @:name @:age @:contacts @:err}
+  {¦ msg: initialize -query_ -response}
+    <> {query: (exec "create table if not exists contacts (name text, age int) strict")}
+  {¦ msg_: initialize -query response_: (ok _)}
+    <> {msg: refresh, (response): ()}
+  {¦ msg: refresh -query_ -response}
+    <> {query: (query "select name, age from contacts")}
+  {¦ msg_: refresh -query response_: (_*) ⋮contacts}
+    <> {(msg): (), (response): (), contacts: (slot (ContactList ^response))}
+  {¦ msg: insert -query_ -response name: (name-l_string name-r_string), age: (age-l_string age-r_string)}
+    <> {query: (exec "insert into contacts values (?, ?)" ^(~ name-l name-r) ^(~ age-l age-r))}
+  {¦ msg_: insert -query response_: (ok _) name_ age_ ⋮err}
+    <> {msg: refresh, (response): (), name: ("" ""), age: ("" ""), (err): ()}
+  {¦ msg_: insert -query response_: [err detail_string] ⋮err}
+    <> {(msg): (), (response): (), err: (p ^detail style: "text-theme-attention-fg")}
+  {¦ msg: (delete name_string) -query_ -response_}
+    <> {query: (exec "delete from contacts where name = ?" ^name)}
+  {¦ msg_: (delete _) -query response_}
+    <> {msg: refresh, (response): ()})
+
+(comment "This is the SQLite connection we'll be using.")
+(db "sqlite3:/tmp/mubook.db"
+  (stmt @query)
+  (result @response))
+
+((I modify: true structural: true multiline: true compose: true) ("" * "") 0)

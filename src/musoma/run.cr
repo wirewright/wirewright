@@ -130,6 +130,7 @@ module MuSoma
       @mouse : MouseAgent,
       @keyboard : KeyboardAgent,
       @scheduler : SchedulerAgent,
+      @database : DatabaseAgent,
     )
     end
 
@@ -160,7 +161,7 @@ module MuSoma
 
     def entangle
       # In no particular order.
-      {@extrinsics, @write, @keyboard, @scheduler}
+      {@extrinsics, @write, @keyboard, @scheduler, @database}
     end
 
     def receive(workspace : Workspace, request : AppRequest) : Nil
@@ -177,6 +178,7 @@ module MuSoma
       @circuit.receive(workspace, plan, msg)
       @mouse.receive(workspace, plan, msg)
       @keyboard.receive(workspace, plan, msg)
+      @database.receive(workspace, plan, msg)
     end
 
     def step(ws : Workspace) : Nil
@@ -368,6 +370,7 @@ module MuSoma
       mouse: MouseAgent.new,
       keyboard: KeyboardAgent.new,
       scheduler: SchedulerAgent.new,
+      database: DatabaseAgent.new,
     )
 
     agents.boot(ws)

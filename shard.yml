@@ -17,6 +17,9 @@ dependencies:
   sdl:
     github: ysbaddaden/sdl.cr
     commit: 5a22270
+  sqlite3:
+    github: crystal-lang/crystal-sqlite3
+
 # dependencies:
 #   pg:
 #     github: will/crystal-pg

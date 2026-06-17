@@ -1,5 +1,9 @@
 version: 2.0
 shards:
+  db:
+    git: https://github.com/crystal-lang/crystal-db.git
+    version: 0.14.0
+
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
     version: 0.13.2
@@ -11,4 +15,8 @@ shards:
   sdl-crystal-bindings:
     git: https://github.com/hadeweka/sdl-crystal-bindings.git
     version: 0.5.0+git.commit.57b2139692d6d9b674247d3c9f032c6a3d37a3cf
+
+  sqlite3:
+    git: https://github.com/crystal-lang/crystal-sqlite3.git
+    version: 0.23.0
 

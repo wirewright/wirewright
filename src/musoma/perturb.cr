@@ -5,7 +5,7 @@ module MuSoma
   alias Perturbation = GlobalPerturbation | TargetedPerturbation
 
   # Global perturbations do target any node in particular.
-  alias GlobalPerturbation = UpdateMice | UpdateRefs | FinishWrites | Scheduler::Event
+  alias GlobalPerturbation = UpdateMice | UpdateRefs | FinishWrites | Scheduler::Event | DatabaseTaskCompleted
 
   # Targeted perturbations target a specific node, identified by its `addr`.
   alias TargetedPerturbation = UpdateInput
@@ -37,6 +37,8 @@ module MuSoma
       node
     end
   end
+
+  # TODO: These should probably belong to agents!!!
 
   private def perturb(node : Term, action : UpdateKeyboardState) : Term
     head, *_ = node.items
@@ -214,5 +216,20 @@ module MuSoma
 
   private def perturb(node : Term, action : Scheduler::Expire) : Term
     node
+  end
+
+  private def perturb(node : Term, action : DatabaseTaskCompleted) : Term
+    Term.case(node) do
+      matchpi %{[db (uri_string stmtQ_)]}, uri: String do
+        continue unless stmt = DatabaseAgent.stmt?(stmtQ)
+
+        task = DatabaseAgent::Task.new(uri, stmt)
+        continue unless task == action.task
+
+        Term.morph(node, {2, action.result})
+      end
+
+      otherwise { node }
+    end
   end
 end
