@@ -305,14 +305,20 @@ module Ww
     end
 
     # *Exhaustive rewriter*. See `rho.exhR`.
-    def exhR(successor : Rewriter) : Rewriter
-      infinite do |attachments, input|
-        exhR(successor, attachments, input)
+    def exhR(successor : Rewriter, *, limit : UInt32 = UInt32::MAX) : Rewriter
+      if limit == UInt32::MAX # ?!
+        infinite do |attachments, input|
+          exhR(successor, attachments, input, limit)
+        end
+      else
+        finite do |attachments, input|
+          exhR(successor, attachments, input, limit)
+        end
       end
     end
 
-    private def exhR(successor, attachments, input : Term)
-      loop do
+    private def exhR(successor, attachments, input : Term, limit : UInt32)
+      limit.times do |epoch|
         rep = successor.call(input, attachments.cache)
         if rep.empty?
           return rep
@@ -328,11 +334,13 @@ module Ww
         end
 
         output = Term.flatten(rep) do |offspring|
-          exhR(successor, attachments, offspring)
+          exhR(successor, attachments, offspring, limit - epoch)
         end
 
         return output
       end
+
+      Term.rep(input) # E.g. if limit: 0 due to `limit - epoch` above.
     end
 
     # *Chain rewriter*: see `rho.chainR`.
@@ -499,15 +507,28 @@ module Ww
         # |@ rho.exhR
         #
         # |@pattern
-        # [exhR successor_]
+        # (exhR successor_ ⍊ ⋮limit)
         #
         # |@key successor rho
         #
+        # |@key limit
+        # Sets the maximum number of cycles. If set, exhR becomes a finite rewriter.
+        # Minimum: 1. Maximum: 32 (inclusive).
+        #
         # |@block
-        # Converts a finite or infinite rewriter to an infinite rewriter: rewrites
-        # using *successor* until fixed point.
+        # Rewrites using *successor* until fixed point or until *limit* is exceeded.
+        # Effectively, unless *limit* is set, converts a finite or infinite rewriter
+        # to an infinite rewriter.
         matchpi %{[exhR successor_]} do
-          exhR(rewriter(successor, data))
+          limit = pass do
+            next unless candidate = spec[:limit]?
+            next unless candidate = candidate.index32?
+            next unless 1 <= candidate <= 32
+
+            candidate
+          end
+
+          exhR(rewriter(successor, data), limit: limit || UInt32::MAX)
         end
 
         # |@ rho.ascR
