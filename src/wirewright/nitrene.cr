@@ -788,6 +788,11 @@ module Ww::Nitrene
         Term.of(arg.round)
       end
 
+      matchpiT %{(finite arg_ or: alt_)} do
+        a = arith?(arg)
+        a.is_a?(ArithConst) ? arg : alt
+      end
+
       matchpiT %{(exact ±arg)} do
         Term.of(Term::Num.exact(arg))
       end

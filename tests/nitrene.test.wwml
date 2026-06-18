@@ -164,6 +164,18 @@
 
 ;; round
 
+;; finite or: _
+(group
+  (ni= (finite 0 or: infinite) 0)
+  (ni= (finite 100 or: infinite) 100)
+  (ni= (finite ≈1.23 or: infinite) ≈1.23)
+  (ni= (finite ∞ or: infinite) infinite)
+  (ni= (finite -∞ or: infinite) infinite)
+  (ni= (finite indet or: infinite) infinite)
+  (ni= (finite qux or: infinite) infinite)
+  (ni= (finite "hello world" or: infinite) infinite))
+  ;; TODO: approx NaN, -Infinity, Infinity.
+
 ;; exact
 
 ;; approx
