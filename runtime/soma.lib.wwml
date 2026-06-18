@@ -419,14 +419,15 @@
 ;; |@block
 ;; Implements a basic vertical scrollbar. Uses stock styling, which is customizable
 ;; via *track-style* and *thumb-style*.
-(YScrollbar @thumb-dt_ @thumb-h_ @track-h_ ⍊ track-style⋮ "" thumb-style⋮ "")
-  => (component {@:thumb-dt @:thumb-h @:track-h}
+(YScrollbar @thumb-dt_ @thumb-h_ @track-h_ @show_ ⍊ track-style⋮ "" thumb-style⋮ "")
+  => (component {@:thumb-dt @:thumb-h @:track-h @:show}
        (comment "Give outside world (and ourselves!) direct access to parts of the figure below.")
        (part (@view @thumb-dt) [track [thumb-container (thumb _ ⍊ µ-dt: ±thumb-dt)]])
        (part (@view @thumb-h) [track [thumb-container (thumb _ ⍊ µ-h: ±thumb-h)]])
        (part (@desc @track-h) ⟪(thumb-container _ ⍊ h: ±track-h)⟫)
        (part (@desc @thumb-hover) ⟪(thumb _ ⍊ hit-hover: thumb-hover_)⟫)
        (part (@desc @track-goal) [figure (track _ ⍊ hit-hover hit-focus-t: ±track-goal)])
+       (part (@view @show) {¦ show_})
        (part (@desc @scroll-hover) [figure (track _ ⍊ hit-hover: scroll-hover_)])
 
        (comment
@@ -437,8 +438,9 @@
           thumb-container's height instead of track's for track-h.")
        (figure {@:desc, node: @view}
          (template
-           (track style: ^"flow-none bg-transparent bg-min-none content-x membrane hover:cue-hover \
-                           active:cue-active ⸢track-style⸣"
+           (track style: ^"transparent show:opaque flow-none bg-transparent bg-min-none \
+                           content-x membrane hover:cue-hover active:cue-active ⸢track-style⸣"
+                  show: false
              (thumb-container style: ""
                (thumb style: "" µ-dt: 0 µ-h: 0
                  (box style: ^"bg-theme-highlight-med bg-min-none max-w-1 rounded-full in-hover:bg-theme-subtle \
@@ -503,3 +505,83 @@
          ;; The clamp rules take care of the nasty stuff.
          {¦ view: {¦ track-hover} ±track-goal mouse: [mouse B←left] ±thumb-dt ±thumb-h}
            <> {(B): (), thumb-dt: ^(- track-goal (/ thumb-h 2))}))
+
+(Scroll (bar @thumb-offset_ @thumb-size_ @track-size_ @show_)
+        (view @view-scroll_ @view-offset_ @view-size_ @view-hover_ @content-size_)
+        (axis axis←(%any x y)))
+  => (component {@:content-size @:thumb-offset @:thumb-size @:track-size @:show @:view-hover @:view-scroll @:view-size @:view-offset}
+       (template
+         (cell @axis ^axis))
+
+       (comment
+         "Scroll is interested in the mouse (for mouse wheel) and the keyboard. If the axis \
+          is X, then we need the keyboard to detect Shift + scroll. If the axis, \
+          is Y, then we need it to detect PageUp and PageDn.")
+       (node @mouse (mouse))
+       (node @input (input))
+
+       (cell @ref-offset)
+
+       (comment
+         "The rewriter below works just like the one in YScrollbar. We do a capped exhR \
+          for the same reason; instead of having more complex rules but less rewrite ticks, \
+          have simpler rules but more rewrite ticks. It's a trade-off seen all throughout \
+          Wirewright's rewrite part, including the very D7/Rack design itself.")
+       (rewriter ((exhR (rulesetR exh: true) limit: 3)
+                   <-> {@:show @:axis @:content-size @:input @:mouse @:thumb-offset
+                        @:thumb-size @:track-size @:view-hover @:view-scroll
+                        @:view-size @:view-offset @:ref-offset})
+           ;; Detect changes to view offset: empty -> nonempty.
+           {¦ ±view-offset -ref-offset_}
+             <> {ref-offset: (changed ^view-offset)}
+           ;; Detect changes to view offset: nonempty -> nonempty.
+           {¦ ±view-offset ±ref-offset}
+             <> {ref-offset: (^br (= view-offset ref-offset) ^ref-offset (changed ^view-offset))}
+           ;; When view offset changes, recalculate thumb-offset accordingly.
+           ;; This handles aims within the viewport, which now also affect
+           ;; the scrollbar.
+           {¦ ref-offset_: (changed ±offset) ±content-size ±view-size ±track-size ±thumb-size ±thumb-offset}
+             <> {ref-offset: ^offset, thumb-offset: ^(* (/ offset (- content-size view-size)) (- track-size thumb-size))}
+           ;; Keep thumb height in sync.
+           {¦ ±thumb-size ±track-size ±view-size ±content-size}
+             <> {thumb-size: ^(min track-size (* track-size (finite (/ view-size content-size) or: 0)))}
+           ;; Keep thumb-offset in bounds.
+           {¦ ±thumb-offset ±thumb-size ±track-size show_}
+             <> {thumb-offset: ^(max 0 (min thumb-offset (- track-size thumb-size))),
+                 show: ^(-> (- thumb-size track-size) (abs _) (>= _ 1))}
+           ;; Synchronize thumb-offset with viewport offset.
+           {¦ ±view-scroll ±view-size ±content-size ±thumb-offset ±track-size ±thumb-size}
+             <> {view-scroll: ^(finite or: 0 (round (* (/ thumb-offset (- track-size thumb-size)) (- content-size view-size))))}
+           ;; Scroll up over viewport.
+           {¦ axis: y view-hover mouse: [mouse B←scroll-up] ±thumb-offset}
+             <> {(B): (), thumb-offset: ^(- thumb-offset 10)}
+           ;; Scroll down over viewport.
+           {¦ axis: y view-hover mouse: [mouse B←scroll-dn] ±thumb-offset}
+             <> {(B): (), thumb-offset: ^(+ thumb-offset 10)}
+           ;; Page up over viewport.
+           {¦ axis: y input: ⟨K←(key pgup)⟩ ±thumb-offset ±thumb-size}
+             <> {(K): (), thumb-offset: ^(- thumb-offset thumb-size)}
+           ;; Page down over viewport.
+           {¦ axis: y input: ⟨K←(key pgdn)⟩ ±thumb-offset ±thumb-size}
+             <> {(K): (), thumb-offset: ^(+ thumb-offset thumb-size)}
+           ;; Activate input when hovered.
+           {¦ view-hover input: (input ⍊ -focus_)}
+             <> {focus: always}
+           ;; Deactivate input on unhover.
+           {¦ -view-hover input: (input _* ⍊ focus_)}
+             <> {(focus): ()}))
+
+;; FIXME: We should use (inline _) instead of (slot _) here probably ... There's absolutely
+;; no need for a slot here, nor in button and input above for that matter!
+(Scroll (bar @thumb-offset_ @thumb-size_ @track-size_ @show_) (view @desc_ @node_) (axis y))
+  => (component {@:desc @:node @:show @:thumb-offset @:thumb-size @:track-size}
+       (part (@node @view-scroll) {¦ page-y: (±view-scroll px)})
+       (part (@desc @view-size) [figure {¦ h: ±view-size}])
+       (part (@desc @view-offset) [figure {¦ offset-y: ±view-offset}])
+       (part (@desc @view-hover) [figure {¦ hit-hover: view-hover_}])
+       (part (@desc @content-size) [figure {¦ content-h: ±content-size}])
+       (slot
+         (Scroll
+           (bar @thumb-offset @thumb-size @track-size @show)
+           (view @view-scroll @view-offset @view-size @view-hover @content-size)
+           (axis y))))
