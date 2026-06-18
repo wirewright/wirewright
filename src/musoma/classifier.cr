@@ -33,7 +33,9 @@ module MuSoma
           D7.parent(node.as_d, 2u32...node.uitemsize)
         end
 
-        matchpi %{[figure {¦ @desc_ node: @view_} body_]} do
+        matchpi %{[figure {¦ @desc_ node: @view_} _?]} do
+          body = node[2]?
+
           defn = Term.of(:group,
             {:figure, desc},
             {:node, view, body})
