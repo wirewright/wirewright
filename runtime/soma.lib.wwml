@@ -393,3 +393,87 @@
                 value: true
                "")))
          ^… props))
+
+;; |@ musoma.y-scrollbar
+;;
+;; |@pattern
+;; (YScrollbar @thumb-dt_ @thumb-h_ @track-h_ ⍊ track-style⋮ "" thumb-style⋮ "")
+;;
+;; |@key thumb-dt
+;; Edge for reading and writing _d_elta _t_op of the thumb within the track (pixels).
+;;
+;; |@key thumb-h
+;; Edge for reading and writing the height of the thumb (pixels).
+;;
+;; |@key track-h
+;; Edge for reading the height of the track (pixels).
+;;
+;; |@key track-style
+;; Microfold styles to append to the track. Use this to customize the appearance
+;; of the track.
+;;
+;; |@key thumb-style
+;; Microfold styles to append to the thumb. Use this to customize the appearance
+;; of the thumb.
+;;
+;; |@block
+;; Implements a basic vertical scrollbar. Uses stock styling, which is customizable
+;; via *track-style* and *thumb-style*.
+(YScrollbar @thumb-dt_ @thumb-h_ @track-h_ ⍊ track-style⋮ "" thumb-style⋮ "")
+  => (component {@:thumb-dt @:thumb-h @:track-h}
+       (comment "Give outside world direct access to things in the figure below.")
+       (part (@view @thumb-dt) [track [thumb-container (thumb _ ⍊ µ-dt: ±thumb-dt)]])
+       (part (@view @thumb-h) [track [thumb-container (thumb _ ⍊ µ-h: ±thumb-h)]])
+       (part (@desc @track-h) ⟪(thumb-container _ ⍊ h: ±track-h)⟫)
+       (part (@desc @thumb-hover) ⟪(thumb _ ⍊ hit-hover: thumb-hover_)⟫)
+
+       (comment
+         "Define the visual appearance for the scrollbar. Notice how we have \
+          a dedicated thumb-container instead of just using track's height. This \
+          is because track-style can include things like padding that do not affect \
+          track's own height but do restrict thumb's max height. Therefore, we use \
+          thumb-container's height instead of track's for track-h.")
+       (figure {@:desc, node: @view}
+         (template
+           (track style: ^"flow-none bg-transparent bg-min-none content-x membrane hover:cue-hover \
+                           active:cue-active ⸢track-style⸣"
+             (thumb-container style: ""
+               (thumb style: "" µ-dt: 0 µ-h: 0
+                 (box style: ^"bg-theme-highlight-med bg-min-none max-w-1 rounded-full in-hover:bg-theme-subtle \
+                               in-active:bg-theme-text ⸢thumb-style⸣"))))))
+
+       (comment
+         "The scrollbar is interested in the mouse because (at the moment) only \
+          the mouse can control it.")
+       (node @mouse (mouse))
+
+       (comment
+         "The backsystem below controls the behavior of the scrollbar. Notice how it \
+          is a severely capped exhR. But even with limit: 3 there's a lot of opportunities \
+          for the rules to apply. exhR is needed here to make sure we do the clamps during \
+          just one tick; we can't spread it over multiple ticks due to UX concerns.")
+       (rewriter ((exhR (rulesetR exh: true) limit: 3) <-> {@:mouse @:thumb-hover @:thumb-dt @:thumb-h @:track-h @:view})
+         ;; Sync visual hover with logical hover: hover.
+         {¦ thumb-hover view: {¦ -hover_}} <> {hover: true}
+         ;; Sync visual hover with logical hover: unhover.
+         {¦ -thumb-hover view: {¦ hover_}} <> {(hover): ()}
+         ;; When you do mouse left over the thumb, ask mouse for focus coords
+         ;; and mark view as active.
+         {¦ view: {¦ hover -active_} mouse: (mouse left ⍊ -focus_)}
+           <> {active: true, focus: ?}
+         ;; When you release mouse left we reset the mouse the easy way and
+         ;; unmark active.
+         {¦ mouse_: [mouse] view: {¦ active_}}
+           <> {mouse: (mouse), (active): ()}
+         ;; When mouse gets focus coords define ref-y (reference Y).
+         {¦ mouse: (mouse left ⍊ -ref-y_ -ref-dt_ focus: {¦ ±y}) ±thumb-dt}
+           <> {ref-y: ^y, ref-dt: ^thumb-dt}
+         ;; Maintain thumb-dt in bounds.
+         {¦ ±thumb-dt ±thumb-h ±track-h}
+           <> {thumb-dt: ^(max 0 (min thumb-dt (- track-h thumb-h)))}
+         ;; Maintain ref-dt in bounds.
+         {¦ mouse: {¦ ±ref-dt} ±thumb-h ±track-h}
+           <> {ref-dt: ^(max 0 (min ref-dt (- track-h thumb-h)))}
+         ;; Update thumb-dt according to ref-y.
+         {¦ mouse: (mouse left ⍊ ±ref-y ±ref-dt focus: {¦ ±y}) ±thumb-dt}
+           <> {thumb-dt: ^(+ ref-dt (- y ref-y))}))
