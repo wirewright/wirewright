@@ -1097,6 +1097,7 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 
 --- initial-state
 
+;; Set to `true` while the circuit is loading.
 circuit-loading: true
 
 ;; Window size.

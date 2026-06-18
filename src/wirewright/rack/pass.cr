@@ -12,6 +12,21 @@ module Ww::Rack
     end
   end
 
+  # TODO: In theory, we can actually avoid D7.case and this weird DSL,
+  # and write all rules manually (i.e., explore the hypergraph manually).
+  # Provided we have lots of helpers this should turn out to be much more
+  # performant, readable, and also a huge lot more flexible; we can still
+  # use hub-spokes (which D7.case forces) but occasionally conduct arbitrary
+  # searches. This would be very useful to simplify the implementation of `part`.
+  # It would be nice if there were no prepasses and all of this other weird
+  # stuff. We should keep compatibility with Classifier though because everything
+  # else relies on it, including MuSoma (i.e., it survived very well so it doesn't
+  # deserve being thrown out); and also its caching is extremely useful. When we
+  # get to the hypergraph, though, here in Rack, we're free do to whatever we want,
+  # though. Instead of the hypergraph we should probably just use some sort of
+  # Array(Node), where Node is a pre-parsed node. We won't need pattern matching
+  # here, without it, everything should be pretty very fast, assuming we cache Term -> Node.
+  # The Array(Node) can have some indexing attached as well.
   def step(clf : D7::Classifier, circuit : Term, prepass, *, cache : D7::IParseCache = Uncached(Term, D7::ParseTree).new) : Slice(Term)
     D7.case(clf, circuit, cache: cache, decorator: prepass) do
       rule(<<-WWML) do |tgt|

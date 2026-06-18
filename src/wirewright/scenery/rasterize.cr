@@ -445,6 +445,9 @@ module Ww::Scenery
     PlutoVG.canvas_save(canvas)
 
     PlutoVG.canvas_set_color(canvas, pointerof(color))
+    # FIXME: The snapping logic from DrawTransform affects this in
+    # a horrendous way. We should probably wrap DrawGlyphs in DrawTransforms
+    # and remove #pen but I'm unsure whether that'd be too expensive.
     PlutoVG.canvas_translate(canvas, command.pen.x, command.pen.y)
     assert FreeType.outline_decompose_face(face, pointerof(funcs), canvas.as(Void*)).zero?
     PlutoVG.canvas_fill(canvas)
