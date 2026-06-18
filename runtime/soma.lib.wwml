@@ -421,11 +421,13 @@
 ;; via *track-style* and *thumb-style*.
 (YScrollbar @thumb-dt_ @thumb-h_ @track-h_ ⍊ track-style⋮ "" thumb-style⋮ "")
   => (component {@:thumb-dt @:thumb-h @:track-h}
-       (comment "Give outside world direct access to things in the figure below.")
+       (comment "Give outside world (and ourselves!) direct access to parts of the figure below.")
        (part (@view @thumb-dt) [track [thumb-container (thumb _ ⍊ µ-dt: ±thumb-dt)]])
        (part (@view @thumb-h) [track [thumb-container (thumb _ ⍊ µ-h: ±thumb-h)]])
        (part (@desc @track-h) ⟪(thumb-container _ ⍊ h: ±track-h)⟫)
        (part (@desc @thumb-hover) ⟪(thumb _ ⍊ hit-hover: thumb-hover_)⟫)
+       (part (@desc @track-goal) [figure (track _ ⍊ hit-hover hit-focus-t: ±track-goal)])
+       (part (@desc @scroll-hover) [figure (track _ ⍊ hit-hover: scroll-hover_)])
 
        (comment
          "Define the visual appearance for the scrollbar. Notice how we have \
@@ -452,11 +454,13 @@
           is a severely capped exhR. But even with limit: 3 there's a lot of opportunities \
           for the rules to apply. exhR is needed here to make sure we do the clamps during \
           just one tick; we can't spread it over multiple ticks due to UX concerns.")
-       (rewriter ((exhR (rulesetR exh: true) limit: 3) <-> {@:mouse @:thumb-hover @:thumb-dt @:thumb-h @:track-h @:view})
+       (rewriter ((exhR (rulesetR exh: true) limit: 3) <-> {@:mouse @:thumb-dt @:thumb-h @:thumb-hover @:track-goal @:track-h @:scroll-hover @:view})
          ;; Sync visual hover with logical hover: hover.
-         {¦ thumb-hover view: {¦ -hover_}} <> {hover: true}
+         {¦ thumb-hover mouse: [mouse] view: {¦ -hover_}}
+           <> {hover: true}
          ;; Sync visual hover with logical hover: unhover.
-         {¦ -thumb-hover view: {¦ hover_}} <> {(hover): ()}
+         {¦ -thumb-hover view: {¦ hover_}}
+           <> {(hover): ()}
          ;; When you do mouse left over the thumb, ask mouse for focus coords
          ;; and mark view as active.
          {¦ view: {¦ hover -active_} mouse: (mouse left ⍊ -focus_)}
@@ -466,7 +470,7 @@
          {¦ mouse_: [mouse] view: {¦ active_}}
            <> {mouse: (mouse), (active): ()}
          ;; When mouse gets focus coords define ref-y (reference Y).
-         {¦ mouse: (mouse left ⍊ -ref-y_ -ref-dt_ focus: {¦ ±y}) ±thumb-dt}
+         {¦ mouse: (mouse left ⍊ -ref-y_ -ref-dt_ focus: {¦ ±y}) view: {¦ active} ±thumb-dt}
            <> {ref-y: ^y, ref-dt: ^thumb-dt}
          ;; Maintain thumb-dt in bounds.
          {¦ ±thumb-dt ±thumb-h ±track-h}
@@ -476,4 +480,26 @@
            <> {ref-dt: ^(max 0 (min ref-dt (- track-h thumb-h)))}
          ;; Update thumb-dt according to ref-y.
          {¦ mouse: (mouse left ⍊ ±ref-y ±ref-dt focus: {¦ ±y}) ±thumb-dt}
-           <> {thumb-dt: ^(+ ref-dt (- y ref-y))}))
+           <> {thumb-dt: ^(+ ref-dt (- y ref-y))}
+         ;; Sync visual track hover with logical track hover.
+         {¦ scroll-hover mouse: [mouse] view: {¦ -hover -active -track-hover_}}
+           <> {track-hover: true}
+         {¦ -scroll-hover view: {¦ track-hover_}}
+           <> {(track-hover): ()}
+         {¦ view: {¦ hover track-hover_}}
+           <> {(track-hover): ()}
+         ;; Scroll up. Make sure to consume the button so it is guaranteed to apply
+         ;; once (since we're exhR it will apply many times otherwise).
+         ;;
+         ;; TODO: Un-hardcode constant.
+         {¦ scroll-hover mouse: [mouse B←scroll-up] ±thumb-dt}
+           <> {(B): (), thumb-dt: ^(- thumb-dt 10)}
+         ;; Scroll down. Ditto about the button.
+         ;;
+         ;; TODO: Un-hardcode constant.
+         {¦ scroll-hover mouse: [mouse B←scroll-dn] ±thumb-dt}
+           <> {(B): (), thumb-dt: ^(+ thumb-dt 10)}
+         ;; On click, move thumb center to goal coord. Ditto about the button.
+         ;; The clamp rules take care of the nasty stuff.
+         {¦ view: {¦ track-hover} ±track-goal mouse: [mouse B←left] ±thumb-dt ±thumb-h}
+           <> {(B): (), thumb-dt: ^(- track-goal (/ thumb-h 2))}))
