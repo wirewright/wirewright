@@ -1883,11 +1883,14 @@ scroll: {}
            (when () "to go to end-of-time.")
            (when _ "to go forward."))))
 
-(TimeTooltip (behind_dict I * _ _))
+(TimeTooltip (behind_dict I * status_ _))
   => (Markup
        (m-span ^"There are ⸢(itemsize behind)⸣ frame(s) of history. You are looking at")
-       (m-span "a not-yet-committed draft, called end-of-time. Hit ") (m-key normal ",")
-       (m-span "to go back."))
+       (m-span "a not-yet-committed draft, called end-of-time. Hit") (m-key normal ",")
+       (m-span "to go back.")
+       (^match status
+         (when - (m-span "Hit") (m-key normal ".") (m-span "to single-step."))
+         (when _)))
 
 ;;
 ;; Statusbar seed
