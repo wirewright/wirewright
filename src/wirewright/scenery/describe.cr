@@ -339,6 +339,9 @@ module Ww::Scenery
         commit.with(:"offset-x", describe(node.offset.x))
         commit.with(:"offset-y", describe(node.offset.y))
 
+        commit.with(:"content-w", describe(content_rect.w))
+        commit.with(:"content-h", describe(content_rect.h))
+
         max_offset = Point.max(Point[0, 0], content_rect.size - box.bounds.size)
         commit.with(:"max-offset-x", describe(max_offset.x))
         commit.with(:"max-offset-y", describe(max_offset.y))
