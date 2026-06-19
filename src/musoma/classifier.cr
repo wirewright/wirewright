@@ -38,12 +38,12 @@ module MuSoma
 
           defn = Term.of(:group,
             {:figure, desc},
-            {:node, view, body})
+            {:frag, view, body})
 
           D7.mixture(node, defn) do |(_, _, node_out)|
             Term.case(node_out) do
-              matchpi %{(node _ body-out_)} { Term.morph(node, {2, body_out}) }
-              matchpi %{(node _)} { Term.morph(node, {2, nil}) }
+              matchpi %{(frag _ body-out_)} { Term.morph(node, {2, body_out}) }
+              matchpi %{(frag _)} { Term.morph(node, {2, nil}) }
             end
           end
         end
