@@ -147,6 +147,18 @@ module MuSoma
           end
         end
 
+        matchpi %{[trunk]} do
+          D7.gnd(node)
+        end
+
+        # adjunct is a special node which defines a point-of-view for adjacency
+        # queries in distill, in particular, trunk queries. I.e., when you do `(trunk)`,
+        # the question is, trunk with respect to what? The answer is, with respect to
+        # to the enclosing `adjunct`.
+        matchpi %{[adjunct _*]} do
+          D7.parent(node.as_d, 1u32...node.uitemsize)
+        end
+
         matchpi %{[head_ _*]} do
           continue unless Scenery::KnowledgeBase.parent_head?(head)
 
@@ -211,7 +223,9 @@ module MuSoma
     end
   end
 
-  private def distill(codex, tree : D7::InertLeaf, addr) : Term::Rep
+  defrecord Trunk, active : Term::Rep?
+
+  private def distill(codex, tree : D7::InertLeaf, addr, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -237,10 +251,14 @@ module MuSoma
     end
   end
 
-  private def distill(codex, tree : D7::GndLeaf, addr) : Term::Rep
+  private def distill(codex, tree : D7::GndLeaf, addr, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
+      matchpi %{[trunk]} do
+        Term.rep(trunk.active || Slice(Term).empty) # active or omit
+      end
+
       matchpi %{[slot _]} do
         Term.rep(Term.of({:loading}))
       end
@@ -255,11 +273,42 @@ module MuSoma
     end
   end
 
-  private def distill(codex, tree : D7::ParentNode, addr) : Term::Rep
-    children = Term.flatten(tree.children) do |child, index|
-      key = tree.feature.range.begin + index
-      distill(codex, child, addr.append(key))
+  private def adjunct?(tree : D7::ParseTree) : Bool
+    return false unless tree.is_a?(D7::ParentNode)
+
+    Term.case(tree.feature.node) do
+      matchpi %{[adjunct _*]} { true }
+      otherwise { false }
     end
+  end
+
+  private def distill(codex, tree : D7::ParentNode, addr, trunk) : Term::Rep
+    pred = nil
+    buffer = Pf::Kit.stack_array(Term::Rep, 8)
+
+    tree.children.zip(tree.feature.range) do |child, key|
+      child_adjunct = adjunct?(child)
+
+      if child_adjunct
+        child_trunk = Trunk.new(pred)
+      else
+        child_trunk = trunk
+      end
+
+      rep = distill(codex, child, addr.append(key), child_trunk)
+      if !child_adjunct && pred
+        buffer << pred
+      end
+
+      pred = rep
+    end
+
+    # Flush the last one.
+    if pred
+      buffer << pred
+    end
+
+    children = Term.flatten(buffer, &.itself)
 
     Term.case(tree.feature.node) do
       matchpi %{[group [figure @_] _*]} do
@@ -273,13 +322,13 @@ module MuSoma
       end
 
       matchpi %{[window _*]}, %{{¦ style}} do
-        distill(tree, children)
+        curate(tree, children)
       end
 
       matchpi %{[head_ _*]} do
         continue unless Scenery::KnowledgeBase.parent_head?(head)
 
-        distill(tree, children)
+        curate(tree, children)
       end
 
       otherwise do
@@ -288,11 +337,11 @@ module MuSoma
     end
   end
 
-  private def distill(tree : D7::ParentNode, children : Term::Rep) : Term::Rep
+  private def curate(tree : D7::ParentNode, children : Enumerable(Term)) : Term::Rep
     node = tree.feature.node
     range = tree.feature.range
 
-    distilled = node.pairspart.transaction do |commit|
+    curated = node.pairspart.transaction do |commit|
       # Curate impassable items in front.
       (0...range.begin).each do |key|
         commit.concat(curate(node[key]))
@@ -318,23 +367,25 @@ module MuSoma
       end
     end
 
-    Term.rep_of(distilled)
+    Term.rep_of(curated)
   end
 
-  private def distill(codex, tree : D7::MixtureNode | D7::ScopeNode, addr) : Term::Rep
-    distill(codex, tree.child, addr)
+  private def distill(codex, tree : D7::MixtureNode | D7::ScopeNode, addr, trunk) : Term::Rep
+    distill(codex, tree.child, addr, trunk)
   end
 
   # Finds Microfold and Scenery nodes in *tree* and returns a list of roots
   # for trees built this way.
   def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
-    Term.of(distill(codex, tree, D7::NodeAddr.empty))
+    addr = D7::NodeAddr.empty
+    trunk = Trunk.new(active: nil)
+    Term.of(distill(codex, tree, addr, trunk))
   end
 
   defrecord WindowInfo, id : Term, defn : Term, open : Bool
 
   # Returns a list of `WindowInfo` objects describing windows (and their content)
-  # found in *circuit*.
+  # found in *tree*.
   def window_infos(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Slice(WindowInfo)
     roots = distill(codex, tree)
     unless roots = roots.as_d?
