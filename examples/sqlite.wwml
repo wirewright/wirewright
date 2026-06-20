@@ -13,9 +13,12 @@
   => (p "No contacts ..." style: "content-center text-theme-muted")
 
 (ContactList rows_dict)
-  => (group style: "flow-col gap-1 content-y clip"
-       (^each (rows as {¦ "name": name_string, "age": ±age})
-         (slot (Contact ^name ^age))))
+  => (group
+       (group style: "flow-col gap-1 mb-1 content-y clip"
+         (^each (rows as {¦ "name": name_string, "age": ±age})
+           (slot (Contact ^name ^age))))
+       (adjunct
+         (slot (Scroll))))
 
 (window title: "MuBook"
         style: "bg-theme-base"

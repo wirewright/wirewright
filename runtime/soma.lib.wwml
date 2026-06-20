@@ -379,8 +379,8 @@
                         text-theme-muted in-hover:text-theme-subtle \
                         in-focus:text-theme-selection-bg"
                ^label))
-           (box style: "fr-1 flow-none content-clip border-xs border-theme-highlight-low \
-                        rounded px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
+           (box style: "fr-1 flow-none content-clip content-aim-off-through content-y border-sm border-theme-highlight-low rounded \
+                        px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
                         in-focus:border-theme-selection-bg"
              ;; Display placeholder, but only in an empty field.
              (p style: "absent in-empty:present text-theme-muted leading-none"
@@ -507,9 +507,9 @@
            <> {(B): (), thumb-dt: ^(- track-goal (/ thumb-h 2))}))
 
 (Scroll (bar @thumb-offset_ @thumb-size_ @track-size_ @show_)
-        (view @view-scroll_ @view-offset_ @view-size_ @view-hover_ @content-size_)
+        (view @view-scroll_ @view-size_ @view-hover_ @content-size_ @view-aim_)
         (axis axis←(%any x y)))
-  => (component {@:content-size @:thumb-offset @:thumb-size @:track-size @:show @:view-hover @:view-scroll @:view-size @:view-offset}
+  => (component {@:content-size @:thumb-offset @:thumb-size @:track-size @:show @:view-hover @:view-scroll @:view-size @:view-aim}
        (template
          (cell @axis ^axis))
 
@@ -522,6 +522,9 @@
 
        (cell @ref-offset)
 
+       (feed (copy @view-aim) (atop @dbg))
+       (cell @dbg)
+
        (comment
          "The rewriter below works just like the one in YScrollbar. We do a capped exhR \
           for the same reason; instead of having more complex rules but less rewrite ticks, \
@@ -530,18 +533,18 @@
        (rewriter ((exhR (rulesetR exh: true) limit: 3)
                    <-> {@:show @:axis @:content-size @:input @:mouse @:thumb-offset
                         @:thumb-size @:track-size @:view-hover @:view-scroll
-                        @:view-size @:view-offset @:ref-offset})
+                        @:view-size @:view-aim @:ref-offset})
            ;; Detect changes to view offset: empty -> nonempty.
-           {¦ ±view-offset -ref-offset_}
-             <> {ref-offset: (changed ^view-offset)}
+           {¦ ±view-aim -ref-offset_}
+             <> {ref-offset: (changed 0 ^view-aim)}
            ;; Detect changes to view offset: nonempty -> nonempty.
-           {¦ ±view-offset ±ref-offset}
-             <> {ref-offset: (^br (= view-offset ref-offset) ^ref-offset (changed ^view-offset))}
+           {¦ ±view-aim ±ref-offset}
+             <> {ref-offset: (^br (= view-aim ref-offset) ^ref-offset (changed ^ref-offset ^view-aim))}
            ;; When view offset changes, recalculate thumb-offset accordingly.
            ;; This handles aims within the viewport, which now also affect
            ;; the scrollbar.
-           {¦ ref-offset_: (changed ±offset) ±content-size ±view-size ±track-size ±thumb-size ±thumb-offset}
-             <> {ref-offset: ^offset, thumb-offset: ^(* (/ offset (- content-size view-size)) (- track-size thumb-size))}
+           {¦ ref-offset_: (changed ±offset ±offset') ±content-size ±view-size ±track-size ±thumb-size ±thumb-offset}
+             <> {ref-offset: ^offset', thumb-offset: ^(* (/ offset' (- content-size view-size)) (- track-size thumb-size))}
            ;; Keep thumb height in sync.
            {¦ ±thumb-size ±track-size ±view-size ±content-size}
              <> {thumb-size: ^(min track-size (* track-size (finite (/ view-size content-size) or: 0)))}
@@ -577,11 +580,28 @@
   => (component {@:desc @:node @:show @:thumb-offset @:thumb-size @:track-size}
        (part (@node @view-scroll) {¦ page-y: (±view-scroll px)})
        (part (@desc @view-size) [figure {¦ h: ±view-size}])
-       (part (@desc @view-offset) [figure {¦ offset-y: ±view-offset}])
+       (part (@desc @view-aim) [figure {¦ aim-y: ±view-aim}])
        (part (@desc @view-hover) [figure {¦ hit-hover: view-hover_}])
        (part (@desc @content-size) [figure {¦ content-h: ±content-size}])
-       (slot
+       (slot open: true
          (Scroll
            (bar @thumb-offset @thumb-size @track-size @show)
-           (view @view-scroll @view-offset @view-size @view-hover @content-size)
+           (view @view-scroll @view-size @view-hover @content-size @view-aim)
            (axis y))))
+
+(Scroll)
+  => (component {}
+       (group style: "flow-none"
+         (figure {@:desc, @:node}
+           (viewport aim-through: true
+                     aim-pan: false
+                     page-x: (0 px)
+                     page-y: (0 px)
+             (content y: true
+               (comment
+                 "Scroll is an *adjunct*. An adjunct is \"attached\" to a *trunk*. So \
+                  `trunk` here refers to that trunk.")
+               (trunk))))
+         (align x: 1
+           (slot (YScrollbar @thumb-offset @thumb-size @track-size @show))))
+       (slot (Scroll (bar @thumb-offset @thumb-size @track-size @show) (view @desc @node) (axis y))))
