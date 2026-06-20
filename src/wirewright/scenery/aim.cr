@@ -22,7 +22,11 @@ module Ww::Scenery
           ibeam = item.selection
           next unless ibeam.aim
 
-          foci << Rect[x - ibeam.clearance, y, ibeam.clearance*2 + ibeam.thickness, node.line_height]
+          foci << Rect[x, y, ibeam.thickness, node.line_height].margin(ibeam.clearance)
+          if ibeam.clearance_line
+            foci << Rect[x, y - node.line_height, ibeam.thickness, node.line_height]
+            foci << Rect[x, y + node.line_height, ibeam.thickness, node.line_height]
+          end
         in Endl, ShapedStyledGlyph
           item.decorations.each do |decoration|
             next unless spec = decoration.spec.as?(Selection)
@@ -39,7 +43,12 @@ module Ww::Scenery
             end
 
             # Mark the glyph rect as a focus, plus clearance.
-            foci << Rect[x - spec.clearance, y, advance + spec.clearance*2, node.line_height]
+            foci << Rect[x, y, advance, node.line_height].margin(spec.clearance)
+
+            if spec.clearance_line
+              foci << Rect[x, y - node.line_height, advance, node.line_height]
+              foci << Rect[x, y + node.line_height, advance, node.line_height]
+            end
           end
 
           # No point incrementing on Endl because the loop will immediately break after
@@ -52,6 +61,12 @@ module Ww::Scenery
 
       x = box.bounds.x
       y += node.line_height
+    end
+
+    # Don't include empty space around foci (from the text's point of view; e.g.,
+    # due to clearance).
+    foci.map! do |focus|
+      Rect.intersection(focus, box.bounds)
     end
 
     AimResponse.new(node, foci.to_unsafe_readonly_slice!)

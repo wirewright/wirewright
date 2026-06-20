@@ -274,7 +274,8 @@ module Ww::Scenery
     thickness : Magnitude,
     extents : Rect,
     aim : Bool,
-    clearance : Magnitude,
+    clearance : Point,
+    clearance_line : Bool,
     endl : Bool,
     endl_width : Magnitude
 

@@ -508,7 +508,24 @@ vantage: ""
 
 (for text-box
   (utility (prefix "sel-clearance-" (number value))
-    {selection-clearance: ^(* value spacing)}))
+    {selection-clearance-x: ^(* value spacing),
+     selection-clearance-y: ^(* value spacing)}))
+
+(for text-box
+  (utility (prefix "sel-clearance-x-" (number value))
+    {selection-clearance-x: ^(* value spacing)}))
+
+(for text-box
+  (utility (prefix "sel-clearance-y-" (number value))
+    {selection-clearance-y: ^(* value spacing)}))
+
+(for text-box
+  (utility "sel-clearance-line"
+    {selection-clearance-line: true}))
+
+(for text-box
+  (utility "-sel-clearance-line"
+    {selection-clearance-line: false}))
 
 ;; E.g. sel-blue-500
 (for text-box
@@ -548,7 +565,24 @@ vantage: ""
 
 (for x-sel-box
   (utility (prefix "x-sel-clearance-" (number value))
-    {selection-clearance: ^(* value spacing)}))
+    {selection-clearance-x: ^(* value spacing),
+     selection-clearance-y: ^(* value spacing)}))
+
+(for x-sel-box
+  (utility (prefix "x-sel-clearance-x-" (number value))
+    {selection-clearance-x: ^(* value spacing)}))
+
+(for x-sel-box
+  (utility (prefix "x-sel-clearance-y-" (number value))
+    {selection-clearance-y: ^(* value spacing)}))
+
+(for x-sel-box
+  (utility "x-sel-clearance-line"
+    {selection-clearance-line: true}))
+
+(for x-sel-box
+  (utility "-x-sel-clearance-line"
+    {selection-clearance-line: false}))
 
 (for x-sel-box
   (utility (prefix "x-sel-text-" (one-of colors color))

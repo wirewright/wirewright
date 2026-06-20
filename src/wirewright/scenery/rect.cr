@@ -222,9 +222,9 @@ module Ww::Scenery
       )
     end
 
-    # Returns a copy of this rectangle with a margin of *n* pixels on all sides.
-    def margin(n : Magnitude) : Rect
-      Rect.new(tl: tl - Point[n, n], size: size + Point[2*n, 2*n])
+    # Increases this rectangle by the given margin.
+    def margin(m : Point) : Rect
+      Rect.new(tl: tl - m, size: size + m*2)
     end
 
     # Returns a copy of this rectangle with size increased by *delta*.

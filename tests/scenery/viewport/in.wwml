@@ -22,7 +22,7 @@ height: 900
                selection-thickness: 2
                selection-aim: true
                selection-anchor: ^anchor
-               selection-clearance: 10
+               selection-clearance-x: 10
                selection-span: ^span
                color: white
                caption: "Hello World\nBye world")))))

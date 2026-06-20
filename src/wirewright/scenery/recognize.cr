@@ -1582,7 +1582,9 @@ module Ww::Scenery
     #   selection-endl⋮ false
     #   selection-endl-w⋮ 8
     #   selection-aim⋮ false
-    #   selection-clearance⋮ 8)
+    #   selection-clearance-x⋮ 8
+    #   selection-clearance-y⋮ 0
+    #   selection-clearance-line⋮ false)
     #
     # |@key selection-anchor
     # The modular index of the starting grapheme of the selection.
@@ -1626,9 +1628,17 @@ module Ww::Scenery
     # |@key selection-aim
     # Whether an enclosing viewport should try to bring this selection into view.
     #
-    # |@key selection-clearance
+    # |@key selection-clearance-x
     # Requests some horizontal space on either side of this selection (in pixels)
     # from the enclosing viewport.
+    #
+    # |@key selection-clearance-y
+    # Requests some vertical space on either side of this selection (in pixels)
+    # from the enclosing viewport.
+    #
+    # |@key selection-clearance-line
+    # Requests vertical space for a line above and below the selection from
+    # the enclosing viewport.
     #
     # |@block
     # Defines a master selection in the text. Use `selection: true selections: (...)` to
@@ -1670,7 +1680,9 @@ module Ww::Scenery
        selection-endl⋮ false
        selection-endl-w⋮ 8
        selection-aim⋮ false
-       selection-clearance⋮ 8}
+       selection-clearance-x⋮ 8
+       selection-clearance-y⋮ 0
+       selection-clearance-line⋮ false}
     WWML
       anchor = selection_anchor.to(Int32) % (caption.size + 1)
       focus = (anchor + selection_span.to(Int32)) % (caption.size + 1)
@@ -1685,7 +1697,11 @@ module Ww::Scenery
           br: Point[selection_r.to(Magnitude), selection_b.to(Magnitude)],
         ),
         aim: selection_aim.to(Bool),
-        clearance: selection_clearance.to(Magnitude),
+        clearance: Point[
+          selection_clearance_x.to(Magnitude),
+          selection_clearance_y.to(Magnitude),
+        ],
+        clearance_line: selection_clearance_line.to(Bool),
         endl: selection_endl.to(Bool),
         endl_width: selection_endl_w.to(Magnitude),
       )

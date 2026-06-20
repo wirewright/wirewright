@@ -385,7 +385,7 @@
              ;; Display placeholder, but only in an empty field.
              (p style: "absent in-empty:present text-theme-muted leading-none"
                ^placeholder)
-             (p style: "sel sel-endl sel-aim sel-clearance-0 sel-text-theme-muted \
+             (p style: "sel sel-endl sel-aim sel-clearance-x-3 sel-clearance-line sel-text-theme-muted \
                         in-focus:sel-text-theme-selection-fg sel-theme-highlight-low \
                         in-hover:sel-theme-highlight-med text-theme-text leading-tight \
                         beam-transparent in-hover:beam-thick in-focus:beam-thick \
