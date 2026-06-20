@@ -18,13 +18,12 @@ module Ww::Scenery
     line_wrap(node, at: box.bounds.w) do |line|
       line.items.each do |item|
         case item
-        in Endl
         in IBeam
           ibeam = item.selection
           next unless ibeam.aim
 
           foci << Rect[x - ibeam.clearance, y, ibeam.clearance*2 + ibeam.thickness, node.line_height]
-        in ShapedStyledGlyph
+        in Endl, ShapedStyledGlyph
           item.decorations.each do |decoration|
             next unless spec = decoration.spec.as?(Selection)
             next unless spec.aim
@@ -32,11 +31,22 @@ module Ww::Scenery
             # Skip glyphs in the middle of a selection.
             next unless decoration.anchor_to_left || decoration.anchor_to_right
 
+            case item
+            in ShapedStyledGlyph
+              advance = item.advance.x
+            in Endl
+              advance = spec.endl_width
+            end
+
             # Mark the glyph rect as a focus, plus clearance.
-            foci << Rect[x - spec.clearance, y, item.advance.x + spec.clearance*2, node.line_height]
+            foci << Rect[x - spec.clearance, y, advance + spec.clearance*2, node.line_height]
           end
 
-          x += item.advance.x
+          # No point incrementing on Endl because the loop will immediately break after
+          # it anyway.
+          if item.is_a?(ShapedStyledGlyph)
+            x += item.advance.x
+          end
         end
       end
 
