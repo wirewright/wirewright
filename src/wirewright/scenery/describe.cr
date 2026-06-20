@@ -339,6 +339,11 @@ module Ww::Scenery
         commit.with(:"offset-x", describe(node.offset.x))
         commit.with(:"offset-y", describe(node.offset.y))
 
+        unless node.aim_visible
+          commit.with(:"aim-x", describe(node.aim.x))
+          commit.with(:"aim-y", describe(node.aim.y))
+        end
+
         commit.with(:"content-w", describe(content_rect.w))
         commit.with(:"content-h", describe(content_rect.h))
 

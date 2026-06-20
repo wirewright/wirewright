@@ -112,13 +112,8 @@ module Ww::Scenery
 
     # Union through aim rects of children to get to the aim rect for us.
     aim_rect = nil
-
-    case node.aim
-    in .off?, .off_through?
-    in .on?, .on_through?
-      foci.each do |focus|
-        aim_rect = aim_rect.nil? ? focus : Rect.union(aim_rect, focus)
-      end
+    foci.each do |focus|
+      aim_rect = aim_rect.nil? ? focus : Rect.union(aim_rect, focus)
     end
 
     # Union through child bounds to determine the content rect.
@@ -150,13 +145,22 @@ module Ww::Scenery
     y = scroll(page_offset.y, box.bounds.h, aim_rect.y, aim_rect.h)
     view_offset = Point[x, y].round
 
-    aimed_node = Clip.new(aimed_children, view_offset, node.radii, node.goal)
+    page_rect = Rect[page_offset.x, page_offset.y, box.bounds.w, box.bounds.h]
+    aim_visible = page_rect.includes?(aim_rect.tl) && page_rect.includes?(aim_rect.br)
+    aim_offset = view_offset
 
-    case node.aim
-    in .on?, .off?
-      foci = Slice(Rect).empty
-    in .on_through?, .off_through?
+    if node.aim_pan
+      aimed_offset = view_offset
+    else
+      aimed_offset = page_offset
+    end
+
+    aimed_node = Clip.new(aimed_children, aimed_offset, aim_offset, aim_visible, node.radii, node.goal)
+
+    if node.aim_through
       foci = foci.to_readonly_slice(&.translate(-view_offset))
+    else
+      foci = Slice(Rect).empty
     end
 
     AimResponse.new(aimed_node, foci)

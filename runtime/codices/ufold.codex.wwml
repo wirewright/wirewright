@@ -760,18 +760,20 @@ vantage: ""
     (utility "-content-clip" {present: false}))
 
   (for content-viewport-box
-    (utility "content-aim" {aim: on}))
+    (utility "content-aim"
+      {aim-through: false, aim-pan: true}))
 
   (for content-viewport-box
-    (utility "content-aim-off" {aim: off}))
+    (utility "content-aim-off"
+      {aim-through: false, aim-pan: false}))
 
   (for content-viewport-box
     (utility "content-aim-through"
-      {aim: on-through}))
+      {aim-through: true, aim-pan: true}))
 
   (for content-viewport-box
     (utility "content-aim-off-through"
-      {aim: off-through}))
+      {aim-through: true, aim-pan: false}))
 
   (for content-viewport-box
     (utility (prefix "content-clip-rounded-" (one-of radii radius))
@@ -788,16 +790,20 @@ vantage: ""
     (utility "-clip" {present: false}))
 
   (for viewport-box
-    (utility "clip-aim" {aim: on}))
+    (utility "clip-aim"
+      {aim-through: false, aim-pan: true}))
 
   (for viewport-box
-    (utility "clip-aim-off" {aim: off}))
+    (utility "clip-aim-off"
+      {aim-through: false, aim-pan: false}))
 
   (for viewport-box
-    (utility "clip-aim-through" {aim: on-through}))
+    (utility "clip-aim-through"
+      {aim-through: true, aim-pan: true}))
 
   (for viewport-box
-    (utility "clip-aim-off-through" {aim: off-through}))
+    (utility "clip-aim-off-through"
+      {aim-through: true, aim-pan: false}))
 
   (for viewport-box
     (utility (prefix "clip-rounded-" (one-of radii radius))

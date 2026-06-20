@@ -215,7 +215,7 @@ height: 900
                   (aim (text color: lightgreen caption: "Be happy"))))))))
       (limit max-w: 50 max-h: 50
         (BoundedBox stroke: yellow
-          (viewport page-x: (* 0.5) page-y: (* 0.5) aim: off ;; aim loses now
+          (viewport page-x: (* 0.5) page-y: (* 0.5) aim-pan: false ;; aim loses now
             (content x: true y: true
               (y-stack
                 (text color: white caption: "Buy apples")

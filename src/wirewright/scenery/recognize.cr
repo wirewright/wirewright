@@ -1273,7 +1273,8 @@ module Ww::Scenery
       # and anchors of `selection-aim: true` selections (I-beams).
       matchpi(<<-WWML) do
       (viewport subterms_+ ⍊
-        aim⋮ on
+        aim-through⋮ false
+        aim-pan⋮ true
         page-x_⋮ 0
         page-y_⋮ 0
         offset-x_⋮ 0
@@ -1286,17 +1287,6 @@ module Ww::Scenery
         children = recognize(cache, nodes: subterms.items)
         return Inert.new if children.all?(Inert)
 
-        case aim
-        when Term.of(:"on-through")
-          aim = ViewportAim::OnThrough
-        when Term.of(:off)
-          aim = ViewportAim::Off
-        when Term.of(:"off-through")
-          aim = ViewportAim::OffThrough
-        else # Term.of(:on)
-          aim = ViewportAim::On
-        end
-
         goal = nil
         if node[:"goal-x"]? || node[:"goal-y"]?
           goal_x = node[:"goal-x"]?.try(&.to?(Magnitude)) || Magnitude.new(0)
@@ -1304,7 +1294,9 @@ module Ww::Scenery
           goal = Point[goal_x, goal_y]
         end
 
-        Viewport.new(children, aim,
+        Viewport.new(children,
+          aim_through: aim_through.to(Bool),
+          aim_pan: aim_pan.to(Bool),
           page_x: Unit.rel(page_x, fallback: Unit.rel(0)),
           page_y: Unit.rel(page_y, fallback: Unit.rel(0)),
           offset_x: Unit.rel(offset_x, fallback: Unit.rel(0)),

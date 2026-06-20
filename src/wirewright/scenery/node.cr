@@ -584,7 +584,8 @@ module Ww::Scenery
 
   defcase Viewport(Node),
     children : Slice(Node),
-    aim : ViewportAim,
+    aim_through : Bool,
+    aim_pan : Bool,
     page_x : Unit,
     page_y : Unit,
     offset_x : Unit,
@@ -593,16 +594,11 @@ module Ww::Scenery
     goal : Point?,
     caches_hash: true
 
-  enum ViewportAim
-    Off
-    OffThrough
-    On
-    OnThrough
-  end
-
   defcase Clip(Node),
     children : Slice(Node),
     offset : Point,
+    aim : Point,
+    aim_visible : Bool,
     radii : RectRadii,
     goal : Point?,
     caches_hash: true
