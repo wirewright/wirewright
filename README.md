@@ -6,21 +6,24 @@
 # Wirewright
 
 Wirewright is an experimental research project aiming to express computation as the evolution of symbolic structure inside an immutable
-world. The project attempts to push that model as far as possible: into IO (including UI, audio, and the network), symbolic AI,
-and beyond.
+world. Wirewright tries to push this idea as far as possible: into IO (including UI, audio [TODO], and networking [TODO]),
+symbolic AI, and beyond.
 
 One of the goals of Wirewright is the realization of the idea of *a program as a physical thing*,
-a kind of *symbolic mechanism*.
+a kind of *symbolic mechanism*. What does one mean when one says, structure *is* computation, that is,
+structure is *the same thing* as computation? Wirewright is an attempt to answer this question, among
+many others.
 
 In Wirewright, buttons and input fields have insides (the same way a real-world button is a box
 with a mechanism inside it), programs can move, and some of the core distinctions of modern
-programming do not exist. In Wirewright, the same term can act as data, state, code, and UI.
+programming do not exist. In Wirewright, the same *term* can act as data, state, code, and UI.
+Instead of *evaluation*, in Wirewright, we have *simulation*.
 
 > [!NOTE]
 > Wirewright is not a solution to any practical problem. Instead, it tries to see what else
 > is there beyond & in the near neighborhood of OOP (in the Alan Key sense), pure FP, dataflow,
-> discrete simulation, cellular automata, term rewriting, and the like. Whether this endeavor
-> results in anything practically interesting is currently unknown.
+> discrete simulation, cellular automata, term rewriting, morphological computing, programmable matter,
+> and the like. Whether this endeavor results in anything practically useful is currently unknown.
 
 ## Gallery
 
@@ -32,17 +35,23 @@ I am excited to announce a new front-end for Wirewright (with the old name :^), 
 
 ### Bounce
 
-This is an example of a "moving" program. The `circuit` defines the boundaries of a "symbolic world". The backsystem
+This is an example of a simple "moving" program. The `circuit` defines the boundaries of a "symbolic world". The backsystem
 `backsys` defines some "laws". And the `module` inside the world implements a basic bouncing behavior. The module is
 subject to a mix of "laws" defined in the `backsys`, and the laws of Rack, which is the "ultimate" physics here,
 responsible for animating `backsys`, `circuit`, etc. themselves.
 
 https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
 
-## So What is Wirewright?
+## So what exactly *is* Wirewright?
 
 Good question. As a software project (as opposed to a philosophical endeavor of mine), [my definition of Wirewright](https://youtu.be/rkWXB-3ReV0) is an ecosystem of components which together implement a particular "style" of symbolic computation -- one that is heavily inspired by physics. I call this "style" *symbolic physics*.
+
 Now, if you want a short answer, Wirewright is not a single thing but an umbrella of multiple things, some of them described below, that are made to interact with each other in ways I find interesting.
+
+If I was forced to define what Wirewright *is*, as opposed to what it consists of in practice (see below), I'd say it's an engine
+featuring something akin to a "self-evolving abstract syntax tree". The tree is observed and rewritten in various ways by Wirewright
+to implement UI, IO, state, and logic. This tree is also what I refer to as the *symbolic world*, although this phrase can be used
+more generally.
 
 ### Data and notation
 
@@ -83,9 +92,9 @@ ML is based on S-expressions, extended with key-value pairs, e.g. `(/ 1 2 precis
 
 Here, things starting with `^` are related to Alloy.
 
-**Nitrene** is an expression language. Nitrene, too, uses terms; in Wirewright, everything uses terms. Nitrene is meant to be embedded in Alloy, but you can embed Alloy in Nitrene as well. In the Alloy example above, expressions such as `(= mode expects-mode)`, `(words text)` and so on are  Nitrene.
+**Nitrene** is an expression language. Nitrene, too, uses terms; in Wirewright, everything uses terms. Nitrene is meant to be embedded in Alloy, but you can embed Alloy in Nitrene as well. In the Alloy example above, expressions such as `(= mode expects-mode)`, `(words text)` and so on are Nitrene.
 
-An expression language is somewhat like Excel's in terms of its goals, allowing you to do raw computation at the "leaves" (e.g. `(+ 2 2)`).
+An *expression language* in the sense I am employing here can be likened to Excel formulas, in terms of its scope & the kinds of computations it allows you to do; that is, raw computation at the "leaves" (e.g. `(+ 2 2)`, `(max 1 2 3)`).
 
 **Rulesets** let you define rules where the left-hand side is an M1 pattern and the right-hand side is an Alloy template. They also allow you to write *backmaps*: the left-hand side is also a pattern, but the right-hand side is now a list of replacements defined relative to each other. For example, `(swap a_ b_) <> {a: ^b, b: ^a}`, under some modes of evaluation, results in an oscillator which swaps *a* and *b* forever: `(swap 1 2)` is rewritten to `(swap 2 1)` and so on forever. Rulesets are one of the "hubs" in Wirewright: they bring together M1 (the pattern `(+ a_)`), Alloy (the templates `^a`, `^b`), Nitrene (the expressions immediately inside the template `a`, `b`), and then M1 backmaps `_ <> _`. Rulesets, too, are terms: dictionaries representing a list of rules.
 
@@ -207,7 +216,7 @@ do (or relate to?) interactivity, go to `runtime/soma.lib.wwml`.
 
 For the latter, you are advised to use MuSoma, by the way, so that everything renders nicely.
 Consider opening MuSoma with the input example `examples/input.wwml`; then click the arrows &
-pan around; this should get you acquainted with symbolic hell! On the latter, now, look, I *love*
+pan around; this should get you acquainted with symbolic *paradise*! On the latter, now, look, I *love*
 the notation, but from the outside, it probably looks like a bizarre mix of APL and Lisp. Wha te ver, huh?
 
 Hit `?` in MuSoma in Normal mode to open the help pane. Right now it's pretty much empty, but
