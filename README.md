@@ -19,6 +19,11 @@ with a mechanism inside it), programs can move, and some of the core distinction
 programming do not exist. In Wirewright, the same *term* can act as data, state, code, and UI.
 Instead of *evaluation*, in Wirewright, we have *simulation*.
 
+Wirewright can also be seen through the lens of a game analogy. Imagine Wirewright as implementing
+a game, but instead of entities you have data structures, instead of sprites & textures & materials
+etc. you have extended S-expressions, and physics is not about boxes and vectors and collisions
+and such but about making data structures interact with each other in various ways.
+
 > [!NOTE]
 > Wirewright is not a solution to any practical problem. Instead, it tries to see what else
 > is there beyond & in the near neighborhood of OOP (in the Alan Key sense), pure FP, dataflow,
