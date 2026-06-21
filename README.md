@@ -50,13 +50,22 @@ responsible for animating `backsys`, `circuit`, etc. themselves.
 
 https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
 
+## Tutorials
+
+I'm going to try writing tutorials for Wirewright. Please visit one of:
+
+- [Tutorial, Part 1](man/tutorial-1.md)
+
+Please note that Wirewright currently only runs on Linux. However, the tutorials above
+use `irack`, which should run on WSL; at least I hope so.
+
 ## So what exactly *is* Wirewright?
 
 Good question. As a software project (as opposed to a philosophical endeavor of mine), [my definition of Wirewright](https://youtu.be/rkWXB-3ReV0) is an ecosystem of components which together implement a particular "style" of symbolic computation -- one that is heavily inspired by physics. I call this "style" *symbolic physics*.
 
 Now, if you want a short answer, Wirewright is not a single thing but an umbrella of multiple things, some of them described below, that are made to interact with each other in ways I find interesting.
 
-If I was forced to define what Wirewright *is*, as opposed to what it consists of in practice (see below), I'd say it's an engine
+If I am forced to define what Wirewright *is*, as opposed to what it consists of in practice (see below), I'll say it's an engine
 featuring something akin to a "self-evolving abstract syntax tree". The tree is observed and rewritten in various ways by Wirewright
 to implement UI, IO, state, and logic. This tree is also what I refer to as the *symbolic world*, although this phrase can be used
 more generally.
@@ -65,7 +74,7 @@ more generally.
 
 #### Terms (pure)
 
-Terms are one of the core things in Wirewright. All terms are immutable. There are six types of terms: numbers, strings, booleans, symbols, dictionaries, and blobs (for binary data). Dictionaries are of most interest. Conceptually, a dictionary is a list of *entries*, where each entry is the pair `(key, value)`. Keys are unique. An entry can be an *item* (its key is 0 or is a number with a predecessor item in the dict) or a *pair* (all other entries). Items therefore form a chain called the *itemspart* (e.g., keys 0, 0->1, 0->1->2, etc.) The rest of entries form the dictionary's *pairspart*.
+Terms are one of the core things in Wirewright. All terms are immutable. There are six types of terms: numbers, strings, booleans, symbols, dictionaries, and blobs (for binary data). Dictionaries are of most interest. Conceptually, a dictionary is a list of *entries*, where each entry is the pair `(key, value)`. Keys are unique. An entry can be an *item* (its key is 0 or is a number with a predecessor item in the dict) or a *pair* (all other entries). Items therefore form a chain called the *itemspart* (e.g., keys 0, 0->1, 0->1->2, etc.) The rest of the entries form the dictionary's *pairspart*.
 
 #### Notation (pure)
 
