@@ -25,6 +25,9 @@ etc. you have extended S-expressions, and physics is not about boxes and vectors
 and such but about making data structures interact with each other in various ways.
 
 > [!NOTE]
+> I'm not a native speaker of English. I apologize for any mistakes in advance!
+
+> [!NOTE]
 > Wirewright is not a solution to any practical problem. Instead, it tries to see what else
 > is there beyond & in the near neighborhood of OOP (in the Alan Key sense), pure FP, dataflow,
 > discrete simulation, cellular automata, term rewriting, morphological computing, programmable matter,
@@ -101,7 +104,7 @@ Here, things starting with `^` are related to Alloy.
 
 An *expression language* in the sense I am employing here can be likened to Excel formulas, in terms of its scope & the kinds of computations it allows you to do; that is, raw computation at the "leaves" (e.g. `(+ 2 2)`, `(max 1 2 3)`).
 
-**Rulesets** let you define rules where the left-hand side is an M1 pattern and the right-hand side is an Alloy template. They also allow you to write *backmaps*: the left-hand side is also a pattern, but the right-hand side is now a list of replacements defined relative to each other. For example, `(swap a_ b_) <> {a: ^b, b: ^a}`, under some modes of evaluation, results in an oscillator which swaps *a* and *b* forever: `(swap 1 2)` is rewritten to `(swap 2 1)` and so on forever. Rulesets are one of the "hubs" in Wirewright: they bring together M1 (the pattern `(+ a_)`), Alloy (the templates `^a`, `^b`), Nitrene (the expressions immediately inside the template `a`, `b`), and then M1 backmaps `_ <> _`. Rulesets, too, are terms: dictionaries representing a list of rules.
+**Rulesets** let you define rules where the left-hand side is an M1 pattern and the right-hand side is an Alloy template. They also allow you to write *backmaps*: the left-hand side is also a pattern, but the right-hand side is now a list of replacements defined relative to each other. For example, `(swap a_ b_) <> {a: ^b, b: ^a}`, under some modes of evaluation, results in an oscillator which swaps *a* and *b* forever: `(swap 1 2)` is rewritten to `(swap 2 1)` and so on forever. Rulesets are one of the "hubs" in Wirewright: they bring together M1 (the pattern `(swap a_ b_)`), Alloy (the templates `^a`, `^b`), Nitrene (the expressions immediately inside the templates: `a`, `b`), and then M1 backmaps `_ <> _`. Rulesets, too, are terms; they are simply dictionaries representing a list of rules.
 
 **Rho** is a collection of composable rewriters. Rho lets you write things like `(ascR (rulesetR))` (notice again how everything is a term). Running this rewriter on a term, Rho will perform an *ascending rewrite*, applying `(rulesetR)` bottom-up. `rulesetR` in turn connects to rulesets I wrote about above.
 
