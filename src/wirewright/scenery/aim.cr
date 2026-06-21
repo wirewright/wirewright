@@ -147,18 +147,17 @@ module Ww::Scenery
 
     page_rect = Rect[page_offset.x, page_offset.y, box.bounds.w, box.bounds.h]
     aim_visible = page_rect.includes?(aim_rect.tl) && page_rect.includes?(aim_rect.br)
-    aim_offset = view_offset
 
     if node.aim_pan
-      aimed_offset = view_offset
+      target_offset = view_offset
     else
-      aimed_offset = page_offset
+      target_offset = page_offset
     end
 
-    aimed_node = Clip.new(aimed_children, aimed_offset, aim_offset, aim_visible, node.radii, node.goal)
+    aimed_node = Clip.new(aimed_children, target_offset, view_offset, aim_visible, node.radii, node.goal)
 
     if node.aim_through
-      foci = foci.to_readonly_slice(&.translate(-view_offset))
+      foci = foci.to_readonly_slice(&.translate(-target_offset))
     else
       foci = Slice(Rect).empty
     end
