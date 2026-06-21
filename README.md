@@ -258,6 +258,10 @@ this way.
 
 ## Hello World(s)
 
+> [!NOTE]
+> This is for MuSoma, which is a more "advanced" part of Wirewright. I recommend you to read
+> and follow the tutorials first (see above).
+
 If you're afraid of the MuSoma editor, and you probably should be given the amount of
 shorthands it has accreted, just look into `runtime/codices/editR.codex.wwml`, well,
 in that case you can use your favorite editor. To do so:
