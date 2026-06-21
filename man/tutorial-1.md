@@ -345,9 +345,9 @@ If you run the program above, you'll see:
 ;; ... and so on.
 ```
 
-Notice something important. `circuit` is inert when `view` looks at it. In the first frame, `view` looks at the `circuit`, notices the second cell is empty, and erases its destination cell `@value`. Then, *in the same frame*, time is advanced for nodes inside `circuit`, which causes `0` to "fall" into `@y`.  That's the end of the first frame; `irack` prints it in the terminal.
+Notice something important. `circuit` is inert when `view` looks at it. In the seed, `view` looks at the `circuit`, notices the second cell is empty, and erases its destination cell `@value`. Then, *in the same frame*, time is advanced for nodes inside `circuit`, which causes `0` to "fall" into `@y`. This produces the first frame; `irack` prints it in the terminal.
 
-In the second frame, `view` wakes up, sees the second cell contains a number, captures it under `n`, expands the template, and populates the destination cell. Then, in the same frame, time is advanced for nodes inside `circuit`, which makes `0` go back to `@x`. That's the end of the second frame; `irack` prints it in the terminal.
+Next, `view` wakes up, sees the second cell contains a number, captures it under `n`, expands the template, and populates the destination cell. Then, in the same frame, time is advanced for nodes inside `circuit`, which makes `0` go back to `@x`. This produces the second frame; `irack` prints it in the terminal.
 
 That's why you see a "lag" of one frame: why our observation lags behind the actual `circuit`. This is intended, although here it may seem slightly unintuitive. The reason is that Wirewright's D7 (roughly speaking, the thing responsible for evolving the circuit) evolves circuits *top-down*. Within a single frame, it lets the outer circuit *observe* and *perturb* subcircuits; and then, in breadth-first manner, proceeds to evolve those subcircuits. When D7 reaches the leaves, the frame ends. As an aside, the philosophical reasoning behind this choice of top-down (outside-in) over bottom-up (inside-out) evolution is a bit more complex, however. I'm not sure it makes sense to write about it here, and, to be honest, I barely remember why I made this particular choice. I just know it's necessary.
 
