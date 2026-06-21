@@ -391,6 +391,7 @@ the project. Most Linux distributions have these in their package registry.
 - [HarfBuzz](https://github.com/harfbuzz/harfbuzz)
 - [GMP](https://gmplib.org/)
 - [PCRE2](https://github.com/PCRE2Project/pcre2)
+- [SQLite3](https://sqlite.org)
 
 If you get a linker error, this probably means I forgot to include something in
 the list above. Let me know if that's the case so that it can be made more accurate.
