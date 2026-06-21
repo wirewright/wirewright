@@ -477,11 +477,5 @@ Or `musoma`, which is, well, MuSoma.
 
 ## Want to learn more?
 
-### More of my ramblings
-
-See the ramblings/ directory to read more of my ramblings. None of those are of publishing quality and most are probably going to read like pseudo-scientific nonsense. Sorry.
-
-### Videos
-
 Visit the YouTube channel of Wirewright for videos about Wirewright: [Wirewright — YouTube](https://www.youtube.com/@wirewright).
 
