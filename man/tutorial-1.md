@@ -280,7 +280,7 @@ If you run this, nothing changes except we now have the surrounding `circuit`:
   (cell @x)
   (cell @y 0)
   (feed @x @y @x))
-  
+
 ;; Frame 2
 (circuit @subcircuit
   (cell @x 0)
@@ -299,10 +299,10 @@ Let's use the `view` node, which maintains at the destination cell a projection 
   (cell @x 0)
   (cell @y)
   (feed @x @y @x))
-  
+
 (view (@subcircuit (_ (cell _ ±n) _) @value)
   ^n)
-  
+
 (cell @value)
 ```
 
@@ -352,3 +352,280 @@ Next, `view` wakes up, sees the second cell contains a number, captures it under
 That's why you see a "lag" of one frame: why our observation lags behind the actual `circuit`. This is intended, although here it may seem slightly unintuitive. The reason is that Wirewright's D7 (roughly speaking, the thing responsible for evolving the circuit) evolves circuits *top-down*. Within a single frame, it lets the outer circuit *observe* and *perturb* subcircuits; and then, in breadth-first manner, proceeds to evolve those subcircuits. When D7 reaches the leaves, the frame ends. As an aside, the philosophical reasoning behind this choice of top-down (outside-in) over bottom-up (inside-out) evolution is a bit more complex, however. I'm not sure it makes sense to write about it here, and, to be honest, I barely remember why I made this particular choice. I just know it's necessary.
 
 This lag is just one thing to keep in mind. In a sense, it's a fundamental truth of observation: you're always behind what you're observing, unless you can predict it (and indeed, this is the way to solve such "bugs", although here I won't attempt to do that since this is just a basic tutorial).
+
+This shows *observation*, but what about *perturbation*? That is, how can an observer modify the content of the subcircuit?
+
+Let's use the simpler `@x-@y` feed from above as our subcircuit.
+
+```wwml
+(circuit @subcircuit
+  (cell @x 0)
+  (cell @y)
+  (feed @x @y))
+```
+
+This just causes `0` to fall:
+
+```wwml
+;; Frame 1
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 0)
+  (feed @x @y))
+```
+
+Now, let's add a *backsystem*. But before that, let's see what a backsystem is.
+
+A backsystem is a concept from M1, the pattern matching subsystem which we met a few examples above. A backsystem is a way to make a particular style of rewriting simpler. Consider the following:
+
+```wwml
+(swap a_ b_) => (swap ^b ^a)
+```
+
+This defines a *rewrite rule*. On the left you see the M1 pattern `(swap a_ b_)`, and on the right, the Alloy template `(swap ^b ^a)`. This rule *fires* when a term matching `(swap a_ b_)` is found.
+
+Let's use the symbolic microscope technique from above to understand how this pattern is constructed. We start from `_`. That's too loose, we want to match a *dictionary* with three *items*: `(_ _ _)`. The first of them must be the *symbol* `swap`: `(swap _ _)`. We want to capture the remaining items to refer to them in the template, so let's give them names: `(swap a_ b_)`.
+
+The template simply swaps the items, producing a new dictionary.
+
+For example, if we have the dictionary `(swap 1 2)`, it matches the pattern and produces two captures: `{a: 1, b: 2}`. They are used in the template, producing `(swap 2 1)`. So far so good. Let's make our rule a bit more complex. Let's ignore what we currently call `b` and instead "zoom into" `a`, and swap things there.
+
+```wwml
+(swap (a_ b_) _) => ;; ... But wait!
+```
+
+As you can see, we can't just do that. We have to go through the tedious labor of capturing everything and then reconstructing the original term:
+
+```wwml
+(swap (a_ b_) c_) => (swap (^b ^a) ^c)
+```
+
+This starts to look tedious. And it is! I'm giving very contrived examples here. In practice, some patterns are extremely hard to reconstruct this way. Consider a pattern that might look cryptic to you due to the weird brackets and the degree sign: `⟨±n⟩°`. You're familiar with `±n` already, it means "match a number and call that *n*". What does `⟨_⟩°` mean, then?
+
+The short answer is, the brackets `⟨⟩` mean *find item*. `°` is a *postfix* which reads as *source*. The whole thing, `⟨⟩°`, reads as *find item source*, that is, *(find item) source*. The whole pattern turns into a *source* driven by *find item*. This is somewhat similar to iterators. That is, *sources*, or *source patterns*, produce zero or more matches rather than just zero or one match.
+
+Summing up the above, `⟨±n⟩` reads as *find first number item and capture under n*. For example, if you match `(1 2 3 4)`, you'll get `{n: 1}`; and in `(a b 100 200 c 300)`, you'll get `{n: 100}`.
+
+Then, `⟨±n⟩°` makes the pattern into a source of such matches. For `(1 2 3 4)` , you'll get four matches: `{n: 1} {n: 2} {n: 3} {n: 4}`. For `(a b c 100 200 c 300)`, you'll get `{n: 100} {n: 200} {n: 300}`.
+
+Now that you know what `⟨±n⟩°` means, let's consider a rewrite rule which features it. For example, let's say you want to increment all number items this way, and then wrap the resulting dictionary in `(done _)`.
+
+```wwml
+(increment ⟨±n⟩°) => ;; ???
+```
+
+It's quite hard to do this. In fact, we are forced to abandon the idea of using `⟨⟩°` altogether:
+
+```wwml
+(increment ns_dict)
+  => (done
+       (increment
+         (^each (ns as ±n)
+           ^(+ n 1))))
+```
+
+Now to backmaps. I came up with backmaps to combat this verbosity.  Backmaps cooperate very tightly with M1 pattern matching; so much so they are part of M1. Therefore, they know where all *n*s are (in our example). So the same rewrite can be expressed using a backmap:
+
+```wwml
+toplevel←(increment ⟨±n⟩°)
+  <> {toplevel: (done ^(up toplevel)), n: ^(+ n 1)}
+```
+
+It's useful to think of backmaps as a way to do in-place replacement. However, it is extremely important to understand that backmaps are not *mutating* anything. A backmap is, conceptually, a shorthand for rewrites `=>` like the one above. They do the "tearing down" and "reassembly" of immutable structure for you, which, as I shown above, is the boring part. The structure stays immutable throughout the whole process; the rewritten term is a completely new term (caveat: structural sharing).
+
+If we simplify our task a little bit and say we just want to increment all numbers in a list, a backmap would do that in just a dozen characters: `⟨±n⟩° <> {n: ^(+ n 1}`. This rule reads as, for each number item in a dictionary, increment it. If we rewrite `(a b 100 200 c 300)` with this, we get: `(a b 101 201 c 301)`.
+
+The left-hand side of a backmap is the backmap's M1 *pattern*. The right-hand side is called a *backspec* (short for *backmap specification*).
+
+Now, I promised no theory, but all of this is theory, right? Not really. I know I was talking about *backsystems*; I haven't lost track of that. So let's define a *backsystem*, which is a *system of backmaps*, now that you're acquainted with backmaps; the distinctive feature of the latter being the `_ <> _` syntax. Backsystems can be defined using the `backsys` node.
+
+```wwml
+(cell @x (a b 100 200 c 300))
+(backsys @x
+  ⟨±n⟩° <> {n: ^(+ n 1)})
+```
+
+If you run this, you'll see:
+
+```wwml
+;; Frame 1
+(cell @x (a b 101 201 c 301))
+(backsys @x
+  ⟨±n⟩° <> {n: ^(+ n 1)})
+
+;; Frame 2
+(cell @x (a b 102 202 c 302))
+(backsys @x
+  ⟨±n⟩° <> {n: ^(+ n 1)})
+
+;; Frame 3
+(cell @x (a b 103 203 c 303))
+(backsys @x
+  ⟨±n⟩° <> {n: ^(+ n 1)})
+
+;; ... and so on.
+```
+
+As you can see, the thing actually works. Feel free to plug in the other backmap and see how the behavior of the circuit changes.
+
+What's the point of the word *system* in *backsystem*, though? Well, consider:
+
+```wwml
+(cell @x (100 200))
+(backsys @x
+  (±n _) <> {n: ^(+ n 1)}
+  (_ ±n) <> {n: ^(+ n 1)})
+```
+
+Here, two backmaps cooperate to increment the numbers. In this particular case they do not interfere into each other's progress; and I don't want to make up complex examples where they do. Nevertheless, they form what I call a *rule system*; whose "systemicity", or "unity", is clearly visible if we imagine ourselves "living" inside `@x`. If we were, the numbers would just increment in concert.
+
+```wwml
+;; Frame 1
+(cell @x (101 201))
+(backsys @x
+  (±n _) <> {n: ^(+ n 1)}
+  (_ ±n) <> {n: ^(+ n 1)})
+
+;; Frame 2
+(cell @x (102 202))
+(backsys @x
+  (±n _) <> {n: ^(+ n 1)}
+  (_ ±n) <> {n: ^(+ n 1)})
+
+;; ... and so on.
+```
+
+Now, let's unwind all the way back to the observer example. Now that you've seen a `backsys` modify a `cell`, why shouldn't it be a `circuit` instead of `cell`, really?
+
+```wwml
+(circuit @subcircuit
+  (cell @x 0)
+  (cell @y)
+  (feed @x @y))
+
+(backsys @subcircuit
+  ((cell _ `dst) (cell _ ±n) _)
+    <> {dst: ^(+ n 1), (n): ()})
+```
+
+In the pattern here, `` `dst `` identifies a spot where to "plug something in" (an insertion spot, so to speak).  For example, ``(foo `x) <> {x: 100}`` will match `(foo)` (and **not** e.g. `(foo abc)`); and  rewrite it, *inserting* `100` at the designated spot, so it becomes `(foo 100)`.
+
+`(n): ()` in the backspec means *delete* *n*. So for example, the backmap `(foo x_) <> {(x): ()}` rewrites `(foo "hello")` to `(foo)` -- it deletes *x*.
+
+If you run this, you'll see the following (I'll omit `backsys` because it stays the same all throughout):
+
+```wwml
+;; Frame 1
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 1)
+  (feed @x @y))
+
+;; Frame 2
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 2)
+  (feed @x @y))
+
+;; Frame 3
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 3)
+  (feed @x @y))
+
+;; ... and so on.
+```
+
+What's going on here? First, you have to keep in mind the "observation lag" from above. I think it'd be easier to see if I split frames into *subframes* so that the `circuit` is seen evolving separately from its container:
+
+```wwml
+;; Subframe 1
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 0)
+  (feed @x @y))
+
+;; Subframe 2
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 0)
+  (feed @x @y))
+
+;; FRAME 1 complete
+;; ----------------
+
+;; Backsystem notices the second cell is 0. In one swift move, it grabs
+;; the zero and puts it into `@x`, incrementing it. This produces
+;; Subframe 3.
+
+;; Subframe 3
+(circuit @subcircuit
+  (cell @x 1)
+  (cell @y)
+  (feed @x @y))
+
+;; Subframe 4
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 1)
+  (feed @x @y))
+
+;; FRAME 2 complete
+;; ----------------
+
+;; Again, it's the backsystem's turn now.
+
+;; Subframe 5.
+(circuit @subcircuit
+  (cell @x 2)
+  (cell @y)
+  (feed @x @y))
+
+;; ... and so on.
+```
+
+Since time runs outside-in, we simply can't observe the incremented value fall. We (humans) are at the outermost level; `backsys` is one level down, but it, too, can't catch the `circuit`, because it is evaluated already when it's our move.
+
+It might seem I'm only showing examples where this top-down order seems highly unintuitive. Fair point. However, consider:
+
+```wwml
+(circuit @subcircuit
+  (cell @x 0)
+  (cell @y)
+  (feed @x @y @x))
+
+(backsys @subcircuit
+  (_ (cell _ ±n) _) <> {n: ^(+ n 1)})
+```
+
+If you run this (again, I'm omitting `backsys` for brevity):
+
+```wwml
+;; Frame 1
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 0)
+  (feed @x @y @x))
+
+;; Frame 2
+(circuit @subcircuit
+  (cell @x 1) ;; `backsys` incremented, then `feed` moved!
+  (cell @y)
+  (feed @x @y @x))
+
+;; Frame 3
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 1)
+  (feed @x @y @x))
+
+;; Frame 4
+(circuit @subcircuit
+  (cell @x 2) ;; ditto
+  (cell @y)
+  (feed @x @y @x))
+
+;; ... and so on.
+```
+
+Here, the choice of outside-in for time makes sense; we allow the container to observe & modify the contained, and then, give reigns to the contained; it is its turn to "relax" now, as in, reach a relaxed state, given the perturbations of its container (if any). Outside-in is therefore important, because relaxation is naturally scheduled when a subcircuit is (or could be) damaged; and observation always happens when a subcircuit is relaxed. A container never observes its elements in their "broken" shape; only in their relaxed, or tending-to-relaxation, state. This is part of the philosophical reasoning I mentioned above; as you can see, it's not an easy point to make.
