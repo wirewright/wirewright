@@ -33,11 +33,11 @@ module MuSoma
           D7.parent(node.as_d, 2u32...node.uitemsize)
         end
 
-        matchpi %{[figure {¦ @desc_ node: @view_} _?]} do
+        matchpi %{[reflection {¦ @desc_ node: @view_} _?]} do
           body = node[2]?
 
           defn = Term.of(:group,
-            {:figure, desc},
+            {:reflection, desc},
             {:frag, view, body})
 
           D7.mixture(node, defn) do |(_, _, node_out)|
@@ -48,15 +48,15 @@ module MuSoma
           end
         end
 
-        matchpi %{[figure @edge_ _+]} do
-          defn = Term.morph(node, {0, :group}, {1, Term.of(:figure, edge)})
+        matchpi %{[reflection @edge_ _+]} do
+          defn = Term.morph(node, {0, :group}, {1, Term.of(:reflection, edge)})
 
           D7.mixture(node, defn) do |mix|
-            Term.morph(mix, {0, :figure}, {1, edge})
+            Term.morph(mix, {0, :reflection}, {1, edge})
           end
         end
 
-        matchpi %{[figure @edge_]} do
+        matchpi %{[reflection @edge_]} do
           D7.gnd(node, edge)
         end
 
@@ -172,16 +172,16 @@ module MuSoma
     end
   end
 
-  struct FigurePrepass(Prepass)
+  struct ReflectionPrepass(Prepass)
     def initialize(@vantages : VarHash(D7::NodeAddr, Term), @successor : Prepass)
     end
 
     def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
       figure_node_ids = Pf::USet32.transaction do |txn|
-        hg.each_node_with_head(Term.of(:figure)) do |node|
+        hg.each_node_with_head(Term.of(:reflection)) do |node|
           observation = @vantages.get?(node.addr)
 
-          Term.matchpi?(node.term, %{[figure @edge_]}) do
+          Term.matchpi?(node.term, %{[reflection @edge_]}) do
             hg.replace!(node.id, Term.of(:cell, edge, observation))
             txn << node.id
           end
@@ -194,14 +194,14 @@ module MuSoma
         return patch
       end
 
-      # Discard all patches to figure nodes ,which we've replaced. Such patches make
+      # Discard all patches to reflection nodes ,which we've replaced. Such patches make
       # no sense. This covers circuits like:
       #
-      #   (figure @f (p "Hello"))
+      #   (reflection @f (p "Hello"))
       #   (discard @f)
       #
       # Which, as I've said, make no sense, because there isn't *really* anything to
-      # discard. For Rack, figure acts as a kind of "infinite source", replenished
+      # discard. For Rack, reflection acts as a kind of "infinite source", replenished
       # immediately regardless of what Rack does to it.
       if figure_node_ids.size < patch.size
         patch = patch.transaction do |txn|
@@ -311,10 +311,10 @@ module MuSoma
     children = Term.flatten(buffer, &.itself)
 
     Term.case(tree.feature.node) do
-      matchpi %{[group [figure @_] _*]} do
+      matchpi %{[group [reflection @_] _*]} do
         distilled = Term::Dict.build do |commit|
           commit << :vantage
-          commit.with(:id, {:figure, addr.append(1)})
+          commit.with(:id, {:reflection, addr.append(1)})
           commit.concat(children)
         end
 

@@ -181,7 +181,7 @@ module MuSoma
             D7.gnd(node)
           end
 
-          matchpi %{[figure _dict _]} do
+          matchpi %{[reflection _dict _]} do
             continue if feature.is_a?(D7::Inert)
 
             D7.parent(node.as_d, 2u32...3u32)
