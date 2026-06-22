@@ -34,7 +34,7 @@
           that; instead, it sees a symbolic, visual reflection of itself, something akin \
           to SVG in spirit, annotated with information such as what the mouse is currently \
           hovering over.")
-       (reflection {@:desc, node: @view}
+       (reflection {@:desc, @:node}
          (template ^view))
        (comment
          "Optionally, the button also watches the input (i.e., the keyboard). If you \
@@ -46,35 +46,35 @@
        (comment
          "The backsystem below then relates everything together. The rewrite rules \
           below are responsible for the button's behavior.")
-       (backsys {@:mouse @:input @:key @:desc @:view @:msg @:msgs}
+       (backsys {@:mouse @:input @:key @:desc @:node @:msg @:msgs}
          ;; The key that this button is watching for was pressed.
-         {¦ input: ⟨K'←K_⟩ key: K_ msg_ view: {¦ -active_} -msgs_}
+         {¦ input: ⟨K'←K_⟩ key: K_ msg_ node: {¦ -active_} -msgs_}
            <> {(K'): (), active: tap, msgs: ^msg}
          ;; Mouse enters the button.
-         {¦ mouse: [mouse] desc: (reflection {¦ hit-hover}) view: {¦ hover_: (%optional false false)}}
+         {¦ mouse: [mouse] desc: (reflection {¦ hit-hover}) node: {¦ hover_: (%optional false false)}}
            <> {hover: true}
          ;; Mouse leaves the button.
-         {¦ desc: (reflection {¦ -hit-hover}) view: {¦ hover_: true}}
+         {¦ desc: (reflection {¦ -hit-hover}) node: {¦ hover_: true}}
            <> {(hover): ()}
          ;; Mouse left pressed while over the button.
-         {¦ mouse: [mouse left] view: {¦ hover: true active_: (%optional false false)}}
+         {¦ mouse: [mouse left] node: {¦ hover: true active_: (%optional false false)}}
            <> {active: true}
          ;; Mouse moved away from the button while holding left, then returned back
          ;; while holding left.
-         {¦ desc: (reflection {¦ hit-hover}) view: {¦ -hover_ active: true}}
+         {¦ desc: (reflection {¦ hit-hover}) node: {¦ -hover_ active: true}}
            <> {hover: true}
          ;; Mouse left released while over the button.
-         {¦ mouse: [mouse], desc: (reflection {¦ hit-hover}) view: {¦ active: true} msg_ -msgs_}
+         {¦ mouse: [mouse], desc: (reflection {¦ hit-hover}) node: {¦ active: true} msg_ -msgs_}
            <> {msgs: ^msg}
          ;; Mouse left released while **not** over the button.
-         {¦ mouse: [mouse] view: {¦ active_: true}}
+         {¦ mouse: [mouse] node: {¦ active_: true}}
            <> {(active): ()}
          ;; Target cell occupied, won't be able to send if clicked.
-         {¦ msgs view: {¦ ⋮enabled}} <> {enabled: false}
+         {¦ msgs node: {¦ ⋮enabled}} <> {enabled: false}
          ;; Target cell free, we can send if clicked.
-         {¦ -msgs view: {¦ ⋮enabled}} <> {enabled: true}
+         {¦ -msgs node: {¦ ⋮enabled}} <> {enabled: true}
          ;; End tap on the next tick.
-         {¦ view: {¦ active_: tap}}
+         {¦ node: {¦ active_: tap}}
            <> {(active): ()}))
 
 ;; |@ musoma.button
@@ -148,7 +148,7 @@
        (node @mouse (mouse))
        (comment
          "Inputs are also interested in their own visual reflection, just like buttons are")
-       (reflection {@:desc @:node}
+       (reflection {@:desc, @:node}
          (template ^view))
        (comment
          "The following massive rewriter is where the \"symbolic physics\" of the input \
@@ -422,12 +422,12 @@
 (YScrollbar @thumb-dt_ @thumb-h_ @track-h_ @show_ ⍊ track-style⋮ "" thumb-style⋮ "")
   => (component {@:thumb-dt @:thumb-h @:track-h @:show}
        (comment "Give outside world (and ourselves!) direct access to parts of the reflection below.")
-       (part (@view @thumb-dt) [track [thumb-container (thumb _ ⍊ µ-dt: ±thumb-dt)]])
-       (part (@view @thumb-h) [track [thumb-container (thumb _ ⍊ µ-h: ±thumb-h)]])
+       (part (@node @thumb-dt) [track [thumb-container (thumb _ ⍊ µ-dt: ±thumb-dt)]])
+       (part (@node @thumb-h) [track [thumb-container (thumb _ ⍊ µ-h: ±thumb-h)]])
        (part (@desc @track-h) ⟪(thumb-container _ ⍊ h: ±track-h)⟫)
        (part (@desc @thumb-hover) ⟪(thumb _ ⍊ hit-hover: thumb-hover_)⟫)
        (part (@desc @track-goal) [reflection (track _ ⍊ hit-hover hit-focus-t: ±track-goal)])
-       (part (@view @show) {¦ show_})
+       (part (@node @show) {¦ show_})
        (part (@desc @scroll-hover) [reflection (track _ ⍊ hit-hover: scroll-hover_)])
 
        (comment
@@ -436,7 +436,7 @@
           is because track-style can include things like padding that do not affect \
           track's own height but do restrict thumb's max height. Therefore, we use \
           thumb-container's height instead of track's for track-h.")
-       (reflection {@:desc, node: @view}
+       (reflection {@:desc, @:node}
          (template
            (track style: ^"transparent show:opaque flow-none bg-transparent bg-min-none \
                            content-x membrane hover:cue-hover active:cue-active ⸢track-style⸣"
@@ -456,23 +456,23 @@
           is a severely capped exhR. But even with limit: 3 there's a lot of opportunities \
           for the rules to apply. exhR is needed here to make sure we do the clamps during \
           just one tick; we can't spread it over multiple ticks due to UX concerns.")
-       (rewriter ((exhR (rulesetR exh: true) limit: 3) <-> {@:mouse @:thumb-dt @:thumb-h @:thumb-hover @:track-goal @:track-h @:scroll-hover @:view})
+       (rewriter ((exhR (rulesetR exh: true) limit: 3) <-> {@:mouse @:thumb-dt @:thumb-h @:thumb-hover @:track-goal @:track-h @:scroll-hover @:node})
          ;; Sync visual hover with logical hover: hover.
-         {¦ thumb-hover mouse: [mouse] view: {¦ -hover_}}
+         {¦ thumb-hover mouse: [mouse] node: {¦ -hover_}}
            <> {hover: true}
          ;; Sync visual hover with logical hover: unhover.
-         {¦ -thumb-hover view: {¦ hover_}}
+         {¦ -thumb-hover node: {¦ hover_}}
            <> {(hover): ()}
          ;; When you do mouse left over the thumb, ask mouse for focus coords
-         ;; and mark view as active.
-         {¦ view: {¦ hover -active_} mouse: (mouse left ⍊ -focus_)}
+         ;; and mark node as active.
+         {¦ node: {¦ hover -active_} mouse: (mouse left ⍊ -focus_)}
            <> {active: true, focus: ?}
          ;; When you release mouse left we reset the mouse the easy way and
          ;; unmark active.
-         {¦ mouse_: [mouse] view: {¦ active_}}
+         {¦ mouse_: [mouse] node: {¦ active_}}
            <> {mouse: (mouse), (active): ()}
          ;; When mouse gets focus coords define ref-y (reference Y).
-         {¦ mouse: (mouse left ⍊ -ref-y_ -ref-dt_ focus: {¦ ±y}) view: {¦ active} ±thumb-dt}
+         {¦ mouse: (mouse left ⍊ -ref-y_ -ref-dt_ focus: {¦ ±y}) node: {¦ active} ±thumb-dt}
            <> {ref-y: ^y, ref-dt: ^thumb-dt}
          ;; Maintain thumb-dt in bounds.
          {¦ ±thumb-dt ±thumb-h ±track-h}
@@ -484,11 +484,11 @@
          {¦ mouse: (mouse left ⍊ ±ref-y ±ref-dt focus: {¦ ±y}) ±thumb-dt}
            <> {thumb-dt: ^(+ ref-dt (- y ref-y))}
          ;; Sync visual track hover with logical track hover.
-         {¦ scroll-hover mouse: [mouse] view: {¦ -hover -active -track-hover_}}
+         {¦ scroll-hover mouse: [mouse] node: {¦ -hover -active -track-hover_}}
            <> {track-hover: true}
-         {¦ -scroll-hover view: {¦ track-hover_}}
+         {¦ -scroll-hover node: {¦ track-hover_}}
            <> {(track-hover): ()}
-         {¦ view: {¦ hover track-hover_}}
+         {¦ node: {¦ hover track-hover_}}
            <> {(track-hover): ()}
          ;; Scroll up. Make sure to consume the button so it is guaranteed to apply
          ;; once (since we're exhR it will apply many times otherwise).
@@ -503,7 +503,7 @@
            <> {(B): (), thumb-dt: ^(+ thumb-dt 10)}
          ;; On click, move thumb center to goal coord. Ditto about the button.
          ;; The clamp rules take care of the nasty stuff.
-         {¦ view: {¦ track-hover} ±track-goal mouse: [mouse B←left] ±thumb-dt ±thumb-h}
+         {¦ node: {¦ track-hover} ±track-goal mouse: [mouse B←left] ±thumb-dt ±thumb-h}
            <> {(B): (), thumb-dt: ^(- track-goal (/ thumb-h 2))}))
 
 (Scroll (bar @thumb-offset_ @thumb-size_ @track-size_ @show_)
@@ -521,9 +521,6 @@
        (node @input (input))
 
        (cell @ref-offset)
-
-       (feed (copy @view-aim) (atop @dbg))
-       (cell @dbg)
 
        (comment
          "The rewriter below works just like the one in YScrollbar. We do a capped exhR \
