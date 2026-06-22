@@ -178,7 +178,7 @@ This creates a "waterfall" with one cell in between:
 ;; ... and so on.
 ```
 
-Why is the gap there? This is because `feed`, as well as all other nodes, look at the *complete previous frame* when they are evaluated. In this sense, the process is the same as in cellular automata. So in Frame 1, `feed` looks at the seed, and sees that while the `@v-@x` "roll-down" is possible, `@u-@v` is not. In Frame 2, `200` is at `@x`, so `@v` is empty. Therefore, the `@u-@v` "roll-down" becomes possible, just like `@x-@y`. Both "roll-downs" occur.
+Why is the gap there? This is because `feed`, as well as all other nodes, looks at the *complete previous frame* when it is evaluated. In this sense, the process is the same as in cellular automata. So while building Frame 1, `feed` looks at the seed, and sees that while the `@v-@x` "roll-down" is possible, `@u-@v` is not. Whereas while building Frame 2, `200` is at `@x`, so `@v` is empty. Therefore, the `@u-@v` "roll-down" becomes possible, just like `@x-@y`. Both "roll-downs" occur.
 
 Now I want you to get acquainted with M1, Alloy, and Nitrene, simultaneously. M1 is Wirewright's *pattern matching* subsystem. Alloy is Wirewright's *structural templating language*. Nitrene is Wirewright's *expression language*.
 
@@ -306,7 +306,7 @@ Let's use the `view` node, which maintains at the destination cell a projection 
 (cell @value)
 ```
 
-Let's see what the M1 pattern says first, though: `(_ (cell _ ±n) _)`. This pattern can be constructed using the technique of "progressive refinement", which you should imagine to be like a "symbolic microscope".
+Let's see what the M1 pattern says first, though: `(_ (cell _ ±n) _)`. This pattern can be constructed using the technique of "progressive refinement", which you should imagine to be a bit like a "symbolic microscope".
 
 Let's start with `_`. Most things with underscores in M1 patterns are so-called *blanks*; this particular treatment of underscores is heavily inspired by Wolfram Language, although in M1, it's somewhat more restricted. `_` is known as a nameless, typeless blank. It means "match absolutely anything". You can also read it simply as, "I don't care", or "irrelevant".
 
@@ -384,7 +384,7 @@ A backsystem is a concept from M1, the pattern matching subsystem which we met a
 
 This defines a *rewrite rule*. On the left you see the M1 pattern `(swap a_ b_)`, and on the right, the Alloy template `(swap ^b ^a)`. This rule *fires* when a term matching `(swap a_ b_)` is found.
 
-Let's use the symbolic microscope technique from above to understand how this pattern is constructed. We start from `_`. That's too loose, we want to match a *dictionary* with three *items*: `(_ _ _)`. The first of them must be the *symbol* `swap`: `(swap _ _)`. We want to capture the remaining items to refer to them in the template, so let's give them names: `(swap a_ b_)`.
+Let's use the refinement technique from above to understand how this pattern is constructed. We start from `_`. That's too loose, we want to match a *dictionary* with three *items*: `(_ _ _)`. The first of them must be the *symbol* `swap`: `(swap _ _)`. We want to capture the remaining items to refer to them in the template, so let's give them names: `(swap a_ b_)`.
 
 The template simply swaps the items, producing a new dictionary.
 
@@ -400,9 +400,15 @@ As you can see, we can't just do that. We have to go through the tedious labor o
 (swap (a_ b_) c_) => (swap (^b ^a) ^c)
 ```
 
-This starts to look tedious. And it is! I'm giving very contrived examples here. In practice, some patterns are extremely hard to reconstruct this way. Consider a pattern that might look cryptic to you due to the weird brackets and the degree sign: `⟨±n⟩°`. You're familiar with `±n` already, it means "match a number and call that *n*". What does `⟨_⟩°` mean, then?
+This is starting to look tedious. And it is! I'm giving very contrived examples here. In practice, some patterns -- most patterns! -- are extremely hard to reconstruct this way. Let's see how a *backmap* rule for this `swap` would look like to get an intuitive idea of what backmaps do:
 
-The short answer is, the brackets `⟨⟩` mean *find item*. `°` is a *postfix* which reads as *source*. The whole thing, `⟨⟩°`, reads as *find item source*, that is, *(find item) source*. The whole pattern turns into a *source* driven by *find item*. This is somewhat similar to iterators. That is, *sources*, or *source patterns*, produce zero or more matches rather than just zero or one match.
+```wwml
+(swap (a_ b_) _) <> {a: ^b, b: ^a}
+```
+
+Now, consider the pattern `⟨±n⟩°`. It might look cryptic to you due to the weird brackets and the degree sign. You're familiar with `±n` already, though; it means "match a number and call that *n*". What does `⟨_⟩°` mean, then?
+
+The short answer is, the brackets `⟨⟩` mean *find item*. `°` is a *postfix* which reads as *source*. The whole thing, `⟨⟩°`, reads as *find item source*, that is, *(find item) source*. The whole pattern turns into a *source* driven by *find item*. *Sources*, or *source patterns*, produce zero or more matches, eagerly and exhaustively, rather than just zero or one match.
 
 Summing up the above, `⟨±n⟩` reads as *find first number item and capture under n*. For example, if you match `(1 2 3 4)`, you'll get `{n: 1}`; and in `(a b 100 200 c 300)`, you'll get `{n: 100}`.
 
@@ -424,6 +430,8 @@ It's quite hard to do this. In fact, we are forced to abandon the idea of using 
            ^(+ n 1))))
 ```
 
+In some sense, the common theme with these patterns and our struggling with them is that we're forced to rebuild a house, from scratch, manually, when all we wanted is just to hang a painting in one of its rooms.
+
 Now to backmaps. I came up with backmaps to combat this verbosity.  Backmaps cooperate very tightly with M1 pattern matching; so much so they are part of M1. Therefore, they know where all *n*s are (in our example). So the same rewrite can be expressed using a backmap:
 
 ```wwml
@@ -431,13 +439,15 @@ toplevel←(increment ⟨±n⟩°)
   <> {toplevel: (done ^(up toplevel)), n: ^(+ n 1)}
 ```
 
-It's useful to think of backmaps as a way to do in-place replacement. However, it is extremely important to understand that backmaps are not *mutating* anything. A backmap is, conceptually, a shorthand for rewrites `=>` like the one above. They do the "tearing down" and "reassembly" of immutable structure for you, which, as I shown above, is the boring part. The structure stays immutable throughout the whole process; the rewritten term is a completely new term (caveat: structural sharing).
+It's useful to think of backmaps as a way to do in-place replacement. However, it is extremely important to understand that backmaps are not *mutating* anything. A backmap is, conceptually, a shorthand for rewrites `=>` like the one above. They do the "tearing down" and "reassembly" of immutable structure for you, which, as I demonstrated above, is the boring & tedious part. Everything stays immutable throughout the whole process; the rewritten term is a completely new term (minus structural sharing).
 
-If we simplify our task a little bit and say we just want to increment all numbers in a list, a backmap would do that in just a dozen characters: `⟨±n⟩° <> {n: ^(+ n 1}`. This rule reads as, for each number item in a dictionary, increment it. If we rewrite `(a b 100 200 c 300)` with this, we get: `(a b 101 201 c 301)`.
+If we simplify our task a little bit and say we just want to increment all numbers in a list, a backmap would do that in just about twenty characters: `⟨±n⟩° <> {n: ^(+ n 1}`. This rule reads as, for each number item in a dictionary, increment it. If we rewrite `(a b 100 200 c 300)` with this, we get: `(a b 101 201 c 301)`.
 
-The left-hand side of a backmap is the backmap's M1 *pattern*. The right-hand side is called a *backspec* (short for *backmap specification*).
+The left-hand side of a backmap is the backmap's M1 *pattern*. The right-hand side is called a *backspec* (short for *backmap specification*). It specifies which captures must be replaced, and provides Alloy templates for what they should be replaced with. In each replacement template, all captures are available.
 
-Now, I promised no theory, but all of this is theory, right? Not really. I know I was talking about *backsystems*; I haven't lost track of that. So let's define a *backsystem*, which is a *system of backmaps*, now that you're acquainted with backmaps; the distinctive feature of the latter being the `_ <> _` syntax. Backsystems can be defined using the `backsys` node.
+Moreover, in each replacement template, in Nitrene expressions, you can use `(up capture_)`  and `(dn capture_)`. The former, e.g. `(up foobar)`, you can think of as standing for *up-to-date*, but what it really means is, "look from above", i.e., the point of view is above the capture that is being replaced -- *up*, from that capture's point of view. Symmetrically for `dn`. The understanding of `up` and `dn` is not really necessary in the first tutorial, though, so let's leave them for later. You should be able to recognize them now, however, when you see them.
+
+Now, I promised no theory, but all of this is theory, right? Not really. I know I was talking about *backsystems*; I haven't lost track of that. So let's define a *backsystem*, which is a *system of backmaps*, now that you're acquainted with backmaps; the distinctive feature of the latter being the `_ <> _` syntax. Backsystems can be defined in the circuit using the `backsys` node.
 
 ```wwml
 (cell @x (a b 100 200 c 300))
@@ -466,7 +476,7 @@ If you run this, you'll see:
 ;; ... and so on.
 ```
 
-As you can see, the thing actually works. Feel free to plug in the other backmap and see how the behavior of the circuit changes.
+As you can see, the thing actually works. Feel free to plug in the other backmap(s) and see how the behavior of the circuit changes. Play with the value in the cell, too.
 
 What's the point of the word *system* in *backsystem*, though? Well, consider:
 
@@ -477,7 +487,7 @@ What's the point of the word *system* in *backsystem*, though? Well, consider:
   (_ ±n) <> {n: ^(+ n 1)})
 ```
 
-Here, two backmaps cooperate to increment the numbers. In this particular case they do not interfere into each other's progress; and I don't want to make up complex examples where they do. Nevertheless, they form what I call a *rule system*; whose "systemicity", or "unity", is clearly visible if we imagine ourselves "living" inside `@x`. If we were, the numbers would just increment in concert.
+Here, two backmaps cooperate to increment the numbers. In this particular case they do not interfere with each other's progress; and I don't want to make up complex examples where they do; I don't want this to get even more confusing. Nevertheless, the two backmaps here form what I call a *rule system*; whose "systemicity", or "unity", is clearly visible if we imagine ourselves "living" inside `@x`. For us there, the numbers would just increment in concert. The observed effect (behavior) is indivisible even though it is produced by a collection of entities; I don't know about you, but for me, that surely looks very similar to a *system* -- the entities being rules (backmaps). So, *backsystem*.
 
 ```wwml
 ;; Frame 1
@@ -508,7 +518,7 @@ Now, let's unwind all the way back to the observer example. Now that you've seen
     <> {dst: ^(+ n 1), (n): ()})
 ```
 
-In the pattern here, `` `dst `` identifies a spot where to "plug something in" (an insertion spot, so to speak).  For example, ``(foo `x) <> {x: 100}`` will match `(foo)` (and **not** e.g. `(foo abc)`); and  rewrite it, *inserting* `100` at the designated spot, so it becomes `(foo 100)`.
+In the pattern here, `` `dst `` identifies a spot where to "plug something in" (an insertion point, so to speak).  For example, ``(foo `x) <> {x: 100}`` will match `(foo)` (and **not** e.g. `(foo abc)`); and  rewrite it, *inserting* `100` at the designated spot, so it becomes `(foo 100)`.
 
 `(n): ()` in the backspec means *delete* *n*. So for example, the backmap `(foo x_) <> {(x): ()}` rewrites `(foo "hello")` to `(foo)` -- it deletes *x*.
 
@@ -536,7 +546,9 @@ If you run this, you'll see the following (I'll omit `backsys` because it stays 
 ;; ... and so on.
 ```
 
-What's going on here? First, you have to keep in mind the "observation lag" from above. I think it'd be easier to see if I split frames into *subframes* so that the `circuit` is seen evolving separately from its container:
+What's going on here? Why don't we see the "fall"?
+
+First, you have to keep in mind the "observation lag" from above. I think it'd be easier to see what happens here and why we don't see the "fall" if I split frames into *subframes* so that the `circuit` is seen evolving separately from its container:
 
 ```wwml
 ;; Subframe 1
@@ -551,7 +563,7 @@ What's going on here? First, you have to keep in mind the "observation lag" from
   (cell @y 0)
   (feed @x @y))
 
-;; FRAME 1 complete
+;; FRAME 1 complete. The above is printed.
 ;; ----------------
 
 ;; Backsystem notices the second cell is 0. In one swift move, it grabs
@@ -570,7 +582,7 @@ What's going on here? First, you have to keep in mind the "observation lag" from
   (cell @y 1)
   (feed @x @y))
 
-;; FRAME 2 complete
+;; FRAME 2 complete. The above is printed.
 ;; ----------------
 
 ;; Again, it's the backsystem's turn now.
@@ -580,11 +592,20 @@ What's going on here? First, you have to keep in mind the "observation lag" from
   (cell @x 2)
   (cell @y)
   (feed @x @y))
+  
+;; Subframe 6.
+(circuit @subcircuit
+  (cell @x)
+  (cell @y 2)
+  (feed @x @y))
+  
+;; FRAME 3 complete. The above is printed.
+;; ----------------
 
 ;; ... and so on.
 ```
 
-Since time runs outside-in, we simply can't observe the incremented value fall. We (humans) are at the outermost level; `backsys` is one level down, but it, too, can't catch the `circuit`, because it is evaluated already when it's our move.
+Since time runs outside-in, we simply can't observe the incremented value fall. We (humans) are at the outermost level; `backsys` is one level down, but it, too, can't catch the `circuit` in the interim, because it is evaluated already when it's the backsystem's move.
 
 It might seem I'm only showing examples where this top-down order seems highly unintuitive. Fair point. However, consider:
 
@@ -628,4 +649,6 @@ If you run this (again, I'm omitting `backsys` for brevity):
 ;; ... and so on.
 ```
 
-Here, the choice of outside-in for time makes sense; we allow the container to observe & modify the contained, and then, give reigns to the contained; it is its turn to "relax" now, as in, reach a relaxed state, given the perturbations of its container (if any). Outside-in is therefore important, because relaxation is naturally scheduled when a subcircuit is (or could be) damaged; and observation always happens when a subcircuit is relaxed. A container never observes its elements in their "broken" shape; only in their relaxed, or tending-to-relaxation, state. This is part of the philosophical reasoning I mentioned above; as you can see, it's not an easy point to make.
+Here, the choice of outside-in for time makes sense; we allow the container to observe & modify the contained, and then, give reigns to the contained; it is its turn to "relax" now, as in, reach or search for a relaxed state, given the perturbations by its container (if any).
+
+Outside-in is therefore important, because relaxation is naturally scheduled when a subcircuit is (or could be) damaged; and observation always happens when a subcircuit is relaxed, or was at least given a chance to relax. The container is preferred and given reign over the contained; the contained responds to the container, and not the other way.
