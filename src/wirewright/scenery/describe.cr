@@ -475,6 +475,9 @@ module Ww::Scenery
   private def annotate(commit : Term::Dict::Commit, hit : HitLeaf | HitGroup) : Nil
     if hit.hover
       commit.with(:"hit-hover", true)
+      if hit.is_a?(HitLeaf)
+        commit.with(:"hit-leaf", true)
+      end
     end
 
     focus = hit.part.tl

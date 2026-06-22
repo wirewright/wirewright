@@ -215,15 +215,19 @@ module Ww::D7
   alias IParseCache = ICache(Term, ParseTree)
 
   # Uses the classifier *clf* to convert a *circuit* into a tree of the kind
-  # defined by the *reply* type.
-  def parse(clf : Classifier, circuit : Term, reply : ParseTree.class, *, cache : IParseCache = Uncached(Term, ParseTree).new)
+  # defined by the *reply* type. *circuit* is considered a `Parent` if it
+  # is a dict.
+  #
+  # You can also provide an explicit child *range* to pass through to `Parent`;
+  # by default, all items are considered.
+  def parse(clf : Classifier, circuit : Term, reply : ParseTree.class, *, cache : IParseCache = Uncached(Term, ParseTree).new, range : Range(UInt32, UInt32)? = nil)
     unless nodes = circuit.as_d?
       return InertLeaf.new(feature: inert(circuit))
     end
 
     # Assuming you can't embed a circuit inside itself, of course ... Which you can't.
     cache.put_if_absent(circuit) do
-      parse(clf, cache, parent(nodes), reply)
+      parse(clf, cache, parent(nodes, range || (0u32...nodes.uitemsize)), reply)
     end
   end
 

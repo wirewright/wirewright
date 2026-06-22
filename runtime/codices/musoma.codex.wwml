@@ -504,10 +504,17 @@ history-limit: 128
 
 [inert term_] => (term ^term)
 
-(inert (comment caption_string) ⍊ -incomplete)
-  => (group detail: (comment ^caption))
+;; Figures are considered very visually "heavy", so we effectively force
+;; them to be rendered multiline.
+[figure trees←(_*)]
+  => (atom type: ^('figure trees) mass: 64)
 
 (gnd term_) => (inert ^term)
+
+;; Comment widget
+
+(gnd (comment caption_string))
+  => (group detail: (comment ^caption))
 
 ;; Rule widget
 
@@ -1074,6 +1081,11 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 (atom ⍊ type: (expander addr_ ¦ pairs_))
   => (Expander ^addr ^… pairs)
 
+(atom ⍊ type: (figure (tree_)))
+  => ^tree
+
+(atom ⍊ type: (figure trees←(_*)))
+  => (group ^*trees style: "flow-col")
 
 --- prettyR ;; Pretty printing rewriter spec
 
@@ -1396,6 +1408,7 @@ scroll: {}
 
 ;; Begin panning circuit...
 {¦ hover-over: ()
+   -reflection-hover
    mouse: {| left -dragging_} ;; | Damn Racket highlighting
    circuit-view-vantage: [vantage {¦ hit-hover hit-focus-l: ±hit-l hit-focus-t: ±hit-t}]
    -panning-circuit_}

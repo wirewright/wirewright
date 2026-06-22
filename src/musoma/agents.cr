@@ -187,6 +187,12 @@ module MuSoma
             D7.parent(node.as_d, 2u32...3u32)
           end
 
+          matchpi %{[figure _*]} do
+            continue if MuSoma.editing?(node)
+
+            D7.gnd(node)
+          end
+
           otherwise do
             feature
           end
@@ -194,7 +200,7 @@ module MuSoma
       end
     end
 
-    private def self.repr(tree : D7::InertLeaf, addr : D7::NodeAddr) : Term
+    private def self.repr(codex : Microfold::SyncCodex, tree : D7::InertLeaf, addr : D7::NodeAddr) : Term
       repr = Term::Dict.build do |commit|
         commit << :inert << tree.feature.node
 
@@ -208,7 +214,7 @@ module MuSoma
       Term.of(repr)
     end
 
-    private def self.repr(tree : D7::GndLeaf, addr) : Term
+    private def self.repr(codex : Microfold::SyncCodex, tree : D7::GndLeaf, addr) : Term
       node = tree.feature.node
 
       Term.case(node) do
@@ -248,13 +254,19 @@ module MuSoma
           Term.of(:"closed-rule-widget", addr, doc, pattern)
         end
 
+        matchpi %{[figure _*]} do
+          trunk = Trunk.new(active: nil)
+          tree = D7.parse(MuSoma.clf, node, reply: D7::ParseTree, range: 1u32...node.uitemsize)
+          Term.of(:figure, MuSoma.distill(codex, tree, addr, trunk))
+        end
+
         otherwise do
           Term.of(:gnd, node)
         end
       end
     end
 
-    private def self.repr(tree : D7::UnaugmentedParentNode, addr) : Term
+    private def self.repr(codex : Microfold::SyncCodex, tree : D7::UnaugmentedParentNode, addr) : Term
       parent = tree.feature
 
       repr = parent.node.pairspart.transaction do |commit|
@@ -271,7 +283,7 @@ module MuSoma
           index = key - parent.range.begin
           child = tree.children[index]
 
-          commit << repr(child, addr.append(key))
+          commit << repr(codex, child, addr.append(key))
         end
       end
 
@@ -296,8 +308,8 @@ module MuSoma
 
     # Returns the representation tree for *tree*. This tree is ready for
     # pretty-printing.
-    def self.repr(tree : D7::UnaugmentedParseTree) : Term
-      repr = repr(tree, D7::NodeAddr.empty)
+    def self.repr(codex : Microfold::SyncCodex, tree : D7::UnaugmentedParseTree) : Term
+      repr = repr(codex, tree, D7::NodeAddr.empty)
 
       # Mark the topmost parent as root for styling in prettyR.
       Term.matchpi(repr, %{[parent _*]}) do
@@ -306,18 +318,20 @@ module MuSoma
     end
 
     def present(ws : Workspace) : Nil
-      force = Var.pending?(ws.codex)
+      force = Var.pending?(ws.codex, ws.mu_codex)
       return unless Var.pending?({ws.state, :timeline}, or_if: force)
 
       ws.state.update do |state|
-        present(ws.codex.get.pretty, state, force)
+        codex = ws.codex.get
+        mu_codex = ws.mu_codex.get
+        present(codex.pretty, mu_codex, state, force)
       end
     end
 
     @seen_circuit : Term?
     @seen_repr : Term?
 
-    def present(pretty : Codex::Pretty, state : Term::Dict, force : Bool) : Term::Dict
+    def present(pretty : Codex::Pretty, mu_codex : Microfold::SyncCodex, state : Term::Dict, force : Bool) : Term::Dict
       circuit = Term.case(state) do
         # Show the draft if at end-of-history.
         matchpi %{{¦ timeline: (_ I * _ draft_)}} do
@@ -341,7 +355,7 @@ module MuSoma
         D7.parse(PrettyAgent.fbclf, circuit, reply: D7::UnaugmentedParseTree, cache: @cache)
       end
 
-      repr = PrettyAgent.repr(tree)
+      repr = PrettyAgent.repr(mu_codex, tree)
 
       # Fast path if the representation did not change. This accounts for
       # things like folds (e.g. `section`, `slot`). If something is inside
@@ -881,20 +895,36 @@ module MuSoma
       # TODO: What do we need to do if the window is closed?
       return unless description = msg.description?
 
-      state = {} of D7::NodeAddr => Term
+      reflections = {} of D7::NodeAddr => Term
+      reflection_hover = false
 
       description.vantages.each do |vantage|
-        Term.matchpi?(vantage, %{(vantage _* ⍊ id: (figure path←(_*)))}) do
+        Term.matchpi?(vantage, %{(vantage _* ⍊ id: (reflection path←(_*)))}) do
           indices = path.items.compact_map(&.to?(UInt32))
           assert indices.size == path.size
 
           addr = D7::NodeAddr.new(indices, &.itself)
-          observation = Term.morph(vantage, {0, :figure}, {:id, nil})
-          state[addr] = observation
+          reflection = Term.morph(vantage, {0, :reflection}, {:id, nil})
+          reflections[addr] = reflection
+
+          next if reflection_hover
+
+          children = reflection.items.move(1)
+          children.each do |child|
+            next unless child = child.as_d?
+            next unless child[:"hit-hover"]?
+
+            reflection_hover = true
+            break
+          end
         end
       end
 
-      @vantages.sync(state)
+      ws.state.update do |state|
+        Term.morph(state, {:"reflection-hover", reflection_hover ? true : nil})
+      end
+
+      @vantages.sync(reflections)
     end
 
     def receive(ws, plan, msg : Scheduler::Event)
@@ -923,7 +953,7 @@ module MuSoma
       ws.state.update do |state|
         Term.case(state) do
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
-            prepass = FigurePrepass.new(@vantages, successor: Rack::Prepass)
+            prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
 
             drafts1 = ws.parser.step(MuSoma.clf, draft, prepass, steppers: {Rack::Tspace, Rack})
             draft1 = drafts1.last
@@ -966,7 +996,6 @@ module MuSoma
   class MouseAgent
     def initialize
       @mice = Slice(MediaService::Mouse).empty
-      @hovered = false
     end
 
     def receive(ws : Workspace, plan, msg : MediaService::WindowDescriptionChanged) : Nil
@@ -976,26 +1005,12 @@ module MuSoma
         mice1 = description.mice
       end
 
-      hovered0 = @hovered
-      hovered1 = false
-      Term.matchpi?(ws.state.get, %{{¦ window-view-vantage: [vantage {¦ hit-hover}]}}) do
-        hovered1 = true
-      end
-
       @mice = mice1
-      @hovered = hovered1
 
-      case {hovered0, hovered1}
-      in {false, false}
-      in {false, true}, {true, false}
-        # Update mice in the circuit on window-view pane hover / unhover transition.
-        plan << UpdateMice.new(mice0, mice1)
-      in {true, true}
-        # Update mice in the circuit while window-view is hovered.
-        unless mice0 == mice1
-          plan << UpdateMice.new(mice0, mice1)
-        end
-      end
+      # Update mice in the circuit. Note that we can't do anything smart here
+      # because a (mouse) node can appear out of nowhere in the circuit and it
+      # must be updated with whatever state available, changed or not.
+      plan << UpdateMice.new(mice0, mice1)
 
       state0 = MediaService::Mouse::State::None
       if mouse0 = mice0.first?

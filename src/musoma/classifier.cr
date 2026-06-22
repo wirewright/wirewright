@@ -159,6 +159,14 @@ module MuSoma
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
+        matchpi %{[figure _*]} do
+          D7.parent(node.as_d, 1u32...node.uitemsize)
+        end
+
+        matchpi %{(comment _string)} do
+          D7.gnd(node)
+        end
+
         matchpi %{[head_ _*]} do
           continue unless Scenery::KnowledgeBase.parent_head?(head)
 
@@ -225,7 +233,8 @@ module MuSoma
 
   defrecord Trunk, active : Term::Rep?
 
-  private def distill(codex, tree : D7::InertLeaf, addr, trunk) : Term::Rep
+  # :nodoc:
+  def distill(codex, tree : D7::InertLeaf, addr, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -251,7 +260,8 @@ module MuSoma
     end
   end
 
-  private def distill(codex, tree : D7::GndLeaf, addr, trunk) : Term::Rep
+  # :nodoc:
+  def distill(codex, tree : D7::GndLeaf, addr, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -282,7 +292,8 @@ module MuSoma
     end
   end
 
-  private def distill(codex, tree : D7::ParentNode, addr, trunk) : Term::Rep
+  # :nodoc:
+  def distill(codex, tree : D7::ParentNode, addr, trunk) : Term::Rep
     pred = nil
     buffer = Pf::Kit.stack_array(Term::Rep, 8)
 
@@ -370,7 +381,8 @@ module MuSoma
     Term.rep_of(curated)
   end
 
-  private def distill(codex, tree : D7::MixtureNode | D7::ScopeNode, addr, trunk) : Term::Rep
+  # :nodoc:
+  def distill(codex, tree : D7::MixtureNode | D7::ScopeNode, addr, trunk) : Term::Rep
     distill(codex, tree.child, addr, trunk)
   end
 
