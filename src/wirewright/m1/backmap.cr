@@ -1173,142 +1173,212 @@ module Ww::M1
       Proposed.new
     end
 
-    alias PatchArray = Pf::Kit::HybridArray({Patch, Node | DictEntry}, 16)
-
     defrecord ProposeContext, patches : PatchArray, dict : Term::Dict, subtree : Node
+
+    class PatchArray
+      alias Srcnode = Node | DictEntry
+
+      include Indexable({Patch, Srcnode})
+
+      # Returns `true` if all patches in this array are `Replace`.
+      getter? replacements : Bool
+
+      # :nodoc:
+      def initialize(@patches : Pf::Kit::HybridArray({Patch, Srcnode}, 16))
+        @replacements = true
+      end
+
+      def self.alloc(& : PatchArray ->)
+        patches = Pf::Kit.stack_array({Patch, Srcnode}, 16)
+        instance = stack_alloc PatchArray.new(patches)
+        yield instance
+      end
+
+      def size : Int32
+        @patches.size
+      end
+
+      def unsafe_fetch(index : Int) : {Patch, Srcnode}
+        @patches.unsafe_fetch(index)
+      end
+
+      def <<(entry : {Patch, Srcnode}) : self
+        patch, srcnode = entry
+
+        unless patch.is_a?(Replace)
+          @replacements = false
+        end
+        @patches << {patch, srcnode}
+
+        self
+      end
+    end
 
     def propose(µ : MutContext?, node : DictInterior) : ProposeOut
       node.proposal = nil
 
-      dict = node.initial
-      patches : PatchArray = Pf::Kit.stack_array({Patch, Node | DictEntry}, 16)
+      PatchArray.alloc do |patches|
+        dict = node.initial
 
-      node.fanout.each do |step, successor|
-        # If successor is not mutated, we need not devote any attion to it.
-        next unless mutates?(successor)
-        next unless proposal = successor.proposal
+        node.fanout.each do |step, successor|
+          # If successor is not mutated, we need not devote any attion to it.
+          next unless mutates?(successor)
+          next unless proposal = successor.proposal
 
-        unless propose?(ProposeContext.new(patches, dict, successor), step, proposal)
-          return conflict(successor)
+          unless propose?(ProposeContext.new(patches, dict, successor), step, proposal)
+            return conflict(successor)
+          end
         end
-      end
 
-      node.entries.each do |key0, entry|
-        # If neither key nor value is mutated, accounting for them could cause
-        # spurious conflicts, so we skip them.
-        next unless mutates?(entry.key) || mutates?(entry.value)
+        node.entries.each do |key0, entry|
+          # If neither key nor value is mutated, accounting for them could cause
+          # spurious conflicts, so we skip them.
+          next unless mutates?(entry.key) || mutates?(entry.value)
 
-        keyp = entry.key.proposal
-        valuep = entry.value.proposal
+          keyp = entry.key.proposal
+          valuep = entry.value.proposal
 
-        if keyp && Term.changes?(key0, after: keyp)
-          # valuep : Nil  (%entry k_string _) <> {k: (seen ^k)}
-          # valuep : Rep  (%entry k_string v_) <> {k: (seen ^k), v: (seen ^v)}
-          valuep ||= Term.rep(dict[key0])
+          if keyp && Term.changes?(key0, after: keyp)
+            # valuep : Nil  (%entry k_string _) <> {k: (seen ^k)}
+            # valuep : Rep  (%entry k_string v_) <> {k: (seen ^k), v: (seen ^v)}
+            valuep ||= Term.rep(dict[key0])
+            if valuep.empty?
+              # Removal wins: (%entry k_string v_) <> {k: (seen ^k), (v): ()}
+              patches << {Dissoc.new(key0), entry.value}
+              next
+            end
+
+            value = Term.collapse(valuep)
+
+            # Key changed.
+            patches << {Dissoc.new(key0), entry.key}
+
+            # Implement broadcast value behavior, as demonstrated by:
+            #
+            #   (%entry k_ foo) <> {(k): (a b c)}
+            #
+            # Running this on {x: foo, y: bar}, you get: {a: foo, b: foo, c: foo, y: bar}.
+            keyp.each do |dst|
+              patches << {Assoc.new(dst, value), entry.key}
+            end
+
+            # If value also changed, then the Assocs we've emitted above are enough.
+            next
+          end
+
+          # Key is the same.
+
+          next unless valuep
+
+          if index = dict.index32?(key0)
+            if term = valuep.single?
+              # (x_ _) <> {x: 100}
+              patches << {Replace.new(key0, term), entry.value}
+              next
+            end
+            # (x_ _) <> {(x): (a b c)}
+            # (x_ _) <> {(x): ()}
+            # etc.
+            patches << {ReplaceRange.new(index, index + 1, ord: index, rep: valuep), entry.value}
+            next
+          end
+
           if valuep.empty?
-            # Removal wins: (%entry k_string v_) <> {k: (seen ^k), (v): ()}
+            # {¦ x_} <> {(x): ()}
             patches << {Dissoc.new(key0), entry.value}
             next
           end
 
-          value = Term.collapse(valuep)
+          # {¦ x_} <> {x: 100}  {¦ x_} <> {(x): (a b c)}
+          patches << {Replace.new(key0, Term.collapse(valuep)), entry.value}
+        end
 
-          # Key changed.
-          patches << {Dissoc.new(key0), entry.key}
+        # Check for conflicts.
+        if conflict = conflict?(dict, patches)
+          return conflict
+        end
 
-          # Implement broadcast value behavior, as demonstrated by:
-          #
-          #   (%entry k_ foo) <> {(k): (a b c)}
-          #
-          # Running this on {x: foo, y: bar}, you get: {a: foo, b: foo, c: foo, y: bar}.
-          keyp.each do |dst|
-            patches << {Assoc.new(dst, value), entry.key}
+        replacements = Pf::Kit.stack_array(ReplaceRange, 4)
+
+        dict = dict.transaction do |commit|
+          patches.each do |patch, _|
+            case patch
+            in Assoc, Replace
+              commit.with(patch.key, patch.value)
+            in Dissoc
+              commit.without(patch.key)
+            in ReplaceRange
+              replacements << patch
+            end
           end
-
-          # If value also changed, then the Assocs we've emitted above are enough.
-          next
         end
 
-        # Key is the same.
-
-        next unless valuep
-
-        if index = dict.index32?(key0)
-          if term = valuep.single?
-            # (x_ _) <> {x: 100}
-            patches << {Replace.new(key0, term), entry.value}
-            next
+        if replacements.present?
+          replacements.unstable_sort_by! { |r| {r.begin, r.end, r.ord} }
+          replacements.reverse_each do |r|
+            dict = dict.replace(r.begin...r.end, r.rep)
           end
-          # (x_ _) <> {(x): (a b c)}
-          # (x_ _) <> {(x): ()}
-          # etc.
-          patches << {ReplaceRange.new(index, index + 1, ord: index, rep: valuep), entry.value}
-          next
         end
 
-        if valuep.empty?
-          # {¦ x_} <> {(x): ()}
-          patches << {Dissoc.new(key0), entry.value}
-          next
-        end
+        node.proposal = dict
 
-        # {¦ x_} <> {x: 100}  {¦ x_} <> {(x): (a b c)}
-        patches << {Replace.new(key0, Term.collapse(valuep)), entry.value}
+        Proposed.new
       end
+    end
+
+    private def conflict?(dict : Term::Dict, patches) : Conflict?
+      # O(n) instead of O(n^2) when we have a lot of replacements. Note that
+      # it would be nice if we didn't have either here: not O(n), nor O(n^2),
+      # but unfortunately, for now, we must; I can't see how this can be improved,
+      # since we do need to check for conflicts...
+      if patches.replacements? && patches.size >= 16
+        hash = {} of Term => {Replace, PatchArray::Srcnode}
+
+        patches.each do |patch, srcnode|
+          assert patch.is_a?(Replace)
+
+          if prev = hash[patch.key]?
+            prev_patch, prev_srcnode = prev
+            if conflicts?(prev_patch, patch)
+              return conflict(prev_srcnode, srcnode)
+            end
+          end
+
+          hash[patch.key] = {patch, srcnode}
+        end
+
+        return # No conflicts found.
+      end
+
+      conflict_quadratic?(dict, patches)
+    end
+
+    private def conflict_quadratic?(dict : Term::Dict, patches) : Conflict?
+      return unless patches.size >= 2
 
       patches.each_with_index do |(p, srcnode0), i|
         patches.each_with_index do |(q, srcnode1), j|
           next if i == j
           next unless conflicts?(p, q)
-          next unless agents(srcnode0) == agents(srcnode1)
 
           # For any rule there's an exception! Of course! . . .
-
-          case {p, q}
-          when {ReplaceRange, ReplaceRange}
-            # If we have two ranges, they are *really* in conflict only if different agents
-            # are involved. The same (group of) agents can't conflict with itself on
-            # ReplaceRange, assuming the ords are different.
-            next unless p.ord == q.ord
-          when {ReplaceRange, Replace}, {Replace, ReplaceRange}
-            # These are never in conflict for a single agent because patch application
-            # is staged, so ReplaceRanges win over Replaces.
-            next
+          if agents(srcnode0) == agents(srcnode1) # u64 equality most of the time
+            case {p, q}
+            when {ReplaceRange, ReplaceRange}
+              # If we have two ranges, they are *really* in conflict only if different agents
+              # are involved. The same (group of) agents can't conflict with itself on
+              # ReplaceRange, assuming the ords are different.
+              next unless p.ord == q.ord
+            when {ReplaceRange, Replace}, {Replace, ReplaceRange}
+              # These are never in conflict for a single agent because patch application
+              # is staged, so ReplaceRanges win over Replaces.
+              next
+            end
           end
 
           return conflict(srcnode0, srcnode1)
         end
-
-        if p.is_a?(Assoc) && dict.includes?(p.key)
-          return conflict(srcnode0)
-        end
       end
-
-      replacements = Pf::Kit.stack_array(ReplaceRange, 4)
-
-      dict = dict.transaction do |commit|
-        patches.each do |patch, _|
-          case patch
-          in Assoc, Replace
-            commit.with(patch.key, patch.value)
-          in Dissoc
-            commit.without(patch.key)
-          in ReplaceRange
-            replacements << patch
-          end
-        end
-      end
-
-      if replacements.present?
-        replacements.unstable_sort_by! { |r| {r.begin, r.end, r.ord} }
-        replacements.reverse_each do |r|
-          dict = dict.replace(r.begin...r.end, r.rep)
-        end
-      end
-
-      node.proposal = dict
-
-      Proposed.new
     end
 
     def propose?(ctx, step : Log::ExamineRange, proposal : Term::Rep) : Bool

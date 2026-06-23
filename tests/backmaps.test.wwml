@@ -880,7 +880,7 @@
 
   (backmap ((%partition (%layer rest_ (_ _)) _) {rest: {a: 1, b: 2}})
     (= (+ 1 2 3 x: 10 y: 20) (+ 1 a: 1 b: 2 x: 10 y: 20))
-    (= (+ 1 2 3 a: 10 b: 20 x: 10 y: 20)))
+    (= (+ 1 2 3 a: 10 b: 20 x: 10 y: 20) (+ 1 a: 1 b: 2 x: 10 y: 20)))
 
   ;; Replace pairspart residue
   (backmap ((_* ¦ rest_ x_ y_) {rest: {a: ^y, b: ^x}})
