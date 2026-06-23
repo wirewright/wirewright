@@ -169,7 +169,8 @@ module Ww::M1
           %{[%'%let _ _]},
           %{[%'%ref _]},
           %{[%'%payload _]},
-          cues: {:"%pass", :"%never", :"%let", :"%ref", :"%payload"},
+          %{[%'%seq _*]},
+          cues: {:"%pass", :"%never", :"%let", :"%ref", :"%payload", :"%seq"},
         ) { }
 
         matchpi(
@@ -183,11 +184,37 @@ module Ww::M1
           details += 1
         end
 
+        matchpi(
+          %{[%'%plural]},
+          %{[%'%plural/min]},
+          %{[%'%plural/max]},
+          %{[%'%plural _]},
+          %{[%'%plural/min _]},
+          %{[%'%plural/max _]},
+          cues: {:"%plural", :"%plural/min", :"%plural/max",
+                 :"%plural", :"%plural/min", :"%plural/max"},
+        ) do
+          details += 1
+
+          unless member[:type]? == Term.of(:_)
+            details += 1
+          end
+
+          unless member[:min]? == Term.of(0)
+            details += 1
+          end
+
+          unless member[:max]? == Term.of(:∞)
+            details += 1
+          end
+        end
+
         # Duplicate name such as in (+ x_ x_) counts as a constraint. Constraints
         # are among the most valued things in a pattern.
         matchpi %{[%'%capture name_]}, cue: :"%capture" do
           next if names.add?(name)
 
+          # Duplicate
           constraints += 1
         end
 

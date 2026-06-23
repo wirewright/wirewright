@@ -3937,6 +3937,13 @@
   (level ((%keypool x y) b c))
   (level ((%keypool x y z) b c)))
 
+;; Plurals must affect specificity
+(specificity
+  (level D_dict (_*))
+  (level (_number*) (_string*) (_boolean*) ((%plural/min type: _number)) ((%plural/min xs min: 3)))
+  (level (_number+) (_string+) (_boolean+) ((%plural/max type: _number min: 3)))
+  (level ((%plural/min xs type: _number min: 3 max: 5))))
+
 (specificity
   (level (x_ b c))
   (level ((%all x_ y_) b c))
