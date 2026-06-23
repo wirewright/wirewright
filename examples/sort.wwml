@@ -1,0 +1,7 @@
+(cell @numbers
+  (392 936 237 463 169 985 403 983 214 376 189 856 949 13 519 14 626 179 906))
+
+(backsys @numbers
+  ;; Swap adjacent if out of order. This is basically bubble sort.
+  ⟨±n m←(%number _ < (var n))⟩°
+    <> {n: ^m, m: ^n})
