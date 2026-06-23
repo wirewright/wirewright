@@ -2551,6 +2551,28 @@ module Indexable(T)
   def starts_with?(other : Indexable)
     starts_with?(other) { |a, b| a == b }
   end
+
+  def median
+    if empty?
+      raise EmptyError.new
+    end
+
+    workspace = sort
+
+    # size > 0
+
+    if size.odd?
+      return workspace[size//2]
+    end
+
+    # size > 0 && size.even?
+    #   => size >= 2
+
+    i = size//2
+    m0 = workspace[i - 1]
+    m1 = workspace[i]
+    (m0 + m1)/2
+  end
 end
 
 struct Slice(T)

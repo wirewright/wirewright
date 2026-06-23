@@ -548,7 +548,8 @@ If you run this, you'll see the following (I'll omit `backsys` because it stays 
 
 What's going on here? Why don't we see the "fall"?
 
-First, you have to keep in mind the "observation lag" from above. I think it'd be easier to see what happens here and why we don't see the "fall" if I split frames into *subframes* so that the `circuit` is seen evolving separately from its container:
+First, you have to keep in mind the "observation lag" from above. I think it'd be easier to see what happens here and why we don't see the "fall" if I split frames into *subframes* so that the `circuit` is seen evolving separately from its container.
+You can do the same using the `--subframes` flag in `irack`; run the example above like so: `irack --single-step --subframes /tmp/seed.wwml`.
 
 ```wwml
 ;; Subframe 1
