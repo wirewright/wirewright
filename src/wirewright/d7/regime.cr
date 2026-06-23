@@ -321,11 +321,11 @@ module Ww::D7
           return false unless compatible?(item0, item1, subpath, predicate)
         end
       else
-        # They're definitely incompatible if one, say, pushed, and the other
-        # popped. We'll mess up the indices if we attempt to merge. Only one
-        # participant gets to modify the itemsize (and everything else along
-        # with it). Thus we mark all items as having been modified.
-        ref.items.each_with_index do |item, index|
+        # Itemsize change (adding or removing an item) is treated holistically:
+        # only one participant is allowed to modify it. To achieve this we mark
+        # all items as having been modified.
+        target = {ref, successor}.max_by(&.itemsize)
+        target.items.each_with_index do |target, index|
           subpath = path.append(Tpath.value(index))
           return false unless predicate.call(subpath)
         end

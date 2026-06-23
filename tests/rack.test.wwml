@@ -5529,3 +5529,24 @@
       (part (@counter @count) (counter ±count))
       (backsys @count ±n <> {n: ^(+ n 1)}))))
   ;; ...
+
+;; BUG: only one participant must be allowed to change itemsize;
+;; all of its changes must be rolled back in case of failure.
+(rack
+  (frame
+    (backsys {@:xs @:a} {¦ xs: (_* `dst) a_} <> {dst: ^a, (a): ()})
+    (backsys {@:xs @:b} {¦ xs: (_* `dst) b_} <> {dst: ^b, (b): ()})
+    (cell @xs ())
+    (cell @a 1)
+    (cell @b 2))
+
+  (frame/tail
+    (cell @xs (1))
+    (cell @a)
+    (cell @b 2))
+
+  (frame/tail
+    (cell @xs (1 2))
+    (cell @a)
+    (cell @b))
+  end)
