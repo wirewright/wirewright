@@ -504,7 +504,7 @@ module Ww::M1
 
           min = s.key(:min, type: UInt32, default: 0u32)
           max = s.key(:max, type: UInt32, default: Term.of(:∞))
-          type = s.key(:type, value: {:_, :_number, :_string, :_symbol, :_dict, :_blob}, default: Term.of(:_))
+          type = s.key(:type, value: {:_, :_number, :_string, :_symbol, :_boolean, :_dict, :_blob}, default: Term.of(:_))
           continue if max.is_a?(UInt32) && min > max
 
           normal = opts.transaction do |commit|
