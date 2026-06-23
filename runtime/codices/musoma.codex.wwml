@@ -284,6 +284,16 @@ history-limit: 128
   => (atom "()" type: punct)
 
 ;; Example:
+;; (1 2 3 4 5)
+(term D←((%plural type: _number min: 8)))
+  => (group detail: cat
+       (group detail: seq
+         (atom "(" type: punct)
+         (group detail: (number-block ^D)
+           (atom mass: 64)))
+       (atom ")" type: punct))
+
+;; Example:
 ;; (x (a b c) y z)
 ;; (x (a b c)
 ;;   y
@@ -1077,6 +1087,11 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 
 (group ⍊ detail: (path-reading addr_ path_string reading_))
   => (PathReadingWidget ^addr ^path ^reading)
+
+(group [atom] ⍊ detail: (number-block D_dict))
+  => (group style: "content flow-wrap gap-3/2 text-theme-number clamp max-w-3xs border-sm px-1 border-theme-highlight-low rounded-sm text-sm/4"
+       (^each (D as ±n)
+         ^\n))
 
 (atom ⍊ type: (expander addr_ ¦ pairs_))
   => (Expander ^addr ^… pairs)
