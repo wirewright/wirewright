@@ -14,24 +14,33 @@ a kind of *symbolic mechanism*. What does one mean when one says, structure *is*
 structure is *the same thing* as computation? Wirewright is an attempt to answer this question, among
 many others.
 
-In Wirewright, buttons and input fields have insides (the same way a real-world button is a box
-with a mechanism inside it), programs can move, and some of the core distinctions of modern
-programming do not exist. In Wirewright, the same *term* can act as data, state, code, and UI.
-Instead of *evaluation*, in Wirewright, we have *simulation*.
+In Wirewright,
+
+- Buttons and inputs have insides, the same way a button in the real world is a box
+  with a mechanism inside it. A Wirewright button is a tiny "organism" containing a
+  symbolic model of the mouse. The button is capable of observing this model as well
+  as a symbolic description of its own visuals, and reacting to the behavior of the user.
+- Programs can look around and move!
+- Editors inhabit the same world they edit.
+- Sorting is understood as a law that reduces disorder.
+- Some of the core distinctions of modern programming do not apply. The same *term* can
+  act as data, state, code, and UI.
+- Instead of *evaluation*, we have *simulation*.
 
 Wirewright can also be seen through the lens of a game analogy. Imagine Wirewright as implementing
-a game, but instead of entities you have data structures, instead of sprites & textures & materials
-etc. you have extended S-expressions, and physics is not about boxes and vectors and collisions
-and such but about making data structures interact with each other in various ways.
+a game, but instead of entities you have data structures, and instead of graphics you have extended
+S-expressions; and physics is not about boxes and vectors and collisions and such but about
+making data structures interact with each other in various ways.
 
 > [!NOTE]
-> I'm not a native speaker of English. I apologize for any mistakes in advance!
+> I'm not a native speaker of English. I apologize in advance for any mistakes I might make!
 
 > [!NOTE]
 > Wirewright is not a solution to any practical problem. Instead, it tries to see what else
 > is there beyond & in the near neighborhood of OOP (in the Alan Key sense), pure FP, dataflow,
 > discrete simulation, cellular automata, term rewriting, morphological computing, programmable matter,
 > and the like. Whether this endeavor results in anything practically useful is currently unknown.
+> However, see the examples. We're well past the "calculating factorial" point.
 
 ## Gallery
 
