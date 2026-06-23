@@ -40,24 +40,45 @@ making data structures interact with each other in various ways.
 > is there beyond & in the near neighborhood of OOP (in the Alan Key sense), pure FP, dataflow,
 > discrete simulation, cellular automata, term rewriting, morphological computing, programmable matter,
 > and the like. Whether this endeavor results in anything practically useful is currently unknown.
-> However, see the examples. We're well past the "calculating factorial" point.
+> However, see the examples. We're well past the "it can calculate factorial" point.
 
 ## Gallery
 
-### MuSoma
+### Calculator
 
-I am excited to announce a new front-end for Wirewright (with the old name :^), MuSoma.
+This is an example of an interactive calculator. The UI manipulates "AST" directly instead of working with strings. The app
+is about ~200 lines of code, *including* comments, blank lines, etc. Starting from the middle of the video I show time-travel.
 
-<img width="1200" height="986" alt="An image of the MuSoma app showing a calculator dividing by zero" src="https://github.com/user-attachments/assets/bd7f8462-b4da-4a79-b97c-437f84692b44" />
+https://github.com/user-attachments/assets/5ec961a9-61f9-4761-91a3-428de10b709f
+
+Reference: `examples/calculator.wwml`.
+
+### SQLite
+
+A very simple app that uses an SQLite database. The point is to show how databases can be represented in the symbolic world:
+as a black box that takes queries and spits out responses after some time. Starting from the middle of the video I show time-travel
+(which is pure; i.e., the database is not changed as I move through time).
+
+https://github.com/user-attachments/assets/63624868-23b3-4990-9993-90dfd700d85e
 
 ### Bounce
 
 This is an example of a simple "moving" program. The `circuit` defines the boundaries of a "symbolic world". The backsystem
 `backsys` defines some "laws". And the `module` inside the world implements a basic bouncing behavior. The module is
-subject to a mix of "laws" defined in the `backsys`, and the laws of Rack, which is the "ultimate" physics here,
+subjected to a mix of "laws" defined in the `backsys`, and the laws of Rack, which is the "ultimate" physics here,
 responsible for animating `backsys`, `circuit`, etc. themselves.
 
 https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
+
+Reference: `examples/bounce.wwml`.
+
+### Merge sort
+
+This example demonstrates how merge sort (or something very much like it...) can be imagined as a symbolic machine (or a group of symbolic machines).
+
+https://github.com/user-attachments/assets/3213e84f-2696-49a0-a286-5908f77ecbcd
+
+Reference: `examples/msort.wwml`.
 
 ## Tutorials
 
