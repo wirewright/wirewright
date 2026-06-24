@@ -233,7 +233,7 @@ module Ww::D7
       next if patch.empty?
 
       addr_patch = patch.to_h do |node_id, replacement|
-        {hg.addr(node_id), replacement}
+        {hg[node_id].addr, replacement}
       end
 
       circuit = update(cache, clf, circuit, level) do |addr, scope, flat|

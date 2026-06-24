@@ -1,13 +1,34 @@
 module Ww::D7
-  # An integer used to identify a node in a hypergraph. Node ids are
-  # usually hypergraph-bounded rendition of circuit-bounded `NodeAddr`.
+  # An integer used to identify a node in a hypergraph. Node ids are usually
+  # a (hypergraph lifetime)-bounded rendition of the (circuit frame lifetime)-
+  # bounded `NodeAddr`.
   alias NodeId = UInt32
 
-  defrecord Node,
-    id : NodeId,
-    addr : NodeAddr,
-    scope : NodeScope,
-    term : Term
+  struct Node
+    getter id : NodeId
+    getter addr : NodeAddr
+    getter scope : NodeScope
+    getter head : Term
+    getter term : Term
+
+    # :nodoc:
+    def initialize(@id, @addr, @scope, @head, @term)
+    end
+
+    # Resolves *edge* with respect to this node.
+    #
+    # This is necessary in cases where you read an edge from a node (e.g.
+    # using pattern matching) inside a regime. You can't use the edge as-is
+    # because the actual cell (or node) it refers to can be different due
+    # to modules in-between. You must first pass the edge through `resolve`
+    # so that it finds the correct edge with respect to the node that you've
+    # read it from.
+    #
+    # See also: `AbsEdge`.
+    def resolve(edge : Term) : AbsEdge
+      AbsEdge.new(*@scope[edge])
+    end
+  end
 
   # Represents an absolute edge.
   #
@@ -34,15 +55,10 @@ module Ww::D7
     # :nodoc:
     def initialize
       @head_index = {} of Term => Pf::USet32
-
-      # TODO: we probably need to group these . . .
-      @node_terms = [] of Term
-      @node_heads = [] of Term
-      @node_addrs = [] of NodeAddr
-      @node_scopes = [] of NodeScope
+      @nodes = [] of Node
 
       # TODO: I think we can actually try storing this in the good old
-      # array of arrays or something along those lines (aka edge array;
+      # array of arrays or something along these lines (aka edge array;
       # for graphs it's a set of pairs and for hypergraphs it's a set
       # of sets; the representation for either is a matter of artistry,
       # so to speak). Probabilistic indexing can help us search without
@@ -64,12 +80,9 @@ module Ww::D7
       end
 
       # Commit
-      id = @node_terms.size.to_u32
+      id = @nodes.size.to_u32
       @head_index[head] = (@head_index[head]? || Pf::USet32[]).add(id)
-      @node_heads << head
-      @node_terms << term
-      @node_addrs << addr
-      @node_scopes << scope
+      @nodes << Node.new(id, addr, scope, head, term)
 
       id
     end
@@ -83,15 +96,16 @@ module Ww::D7
       end
 
       # Commit
-      @node_terms[node_id] = term
+      node0 = @nodes[node_id]
+      head0 = node0.head
 
-      head0 = @node_heads[node_id]
       unless head0 == head1
         @head_index[head0] = @head_index[head0].delete(node_id)
         @head_index[head1] = (@head_index[head1]? || Pf::USet32[]).add(node_id)
       end
 
-      @node_heads[node_id] = head1
+      node1 = Node.new(node0.id, node0.addr, node0.scope, head1, term)
+      @nodes[node_id] = node1
     end
 
     # Mutates this hypergraph to subscribe a node with the given *node id*
@@ -107,49 +121,33 @@ module Ww::D7
     # Mutates this hypergraph to unsubscribe a node with the given *node id*
     # from *edge*.
     def leave!(node_id : NodeId, edge : AbsEdge) : Nil
-      if edges = @node_edges[node_id]?
+      pass do
+        next unless edges = @node_edges[node_id]?
+
         edges.delete(edge)
-        if edges.empty?
-          @node_edges.delete(node_id)
-        end
+        next unless edges.empty?
+
+        @node_edges.delete(node_id)
       end
 
-      if members = @edge_nodes[edge]?
+      pass do
+        next unless members = @edge_nodes[edge]?
+
         members.delete(node_id)
-        if members.empty?
-          @edge_nodes.delete(edge)
-        end
+        next unless members.empty?
+
+        @edge_nodes.delete(edge)
       end
     end
 
     # Returns the node with the given *node id*.
-    def [](node_id : NodeId) : Term
-      @node_terms[node_id]
-    end
-
-    # Returns the address associated with the node with the given *id*.
-    def addr(node_id : NodeId) : NodeAddr
-      @node_addrs[node_id]
-    end
-
-    # Returns the scope associated with the node with the given *id*.
-    def scope(node_id : NodeId) : NodeScope
-      @node_scopes[node_id]
-    end
-
-    # Resolves an *edge* term (e.g. `@x`) with respect to a node with
-    # the given *id*.
-    def abs_edge(edge : Term, *, wrt node_id : NodeId) : AbsEdge
-      scope = @node_scopes[node_id]
-
-      AbsEdge.new(*scope[edge])
+    def [](node_id : NodeId) : Node
+      @nodes[node_id]
     end
 
     # Yields nodes of this hypergraph.
     def each_node(& : Node ->) : Nil
-      @node_terms.each_with_index do |node, node_id|
-        yield Node.new(NodeId.new(node_id), @node_addrs[node_id], @node_scopes[node_id], node)
-      end
+      @nodes.each { |node| yield node }
     end
 
     # Returns `true` if this hypergraph has a node with the given *head*.
@@ -161,7 +159,7 @@ module Ww::D7
     def each_node_with_head(& : Node, Term ->) : Nil
       @head_index.each do |head, bucket|
         bucket.each do |node_id|
-          yield Node.new(node_id, @node_addrs[node_id], @node_scopes[node_id], @node_terms[node_id]), head
+          yield @nodes[node_id], head
         end
       end
     end
@@ -171,7 +169,7 @@ module Ww::D7
       return unless bucket = @head_index[head]?
 
       bucket.each do |node_id|
-        yield Node.new(node_id, @node_addrs[node_id], @node_scopes[node_id], @node_terms[node_id]), head
+        yield @nodes[node_id]
       end
     end
 
@@ -187,7 +185,7 @@ module Ww::D7
       return unless member_ids = @edge_nodes[edge]?
 
       member_ids.each do |member_id|
-        yield Node.new(member_id, @node_addrs[member_id], @node_scopes[member_id], @node_terms[member_id])
+        yield @nodes[member_id]
       end
     end
 

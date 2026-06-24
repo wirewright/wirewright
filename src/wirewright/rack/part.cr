@@ -141,7 +141,7 @@ module Ww::Rack::Part
 
     hg.each_node_with_head(SYM_CELL) do |node|
       Term.matchpi?(node.term, %{[cell @edge_ whole_]}) do
-        abs_edge = hg.abs_edge(edge, wrt: node.id)
+        abs_edge = node.resolve(edge)
 
         bucket = buckets.put_if_absent(abs_edge) { [] of {D7::Node, Term} }
         bucket << {node, whole}
@@ -183,10 +183,10 @@ module Ww::Rack::Part
     ctx.hg.each_neighbor(of: root.id, on: pred) do |candidate|
       Term.case(candidate.term) do
         matchpi %{[part (@from_ to←(%'edge capture_)) pattern_]} do
-          from_abs = ctx.hg.abs_edge(from, wrt: candidate.id)
+          from_abs = candidate.resolve(from)
           next unless from_abs == pred
 
-          to_abs = ctx.hg.abs_edge(to, wrt: candidate.id)
+          to_abs = candidate.resolve(to)
 
           # Don't follow edges we've already followed.
           #

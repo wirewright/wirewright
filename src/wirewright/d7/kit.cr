@@ -162,16 +162,9 @@ module Ww::D7
     goal.to_readonly_slice { |term| table[D7.resolve(term, wrt: dev)] }
   end
 
-  # Resolves *edge* with respect to *node*. This is necessary in cases
-  # where you read an edge from a node (e.g. using pattern matching)
-  # inside a regime. You can't use the edge as-is because the actual
-  # cell (or node) it refers to can be different due to modules. You
-  # must first pass the edge through `resolve` with respect to the node
-  # that you read it from.
+  # See `Node#resolve`.
   def resolve(edge : Term, *, wrt node : Node) : AbsEdge
-    scope, resn = node.scope[edge]
-
-    AbsEdge.new(scope, resn)
+    node.resolve(edge)
   end
 
   # :ditto:

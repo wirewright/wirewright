@@ -147,7 +147,7 @@ module Ww::D7
 
           matches = Pf::Kit.stack_array(Match)
 
-          link_edge_abs = hg.abs_edge(link_edge, wrt: node.id)
+          link_edge_abs = node.resolve(link_edge)
 
           hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
             next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
@@ -174,7 +174,7 @@ module Ww::D7
             # wrt. their scope, we'd think of them as the same cell, which leads to
             # invalid behavior.
             dep_edge = dep_env[link.capture]
-            dep_edge_abs = hg.abs_edge(dep_edge, wrt: neighbor.id)
+            dep_edge_abs = neighbor.resolve(dep_edge)
             next unless link_edge_abs == dep_edge_abs
 
             seen = seen.add(neighbor.id)
@@ -194,14 +194,14 @@ module Ww::D7
           response = link_edges.items.to_readonly_slice do |link_edge|
             matches = Pf::Kit.stack_array(Match)
 
-            link_edge_abs = hg.abs_edge(link_edge, wrt: node.id)
+            link_edge_abs = node.resolve(link_edge)
 
             hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
               next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
               next unless dep_env = match?(dep.pattern_id, neighbor)
 
               dep_edge = dep_env[link.dep_capture]
-              dep_edge_abs = hg.abs_edge(dep_edge, wrt: neighbor.id)
+              dep_edge_abs = neighbor.resolve(dep_edge)
               next unless link_edge_abs == dep_edge_abs
 
               seen = seen.add(neighbor.id)
@@ -497,7 +497,7 @@ module Ww::D7
             next
           end
 
-          ref = hg[node_id]
+          ref = hg[node_id].term
           acc = ref
 
           reps.each do |rep, proposal_index|
@@ -516,7 +516,7 @@ module Ww::D7
     private def decline_set(hg : Hypergraph, patchtab : Hash(NodeId, Array({Term, UInt32}))) : Pf::USet32
       Pf::USet32.transaction do |declined|
         patchtab.each do |node_id, reps|
-          orig = hg[node_id]
+          orig = hg[node_id].term
 
           reps.each_with_index do |(rep0, proposal_index0), i|
             next if proposal_index0.in?(declined)
