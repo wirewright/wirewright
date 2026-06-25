@@ -412,21 +412,8 @@ module Ww::Rack
       end
 
       matchpi %{[rewriter (spec_ <-> @edge_) body_*]} do
-        mix0 = Term::Dict.build do |commit|
-          commit << :rewriter << {spec, :"<->", {edge}}
-
-          body.items.each do |item|
-            Term.case(item) do
-              matchpi %{[rule pattern_ _]}, %{[backmap pattern_ _]} do
-                commit << Term.morph(item, {1, {pattern}})
-              end
-
-              otherwise { }
-            end
-          end
-        end
-
-        D7.mixture(node, mix0) { node }
+        edges = [edge]
+        D7.gnd(node, edges, defn: Term.of(:rewriter, spec, edge, body))
       end
 
       matchpi %{[rewriter (@spec_ <-> ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) body_*]} do

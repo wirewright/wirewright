@@ -189,6 +189,22 @@ module Ww::Rack
         D7.patches(patches)
       end
 
+      rule(<<-WWML) do |dev, target|
+      [rewriter spec_ @target_ rules_dict] dev
+        -> (one target) [cell @target_ value_] {name: target}
+      WWML
+        spec, rules = D7.fetch(dev, :spec, :rules)
+        input = D7.fetch(target, :value)
+
+        rewriter = Rho.rewriter(spec, rules)
+        next unless rewriter.finite?
+
+        # Rewrite the input term.
+        output = Rho.rewrite(rewriter, Term.of(input))
+
+        D7.patch(target, {2, output})
+      end
+
       rule(<<-WWML) do |dev, spec, itemcell, paircell|
       [rewriter @spec_ itemsrcs←((%past @_ min: 0)) pairsrcs←((%past @_ min: 0)) pairtab_dict rules_dict] dev
         -> (one spec) [cell @spec_ term_] {name: spec}
