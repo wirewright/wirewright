@@ -304,6 +304,55 @@ module Ww
       rep1
     end
 
+    # *Adjacent rewriter*: rewrites items of a dictionary, taking their neighbors
+    # into account.
+    def adjR(successor : Rewriter) : Rewriter
+      finite do |attachments, input|
+        adjR(successor, attachments, input)
+      end
+    end
+
+    private def adjR(successor, attachments, input : Term) : Term::Rep
+      unless dict0 = input.as_d?
+        return Term.rep(input)
+      end
+
+      if rep = attachments.cache.get?({attachments.id, input})
+        return rep
+      end
+
+      dict1 = Term.flatten(dict0, part: Term::Dict.itemspart) do |key, item|
+        assert index = key.index32?
+
+        query = Term::Dict.build do |commit|
+          if index > 0
+            commit.with(:l, dict0[index - 1])
+          end
+
+          commit.with(:m, item)
+
+          if index + 1 < dict0.itemsize
+            commit.with(:r, dict0[index + 1])
+          end
+        end
+
+        responses0 = successor.call(Term.of(query), attachments.cache)
+        responses1 = responses0.to_compact_readonly_slice do |response|
+          response.as_d?.try { |r| r[:m]? }
+        end
+
+        Term.rep(responses1)
+      end
+
+      rep = Term.rep_of(dict1)
+
+      if Term.changes?(input, after: rep)
+        attachments.cache.put({attachments.id, input}, rep)
+      end
+
+      rep
+    end
+
     # *Exhaustive rewriter*. See `rho.exhR`.
     def exhR(successor : Rewriter, *, limit : UInt32 = UInt32::MAX) : Rewriter
       if limit == UInt32::MAX # ?!
@@ -702,6 +751,22 @@ module Ww
           successors.items.reduce(rewriter(head, data)) do |memoR, successor|
             chainR(memoR, rewriter(successor, data))
           end
+        end
+
+        # |@ rho.adjR
+        #
+        # |@pattern
+        # [adjR successor_]
+        #
+        # |@key successor rho
+        #
+        # |@block
+        # The *adjacent rewriter* rewrites each item in an input dictionary
+        # using *successor*. Each item is also paired with its left and right
+        # neighbors. The resulting dictionary `{| l m r}` is rewritten using
+        # *successor*, which must return `{¦ m}`.
+        matchpi %{[adjR successor_]} do
+          adjR(rewriter(successor, data))
         end
 
         # |@ rho.section

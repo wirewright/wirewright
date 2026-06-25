@@ -4775,7 +4775,42 @@
     (frame pattern: true
       ⟨& (cell @in)
          (cell @out (300 c))⟩)
-    end))
+    end)
+
+  ;; adjR
+  (rack
+    (frame
+      (rewriter ((adjR (rulesetR)) <-> @world)
+        {¦ m_: < -l} <> {m: >}
+        {¦ m_: > -r} <> {m: <}
+        {¦ m_: > r: .} <> {m: .}
+        {¦ l: > m_: .} <> {m: >}
+        {¦ l: . m_: <} <> {m: .}
+        {¦ m_: . r: <} <> {m: <})
+      (cell @world (> . . . .)))
+    (frame/tail
+      (cell @world (. > . . .)))
+    (frame/tail
+      (cell @world (. . > . .)))
+    (frame/tail
+      (cell @world (. . . > .)))
+    (frame/tail
+      (cell @world (. . . . >)))
+    (frame/tail
+      (cell @world (. . . . <)))
+    (frame/tail
+      (cell @world (. . . < .)))
+    (frame/tail
+      (cell @world (. . < . .)))
+    (frame/tail
+      (cell @world (. < . . .)))
+    (frame/tail
+      (cell @world (< . . . .)))
+    (frame/tail
+      (cell @world (> . . . .)))
+    (frame/tail
+      (cell @world (. > . . .)))))
+    ;; ...
 
 ;; Instantiation
 (group
