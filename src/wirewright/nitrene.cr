@@ -776,16 +776,52 @@ module Ww::Nitrene
         Term.of(args.all? { |other| ref == other })
       end
 
+      # |@ nitrene.floor
+      #
+      # |@pattern
+      # (floor arg_)
+      #
+      # |@block
+      # Rounds number *arg*s toward negative infinity. Returns `0` for all
+      # other *arg*s.
       matchpiT %{(floor ±arg)} do
         Term.of(arg.floor)
       end
 
+      matchpi %{(floor _)} do
+        Term.of(0)
+      end
+
+      # |@ nitrene.ceil
+      #
+      # |@pattern
+      # (ceil arg_)
+      #
+      # |@block
+      # Rounds number *arg*s toward positive infinity. Returns `0` for all
+      # other *arg*s.
       matchpiT %{(ceil ±arg)} do
         Term.of(arg.ceil)
       end
 
+      matchpi %{(ceil _)} do
+        Term.of(0)
+      end
+
+      # |@ nitrene.round
+      #
+      # |@pattern
+      # (round arg_)
+      #
+      # |@block
+      # Rounds number *arg*s using Banker's rounding. Returns `0` for all
+      # other *arg*s.
       matchpiT %{(round ±arg)} do
         Term.of(arg.round)
+      end
+
+      matchpi %{(round _)} do
+        Term.of(0)
       end
 
       matchpiT %{(finite arg_ or: alt_)} do
@@ -1228,6 +1264,10 @@ module Ww::Nitrene
         end
 
         Term.of(run)
+      end
+
+      matchpi %{(wrap arg_string ¦ maxwidth_: (%optional 60 (%number +i32)))}, arg: String, maxwidth: Int32 do
+        Term.of(wrap(arg, maxwidth))
       end
 
       matchpi %{(codepoints arg_string)}, arg: String do
