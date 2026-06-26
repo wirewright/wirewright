@@ -25,9 +25,9 @@
    parallelism; Rack is still synchronous under the hood). That is, the more \
    of these modules you have, the more merging you can do per tick. Therefore, \
    you end up spending less ticks to sort. However, the cost of each tick increases, \
-   as does the communication & conflict overhead, which is invisible in practice, \
-   but ends up taking a chunk of time under the hood. For example, on my machine, \
-   at the time of writing, the numbers are as follows:\n\
+   as does the communication & conflict overhead, which, despite not being observable, \
+   ends up taking a chunk of time under the hood. For example, on my machine, at the time\
+   of writing, the numbers are as follows:\n\
    sort(n=1000):\n \
    - 1: 9893 frames  ~293µs  ~3s\n \
    - 2: 5779 frames  ~330µs  ~2s\n \

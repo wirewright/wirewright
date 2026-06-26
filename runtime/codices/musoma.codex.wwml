@@ -1089,7 +1089,8 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
   => (PathReadingWidget ^addr ^path ^reading)
 
 (group [atom] ⍊ detail: (number-block D_dict))
-  => (group style: "content flow-wrap gap-3/2 text-theme-number clamp max-w-3xs border-sm px-1 border-theme-highlight-low rounded-sm text-sm/4"
+  => (group style: "content flow-wrap gap-3/2 text-theme-number clamp max-w-3xs \
+                    border-sm px-1 border-theme-highlight-low rounded-sm text-sm/4"
        (^each (D as ±n)
          ^\n))
 
