@@ -634,7 +634,7 @@ module Ww::M1
       # |@ m1.operator.seq.many
       #
       # |@pattern
-      # (%many successor_ members_+ ¦ min⋮ 1 max_⋮ ∞)
+      # (%'%many successor_ members_+ ¦ min⋮ 1 max_⋮ ∞)
       #
       # |@key successor m1.operator
       # An operator that should receive the list of match envs after matching *members*.
@@ -2496,8 +2496,8 @@ module Ww::M1
       # |@ m1.operator.item
       #
       # |@pattern
-      # (%item members_+)
-      # (%item° members_+)
+      # (%'%item members_+)
+      # (%'%item° members_+)
       #
       # |@key members m1.operator
       # Operators used to match each subsequence.
@@ -2583,7 +2583,7 @@ module Ww::M1
       # |@ m1.operator.item
       #
       # |@pattern
-      # (%items successor_ members_+ ¦ min⋮ 1 max_⋮ ∞)
+      # (%'%items successor_ members_+ ¦ min⋮ 1 max_⋮ ∞)
       #
       # |@key successor m1.operator
       # Each subsequence matched by *members* produces a match env. The match env
