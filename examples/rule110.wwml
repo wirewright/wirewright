@@ -1,0 +1,18 @@
+;; You can run this using MuSoma or irack. If you zoom out you'll see
+;; the standard rule 110 pattern.
+
+(cell @worlds
+  ())
+
+(cell @world (. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . O))
+(feed (copy @world) (@worlds back))
+
+;; Rule 110
+;;  0 -> .
+;;  1 -> O
+;; Only rules that rewrite the middle are left. Rules that do not rewrite *m*
+;; can be omitted (and are omitted here).
+(rewriter ((adjR (rulesetR)) <-> @world)
+  {¦ l: O m_: O r: O} <> {m: .}
+  {¦ l: O m_: . r: O} <> {m: O}
+  {¦ l: . m_: . r: O} <> {m: O})
