@@ -97,7 +97,7 @@ module Ww::M1
     #   true # E.g. body is valid
     # end
     # ```
-    def self.select(selector : Term, bases : Enumerable(Term), *, key keymod : Key(T) = Key::Head, discriminator : Term? = nil, & : M1::Normp, Term::Dict -> Bool?) : PatternSet(T) forall T
+    def self.select(selector : Term, bases : Enumerable(Term), *, key keymod : Key(T) = Key::Head, phase : Term? = nil, & : M1::Normp, Term::Dict -> Bool?) : PatternSet(T) forall T
       keyed = {} of T => Array(Int32)
       headless = [] of Int32
 
@@ -110,10 +110,10 @@ module Ww::M1
           envs.each do |env|
             next unless pattern = env[:pattern]?
 
-            if discriminator
+            if phase
               next unless pattern.type.dict?
               next unless pattern.itemsize == 2
-              next unless discriminator == pattern[0]
+              next unless phase == pattern[0]
 
               pattern = pattern[1]
             end

@@ -512,7 +512,7 @@ module Ww
         # |@ rho.rulesetR
         #
         # |@pattern
-        # (rulesetR ⍊ ⋮selector ⋮discriminator ⋮section exh⋮ false)
+        # (rulesetR ⍊ ⋮selector ⋮phase exh⋮ false)
         #
         # |@key selector m1.operator
         # The selector pattern. The captures this pattern makes determine the kind
@@ -530,17 +530,17 @@ module Ww
         # all of *pattern*, *template*, and *backspec*, the ruleset will refuse to
         # create the rule.
         #
-        # |@key discriminator
-        # The selector is wrapped in a dict pattern with *discriminator* as its head.
+        # |@key phase
+        # The selector is wrapped in a dict pattern with *phase* as its head.
         #
-        # For example, `(rulesetR selector: (rule pattern_ template_) discriminator: main)`
+        # For example, `(rulesetR selector: (rule pattern_ template_) phase: main)`
         # is the same as writing `(rulesetR selector: (rule [main pattern_] template_))`.
         #
-        # *discriminator* is most useful when you want to leave the selector out, that is,
+        # *phase* is most useful when you want to leave the selector out, that is,
         # use the default selector. The default selector is rather lengthy, so it's
         # nice to be able to avoid typing it out if you only want to wrap it.
         #
-        # *discriminator* is used to store multiple distinct rulesets in the same rulebase
+        # *phase* is used to store multiple distinct rulesets in the same rulebase
         # term. This is most useful in Rack's `rack.rewriter` node, which only allows you
         # to specify one rulebase.
         #
@@ -561,10 +561,10 @@ module Ww
         matchpi %{(rulesetR ⍊ exh⋮ false)} do
           selector = spec[:selector]? || Ruleset::DEFAULT_SELECTOR
 
-          discriminator = spec[:discriminator]?
+          phase = spec[:phase]?
           rulebase = data
 
-          rulesetR(Ruleset.select(selector, rulebase, discriminator: discriminator), exh: exh.true?)
+          rulesetR(Ruleset.select(selector, rulebase, phase: phase), exh: exh.true?)
         end
 
         # |@ rho.exhR

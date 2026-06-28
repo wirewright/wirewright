@@ -4720,15 +4720,15 @@
          (cell @out (z (result 300) seen: true))⟩)
     end)
 
-  ;; chainR, rulesetR discriminator
+  ;; chainR, rulesetR phase
   (rack
     (frame
       (cell @in ((x y) (a b)))
       (cell @out)
       (cell @rewriter
         (chainR
-          (ascR (rulesetR discriminator: fst))
-          (descR (rulesetR discriminator: snd))))
+          (ascR (rulesetR phase: fst))
+          (descR (rulesetR phase: snd))))
       (rewriter (@in -> @rewriter -> @out)
         (fst x) => 100
         (fst y) => 200
@@ -4746,8 +4746,8 @@
       (cell @out)
       (cell @rewriter
         (chainR
-          (ascR (rulesetR discriminator: fst))
-          (descR (rulesetR discriminator: snd))))
+          (ascR (rulesetR phase: fst))
+          (descR (rulesetR phase: snd))))
       (rewriter (@in -> @rewriter -> @out)
         (fst x) => 100
         (fst y) => 200
@@ -4765,8 +4765,8 @@
       (cell @out)
       (cell @rewriter
         (chainR
-          (ascR (rulesetR discriminator: fst))
-          (descR (rulesetR discriminator: snd))))
+          (ascR (rulesetR phase: fst))
+          (descR (rulesetR phase: snd))))
       (rewriter (@in -> @rewriter -> @out)
         (fst x) => 100
         (fst y) => 200
