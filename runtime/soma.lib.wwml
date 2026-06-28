@@ -137,6 +137,7 @@
        (comment "The following cells comprise this input's internal state.")
        (cell @unit rune)
        (cell @motions ())
+
        (comment
          "The input also contains reflections of the keyboard and the mouse, \
           since it is interested in both of them. The input wants to \
@@ -146,10 +147,12 @@
           cursor, and so on.")
        (node @input (input))
        (node @mouse (mouse))
+
        (comment
          "Inputs are also interested in their own visual reflection, just like buttons are")
        (reflection {@:desc, @:node}
          (template ^view))
+
        (comment
          "The following massive rewriter is where the \"symbolic physics\" of the input \
           field is described. A bit less pretentiously, these are the rewrite rules that \
@@ -182,12 +185,17 @@
          ;; Releasing the button while active makes the input inactive.
          {¦ mouse: [mouse] node: {¦ active_}}
            <> {(active): ()}
-         ;; Sync mouse hit-anchor and hit-focus on the text which has selection
-         ;; enabled, which is presumably the content text, while the input is active.
-         ;; For customizability of the view we don't hard-code anything here, working
-         ;; off of the "cue" that the only text in the view that has selection
-         ;; enabled is the content text.
+         ;; Support Shift-Click: while the left button is pressed.
+         {¦ mouse: [mouse B←left]
+            input: ⟨(key (shift _))⟩
+            node: {¦ active}
+            desc: ⟪{¦ selection hit-anchor: ±pos hit-focus: ±pos}⟫
+            state: [l_string r_string]}
+           <> {(B): (), l: ^(runes (~ l r) 0 ..< pos), r: ^(runes (~ l r) pos ..= -1)}
+         ;; Sync mouse hit-anchor and hit-focus if Shift is not held (implements
+         ;; "drag to select").
          {¦ mouse: [mouse left]
+            input: (%items () (key (shift _)) min: 0)
             node: {¦ active}
             desc: ⟪{¦ selection ±hit-anchor ±hit-focus}⟫
             state: (l_string r_string ⍊ ⋮anchor)}
@@ -338,13 +346,13 @@
         {¦ input: ⟨K←(key end)⟩ motions: (_* `M)}
           <> {(K): (), (M): ((zip line right) (expel right) unzip)}
         ;; While Ctrl is held, the navigation unit is word.
-        {¦ unit_: rune input: (%items (_) (key (ctrl _)))}
+        {¦ unit_: rune input: ⟨(key (ctrl _))⟩}
           <> {unit: word}
         ;; Otherwise, the navigation unit is rune.
         {¦ unit_: word input: (%items () (key (ctrl _)) min: 0)}
           <> {unit: rune}
         ;; While Shift is held, and no runes exist, define anchor if not defined already.
-        {¦ state: (l_string _ ⍊ -anchor_) input: (%items (_) (key (shift _)))}
+        {¦ state: (l_string _ ⍊ -anchor_) input: ⟨(key (shift _))⟩}
           <> {anchor: ^(charcount l)}
         ;; Clear the anchor if it is at the same position as the cursor, and
         ;; Shift is not pressed.
