@@ -300,13 +300,16 @@ module Ww::Rack
 
       rule %{[delay 1 successor_] dev} do |dev|
         successor = D7.fetch(dev, :successor)
-
         D7.replace(dev, successor)
       end
 
       rule %{[delay n←(%number +i32!) _] dev} do |dev|
         n = D7.fetch(dev, :n)
+        D7.patch(dev, {1, n - 1})
+      end
 
+      rule %{[delay n←(%number +i32!)] dev} do |dev|
+        n = D7.fetch(dev, :n)
         D7.patch(dev, {1, n - 1})
       end
 

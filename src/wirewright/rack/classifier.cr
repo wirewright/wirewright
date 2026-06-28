@@ -189,7 +189,7 @@ module Ww::Rack
         end
       end
 
-      matchpi %{[delay (%number +i32) _]} do
+      matchpi %{[delay (%number +i32!)]}, %{[delay (%number +i32) _]} do
         D7.gnd(node)
       end
 
@@ -489,6 +489,47 @@ module Ww::Rack
 
       matchpi %{[slot _ _]} do
         D7.parent(node.as_d, 2u32...3u32)
+      end
+
+      matchpi %{[log (@all_ @last_ ⍊ limit_: (%optional 10 (%number +i32)) edges⋮ false) log0_dict]}, limit: Int32, log0: Term::Dict do
+        tail = log0.items.tail(limit)
+        tip0 = tail.last?
+
+        # HACK: We use `(delay 1)` to force a change on Rack pass. This way,
+        # the unmix function runs regardless of whether anything changed in
+        # *mix0* due to evaluation, **but only during Rack pass** -- since only
+        # Rack pass evaluates delays.
+        mix0 = Term.of(:group,
+          Term.of(:cell, all, tail),
+          Term.of(:cell, last, tip0),
+          Term.of(:delay, 1)
+        )
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.matchpi(mix1, %{(group _ (cell _ tip1_) _)}) do
+            if edges.true? && tip0 == tip1  # Unchanged
+              if log0.itemsize == tail.size # Did not truncate
+                next node
+              end
+
+              # Truncated
+              next Term.morph(node, {2, Term.merge(Term[tail], log0.pairspart)})
+            end
+
+            log1 = log0.pairspart.transaction do |commit|
+              prefix = tail
+              if prefix.size + 1 > limit
+                prefix = prefix.move(1)
+              end
+
+              commit.concat(prefix)
+              commit << tip1
+            end
+
+            # Edge or forced
+            Term.morph(node, {2, log1})
+          end
+        end
       end
 
       otherwise do

@@ -5917,3 +5917,103 @@
        (. . . O O O O O)
        (. . O O . . . O)))))
   ;; ...
+
+;; log
+(group
+  ;; Elementary & truncate
+  (rack
+    (frame
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (log (@xs @x limit: 3) (1 2 3 4 5)))
+    (frame/tail
+      (log (@xs @x limit: 3) (4 5 6)))
+    (frame/tail
+      (log (@xs @x limit: 3) (5 6 7)))
+    (frame/tail
+      (log (@xs @x limit: 3) (6 7 8))))
+    ;; ...
+
+  ;; Progress regardless of change, preserve pairspart.
+  (rack
+    (frame
+      (log (@xs @x limit: 3) (0 x: 100)))
+    (frame
+      (log (@xs @x limit: 3) (0 0 x: 100)))
+    (frame
+      (log (@xs @x limit: 3) (0 0 0 x: 100)))
+    end)
+
+  ;; edges: true, Unchanged
+  (rack
+    (frame
+      (log (@xs @x limit: 3 edges: true) (0)))
+    end)
+
+  ;; edges: true, Truncate preserve pairspart
+  (rack
+    (frame
+      (backsys @x  ±n <> {n: ^(+ n 1)})
+      (log (@xs @x limit: 3 edges: true) (1 2 3 4 5 x: 100)))
+    (frame/tail
+      (log (@xs @x limit: 3 edges: true) (4 5 6 x: 100)))
+    (frame/tail
+      (log (@xs @x limit: 3 edges: true) (5 6 7 x: 100)))
+    (frame/tail
+      (log (@xs @x limit: 3 edges: true) (6 7 8 x: 100))))
+    ;; ...
+
+  (rack
+    (frame
+      (log (@xs @x limit: 3 edges: true) (1 2 3 4 5 x: 100)))
+    (frame
+      (log (@xs @x limit: 3 edges: true) (3 4 5 x: 100)))
+    end)
+
+  ;; Complex
+  (rack
+    (frame
+      (backsys {@:xs, @:x}
+        ;; Bounce off left boundary.
+        {¦ xs: ((_ O _*) (O _*)) x: (l←O r←. _*)}
+          <> {l: ^r, r: ^l}
+        ;; Bounce off right boundary.
+        {¦ xs: ((_* O _) (_* O)) x: (_* l←. r←O)}
+          <> {l: ^r, r: ^l}
+        ;; Move left.
+        {¦ xs: (((%gap n_) (%flex _) (%flex O) _*)
+                ((%gap n_) (%flex O) _*))
+           x: ⟨l←. r←O⟩}
+          <> {l: ^r, r: ^l}
+        ;; Move right.
+        {¦ xs: (((%gap n_) (%flex O) _*)
+                ((%gap n_) (%flex _) (%flex O) _*))
+           x: ⟨l←O r←.⟩}
+          <> {l: ^r, r: ^l})
+      (log (@xs @x limit: 2)
+        ((O . . .)
+         (. O . .))))
+    (frame/tail
+      (log (@xs @x limit: 2)
+        ((. O . .)
+         (. . O .))))
+    (frame/tail
+      (log (@xs @x limit: 2)
+        ((. . O .)
+         (. . . O))))
+    (frame/tail
+      (log (@xs @x limit: 2)
+        ((. . . O)
+         (. . O .))))
+    (frame/tail
+      (log (@xs @x limit: 2)
+        ((. . O .)
+         (. O . .))))
+    (frame/tail
+      (log (@xs @x limit: 2)
+        ((. O . .)
+         (O . . .))))
+    (frame/tail
+      (log (@xs @x limit: 2)
+        ((O . . .)
+         (. O . .))))))
+    ;; ...

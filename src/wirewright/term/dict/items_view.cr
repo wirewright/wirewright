@@ -107,8 +107,10 @@ module Ww
       copy_with(e: (@e + delta).clamp(@b..@dict.itemsize))
     end
 
-    def remaining : ItemsView
-      copy_with(b: @e, e: @dict.itemsize)
+    def tail(size : Int32) : ItemsView
+      assert size >= 0
+
+      self.end.move(-size)
     end
 
     # Expands the view range to enclose all dictionary items.
