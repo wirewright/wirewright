@@ -152,8 +152,6 @@ module Ww
       passable : M1::PatternSet(T)?,
       impassable : M1::PatternSet(T)?
 
-    alias Part = Term::Dict::Part::Any
-
     # *Descending rewriter*. See `rho.descR`.
     def descR(successor : Rewriter, part : Part, leafp : LeafPredicate) : Rewriter
       finite do |attachments, input|
@@ -177,7 +175,7 @@ module Ww
 
       assert dict0 = input.as_d?
 
-      dict1 = Term.flatten(dict0, leafp.guide, part: part) do |_, value|
+      dict1 = flatten(dict0, part, leafp.guide) do |value|
         descR(successor, part, leafp, attachments, value)
       end
 
@@ -206,7 +204,7 @@ module Ww
 
       assert dict0 = input.as_d?
 
-      dict1 = Term.flatten(dict0, leafp.guide, part: part) do |_, value|
+      dict1 = flatten(dict0, part, leafp.guide) do |value|
         ascR(successor, part, leafp, attachments, value)
       end
 
@@ -246,7 +244,7 @@ module Ww
 
       assert dict0 = input.as_d?
 
-      dict1 = Term.flatten(dict0, leafp.guide, part: part) do |_, value|
+      dict1 = flatten(dict0, part, leafp.guide) do |value|
         bidiR(successor, part, leafp, attachments, value)
       end
 
@@ -447,6 +445,29 @@ module Ww
       impassable: [impassable pattern_])
     WWML
 
+    defrecord Part, dict : Term::Dict::Part::Any, axis : Term?
+
+    private def flatten(dict : Term::Dict, part : Part, guide : Term::Dict::Summary, & : Term -> Term::Rep) : Term::Dict
+      if axis = part.axis
+        return dict unless target0 = dict[axis]?.as_d?
+
+        target1 = Term.flatten(target0, guide, part: part.dict) do |_, value0|
+          input = Term.of(dict.with(axis, value0))
+          output = Term.collapse(yield input)
+          next Term.rep unless output = output.as_d?
+
+          dict = output
+          Term.rep_of(dict[axis]? || Slice(Term).empty)
+        end
+
+        return dict.with(axis, target1)
+      end
+
+      Term.flatten(dict, guide, part: part.dict) do |_, value|
+        yield value
+      end
+    end
+
     private def dirR(spec : Term, data : Term, &) : Rewriter
       Term.matchpi(spec, %{[_ successor_]}) do
         if passable = spec[:passable]?
@@ -457,15 +478,17 @@ module Ww
           impassable_set = M1::PatternSet(Term).select(impassable, data)
         end
 
+        axis = spec[:axis]?
+
         case spec[:part]?
         when Term.of(:items)
-          part = Term::Dict.itemspart
+          part = Part.new(Term::Dict.itemspart, axis)
         when Term.of(:pairs)
-          part = Term::Dict.pairspart
+          part = Part.new(Term::Dict.pairspart, axis)
         when Term.of(:entries)
-          part = Term::Dict.entries
+          part = Part.new(Term::Dict.entries, axis)
         else
-          part = Term::Dict.itemspart # default
+          part = Part.new(Term::Dict.itemspart, axis) # default
         end
 
         guide = Term::Dict::Summary.zero
@@ -605,9 +628,15 @@ module Ww
         # |@ rho.ascR
         #
         # |@pattern
-        # (ascR successor_ ⍊ part⋮ items ⋮passable ⋮impassable ⋮cues)
+        # (ascR successor_ ⍊ ⋮axis part⋮ items ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
+        #
+        # |@key axis
+        # If present, sets the key whose value should be the term-to-be-rewritten.
+        # For example, consider the dict `{expr: (+ x y), vars: {x: 100, y: 200}}`.
+        # You might want to rewrite so that `{expr: +, vars: {x: 100, y: 200}}`,
+        # `{expr: x, vars: {...}}`, `{expr: y, vars: {...}}`, `{expr: (+ x y), vars: {...}}`.
         #
         # |@key part
         # Can be `items` (default, fallback; descend only into itemsparts),
@@ -642,9 +671,12 @@ module Ww
         # |@ rho.descR
         #
         # |@pattern
-        # (descR successor_ ⍊ part⋮ items ⋮passable ⋮impassable ⋮cues)
+        # (descR successor_ ⍊ ⋮axis part⋮ items ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
+        #
+        # |@key axis
+        # See `rho.ascR`.
         #
         # |@key part
         # See `rho.ascR`.
@@ -674,9 +706,12 @@ module Ww
         # |@ rho.bidiR
         #
         # |@pattern
-        # (bidiR successor_ ⍊ part⋮ items ⋮passable ⋮impassable ⋮cues)
+        # (bidiR successor_ ⍊ ⋮axis part⋮ items ⋮passable ⋮impassable ⋮cues)
         #
         # |@key successor rho
+        #
+        # |@key axis
+        # See `rho.ascR`.
         #
         # |@key part
         # See `rho.ascR`.

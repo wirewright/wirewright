@@ -4680,6 +4680,92 @@
           ((c))))⟩)
     end)
 
+  ;; dirR axis
+  (rack
+    (frame
+      (rewriter ((chainR (descR (rulesetR phase: main) axis: in) (rulesetR phase: post)) <-> {@:in, @:bus})
+        (main {¦ in: (place var_ `dst) bus: ((set var_ value_) _* `reply)})
+          <> {dst: ^value, reply: (changed ^var ^value)}
+        (main {¦ in: (place var_ value_) bus: ((unset var_) _*)})
+          <> {(value): ()}
+        (main {¦ in: (link a_ b_) bus: ((changed a_ value_) _* `reply)})
+          <> {(reply): ((unset ^a) (set ^b ^value))}
+        (post {¦ bus: (event_ _*)})
+          <> {(event): ()})
+      (cell @bus ((set x 0)))
+      (cell @in
+        (document
+          (group
+            (place x)
+            (place y)
+            (link x a)
+            (link a y))
+          (link y b)
+          (link b x)
+          (place a)
+          (place b))))
+    (frame pattern: true fast-forward: true
+      ⟨(cell @in
+         (document
+           (group
+             (place x 0)
+             (place y)
+             (link x a)
+             (link a y))
+           (link y b)
+           (link b x)
+           (place a)
+           (place b)))⟩)
+    (frame pattern: true fast-forward: true
+      ⟨(cell @in
+         (document
+           (group
+             (place x)
+             (place y)
+             (link x a)
+             (link a y))
+           (link y b)
+           (link b x)
+           (place a 0)
+           (place b)))⟩)
+    (frame pattern: true fast-forward: true
+      ⟨(cell @in
+         (document
+           (group
+             (place x)
+             (place y 0)
+             (link x a)
+             (link a y))
+           (link y b)
+           (link b x)
+           (place a)
+           (place b)))⟩)
+    (frame pattern: true fast-forward: true
+      ⟨(cell @in
+         (document
+           (group
+             (place x)
+             (place y)
+             (link x a)
+             (link a y))
+           (link y b)
+           (link b x)
+           (place a)
+           (place b 0)))⟩)
+    (frame pattern: true fast-forward: true
+      ⟨(cell @in
+         (document
+           (group
+             (place x 0)
+             (place y)
+             (link x a)
+             (link a y))
+           (link y b)
+           (link b x)
+           (place a)
+           (place b)))⟩))
+    ;; ...
+
   ;; Extension
   (rack
     (frame
