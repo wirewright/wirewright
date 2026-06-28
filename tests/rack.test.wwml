@@ -4809,8 +4809,37 @@
     (frame/tail
       (cell @world (> . . . .)))
     (frame/tail
-      (cell @world (. > . . .)))))
+      (cell @world (. > . . .))))
     ;; ...
+
+  ;; valueR
+  (rack
+    (frame
+      (rewriter ((valueR x (rulesetR)) <-> @in)
+        ±n <> {n: ^(+ n 1)})
+      (cell @in {x: 100, y: 200}))
+    (frame/tail
+      (cell @in {x: 101, y: 200}))
+    (frame/tail
+      (cell @in {x: 102, y: 200})))
+    ;; ...
+
+  ;; valueR replace with zero
+  (rack
+    (frame
+      (rewriter ((valueR x (rulesetR)) <-> @in)
+        ±n <> {n: ^(+ n 1)}
+        10 => (^splice))
+      (cell @in {x: 7, y: 200}))
+    (frame/tail
+      (cell @in {x: 8, y: 200}))
+    (frame/tail
+      (cell @in {x: 9, y: 200}))
+    (frame/tail
+      (cell @in {x: 10, y: 200}))
+    (frame/tail
+      (cell @in {y: 200}))
+    end))
 
 ;; Instantiation
 (group

@@ -353,6 +353,20 @@ module Ww
       rep
     end
 
+    # *Value rewriter*. Uses *successor* to rewrite the value of an entry
+    # with the given *key*.
+    def valueR(key : Term, successor : Rewriter) : Rewriter
+      finite do |attachments, input|
+        valueR(key, successor, attachments, input)
+      end
+    end
+
+    private def valueR(key, successor, attachments, input : Term) : Term::Rep
+      Term.subst(input, {key}) do |value0|
+        successor.call(value0, attachments.cache)
+      end
+    end
+
     # *Exhaustive rewriter*. See `rho.exhR`.
     def exhR(successor : Rewriter, *, limit : UInt32 = UInt32::MAX) : Rewriter
       if limit == UInt32::MAX # ?!
@@ -767,6 +781,20 @@ module Ww
         # *successor*, which must return `{¦ m}`.
         matchpi %{[adjR successor_]} do
           adjR(rewriter(successor, data))
+        end
+
+        # |@ rho.valueR
+        #
+        # |@pattern
+        # [valueR key_ successor_]
+        #
+        # |@key successor rho
+        #
+        # |@block
+        # The *value rewriter* uses *successor* to rewrite the value of an entry
+        # with the given *key*.
+        matchpi %{[valueR key_ successor_]} do
+          valueR(key, rewriter(successor, data))
         end
 
         # |@ rho.section
