@@ -1,0 +1,65 @@
+(rewriter ((chainR (adjR (rulesetR phase: move)) (adjR (rulesetR phase: look exh: true))) <-> @host)
+  (move {¦ m_: . r_: ⟨(cell @action action←left)⟩})
+    <> {m: ^(up r), (action): ()}
+  (move {¦ l_: ⟨(cell @action action←right)⟩ m_: .})
+    <> {m: ^(up l), (action): ()}
+  (move {¦ l: . m_: ⟨(cell @action left)⟩})
+    <> {m: .}
+  (move {¦ m_: ⟨(cell @action right)⟩ r: .})
+    <> {m: .}
+  (look {¦ l_ m: ⟨(cell @left view_)⟩})
+    <> {view: ^l}
+  (look {¦ m: ⟨(cell @right view_)⟩ r_})
+    <> {view: ^r})
+
+(circuit @host
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  (module {}
+    (cell @action)
+    (cell @left #)
+    (cell @right #)
+    (log (@history @guest limit: 2)
+      ((* . . . . . . . O . . . * . . .)))
+    (rewriter ((chainR (rulesetR phase: entangle) (valueR guest (adjR (rulesetR phase: step)))) <-> {@:left, @:right, @:guest})
+      (entangle {¦ left_ guest: (`dst O _*)}) <> {dst: ^left}
+      (entangle {¦ right_ guest: (_* O `dst)}) <> {dst: ^right}
+      (entangle {¦ left: . guest: ⟨l←(%not . < >) O⟩}) <> {l: .}
+      (entangle {¦ right: . guest: ⟨O r←(%not . < >)⟩}) <> {r: .}
+      (entangle {¦ left_: (%not .) guest: ⟨l_ O⟩}) <> {l: ^left}
+      (entangle {¦ right_: (%not .) guest: ⟨O r_⟩}) <> {r: ^right}
+      (step {¦ l: * m_: .}) <> {m: <}
+      (step {¦ l: < m_: .}) <> {m: <}
+      (step {¦ m_: . r: *}) <> {m: >}
+      (step {¦ m_: . r: >}) <> {m: >}
+      (step {¦ l: < m_: O r: .}) <> {m: .}
+      (step {¦ m_: < r: O}) <> {m: O}
+      (step {¦ l: . m_: <}) <> {m: .}
+      (step {¦ m_: > r: .}) <> {m: .}
+      (step {¦ l: . m_: O r: >}) <> {m: .}
+      (step {¦ l: O m_: >}) <> {m: O}
+      (step {¦ l: O m_: *}) <> {m: .}
+      (step {¦ m_: * r: O}) <> {m: .})
+    (backsys {@:history, @:action}
+      {¦ history: (((%gap n_) (%flex _) (%flex O) _*) ((%gap n_) (%flex O) _*)) -action_}
+        <> {action: left}
+      {¦ history: (((%gap n_) (%flex O) _*) ((%gap n_) (%flex _) (%flex O) _*)) -action_}
+        <> {action: right}))
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  .
+  .)
