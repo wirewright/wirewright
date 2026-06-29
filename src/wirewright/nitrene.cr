@@ -162,7 +162,7 @@ module Ww::Nitrene
   def div(a : Arith, b : Arith) : Arith
     case {a, b}
     in {ArithConst, ArithConst}
-      if b.value.zero?
+      if b.value.exact? && b.value.zero?
         ArithIndet.new
       else
         ArithConst.new(a.value / b.value)
@@ -692,8 +692,54 @@ module Ww::Nitrene
 
       matchpiT %{(** ±a ±b)} do
         Term.of(a ** b)
-      rescue MathDomainError
-        continue
+      end
+
+      # |@ nitrene.sqrt
+      #
+      # |@pattern
+      # (sqrt arg_)
+      #
+      # |@block
+      # Returns the approximate square root of *arg*. For negative numbers and non-
+      # numbers, returns `≈NaN`.
+      #
+      # ```wwml
+      # (sqrt 4) ;; => ≈2
+      # (sqrt 2) ;; => ≈1.4142135
+      # ```
+      matchpiT %{(sqrt ±arg)} do
+        Term.of(arg.sqrt)
+      end
+
+      matchpiT %{(sqrt _)} do
+        Term.of(Term::Num.nan)
+      end
+
+      # |@ nitrene.isqrt
+      #
+      # |@pattern
+      # (isqrt arg_)
+      #
+      # |@block
+      # Returns the **integer** square root of *arg*.
+      #
+      # - For positive integers or zero, the result is exact.
+      # - For negative integers and non-numbers, the result is `≈NaN`.
+      # - For non-integers, the result is approximate.
+      #
+      # ```wwml
+      # (isqrt 4)   ;; => 2
+      # (isqrt 2)   ;; => 1
+      # (isqrt ≈2)  ;; => ≈1
+      # (isqrt 1/2) ;; => ≈0
+      # (isqrt -1)  ;; => ≈NaN
+      # ```
+      matchpiT %{(isqrt ±a)} do
+        Term.of(a.isqrt)
+      end
+
+      matchpiT %{(isqrt _)} do
+        Term.of(Term::Num.nan)
       end
 
       matchpi %{(< _*)} do
@@ -826,7 +872,7 @@ module Ww::Nitrene
 
       matchpiT %{(finite arg_ or: alt_)} do
         a = arith?(arg)
-        a.is_a?(ArithConst) ? arg : alt
+        a.is_a?(ArithConst) && !(a.value.infinite? || a.value.nan?) ? arg : alt
       end
 
       matchpiT %{(exact ±arg)} do
@@ -839,6 +885,54 @@ module Ww::Nitrene
 
       matchpiT %{(sci ±mantissa ±exponent)} do
         Term.of(mantissa * Term[10]**exponent)
+      end
+
+      # |@ nitrene.nan
+      #
+      # |@pattern
+      # (nan? arg_)
+      #
+      # |@block
+      # Returns `true` if *arg* is the approximate `≈NaN`.
+      #
+      # ```wwml
+      # (nan? 100)       ;; => false
+      # (nan? x)         ;; => false
+      # (nan? ≈NaN)      ;; => true
+      # (nan? ≈Infinity) ;; => false
+      # ```
+      matchpiT %{(nan? ±arg)} do
+        Term.of(arg.nan?)
+      end
+
+      matchpiT %{(nan? _)} do
+        Term.of(false)
+      end
+
+      # |@ nitrene.infinite
+      #
+      # |@pattern
+      # (infinite? arg_)
+      #
+      # |@block
+      # Returns `true` if *arg* is a positive or negative approximate or
+      # arithmetic infinity.
+      #
+      # ```wwml
+      # (infinite? 100)        ;; => false
+      # (infinite? x)          ;; => false
+      # (infinite? ≈NaN)       ;; => false
+      # (infinite? ≈Infinity)  ;; => true
+      # (infinite? ≈-Infinity) ;; => true
+      # (infinite? ∞)          ;; => true
+      # (infinite? -∞)         ;; => true
+      # ```
+      matchpiT %{(infinite? ±arg)} do
+        Term.of(arg.infinite?)
+      end
+
+      matchpiT %{(infinite? arg_)} do
+        Term.of(arg.in?(SYM_INFINITY, SYM_NEG_INFINITY))
       end
 
       # FIXME: These things must use Arith!
@@ -1168,7 +1262,12 @@ module Ww::Nitrene
         n = arith?(value)
         continue if n.nil? || n.is_a?(ArithIndet)
 
-        Term.of((lo == n || lt?(lo, n)) && lt?(n, hi))
+        eq_lo = false
+        if lo.is_a?(ArithConst) && n.is_a?(ArithConst)
+          eq_lo = (lo.value <=> n.value).zero?
+        end
+
+        Term.of((eq_lo || lt?(lo, n)) && lt?(n, hi))
       end
 
       matchpi %{(substring? haystack_string needle_string)}, haystack: String, needle: String do

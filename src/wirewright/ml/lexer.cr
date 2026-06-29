@@ -845,10 +845,18 @@ module Ww::ML
 
         suffix = view { skip(&.symbolic?) }
         if suffix.empty?
-          raise "expected a decimal number after `≈`", suffix
+          raise "expected a decimal number, `NaN`, or `Infinity` after `≈`", suffix
         end
 
-        magn = Kit.decimal(suffix, exact: false)
+        case suffix
+        when "NaN"
+          magn = Term.of(Term::Num.nan)
+        when "Infinity"
+          magn = Term.of(Term::Num.infinity)
+        else
+          magn = Kit.decimal(suffix, exact: false)
+        end
+
         if magn.type.number?
           Term.of(Term::Num.approx(positive ? magn.as_n : Term[-1] * magn.as_n))
         else

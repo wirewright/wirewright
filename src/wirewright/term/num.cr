@@ -100,6 +100,16 @@ module Ww
       new(k)
     end
 
+    # Constructs a positive infinity approximate number.
+    def self.infinity : Num
+      approx(Approx::INFINITY)
+    end
+
+    # Constructs a NaN approximate number.
+    def self.nan : Num
+      approx(Approx::NAN)
+    end
+
     # Constructs a rational number from Crystal number numerator *num* and
     # denominator *den*.
     def self.exact(num, den) : Num
@@ -108,8 +118,8 @@ module Ww
 
     # Constructs an exact number term from a Crystal number *n*.
     def self.exact(n : Float) : Num
-      unless n.finite? # Infinite or NaN
-        raise MathDomainError.new("#{n}")
+      unless n.finite? # Infinity or NaN
+        return approx(n)
       end
 
       if n.integer? && Int61::MIN <= n <= Int61::MAX
@@ -161,11 +171,7 @@ module Ww
 
     # Constructs an approximate number term from a Crystal float *n*.
     def self.approx(n : Float)
-      unless n.finite? # Infinite or NaN
-        raise MathDomainError.new("#{n}")
-      end
-
-      new(n.to_f32)
+      new(n.to_f32!)
     end
 
     # Converts another number term *n* into an approximate number term.
@@ -181,13 +187,13 @@ module Ww
     # :nodoc:
     @[AlwaysInline]
     def self.f32(n : Int64) : Float32
-      n.to_f32
+      n.to_f32!
     end
 
     # :nodoc:
     @[AlwaysInline]
     def self.f32(n : BigRational*) : Float32
-      n.value.to_f32
+      n.value.to_f32!
     end
 
     # :nodoc:
@@ -214,7 +220,7 @@ module Ww
         return yield k.value
       end
 
-      # k : Int64 | Float32
+      # k : Int64 | Approx
       yield k
     end
 
@@ -222,7 +228,7 @@ module Ww
     #
     # - For exact numbers, this always gives the true result.
     # - For inexact numbers, the result depends on the bits of the floating-point
-    #   representation. Here in particular we use `Float32`. This method does *not*
+    #   representation. Here in particular we use `Approx`. This method does *not*
     #   perform approximate equality.
     #
     # This should never return `nil` since we guard against `NaN`s during
@@ -280,7 +286,7 @@ module Ww
     # See also: `#<=>(other : Num)`.
     @[Dncast]
     def zero? : Bool
-      kmap(&.zero?)
+      self == Num.exact(0i64)
     end
 
     # Returns `true` if this number term is greater than or equal to zero.
@@ -310,6 +316,21 @@ module Ww
     @[Dncast]
     def approx? : Bool
       @k.is_a?(Approx)
+    end
+
+    # Returns `true` if this number term is an approximate NaN.
+    def nan? : Bool
+      return false unless k = @k.as?(Approx)
+
+      k != k
+    end
+
+    # Returns `true` if this number term is an approximate infinity (negative
+    # or positive).
+    def infinite? : Bool
+      return false unless k = @k.as?(Approx)
+
+      !!k.infinite?
     end
 
     # Returns this number as a u32 if it is representable with a u32. Otherwise,
@@ -349,7 +370,7 @@ module Ww
     # `false` otherwise.
     #
     # NOTE: Like R7RS, this method returns `true` on an inexact number if
-    # it is an integer (see also: `Float32#integer?`).
+    # it is an integer (see also: `Approx#integer?`).
     @[Dncast]
     def integer? : Bool
       if @k.is_a?(Int64)
@@ -372,7 +393,7 @@ module Ww
     @[Dncast]
     def finite10? : Bool
       unless ratptr = @k.as?(BigRational*)
-        return true # finite, @k : Int64 | Float32
+        return true # finite, @k : Int64 | Approx
       end
 
       ratptr.value.denominator.each_prime_factor do |factor|
@@ -406,7 +427,7 @@ module Ww
       case a = @k
       in Int64                then Num.exact(a.abs)
       in Pointer(BigRational) then Num.exact(a.value.abs)
-      in Float32              then Num.approx(a.abs)
+      in Approx               then Num.approx(a.abs)
       end
     end
 
@@ -433,7 +454,7 @@ module Ww
         %c = pass(%a.value, %b.value) {{block}}
 
         Num.exact(%c)
-      in {_, Float32}, {Float32, _}
+      in {_, Approx}, {Approx, _}
         %c = pass({{@type}}.f32(%a), {{@type}}.f32(%b)) {{block}}
 
         Num.approx(%c)
@@ -509,7 +530,7 @@ module Ww
         Num.exact(a.value / b.to_big_r)
       in {Pointer(BigRational), Pointer(BigRational)}
         Num.exact(a.value / b.value)
-      in {Float32, _}, {_, Float32}
+      in {Approx, _}, {_, Approx}
         Num.approx(Num.f32(a) / Num.f32(b))
       end
     end
@@ -577,7 +598,7 @@ module Ww
       end
 
       # Approx path.
-      if a.is_a?(Float32) || b.is_a?(Float32)
+      if a.is_a?(Approx) || b.is_a?(Approx)
         return Num.approx(Num.f32(a) ** Num.f32(b))
       end
 
@@ -593,9 +614,7 @@ module Ww
     #
     # *other* is passed through `Term.[]` to obtain a number term.
     #
-    # Switches to approximate arithmetic if both numbers are rational. Raises
-    # `MathDomainError` if approximate arithmetic evaluates to infinity
-    # or NaN.
+    # Switches to approximate arithmetic if both numbers are rational.
     @[Dncast]
     def **(other)
       self ** Term[other].as(Num)
@@ -630,37 +649,25 @@ module Ww
     end
 
     # Returns the approximate square root of this number term.
-    #
-    # Raises `MathDomainError` if this number is negative.
     @[Dncast]
     def sqrt : Num
-      if negative?
-        raise MathDomainError.new
-      end
-
-      Num.approx(Math.sqrt(f32(@k)))
+      Num.approx(Math.sqrt(Num.f32(@k)))
     end
 
     # Returns the approximate integer square root of this number term.
     #
     # For non-integer number terms, this method returns the approximate floor
     # of their square root.
-    #
-    # Raises `MathDomainError` if this number is negative.
     @[Dncast]
     def isqrt : Num
-      if negative?
-        raise MathDomainError.new
+      a = @k
+      if a.is_a?(Int64) && a >= 0
+        return Num.exact(Math.isqrt(a))
       end
 
-      case a = @k
-      in Int64
-        Num.exact(Math.isqrt(a))
-      in Pointer(BigRational), Float32
-        # Math.sqrt(BigRational) : BigFloat, so let's just do it on f32, I don't
-        # see the point of going through BigFloat.
-        Num.approx(Math.sqrt(f32(a)).floor)
-      end
+      # Math.sqrt(BigRational) : BigFloat, so let's just do it on f32, I don't
+      # see the point of going through BigFloat.
+      Num.approx(Math.sqrt(Num.f32(a)).floor)
     end
 
     # Returns the greatest integer number term less than or equal to this
@@ -670,7 +677,7 @@ module Ww
       case a = @k
       in Int64                then self
       in Pointer(BigRational) then Num.exact(a.value.floor)
-      in Float32              then Num.approx(a.floor)
+      in Approx               then Num.approx(a.floor)
       end
     end
 
@@ -680,7 +687,7 @@ module Ww
       case a = @k
       in Int64                then self
       in Pointer(BigRational) then Num.exact(a.value.round(:ties_even))
-      in Float32              then Num.approx(a.round(:ties_even))
+      in Approx               then Num.approx(a.round(:ties_even))
       end
     end
 
@@ -691,7 +698,7 @@ module Ww
       case a = @k
       in Int64                then self
       in Pointer(BigRational) then Num.exact(a.value.ceil)
-      in Float32              then Num.approx(a.ceil)
+      in Approx               then Num.approx(a.ceil)
       end
     end
 
@@ -750,7 +757,7 @@ module Ww
     @[Dncast]
     def decimal(io)
       case a = @k
-      in Int64, Float32
+      in Int64, Approx
         io << a
       in Pointer(BigRational)
         unless finite10?
@@ -770,16 +777,29 @@ module Ww
       ML.compact(io, self)
     end
 
+    # :nodoc:
+    BITS_ZERO = 0x4457b45a6fe55351u64
+
+    # :nodoc:
+    BITS_APPROX_ZERO = 0x1c5498cd1438ff93u64
+
     def hashrepr : UInt64
       case k = @k
       in Int64
-        bits = k.unsafe_as(UInt64)
+        # If @k is zero, Int.mix() won't be able to do anything about it.
+        # Therefore, collide `0` with a random big u64, and mix that. The chances
+        # that the random u64 collides with zero in practice are low enough,
+        # I suppose (unless there's an adversarial situation -- a case which
+        # we provide no guarantees for anyway).
+        bits = k.zero? ? BITS_ZERO : k.unsafe_as(UInt64)
       in Float32
-        # Mix the bits from the float so that our hashcode doesn't collide with
-        # Int64 and BigRational as readily but most importantly so that hashcode
-        # behaves like equality, which requires both parties to be of
-        # the approximate kind.
-        bits = Int.mix(k.unsafe_as(UInt32).to_u64)
+        repr = k.unsafe_as(UInt32).to_u64
+        if repr.zero?
+          # Ditto: if repr is zero (0.0f32), we use a *different* random bit
+          # pattern for it. This is because 0 != ≈0.
+          repr = BITS_APPROX_ZERO
+        end
+        bits = Int.mix(repr)
       in Pointer(BigRational)
         bits = k.value.to_f64.to_f32!.unsafe_as(UInt32).to_u64
       end
@@ -791,16 +811,14 @@ module Ww
     def ==(other : Num) : Bool
       l, r = @k, other.@k
 
-      if l.is_a?(Int64) # Fast path
+      if l.is_a?(Int64) && r.is_a?(Int64) # Fast path
         return l == r
       end
 
       # NOTE: Num always uses the fittest representation, that's an invariant.
       # So for two numbers to be equal, their reprs must necessarily be equal.
       case {l, r}
-      when {Int64, Int64}
-        l == r
-      when {Float32, Float32}
+      when {Approx, Approx}
         l == r # Repeat ourselves for stricter restrictions on l and r
       when {Pointer(BigRational), Pointer(BigRational)}
         l.value == r.value
