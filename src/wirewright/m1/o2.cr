@@ -35,6 +35,23 @@ module Ww::M1
         Term.morph(result, {:bounds, 0, lo + 1})
       end
 
+      matchpiT %{[%'%seq (%'%plural ⍊ ±min max_ type_symbol)]}, cue: {:"%seq", :"%plural"} do
+        continue unless min32 = min.index32?
+
+        # Just check. We must make sure the compiler would be able to
+        # construct stuff.
+        continue unless AtomTermType.parse?(type)
+        continue unless Term::Dict::Histogram::Unsaturated.new?(min32)
+
+        unless max == Term.of(:∞)
+          continue unless maxn = max.as_n?
+          continue unless max32 = maxn.index32?
+          continue unless Term::Dict::Histogram::Unsaturated.new?(max32)
+        end
+
+        Term[:"%composition", type: type, min: min, max: max]
+      end
+
       otherwise { op }
     end
   end

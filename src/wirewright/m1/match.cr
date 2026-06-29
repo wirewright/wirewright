@@ -680,6 +680,19 @@ module Ww::M1
 
   # :nodoc:
   #
+  # (_number*)  (_string+)
+  def match(ctx, op : Op::CompositionExclusively, matchee : Tzip, plan)
+    return Fb[] unless dict = matchee.term.as_d?
+    return Fb[] unless dict.size >= op.min.value
+
+    histogram = dict.summary.histogram
+    return Fb[] unless histogram.exclusively?(op.type, op.min, op.max)
+
+    cons(ctx, plan)
+  end
+
+  # :nodoc:
+  #
   # (`front _*)  (`front x_ y_ z_ _*)
   def match(ctx, op : Op::FrontRef, matchee : Tzip, plan)
     return Fb[] unless matchee.type.dict?

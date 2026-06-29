@@ -763,6 +763,41 @@ module Ww::M1
       matchpiT %{[%'%mime type_ params_]}, cue: :"%mime" do
         Op::Mime.new(compile(Π.pattern(type)), compile(Π.pattern(params)))
       end
+
+      matchpiT %{(%'%composition ⍊ min_ max_ type: %'_number)}, cue: {:"%composition", :_number} do
+        Op::CompositionExclusively.new(:number,
+          min: Term::Dict::Histogram::Unsaturated.new(min.to(UInt8)),
+          max: max == Term.of(:∞) ? nil : Term::Dict::Histogram::Unsaturated.new(max.to(UInt8)),
+        )
+      end
+
+      matchpiT %{(%'%composition ⍊ min_ max_ type: %'_string)}, cue: {:"%composition", :_string} do
+        Op::CompositionExclusively.new(:string,
+          min: Term::Dict::Histogram::Unsaturated.new(min.to(UInt8)),
+          max: max == Term.of(:∞) ? nil : Term::Dict::Histogram::Unsaturated.new(max.to(UInt8)),
+        )
+      end
+
+      matchpiT %{(%'%composition ⍊ min_ max_ type: %'_symbol)}, cue: {:"%composition", :_symbol} do
+        Op::CompositionExclusively.new(:symbol,
+          min: Term::Dict::Histogram::Unsaturated.new(min.to(UInt8)),
+          max: max == Term.of(:∞) ? nil : Term::Dict::Histogram::Unsaturated.new(max.to(UInt8)),
+        )
+      end
+
+      matchpiT %{(%'%composition ⍊ min_ max_ type: %'_boolean)}, cue: {:"%composition", :_boolean} do
+        Op::CompositionExclusively.new(:boolean,
+          min: Term::Dict::Histogram::Unsaturated.new(min.to(UInt8)),
+          max: max == Term.of(:∞) ? nil : Term::Dict::Histogram::Unsaturated.new(max.to(UInt8)),
+        )
+      end
+
+      matchpiT %{(%'%composition ⍊ min_ max_ type: %'_blob)}, cue: {:"%composition", :_blob} do
+        Op::CompositionExclusively.new(:blob,
+          min: Term::Dict::Histogram::Unsaturated.new(min.to(UInt8)),
+          max: max == Term.of(:∞) ? nil : Term::Dict::Histogram::Unsaturated.new(max.to(UInt8)),
+        )
+      end
     end
   end
 

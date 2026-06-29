@@ -8,6 +8,47 @@ struct Nil
 end
 
 module Ww
+  # :nodoc:
+  ATOM_NOT_NUMBER = Slice[AtomTermType::String, AtomTermType::Symbol, AtomTermType::Boolean, AtomTermType::Blob]
+  # :nodoc:
+  ATOM_NOT_STRING = Slice[AtomTermType::Number, AtomTermType::Symbol, AtomTermType::Boolean, AtomTermType::Blob]
+  # :nodoc:
+  ATOM_NOT_SYMBOL = Slice[AtomTermType::String, AtomTermType::Number, AtomTermType::Boolean, AtomTermType::Blob]
+  # :nodoc:
+  ATOM_NOT_BOOLEAN = Slice[AtomTermType::Number, AtomTermType::String, AtomTermType::Symbol, AtomTermType::Blob]
+  # :nodoc:
+  ATOM_NOT_BLOB = Slice[AtomTermType::Number, AtomTermType::String, AtomTermType::Symbol, AtomTermType::Boolean]
+
+  # Lists the possible types of *atom* terms. Dictionaries are not atom
+  # terms; nor is there the equivalent of `TermType::Any`.
+  enum AtomTermType : UInt8
+    Number
+    String
+    Symbol
+    Boolean
+    Blob
+
+    def self.parse?(sym : Term::Sym) : AtomTermType?
+      case sym
+      when SYM_BLANK_NUMBER  then Number
+      when SYM_BLANK_STRING  then String
+      when SYM_BLANK_SYMBOL  then Symbol
+      when SYM_BLANK_BOOLEAN then Boolean
+      when SYM_BLANK_BLOB    then Blob
+      end
+    end
+
+    def complement : Indexable(AtomTermType)
+      case self
+      in .number?  then ATOM_NOT_NUMBER
+      in .string?  then ATOM_NOT_STRING
+      in .symbol?  then ATOM_NOT_SYMBOL
+      in .boolean? then ATOM_NOT_BOOLEAN
+      in .blob?    then ATOM_NOT_BLOB
+      end
+    end
+  end
+
   # Lists the possible types of terms.
   enum TermType : UInt8
     Any     = 0

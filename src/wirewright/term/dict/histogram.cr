@@ -42,6 +42,29 @@ class Ww::Term::Dict
     # :nodoc:
     ONE_BLOB = new(0x00_00_00_00_00_01u64)
 
+    # :nodoc:
+    MAX_UNSATURATED = 254
+
+    # Represents an accurate, unsaturated count. Some methods of `Histogram` work
+    # with unsaturated counts (while others work with `Magnitude`s). This is done to
+    # simplify the interface: we could use `Magnitude`s but then there's the question
+    # of what saturation means (especially on the caller's end).
+    struct Unsaturated
+      getter value : UInt8
+
+      def initialize(value : Int)
+        assert 0 <= value <= MAX_UNSATURATED
+
+        @value = value
+      end
+
+      def self.new?(value : Int) : Unsaturated?
+        return unless 0 <= value <= MAX_UNSATURATED
+
+        new(value.to_u8)
+      end
+    end
+
     @[AlwaysInline]
     def self.zero : Histogram
       new(0u64)
@@ -134,6 +157,11 @@ class Ww::Term::Dict
       sat_byte_to_magn((@bits & 0x00_00_00_00_ff_00u64) >> 1*8)
     end
 
+    # Returns the amount of booleans in the dict this histogram describes.
+    def booleans : Magnitude
+      trues + falses
+    end
+
     # Returns the amount of blobs in the dict this histogram describes.
     def blobs : Magnitude
       sat_byte_to_magn((@bits & 0x00_00_00_00_00_ffu64) >> 0*8)
@@ -145,6 +173,17 @@ class Ww::Term::Dict
       numbers + strings + symbols + trues + falses + blobs
     end
 
+    # Dispatches to one `numbers`, `strings`, ..., `blobs` based on the given *type*.
+    def count(type : AtomTermType) : Magnitude
+      case type
+      in .number?  then numbers
+      in .string?  then strings
+      in .symbol?  then symbols
+      in .boolean? then trues + falses
+      in .blob?    then blobs
+      end
+    end
+
     def subset_of?(other : Histogram) : Bool
       return false unless numbers <= other.numbers
       return false unless strings <= other.strings
@@ -154,6 +193,29 @@ class Ww::Term::Dict
       return false unless blobs <= other.blobs
 
       true
+    end
+
+    # Returns `true` if this histogram is comprised of exclusively terms of
+    # the given *type* -- at least *min*, and at most *max* of them (inclusive).
+    def exclusively?(type : AtomTermType, min : Unsaturated, max : Unsaturated? = nil) : Bool
+      master_count = count(type)
+
+      unless master_count >= min.value
+        return false # too few items
+      end
+
+      if max && master_count > max.value
+        return false # too many items
+      end
+
+      # Check exclusivity.
+      type.complement.each do |complement_type|
+        unless count(complement_type).zero?
+          return false
+        end
+      end
+
+      true # ok
     end
 
     def inspect(io)
