@@ -20,7 +20,7 @@ class Ww::Term::Dict
   # - *size* tells the number of entries in the dictionary of interest.
   #   It is precise. Overflow is a runtime error which will crash Wirewright.
   # - *maxdepth16* is the saturating depth of the deepest leaf of the dict.
-  #   Use `maxdepth` to access in general-purpose code.
+  #   Prefer `maxdepth` in general-purpose code.
   # - *size set* is a set of dict sizes 0-15. Consider, for instance, the pattern
   #   `⟨(_ _)⟩`. Even though it doesn't provide any useful content-based cues, we
   #   can still use its very shape, which may or may not be rare in the matchee; and

@@ -682,13 +682,21 @@ module Ww::M1
   #
   # (_number*)  (_string+)
   def match(ctx, op : Op::CompositionExclusively, matchee : Tzip, plan)
-    return Fb[] unless dict = matchee.term.as_d?
-    return Fb[] unless dict.size >= op.min.value
-
-    histogram = dict.summary.histogram
-    return Fb[] unless histogram.exclusively?(op.type, op.min, op.max)
+    return Fb[] unless probably_matches?(op, matchee.term)
 
     cons(ctx, plan)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : Op::CompositionExclusively, matchee : Term)
+    return false unless dict = matchee.as_itemsonly_d?
+    return false unless dict.uitemsize >= op.min.value
+
+    summary = dict.summary
+    return false unless summary.maxdepth16 == 1u16 # e.g. (1 2 3) vs. ((1) 2 3) and so on
+    return false unless summary.histogram.exclusively?(op.type, op.min, op.max)
+
+    true
   end
 
   # :nodoc:
