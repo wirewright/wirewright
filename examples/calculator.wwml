@@ -128,7 +128,7 @@
         <> {(action): ()}
       {¦ action_string workspace: ⟪(in buffer_string)⟫}
         <> {(action): (), buffer: ^(~ buffer action)}
-      {¦ action: clear workspace_}
+      {¦ action: clear workspace_: ⟪(in _)⟫}
         <> {(action): (), workspace: (top (in ""))}
       {¦ action_: backspace workspace: ⟪(in buffer_dict)⟫}
         <> {(action): (), buffer: ""}
