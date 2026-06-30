@@ -102,15 +102,15 @@
   (- ⎡"\"⏏⎤ ⎡expected `"` to end the string⎤)
 
   (- ⎡"\x⏏"⎤ ⎡expected exactly two hex digits after `\x`⎤)
-  (- ⎡"\xA⏏"⎤ ⎡expected exactly two hex digits after `\x`⎤)
-  (- ⎡"\x⏏x⏏"⎤ ⎡expected exactly two hex digits after `\x`⎤)
-  (- ⎡"\x⏏x⏏y"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\x⏏A⏏"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\x⏏x"⎤ ⎡expected exactly two hex digits after `\x`⎤)
+  (- ⎡"\x⏏xy"⎤ ⎡expected exactly two hex digits after `\x`⎤)
 
   (- ⎡"\u⏏"⎤ ⎡expected one of `\u{...}`, `\u[...]`, `\u____`⎤)
 
   (- ⎡"\u{⏏}"⎤ ⎡expected 1-6 hex digits in `\u{}`⎤)
   (- ⎡"\u{⏏qux}"⎤ ⎡expected 1-6 hex digits in `\u{}`⎤)
-  (- ⎡"\u{bac⏏o⏏n}"⎤ ⎡expected `}` to close `\u{`⎤)
+  (- ⎡"\u{bac⏏on}"⎤ ⎡expected `}` to close `\u{`⎤)
 
   (- ⎡"\u{⏏110000⏏}"⎤ ⎡unsupported codepoint `110000`⎤)
 
@@ -123,7 +123,7 @@
 
   (- ⎡"\u[:⏏]"⎤ ⎡expected emoji name⎤)
   (- ⎡"\u[:⏏:]"⎤ ⎡expected emoji name⎤)
-  (- ⎡"\u[:qux⏏]⏏"⎤ ⎡expected `:]`⎤)
+  (- ⎡"\u[:qux⏏]"⎤ ⎡expected `:]`⎤)
   (- ⎡"\u[:⏏qux⏏:]"⎤ ⎡`qux` is not an emoji⎤))
 
 ;; Strings, standard form.
@@ -165,13 +165,13 @@
      ⎡"δΔ: Lorem ispum ABC dolor sit amet! 😄"⎤)
 
   ;; Escape sequence errors in strings.
-  (- ⎡"\u[delta ⏏\⏏u[Delta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
+  (- ⎡"\u[delta ⏏\u[Delta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
      ⎡expected `]` to close `\u[`⎤)
-  (- ⎡"\u[delta]\uDe⏏l⏏ta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
+  (- ⎡"\u[delta]\u⏏De⏏lta]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
      ⎡expected exactly four hex digits after `\u`⎤)
   (- ⎡"\u[delta]\u[⏏qux⏏]: Lorem ispum \x41\x42C dolor sit amet! \u[:smile:]"⎤
      ⎡`qux` is not a Greek letter name nor a Unicode codepoint name⎤)
-  (- ⎡"\u[delta]\u[Delta]: Lorem ispum \x4⏏\⏏x42C dolor sit amet! \u[:smile:]"⎤
+  (- ⎡"\u[delta]\u[Delta]: Lorem ispum \x⏏4⏏\x42C dolor sit amet! \u[:smile:]"⎤
      ⎡expected exactly two hex digits after `\x`⎤)
   (- ⎡"\u[delta]\u[Delta]: Lorem ispum \x41\x42C dolor sit amet! \u[:⏏notarealthing⏏:]"⎤
      ⎡`notarealthing` is not an emoji⎤)

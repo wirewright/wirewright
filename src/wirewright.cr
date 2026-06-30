@@ -14,7 +14,6 @@ require "compress/gzip"
 require "semantic_version"
 
 require "../util"
-require "../rtk"
 
 require "./wirewright/libs/*"
 require "./wirewright/misc/*"

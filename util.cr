@@ -852,6 +852,14 @@ struct Char
     other === self
   end
 
+  def hexdigit? : Int32?
+    case self
+    when '0'..'9' then self - '0'
+    when 'a'..'f' then (self - 'a') + 10
+    when 'A'..'F' then (self - 'A') + 10
+    end
+  end
+
   # Reference: https://github.com/rakudo/rakudo/blob/6b47541e27a4a0bcc9bbc07cdbf944b7174cc01c/src/Raku/ast/regex.rakumod#L715
   def hspace? : Bool
     ord.in?(0x09, 0x20, 0xa0, 0x1680, 0x180e, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a, 0x202f, 0x205f, 0x3000)
@@ -1266,6 +1274,32 @@ struct StringView
     end
 
     remainder
+  end
+
+  def skip_thru_seq(*, limit : UInt32 = UInt32::MAX, & : Char -> T?) : {StringView, Array(T), StringView} forall T
+    seq = [] of T
+    remainder = self
+
+    until remainder.empty? || limit.zero?
+      object = yield remainder.first_char
+      break if object.nil?
+
+      seq << object
+      remainder = remainder.rest
+      limit -= 1
+    end
+
+    {upto(remainder), seq, remainder}
+  end
+
+  def skip_to(sepset : String) : {StringView, StringView}
+    l, m, r = partition(&.in_set?(sepset))
+    {l, m &+ r}
+  end
+
+  def skip_thru(sepset : String) : {StringView, StringView}
+    l, m, r = partition { |chr| !chr.in_set?(sepset) }
+    {l, m &+ r}
   end
 
   def prev_char? : Char?
