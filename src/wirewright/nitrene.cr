@@ -1338,7 +1338,7 @@ module Ww::Nitrene
       # TODO: Remove in favor of partition/rpartition
       matchpi %{(line/rest arg_string)}, arg: StringView do
         _, sep, r = arg.partition('\n')
-        Term.of(sep + r)
+        Term.of(sep &+ r)
       end
 
       # TODO: Remove in favor of partition/rpartition
@@ -1350,11 +1350,11 @@ module Ww::Nitrene
       # TODO: Remove in favor of partition/rpartition
       matchpi %{(rline/rest arg_string)}, arg: StringView do
         l, sep, _ = arg.rpartition('\n')
-        Term.of(l + sep)
+        Term.of(l &+ sep)
       end
 
       # (run (prefix matcheeQ_) (charset prefixQ_))
-      matchpi %{(prefix-run matchee_string prefix_string)}, matchee: StringView, prefix: StringView do |matchee|
+      matchpi %{(prefix-run matchee_string prefix_string)}, matchee: StringView, prefix: String do |matchee|
         run = String.build do |io|
           while matchee.starts_with?(prefix)
             matchee = matchee.lskip(prefix.size)

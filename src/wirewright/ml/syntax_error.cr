@@ -39,7 +39,7 @@ module Ww::ML
 
       column = column_index + 1
 
-      line_index = extended.prior_string.count('\n')
+      line_index = extended.prior_string.ee.count('\n')
       line = line_index + 1
 
       {extended, line, column}
@@ -55,9 +55,9 @@ module Ww::ML
       e = text.char_end
 
       if b == e
-        io << text.string.insert(b, "⏏")
+        io << text.@string.insert(b, "⏏")
       else
-        io << text.string.insert(e, "⏏").insert(b, "⏏")
+        io << text.@string.insert(e, "⏏").insert(b, "⏏")
       end
     end
 

@@ -247,7 +247,7 @@ module Ww::Microfold
     end
 
     def parse?(tables : Tables, parser : Infix, seln : StringView) : Out
-      seln.each_inflection do |l, r|
+      seln.each_before_and_after do |l, r|
         next unless r.starts_with?(parser.infix)
 
         r = r.byte_subview(parser.infix.bytesize, r.bytesize)

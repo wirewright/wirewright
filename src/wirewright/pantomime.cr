@@ -122,7 +122,7 @@ module Ww
     end
 
     private def matches?(pattern : Includes, string : StringView) : Bool
-      string.each_inflection do |l, r|
+      string.each_before_and_after do |l, r|
         if r.starts_with?(pattern.seq)
           return true
         end

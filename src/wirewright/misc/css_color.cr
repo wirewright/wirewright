@@ -170,37 +170,38 @@ module Ww::CSSColor
     seln = seln.lstrip(" ")
     return unless seln = seln.lchop?('#')
 
-    # Read through RRGGBBAA.
-    d0, seln = seln.thru(&.to_i?(base: 16))
-    d1, seln = seln.thru(&.to_i?(base: 16)) if d0
-    d2, seln = seln.thru(&.to_i?(base: 16)) if d1
-    d3, seln = seln.thru(&.to_i?(base: 16)) if d2
-    d4, seln = seln.thru(&.to_i?(base: 16)) if d3
-    d5, seln = seln.thru(&.to_i?(base: 16)) if d4
-    d6, seln = seln.thru(&.to_i?(base: 16)) if d5
-    d7, seln = seln.thru(&.to_i?(base: 16)) if d6
-
+    _, digits, seln = seln.skip_thru_seq(limit: 8u32, &.hexdigit?)
     seln = seln.lstrip(" ")
 
     return unless seln.empty?
 
-    if d0 && d1 && d2 && d4.nil?
-      r = (d0 << 4 | d0).to_u8
-      g = (d1 << 4 | d1).to_u8
-      b = (d2 << 4 | d2).to_u8
-      a = d3 ? (d3 << 4 | d3).to_u8 : 255u8
+    if digits.size.in?(3, 4)
+      # RGB
+      r = ((digits[0] << 4) | digits[0]).to_u8
+      g = ((digits[1] << 4) | digits[1]).to_u8
+      b = ((digits[2] << 4) | digits[2]).to_u8
+
+      a = 255u8
+      if digits.size == 4
+        # RGBA
+        a = ((digits[3] << 4) | digits[3]).to_u8
+      end
+
       return r, g, b, a
     end
 
-    if d0 && d1 && d2 && d3 && d4 && d5
-      r = (d0 << 4 | d1).to_u8
-      g = (d2 << 4 | d3).to_u8
-      b = (d4 << 4 | d5).to_u8
-      if d6.nil?
-        return r, g, b, 255u8
-      end
-      if d7
-        return r, g, b, (d6 << 4 | d7).to_u8
+    if digits.size >= 6
+      r = ((digits[0] << 4) | digits[1]).to_u8
+      g = ((digits[2] << 4) | digits[3]).to_u8
+      b = ((digits[4] << 4) | digits[5]).to_u8
+
+      case digits.size
+      when 6
+        # RRGGBB
+        {r, g, b, 255u8}
+      when 8
+        # RRGGBBAA
+        {r, g, b, ((digits[6] << 4) | digits[7]).to_u8}
       end
     end
   end
