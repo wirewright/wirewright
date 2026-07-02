@@ -637,12 +637,12 @@ end
 module TextWrap
   extend self
 
-  private def scan(text : String, maxw : Int, maxh : Int, &) : Nil
+  private def scan(text : StringView, maxw : Int, maxh : Int, &) : Nil
     w = 0
     h = 1
     wsidx = wsx = nil
 
-    text.view.each_line do |line|
+    text.each_line do |line|
       line.each_char_with_abs_byte_index do |char, byte_index|
         if w + 1 > maxw
           next if char == ' ' # Ignore whitespace that we can't fit.
@@ -695,12 +695,12 @@ module TextWrap
     end
   end
 
-  def wrap(io : IO, text : String, maxw : Int, maxh : Int, *, ellipsis : String = "…") : Nil
+  def wrap(io : IO, text : StringView, maxw : Int, maxh : Int, *, ellipsis : String = "…") : Nil
     cursor = 0
     truncated = false
 
     scan(text, maxw, maxh) do |action, index|
-      prefix = text.view(byte_start: cursor, byte_end: index)
+      prefix = StringView.new(text.@trunk, byte_start: cursor.to_u32, byte_end: index.to_u32) # FIXME
       cursor += prefix.bytesize
 
       io << prefix
@@ -727,14 +727,18 @@ module TextWrap
 
     return if truncated
 
-    remaining = text.view(byte_start: cursor, byte_end: text.bytesize)
+    remaining = StringView.new(text.@trunk, byte_start: cursor.to_u32, byte_end: text.bytesize.to_u32) # FIXME
     io << remaining
   end
 
-  def wrap(text : String, maxw : Int, maxh : Int, **kwargs)
+  def wrap(text : StringView, maxw : Int, maxh : Int, **kwargs)
     String.build((text.bytesize * 1.33).to_i) do |io|
       wrap(io, text, maxw, maxh, **kwargs)
     end
+  end
+
+  def wrap(text : String, maxw : Int, maxh : Int, **kwargs)
+    wrap(text.view, maxw, maxh, **kwargs)
   end
 end
 
@@ -871,937 +875,7 @@ struct Char
   end
 end
 
-# FIXME: I use `ascii_only?` but really I meant `single_byte_optimizable?`. Rename
-# and fix conditions!!!
-#
-# TODO: StringView should be implemented properly and moved to Permafrost. We can
-# copy some of Char::Reader's methods for .first, .rest, .prior, .last, and maybe &+
-# (aka join consecutive); everything else can be built on top of them.
-#
-# TODO: StringView is actually a *selection* in the text editor sense, and should
-# be renamed when I finally decide to move it to permafrost. It should probably be
-# called StringSeln to have the same number of characters.
-struct StringView
-  getter byte_start : Int32
-
-  @byte_tail : UInt32
-
-  def byte_end : Int32
-    (@byte_tail >> 1).to_i
-  end
-
-  # Returns `true` if this string view only contains ASCII characters.
-  def ascii_only? : Bool
-    @byte_tail & 0b1 == 1
-  end
-
-  def initialize(@string : String, @byte_start, byte_end : Int32, ascii_only : Bool)
-    unless 0 <= @byte_start <= byte_end <= @string.bytesize
-      raise ArgumentError.new("invalid byte range #{@byte_start}...#{byte_end}")
-    end
-
-    # Byte end is nonnegative, we know that now!
-
-    @byte_tail = (byte_end.to_u32 << 1) | (ascii_only ? 1u32 : 0u32)
-
-    {% if flag?(:view_check_valid) %}
-      unless Unicode.valid?(@string.to_slice[@byte_start...byte_end])
-        raise ArgumentError.new("invalid encoding")
-      end
-    {% end %}
-  end
-
-  def <=>(other : StringView) : Int32
-    if string.same?(other.@string) && {byte_start, byte_end} == {other.byte_start, other.byte_end}
-      return 0
-    end
-
-    (to_slice <=> other.to_slice).sign
-  end
-
-  def self.join(views : Enumerable(StringView)) : StringView
-    views.reduce? { |memo, view| memo + view } || "".view
-  end
-
-  def self.join(*views : StringView)
-    join(*views)
-  end
-
-  def self.between(a : StringView, b : StringView) : StringView
-    unless a.@string.same?(b.@string)
-      raise ArgumentError.new("cannot take a view between views whose underlying strings compare different by reference")
-    end
-
-    # Sort by endpoints
-    if a.byte_end > b.byte_end
-      a, b = b, a
-    end
-
-    assert a.byte_end <= b.byte_start
-
-    StringView.new(a.@string, a.byte_end, b.byte_start, ascii_only: a.@string.single_byte_optimizable?)
-  end
-
-  def self.difference(a : StringView, b : StringView) : StringView
-    unless a.@string.same?(b.@string)
-      raise ArgumentError.new("cannot take a difference of views whose underlying strings compare different by reference")
-    end
-
-    StringView.new(a.@string, a.byte_start, Math.min(a.byte_end, b.byte_start), ascii_only: a.@string.single_byte_optimizable?)
-  end
-
-  def self.intersection(a : StringView, b : StringView) : StringView
-    unless a.@string.same?(b.@string)
-      raise ArgumentError.new("cannot intersect string views whose underlying strings compare different by reference")
-    end
-
-    xb = Math.max(a.byte_start, b.byte_start)
-    xe = Math.min(a.byte_end, b.byte_end)
-
-    StringView.new(a.@string, xb, xe, ascii_only: a.ascii_only?)
-  end
-
-  def self.intersection(views : Enumerable(StringView)) : StringView
-    result = views.reduce? do |memo, view|
-      StringView.intersection(memo, view)
-    end
-    result || "".view
-  end
-
-  def self.intersection(*views : StringView) : StringView
-    intersection(views)
-  end
-
-  def self.cat(*args) : StringView
-    content = String.build(args.sum(&.bytesize)) do |io|
-      args.each do |arg|
-        io << arg
-      end
-    end
-
-    content.view
-  end
-
-  def before_begin : StringView
-    StringView.new(@string, @byte_start, @byte_start, ascii_only: true)
-  end
-
-  def after_end : StringView
-    StringView.new(@string, byte_end, byte_end, ascii_only: true)
-  end
-
-  def char_start : Int32
-    if @byte_start == @string.bytesize
-      return @string.size
-    end
-
-    @string.byte_index_to_char_index(@byte_start).not_nil!
-  end
-
-  def char_end : Int32
-    if byte_end == @string.bytesize
-      return @string.size
-    end
-
-    @string.byte_index_to_char_index(byte_end).not_nil!
-  end
-
-  def includes?(needle : Char) : Bool
-    each_char do |char|
-      return true if char == needle
-    end
-    false
-  end
-
-  def empty? : Bool
-    @byte_start == byte_end
-  end
-
-  def nonempty? : Bool
-    !empty?
-  end
-
-  def bytesize : Int32
-    byte_end - @byte_start
-  end
-
-  def size : Int32
-    if ascii_only?
-      bytesize
-    elsif covers_fully?
-      # String always knows better than we do how to do this efficiently!
-      @string.size
-    else
-      size = 0
-      each_char do
-        size += 1
-      end
-      size
-    end
-  end
-
-  def byte_bounds : Range(Int32, Int32)
-    @byte_start...byte_end
-  end
-
-  def blank? : Bool
-    each_char do |char|
-      return false unless char.whitespace?
-    end
-
-    true
-  end
-
-  def prefixed_by?(object) : Bool
-    bytesize > object.bytesize && starts_with?(object)
-  end
-
-  def postfixed_by?(object) : Bool
-    bytesize > object.bytesize && ends_with?(object)
-  end
-
-  def surrounded_by?(l, r) : Bool
-    prefixed_by?(l) && postfixed_by?(r)
-  end
-
-  def starts_with?(ch : Char) : Bool
-    return false if bytesize < ch.bytesize
-
-    offset = @byte_start
-
-    ch.each_byte do |byte|
-      unless @string.byte_at(offset) == byte
-        return false
-      end
-
-      offset += 1
-    end
-
-    true
-  end
-
-  def starts_with?(prefix : String) : Bool
-    return false if bytesize < prefix.bytesize
-
-    to_unsafe.memcmp(prefix.to_unsafe, prefix.bytesize) == 0
-  end
-
-  def ends_with?(ch : Char)
-    last_char? == ch
-  end
-
-  def ends_with?(postfix : String) : Bool
-    return false if postfix.bytesize > bytesize
-
-    (to_unsafe + bytesize - postfix.bytesize).memcmp(postfix.to_unsafe, postfix.bytesize) == 0
-  end
-
-  def ends_at?(other : StringView)
-    @string.same?(other.@string) && byte_end == other.byte_start
-  end
-
-  def covers_fully? : Bool
-    {0, @string.bytesize} == {@byte_start, byte_end}
-  end
-
-  def blank? : Bool
-    each_char do |char|
-      return false unless char.whitespace?
-    end
-
-    true
-  end
-
-  def &+(other : StringView)
-    unless ends_at?(other)
-      raise ArgumentError.new("lhs string view does not precede rhs")
-    end
-
-    ascii_only = ascii_only? && other.ascii_only?
-
-    StringView.new(@string, @byte_start, other.byte_end, ascii_only)
-  end
-
-  struct EE
-    include Enumerable(Char)
-
-    def initialize(@v : StringView)
-    end
-
-    def each(& : Char ->)
-      @v.each_char { |ch| yield ch }
-    end
-  end
-
-  def ee : Enumerable(Char)
-    EE.new(self)
-  end
-
-  def skip_thru_seq(*, limit : UInt32 = UInt32::MAX, & : Char -> T?) : {StringView, Array(T), StringView} forall T
-    seq = [] of T
-    remainder = self
-
-    until remainder.empty? || limit.zero?
-      object = yield remainder.first_char
-      break if object.nil?
-
-      seq << object
-      remainder = remainder.rest
-      limit -= 1
-    end
-
-    {upto(remainder), seq, remainder}
-  end
-
-  def skip_to(sepset : String) : {StringView, StringView}
-    l, m, r = partition(&.in_set?(sepset))
-    {l, m &+ r}
-  end
-
-  def skip_thru(sepset : String) : {StringView, StringView}
-    l, m, r = partition { |chr| !chr.in_set?(sepset) }
-    {l, m &+ r}
-  end
-
-  @[AlwaysInline]
-  private def first_char_ascii? : Char?
-    empty? ? nil : to_unsafe[0].unsafe_chr
-  end
-
-  private def first_char_unicode? : Char?
-    if covers_fully?
-      return @string[0]?
-    end
-
-    each_char { |char| return char }
-  end
-
-  def first_char? : Char?
-    ascii_only? ? first_char_ascii? : first_char_unicode?
-  end
-
-  def first_char : Char
-    first_char? || raise IndexError.new
-  end
-
-  def last_char? : Char?
-    if ascii_only?
-      return unless codepoint = to_slice.last?
-      return codepoint.unsafe_chr
-    end
-
-    if covers_fully?
-      return @string[@string.size - 1]?
-    end
-
-    reverse_each_char { |char| return char }
-  end
-
-  def last_char : Char
-    last_char? || raise IndexError.new
-  end
-
-  def first : StringView
-    return self if empty?
-
-    if ascii_only?
-      return StringView.new(@string, @byte_start, @byte_start + 1, ascii_only: true)
-    end
-
-    each_char do |char|
-      return StringView.new(@string, @byte_start, @byte_start + char.bytesize, ascii_only: false)
-    end
-
-    unreachable
-  end
-
-  def rest : StringView
-    return self if empty?
-
-    if ascii_only?
-      return StringView.new(@string, @byte_start + 1, byte_end, ascii_only: true)
-    end
-
-    each_char do |char|
-      return StringView.new(@string, @byte_start + char.bytesize, byte_end, ascii_only: false)
-    end
-
-    unreachable
-  end
-
-  def last : StringView
-    return self if empty?
-
-    if ascii_only?
-      return StringView.new(@string, byte_end - 1, byte_end, ascii_only: true)
-    end
-
-    reverse_each_char do |char|
-      return StringView.new(@string, byte_end - char.bytesize, byte_end, ascii_only: false)
-    end
-
-    unreachable
-  end
-
-  def prior : StringView
-    return self if empty?
-
-    if ascii_only?
-      return StringView.new(@string, @byte_start, byte_end - 1, ascii_only: true)
-    end
-
-    reverse_each_char do |char|
-      return StringView.new(@string, @byte_start, byte_end - char.bytesize, ascii_only: false)
-    end
-
-    unreachable
-  end
-
-  def prior_string : StringView
-    StringView.new(@string, 0, @byte_start, @string.single_byte_optimizable?)
-  end
-
-  def posterior_string : StringView
-    StringView.new(@string, byte_end, @string.bytesize, @string.single_byte_optimizable?)
-  end
-
-  def lskip(nchars : Int32) : StringView
-    reader = Char::Reader.new(@string, pos: @byte_start)
-    reader.each do |char|
-      break if reader.pos >= byte_end
-
-      if nchars.zero?
-        return StringView.new(@string, reader.pos, byte_end, ascii_only?)
-      end
-
-      nchars -= 1
-    end
-
-    after_end
-  end
-
-  def rchop
-    prior
-  end
-
-  # Removes one leading character *ch* from this string view, if present.
-  def lchop(ch : Char) : StringView
-    starts_with?(ch) ? rest : self
-  end
-
-  def lchop?(ch : Char) : StringView?
-    starts_with?(ch) ? rest : nil
-  end
-
-  def byte_subview(byte_start_rel : Int32, byte_end_rel : Int32)
-    StringView.new(@string, byte_start + byte_start_rel, byte_start + byte_end_rel, ascii_only: ascii_only?)
-  end
-
-  def upto(other : StringView)
-    unless @string.same?(other.@string)
-      raise ArgumentError.new("views point to different strings")
-    end
-
-    StringView.new(@string, byte_start, other.byte_start, ascii_only: ascii_only?)
-  end
-
-  def chomp : StringView
-    if ends_with?('\r')
-      prior
-    elsif ends_with?('\n')
-      prefix = prior
-      if prefix.ends_with?('\r') # \r\n
-        return prefix.prior
-      end
-
-      prefix
-    else
-      self
-    end
-  end
-
-  def lstrip(charset = "\n") : StringView
-    reader = Char::Reader.new(@string, pos: @byte_start)
-    reader.each do |char|
-      break if reader.pos >= byte_end
-
-      unless charset.includes?(char)
-        return StringView.new(@string, reader.pos, byte_end, ascii_only?)
-      end
-    end
-
-    after_end
-  end
-
-  def rstrip(charset = "\n") : StringView
-    reader = Char::Reader.new(@string, pos: byte_end)
-
-    until reader.pos == @byte_start
-      reader.previous_char
-
-      unless charset.includes?(reader.current_char)
-        reader.next_char
-
-        return StringView.new(@string, @byte_start, reader.pos, ascii_only?)
-      end
-    end
-
-    before_begin
-  end
-
-  def strip(charset = "\n")
-    lstrip(charset).rstrip(charset)
-  end
-
-  def partition(index : Int32) : {StringView, StringView, StringView}
-    reader = Char::Reader.new(@string, pos: @byte_start)
-
-    lhs_ascii_only = true
-
-    until reader.pos == byte_end
-      char = reader.current_char
-      char_ascii = char.ascii?
-
-      if index.zero?
-        return {StringView.new(@string, @byte_start, reader.pos, lhs_ascii_only),
-                StringView.new(@string, reader.pos, reader.pos + char.bytesize, char_ascii),
-                StringView.new(@string, reader.pos + char.bytesize, byte_end, ascii_only?)}
-      end
-
-      index -= 1
-      lhs_ascii_only &&= char_ascii
-      reader.next_char
-    end
-
-    {self, after_end, after_end}
-  end
-
-  def partition(& : Char -> Bool) : {StringView, StringView, StringView}
-    reader = Char::Reader.new(@string, pos: @byte_start)
-
-    lhs_ascii_only = true
-
-    until reader.pos == byte_end
-      char = reader.current_char
-      char_ascii = char.ascii?
-
-      if yield char
-        l = StringView.new(@string, @byte_start, reader.pos, lhs_ascii_only)
-        mid = StringView.new(@string, reader.pos, reader.pos + char.bytesize, char_ascii)
-        r = StringView.new(@string, reader.pos + char.bytesize, byte_end, ascii_only?)
-        return l, mid, r
-      end
-
-      lhs_ascii_only &&= char_ascii
-
-      reader.next_char
-    end
-
-    {self, after_end, after_end}
-  end
-
-  def partition(separator : Char)
-    partition { |ch| ch == separator }
-  end
-
-  def rpartition(*, limit : Int = Int32::MAX, & : Char -> Bool)
-    reader = Char::Reader.new(@string, pos: byte_end)
-
-    single_bytes = true
-
-    loop do
-      # Not found
-      if limit.zero? || reader.pos == byte_start
-        return before_begin, before_begin, self
-      end
-
-      reader.previous_char
-      if yield reader.current_char
-        l = StringView.new(@string, @byte_start, reader.pos, ascii_only?)
-        m = StringView.new(@string, reader.pos, reader.pos + reader.current_char_width, reader.current_char_width == 1)
-        r = StringView.new(@string, reader.pos + reader.current_char_width, byte_end, single_bytes)
-        return l, m, r
-      end
-
-      single_bytes &&= reader.current_char_width == 1
-      limit -= 1
-    end
-  end
-
-  def rpartition(separator : Char, **kwargs)
-    rpartition { |ch| ch == separator }
-  end
-
-  def split(separator : Char)
-    segments = [] of StringView
-    split(separator) do |segment|
-      segments << segment
-    end
-    segments
-  end
-
-  def split(separator : Char, &)
-    split_and_rest(separator) { |segment, _, _| yield segment }
-  end
-
-  def split_and_rest(separator : Char, &)
-    lhs = self
-
-    until lhs.empty?
-      lhs, sep, rest = lhs.partition(separator)
-      yield lhs, sep, rest
-      lhs = rest
-    end
-  end
-
-  def each_char_view(& : StringView ->) : Nil
-    reader = Char::Reader.new(@string, pos: @byte_start)
-
-    until reader.pos == byte_end
-      yield StringView.new(@string, byte_start: reader.pos, byte_end: reader.pos + reader.current_char_width, ascii_only: reader.current_char.single_byte?)
-      reader.next_char
-    end
-  end
-
-  # Yields each character in this string view, going from left to right.
-  def each_char(& : Char ->) : Nil
-    reader = Char::Reader.new(@string, pos: @byte_start)
-
-    until reader.pos == byte_end
-      yield reader.current_char
-      reader.next_char
-    end
-  end
-
-  # Yields each character in this string view, going from right to left.
-  def reverse_each_char(& : Char ->) : Nil
-    reverse_each_char_with_abs_byte_index do |chr, _|
-      yield chr
-    end
-  end
-
-  def reverse_each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
-    reader = Char::Reader.new(@string, pos: byte_end)
-
-    until reader.pos <= @byte_start
-      reader.previous_char # byte end must be skipped, we're exclusive!
-      yield reader.current_char, reader.pos
-    end
-  end
-
-  # Yields each character in this string view along with its view-local index.
-  def each_char_with_index(& : Char, Int32 ->) : Nil
-    index = 0
-
-    each_char do |char|
-      yield char, index
-
-      index += 1
-    end
-  end
-
-  # Yields each character in this string view along with its byte index
-  # within this view's parent string.
-  def each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
-    byte_index = @byte_start
-
-    each_char do |char|
-      yield char, byte_index
-
-      byte_index += char.bytesize
-    end
-  end
-
-  # Yields each word in this view.
-  #
-  # This method never consumes any characters. All trailing and leading whitespaces
-  # are kept (if any) -- attached either to the left- or the right-hand side word.
-  def each_word(& : StringView ->) : Nil
-    l, sep0, r = partition(' ')
-
-    loop do
-      yield l unless l.empty?
-
-      break if sep0.empty?
-
-      if r.empty?
-        yield sep0
-        break
-      end
-
-      succ, sep1, r1 = r.partition(' ')
-
-      l = sep0 &+ succ
-      sep0 = sep1
-      r = r1
-    end
-  end
-
-  # Yields each word in this view along with its index.
-  #
-  # See also: `each_word`.
-  def each_word_with_index(& : StringView, Int32 ->) : Nil
-    index = 0
-
-    each_word do |word|
-      yield word, index
-
-      index += 1
-    end
-  end
-
-  def each_line(& : StringView ->)
-    return if empty?
-
-    start = @byte_start
-    line_ascii_only = true
-
-    each_char_with_abs_byte_index do |char, byte_index|
-      line_ascii_only &&= char.ascii?
-      next unless char == '\n'
-
-      yield StringView.new(@string, start, byte_index + 1, line_ascii_only)
-      start = byte_index + 1 # start after newline
-      line_ascii_only = true
-    end
-
-    # Handle nonempty tail
-    if start < byte_end
-      yield StringView.new(@string, start, byte_end, line_ascii_only)
-      line_ascii_only = true
-    end
-  end
-
-  def each_line_with_index(& : StringView, Int32 ->)
-    index = 0
-    each_line do |line|
-      yield line, index
-      index += 1
-    end
-  end
-
-  def span(other : StringView) : StringView
-    unless @string.same?(other.@string)
-      raise ArgumentError.new("expected string views of the same string")
-    end
-
-    StringView.new(@string, byte_start, other.byte_end, @string.single_byte_optimizable?)
-  end
-
-  def each_split(& : StringView, StringView, StringView ->)
-    each_char_with_abs_byte_index do |chr, byte_index|
-      l = StringView.new(@string, byte_start, byte_index, ascii_only: ascii_only?)
-      m = StringView.new(@string, byte_index, byte_index + 1, ascii_only: chr.ascii?)
-      r = StringView.new(@string, byte_index + 1, byte_end, ascii_only: ascii_only?)
-      yield l, m, r
-    end
-  end
-
-  def each_before_and_after(& : StringView, StringView ->)
-    each_char_with_abs_byte_index do |chr, byte_index|
-      l = StringView.new(@string, byte_start, byte_index, ascii_only: ascii_only?)
-      r = StringView.new(@string, byte_index, byte_end, ascii_only: ascii_only?)
-      yield l, r
-    end
-
-    l = StringView.new(@string, byte_start, byte_end, ascii_only: ascii_only?)
-    r = StringView.new(@string, byte_end, byte_end, ascii_only: ascii_only?)
-    yield l, r
-  end
-
-  def extend(*, exclusive = true, & : Char -> Bool) : StringView
-    reader = Char::Reader.new(@string, pos: byte_end)
-
-    single_byte = true
-
-    loop do
-      chr = reader.current_char
-      break if chr == '\0'
-
-      unless ok = yield chr
-        break if exclusive
-      end
-
-      single_byte &&= chr.single_byte?
-      reader.next_char
-
-      break unless ok
-    end
-
-    StringView.new(@string, byte_start, reader.pos, single_byte)
-  end
-
-  def reverse_extend(& : Char -> Bool) : StringView
-    reader = Char::Reader.new(@string, pos: byte_start)
-
-    single_byte = true
-
-    loop do
-      break unless reader.has_previous?
-      chr = reader.previous_char
-      unless yield chr
-        reader.next_char
-        break
-      end
-      single_byte &&= chr.single_byte?
-    end
-
-    StringView.new(@string, reader.pos, byte_end, single_byte)
-  end
-
-  def to_s(io)
-    if covers_fully?
-      io << @string
-      return
-    end
-
-    (@byte_start...byte_end).each do |byte_index|
-      io.write_byte(@string.byte_at(byte_index))
-    end
-  end
-
-  def to_s : String
-    if covers_fully?
-      return @string
-    end
-
-    super
-  end
-
-  def to_slice : Bytes
-    Bytes.new(to_unsafe, byte_end - @byte_start, read_only: true)
-  end
-
-  def to_unsafe : UInt8*
-    @string.to_unsafe + @byte_start
-  end
-
-  def inspect(io)
-    io << "…\""
-    each_char do |char|
-      if char.printable?
-        io << char
-      else
-        char.unicode_escape(io)
-      end
-    end
-    io << "\"…"
-  end
-
-  def ==(other : String)
-    to_slice == other.to_slice
-  end
-
-  def ==(other : Char)
-    bytesize == other.bytesize && starts_with?(other)
-  end
-
-  def clone
-    self
-  end
-
-  def_equals_and_hash to_slice
-end
-
 class String
-  alias Ellipsis = String | CharsOmitted
-
-  record CharsOmitted, l = "[…", r = "…]"
-
-  private def brief_render(ellipsis : String, limit : Int)
-    ellipsis
-  end
-
-  private def brief_render(ellipsis : CharsOmitted, limit : Int)
-    "#{ellipsis.l}#{size - limit} char(s)#{ellipsis.r}"
-  end
-
-  def brief(*, limit : Int = 60, ellipsis : Ellipsis = "…") : String
-    return self if size <= limit
-
-    rendered = brief_render(ellipsis, limit)
-
-    if limit <= rendered.size
-      return self[0, limit]
-    end
-
-    rem = limit - rendered.size
-    lsize = rem // 2
-    rsize = rem - lsize
-
-    "#{self[0, lsize]}#{rendered}#{self[-rsize, rsize]}"
-  end
-
-  def fill(char : Char) : String
-    String.build(bytesize) do |io|
-      size.times do
-        io << char
-      end
-    end
-  end
-
-  def starts_with?(range : Range(Char, Char))
-    return unless first_char = self[0]?
-
-    first_char.in?(range)
-  end
-
-  def ===(other : StringView) : Bool
-    # Fast path
-    unless bytesize == other.bytesize
-      return false
-    end
-
-    to_slice == other.to_slice
-  end
-end
-
-struct Char::Reader
-  def reverse_each(& : Char ->)
-    while has_previous?
-      yield previous_char
-    end
-  end
-end
-
-class String
-  def view : StringView
-    StringView.new(self, 0, bytesize, single_byte_optimizable?)
-  end
-
-  def view(byte_start : Int32, *, byte_end : Int32) : StringView
-    unless 0 <= byte_start && byte_end <= bytesize
-      raise IndexError.new
-    end
-
-    StringView.new(self, byte_start, byte_end, single_byte_optimizable?)
-  end
-
-  def view(byte_start : Int32, *, bytesize : Int32) : StringView
-    view(byte_start, byte_end: byte_start + bytesize)
-  end
-
-  def li(*, bullet = "*", indent = 0, ws = ' ', strip_first = false) : String
-    String.build(indent * ws.bytesize + bullet.bytesize + ' '.bytesize + bytesize) do |io|
-      indent.times { io << ws }
-      unless bullet.empty?
-        io << bullet << ' '
-      end
-
-      first = true
-      each_line_view do |line|
-        if first && strip_first
-          line = line.lstrip(" ")
-        else
-          indent.times { io << ws }
-        end
-        io << line.rstrip
-        io.puts
-        first = false
-      end
-    end
-  end
-
   def present? : Bool
     !empty?
   end
@@ -1818,31 +892,10 @@ class String
     prefixed_by?(l) && postfixed_by?(r)
   end
 
-  def rcut(search : Char) : Tuple(Bytes, Bytes?)
-    reader = Char::Reader.new(at_end: self)
+  def starts_with?(range : Range(Char, Char))
+    return unless first_char = self[0]?
 
-    while true
-      if reader.current_char == search
-        lhs = unsafe_byte_slice(0, reader.pos)
-        rhs = unsafe_byte_slice(reader.pos + reader.current_char_width, bytesize - (reader.pos + reader.current_char_width))
-        return lhs, rhs
-      end
-
-      break unless reader.has_previous?
-
-      reader.previous_char
-    end
-
-    {to_slice, nil}
-  end
-
-  # Yields string views corresponding to each line in this string. Byte slices
-  # will include *trailing* newlines (i.e. this method does not "take away" any
-  # characters from the string).
-  #
-  # If this string is empty, does not yield anything.
-  def each_line_view(& : StringView ->) : Nil
-    view.each_line { |v| yield v }
+    first_char.in?(range)
   end
 end
 
@@ -2383,8 +1436,6 @@ end
 struct Time::Span
   def humanize(io)
     nanos = total_nanoseconds
-
-    k1 = 1000u64
 
     if self < 1.nanosecond
       io << total_nanoseconds.round(2) << "ns"
@@ -4617,5 +3668,1050 @@ class ::PrettyPrint
     @indent.times { @output << ' ' }
     @output_width = @indent
     @buffer_width = 0
+  end
+end
+
+struct ::Pf::StringSeln
+  # :nodoc:
+  #
+  # WARNING: *bytes* MUST be valid UTF-8 bytes.
+  # WARNING: *bytes* MUST start and end on UTF-8 character boundaries.
+  # WARNING: *bytesize* must be in `1..4`.
+  def self.unsafe_chr(bytes : UInt8*, bytesize : UInt32) : Char
+    case bytesize
+    when 1u32
+      codepoint = bytes[0]
+    when 2u32
+      byte0 = bytes[0].to_u32
+      byte1 = bytes[1].to_u32
+      codepoint = ((byte0 & 0x1F) << 6) | (byte1 & 0x3F)
+    when 3u32
+      byte0 = bytes[0].to_u32
+      byte1 = bytes[1].to_u32
+      byte2 = bytes[2].to_u32
+      codepoint = ((byte0 & 0x0F) << 12) | ((byte1 & 0x3F) << 6) | (byte2 & 0x3F)
+    when 4u32
+      byte0 = bytes[0].to_u32
+      byte1 = bytes[1].to_u32
+      byte2 = bytes[2].to_u32
+      byte3 = bytes[3].to_u32
+      codepoint = ((byte0 & 0x07) << 18) | ((byte1 & 0x3F) << 12) | ((byte2 & 0x3F) << 6) | (byte3 & 0x3F)
+    else
+      Intrinsics.unreachable
+    end
+
+    codepoint.unsafe_chr
+  end
+
+  # :nodoc:
+  #
+  # WARNING: *bytes* MUST be valid UTF-8 bytes.
+  # WARNING: *bytes* MUST start and end on UTF-8 character boundaries.
+  def self.unsafe_chrsize_and_flags(bytes : UInt8*, bytesize : UInt32) : {UInt32, SelnFlags}
+    if bytesize.zero?
+      return 0u32, SelnFlags::None
+    end
+
+    head = bytes[0]
+    if head >= 0x80
+      return (~head).leading_zeros_count.to_u32, SelnFlags::None
+    end
+
+    {1u32, SelnFlags::AsciiChar}
+  end
+
+  # :nodoc:
+  #
+  # WARNING: *bytes* MUST be valid UTF-8 bytes.
+  # WARNING: *bytes* MUST start and end on UTF-8 character boundaries.
+  def self.unsafe_rchrsize_and_flags(bytes : UInt8*, bytesize : UInt32) : {UInt32, SelnFlags}
+    if bytesize.zero?
+      return 0u32, SelnFlags::None
+    end
+
+    # We're unsafe, and *bytes* is valid UTF-8, so we consider OOB impossible here;
+    # i.e., if valid UTF-8 says "continue", we continue.
+
+    unless (bytes[bytesize &- 1] & 0xC0) == 0x80
+      return 1u32, SelnFlags::AsciiChar
+    end
+
+    unless (bytes[bytesize &- 2] & 0xC0) == 0x80
+      return 2u32, SelnFlags::None
+    end
+
+    unless (bytes[bytesize &- 3] & 0xC0) == 0x80
+      return 3u32, SelnFlags::None
+    end
+
+    {4u32, SelnFlags::None}
+  end
+
+  private def self.continuation_byte?(byte : UInt8) : Bool
+    {byte.bit(7), byte.bit(6)} == {1, 0}
+  end
+
+  private def self.continuation_count(bytes : Bytes) : Int32
+    if bytes.size == 8
+      blks = bytes.unsafe_slice_of(UInt64)
+      blk = blks.unsafe_fetch(0)
+      mask = (blk & 0x8080808080808080u64) & ~(blk << 1)
+      return mask.popcount.to_i
+    end
+
+    count = 0
+
+    bytes.each do |byte|
+      next unless continuation_byte?(byte)
+
+      # See the NOTE below: continuation count can never exceed bytesize, and
+      # bytesize is in Int32.
+      count &+= 1
+    end
+
+    count
+  end
+
+  # :nodoc:
+  #
+  # WARNING: *bytes* MUST be valid UTF-8 bytes.
+  # WARNING: *bytes* MUST start and end on UTF-8 character boundaries.
+  def self.unsafe_measure(bytes : Bytes) : Int32
+    # NOTE: Max continuation count is *bytes* bytesize which is in Int32 bounds.
+    continuation_count = 0
+    bytes.in_chunks_of(size_lte: 8) do |blk|
+      continuation_count &+= continuation_count(blk)
+    end
+
+    bytes.size &- continuation_count
+  end
+end
+
+struct ::Pf::StringSeln
+  # Returns the starting byte of this selection (inclusive).
+  getter byte_start : UInt32
+  # Returns the ending byte of this selection (exclusive).
+  getter byte_end : UInt32
+
+  @[Flags]
+  enum SelnFlags : UInt32
+    AsciiChar
+  end
+
+  # :nodoc:
+  #
+  # WARNING: *trunk* MUST be valid UTF-8.
+  # WARNING: `byte_start <= byte_end <= trunk.bytesize` must be true.
+  def initialize(@trunk : String, @byte_start : UInt32, @byte_end : UInt32, @flags : SelnFlags = SelnFlags::None)
+    # We call this a lot, sometimes per character, so checking this every time
+    # is quite expensive.
+    # {% if flag?(:safe) %}
+      assert @byte_start <= @byte_end <= @trunk.bytesize
+    # {% end %}
+  end
+
+  # Constructs a string selection from the given *string*.
+  #
+  # This forces an encoding check on *string*. This method requires *string* to
+  # be a valid UTF-8 string.
+  #
+  # If you want to `scrub`, use `new_scrub` instead to skip the check.
+  def self.new(string : String) : StringSeln
+    new?(string) || raise ArgumentError.new("string must be valid UTF-8")
+  end
+
+  def self.new?(string : String) : StringSeln?
+    return unless string.valid_encoding?
+
+    new(string, byte_start: 0u32, byte_end: string.bytesize.to_u32)
+  end
+
+  # Constructs a string selection from the given *string*, replacing invalid
+  # bytes (according to UTF-8) with *replacement*.
+  #
+  # See also: `String#scrub`.
+  #
+  # Prefer this method over `new(string.scrub)` to avoid the overhead of validating
+  # the encoding.
+  def self.new_scrub(string : String, replacement : Char = Char::REPLACEMENT) : StringSeln
+    string = string.scrub(replacement)
+
+    new(string, byte_start: 0u32, byte_end: string.bytesize.to_u32)
+  end
+
+  # Returns `true` if *seln*, *selns* are all of common descent, pointing
+  # to the same trunk.
+  def self.siblings?(seln ref : StringSeln, *selns : StringSeln) : Bool
+    selns.all? { |seln| ref.@trunk.same?(seln.@trunk) }
+  end
+
+  def self.contiguous?(a : StringSeln, b : StringSeln) : Bool
+    siblings?(a, b) && a.byte_end <= b.byte_start
+  end
+
+  # Joins two contiguous selections *a*, *b*. *a* must end exactly where *b* begins.
+  def self.chain(a : StringSeln, b : StringSeln) : StringSeln
+    assert siblings?(a, b)
+    assert a.byte_end == b.byte_start
+
+    new(a.@trunk, a.byte_start, b.byte_end)
+  end
+
+  def self.span(a : StringSeln, b : StringSeln) : StringSeln
+    assert siblings?(a, b)
+
+    new(a.@trunk, a.byte_start, b.byte_end)
+  end
+
+  def self.between(a : StringSeln, b : StringSeln) : StringSeln
+    assert contiguous?(a, b)
+
+    new(a.@trunk, a.byte_end, b.byte_start)
+  end
+
+  def self.extend(a : StringSeln, b : StringSeln) : StringSeln
+    assert siblings?(a, b)
+
+    new(a.@trunk, a.byte_start, b.byte_start)
+  end
+
+  private def startptr : UInt8*
+    @trunk.to_unsafe + @byte_start
+  end
+
+  def <=>(other : StringSeln) : Int32
+    # Fast path.
+    if @trunk.same?(other.@trunk) && {byte_start, byte_end} == {other.byte_start, other.byte_end}
+      return 0
+    end
+
+    (to_slice <=> other.to_slice).sign
+  end
+
+  # Returns the number of selected bytes.
+  def bytesize : UInt32
+    @byte_end &- @byte_start
+  end
+
+  def byte_bounds : Range(UInt32, UInt32)
+    @byte_start...@byte_end
+  end
+
+  # Expands this selection to enclose the entire trunk string.
+  def expand : StringSeln
+    StringSeln.new(@trunk, 0u32, @trunk.bytesize)
+  end
+
+  # Returns the index of the first selected character.
+  def char_start : UInt32
+    offset = 0u64
+    index = 0u32
+
+    loop do
+      chrsize, _ = StringSeln.unsafe_chrsize_and_flags(@trunk.to_unsafe + offset, @trunk.bytesize.to_u32)
+      if offset == @byte_start
+        return index
+      end
+
+      offset += chrsize
+      index += 1
+    end
+  end
+
+  # Returns the index of the last selected character.
+  def char_end : UInt32
+    offset = 0u64
+    index = 0u32
+
+    loop do
+      chrsize, _ = StringSeln.unsafe_chrsize_and_flags(@trunk.to_unsafe + offset, @trunk.bytesize.to_u32)
+      if offset == @byte_end
+        return index
+      end
+
+      offset += chrsize
+      index += 1
+    end
+  end
+
+  # Returns the number of selected characters.
+  #
+  # NOTE: Unlike `String`, this method does *not* cache the size -- since
+  # `StringSeln` is located entirely on the stack (minus the trunk string),
+  # there's nowhere for the size to go.
+  #
+  # However, I tried to optimize this method well. In fact, due to the invariants
+  # of `StringSeln`, it runs about 10x faster than uncached `String#size` on
+  # my machine (the example I used was a 20MiB string; the results were: Crystal ~11ms,
+  # StringSeln ~1.25ms).
+  #
+  # The design is that you aren't expected to call this method very often. If you
+  # do end up doing that, we try really hard to remain fast, but ultimately,
+  # this is still worst-case O(N).
+  def size : Int32
+    StringSeln.unsafe_measure(to_slice)
+  end
+
+  # Returns `true` if this selection contains zero characters.
+  def empty? : Bool
+    @byte_start == @byte_end
+  end
+
+  # Returns `true` if this selection contains one or more characters.
+  def nonempty? : Bool
+    !empty?
+  end
+
+  def covers_fully? : Bool
+    {@byte_start, @byte_end} == {0u32, @trunk.bytesize.to_u32}
+  end
+
+  def includes?(object : Char) : Bool
+    each_char do |chr|
+      return true if chr == object
+    end
+
+    false
+  end
+
+  def prefixed_by?(l : Char | String) : Bool
+    bytesize > l.bytesize && starts_with?(l)
+  end
+
+  def postfixed_by?(r : Char | String) : Bool
+    bytesize > r.bytesize && ends_with?(r)
+  end
+
+  def surrounded_by?(l : Char | String, r : Char | String) : Bool
+    bytesize > l.bytesize + r.bytesize && starts_with?(l) && ends_with?(r)
+  end
+
+  def starts_with?(prefix : Char) : Bool
+    bytesize >= prefix.bytesize && first_char == prefix
+  end
+
+  def starts_with?(prefix : String) : Bool
+    to_slice.starts_with?(prefix.to_slice)
+  end
+
+  def ends_with?(suffix : Char) : Bool
+    bytesize >= suffix.bytesize && suffix == last_char
+  end
+
+  def ends_with?(suffix : String) : Bool
+    to_slice.ends_with?(suffix.to_slice)
+  end
+
+  # Returns `true` if this selection is empty or contains exclusively
+  # whitespace (see `Char#whitespace?`).
+  def blank? : Bool
+    each_char do |chr|
+      next if chr.whitespace?
+      return false
+    end
+
+    true
+  end
+
+  # Splits this selection into two: the first selection contains the first
+  # character, and the second one contains the rest of characters. If this
+  # selection is empty, returns two empty selections.
+  def first_and_rest : {StringSeln, StringSeln}
+    chrsize, flags = StringSeln.unsafe_chrsize_and_flags(startptr, bytesize)
+    first = StringSeln.new(@trunk, @byte_start, @byte_start + chrsize, flags)
+    rest = StringSeln.new(@trunk, @byte_start + chrsize, @byte_end)
+    {first, rest}
+  end
+
+  # Splits this selection into two: the first selection contains characters before
+  # the last character, and the second selection contains the last character.
+  def prior_and_last : {StringSeln, StringSeln}
+    chrsize, flags = StringSeln.unsafe_rchrsize_and_flags(startptr, bytesize)
+    prior = StringSeln.new(@trunk, @byte_start, @byte_end - chrsize, flags)
+    last = StringSeln.new(@trunk, @byte_end - chrsize, @byte_end)
+    {prior, last}
+  end
+
+  # Selects the *first* character if there are one or more characters. If there are
+  # zero characters, the returned selection is empty.
+  def first : StringSeln
+    first, _ = first_and_rest
+    first
+  end
+
+  # Selects characters after the *first* character in this selection. If there are
+  # zero characters, the returned selection is empty.
+  def rest : StringSeln
+    _, rest = first_and_rest
+    rest
+  end
+
+  # Selects characters before the *last* character in this selection. If there are
+  # zero characters, the returned selection is empty.
+  def prior : StringSeln
+    prior, _ = prior_and_last
+    prior
+  end
+
+  # Selects the *last* character if there is one or more characters. If there are
+  # zero characters, the returned selection is empty.
+  def last : StringSeln
+    _, last = prior_and_last
+    last
+  end
+
+  # Returns an empty selection pointing before the beginning of this one. Imagine
+  # this as placing an "I-beam" before the first character in this selection (if any).
+  def before_begin : StringSeln
+    StringSeln.new(@trunk, @byte_start, @byte_start)
+  end
+
+  # Selects all characters in the trunk string before the start of this selection.
+  def all_before_begin : StringSeln
+    StringSeln.new(@trunk, 0u32, @byte_start)
+  end
+
+  # Returns an empty selection pointing after the end of this one. Imagine this
+  # this as placing an "I-beam" after the last character in this selection (if any).
+  def after_end : StringSeln
+    StringSeln.new(@trunk, @byte_end, @byte_end)
+  end
+
+  # Selects all characters in the trunk string after the end of this selection.
+  def all_after_end : StringSeln
+    StringSeln.new(@trunk, @byte_end, @trunk.bytesize.to_u32)
+  end
+
+  # :nodoc:
+  def chr : Char
+    if @flags.ascii_char? # Fast path
+      return startptr[0].unsafe_chr
+    end
+
+    assert 1u32 <= bytesize <= 4u32
+
+    StringSeln.unsafe_chr(startptr, bytesize)
+  end
+
+  # Returns the first character in this selection. Raises `IndexError` if
+  # this selection is empty.
+  def first_char : Char
+    first_char? || raise IndexError.new
+  end
+
+  # Returns the last character in this selection. Raises `IndexError` if
+  # this selection is empty.
+  def last_char : Char
+    last_char? || raise IndexError.new
+  end
+
+  # Returns the first character in this selection. Returns `nil` if
+  # this selection is empty.
+  def first_char? : Char?
+    empty? ? nil : first.chr
+  end
+
+  # Returns the last character in this selection. Returns `nil` if
+  # this selection is empty.
+  def last_char? : Char?
+    empty? ? nil : last.chr
+  end
+
+  def each_char_seln(& : StringSeln ->) : Nil
+    remainder = self
+
+    until remainder.empty?
+      first, rest = remainder.first_and_rest
+      yield first
+
+      remainder = rest
+    end
+  end
+
+  def reverse_each_char_seln(& : StringSeln ->) : Nil
+    remainder = self
+
+    until remainder.empty?
+      prior, last = remainder.prior_and_last
+      yield last
+
+      remainder = prior
+    end
+  end
+
+  struct EE
+    include Enumerable(Char)
+
+    def initialize(@seln : StringSeln)
+    end
+
+    def each(& : Char ->)
+      @seln.each_char { |chr| yield chr }
+    end
+  end
+
+  def ee : Enumerable(Char)
+    EE.new(self)
+  end
+
+  # Yields selected characters.
+  def each_char(& : Char ->) : Nil
+    each_char_seln { |seln| yield seln.chr }
+  end
+
+  # Yields selected characters along with their *absolute* byte index.
+  def each_char_with_abs_byte_index(& : Char, Int32 ->) : Nil
+    each_char_seln do |seln|
+      yield seln.chr, seln.byte_start.to_i # ?!
+    end
+  end
+
+  # Yields selected characters in reverse.
+  def reverse_each_char(& : Char ->) : Nil
+    reverse_each_char_seln { |seln| yield seln.chr }
+  end
+
+  def each_char_with_index(& : Char, Int32 ->) : Nil
+    index = 0
+
+    each_char_seln do |seln|
+      yield seln.chr, index
+
+      index += 1
+    end
+  end
+
+  def each_before_and_after(& : StringSeln, StringSeln ->) : Nil
+    each_char_seln do |seln|
+      before = StringSeln.between(before_begin, seln.before_begin)
+      after = StringSeln.between(seln.before_begin, after_end)
+      yield before, after
+    end
+
+    yield self, after_end
+  end
+
+  def reverse_each_before_and_after(& : StringSeln, StringSeln ->) : Nil
+    yield self, after_end
+
+    reverse_each_char_seln do |seln|
+      before = StringSeln.between(before_begin, seln.before_begin)
+      after = StringSeln.between(seln.before_begin, after_end)
+      yield before, after
+    end
+  end
+
+  def each_partition(& : StringSeln, StringSeln, StringSeln ->) : Nil
+    each_char_seln do |seln|
+      l = StringSeln.between(before_begin, seln.before_begin)
+      m = seln
+      r = StringSeln.between(seln.after_end, after_end)
+      yield l, m, r
+    end
+
+    yield self, after_end, after_end
+  end
+
+  def reverse_each_partition(& : StringSeln, StringSeln, StringSeln ->) : Nil
+    yield self, after_end, after_end
+
+    reverse_each_char_seln do |seln|
+      l = StringSeln.between(before_begin, seln.before_begin)
+      m = seln
+      r = StringSeln.between(seln.after_end, after_end)
+      yield l, m, r
+    end
+  end
+
+  def each_split(& : StringSeln, StringSeln, StringSeln ->) : Nil
+    each_partition do |l, m, r|
+      return if m.empty? # last
+      yield l, m, r
+    end
+  end
+
+  def reverse_each_split(& : StringSeln, StringSeln, StringSeln ->) : Nil
+    reverse_each_partition do |l, m, r|
+      next if m.empty? # last
+      yield l, m, r
+    end
+  end
+
+  # Yields each word in this selection.
+  #
+  # This method never consumes any characters. All trailing and leading whitespaces
+  # are kept (if any) -- attached either to the left- or the right-hand side word.
+  def each_word(& : StringSeln ->) : Nil
+    l, sep0, r = partition(' ')
+
+    loop do
+      yield l unless l.empty?
+
+      break if sep0.empty?
+
+      if r.empty?
+        yield sep0
+        break
+      end
+
+      succ, sep1, r1 = r.partition(' ')
+
+      l = sep0 &+ succ
+      sep0 = sep1
+      r = r1
+    end
+  end
+
+  # Yields each word in this selection along with its index.
+  #
+  # See also: `each_word`.
+  def each_word_with_index(& : StringSeln, Int32 ->) : Nil
+    index = 0
+
+    each_word do |word|
+      yield word, index
+
+      index += 1
+    end
+  end
+
+  def each_line(& : StringSeln ->)
+    remainder = self
+
+    until remainder.empty?
+      l, m, remainder = remainder.partition('\n')
+      yield l &+ m
+    end
+  end
+
+  def each_line_with_index(& : StringSeln, Int32 ->)
+    index = 0
+
+    each_line do |line|
+      yield line, index
+
+      index += 1
+    end
+  end
+
+  def partition(& : Char -> Bool) : {StringSeln, StringSeln, StringSeln}
+    each_split do |l, m, r|
+      chr = m.chr
+      if yield chr
+        return l, m, r
+      end
+    end
+
+    {self, after_end, after_end}
+  end
+
+  def partition(pattern : Char) : {StringSeln, StringSeln, StringSeln}
+    partition { |chr| chr === pattern }
+  end
+
+  def partition(index needle : Int) : {StringSeln, StringSeln, StringSeln}
+    index = 0
+
+    each_split do |l, m, r|
+      if index == needle
+        return l, m, r
+      end
+
+      index += m.bytesize
+    end
+
+    {self, after_end, after_end}
+  end
+
+  def rpartition(& : Char -> Bool) : {StringSeln, StringSeln, StringSeln}
+    reverse_each_split do |l, m, r|
+      chr = m.chr
+      if yield chr
+        return l, m, r
+      end
+    end
+
+    {before_begin, before_begin, self}
+  end
+
+  def rpartition(pattern : Char) : {StringSeln, StringSeln, StringSeln}
+    rpartition { |chr| chr === pattern }
+  end
+
+  def split(sep : Char, **kwargs) : Array(StringSeln)
+    segments = [] of StringSeln
+
+    split(sep, **kwargs) do |segment|
+      segments << segment
+    end
+
+    segments
+  end
+
+  def split(sep : Char, **kwargs, &) : Nil
+    split_and_rest(sep, **kwargs) do |segment, _|
+      yield segment
+    end
+  end
+
+  def split_and_rest(sep : Char, *, allow_empty : Bool = true, & : StringSeln, StringSeln ->) : Nil
+    remainder = self
+
+    loop do
+      l, m, remainder = remainder.partition(sep)
+      if l.nonempty? || allow_empty
+        yield l, remainder
+      end
+
+      break if m.empty?
+    end
+  end
+
+  def &+(other : StringSeln) : StringSeln
+    StringSeln.chain(self, other)
+  end
+
+  # Returns a selection that excludes the first selected character.
+  def lchop : StringSeln
+    _, rest = first_and_rest
+    rest
+  end
+
+  # Returns a selection that excludes the last selected character.
+  def rchop : StringSeln
+    prior, _ = prior_and_last
+    prior
+  end
+
+  # Skips one leading character *chr* from this selection, if present.
+  def lchop(chr : Char) : StringSeln
+    lchop?(chr) || self
+  end
+
+  # Skips one trailing character *chr* from this selection, if present.
+  def rchop(chr : Char) : StringSeln
+    rchop?(chr) || self
+  end
+
+  # Skips one leading character *chr* from this selection, if present.
+  # Returns `nil` if *chr* is absent.
+  def lchop?(pattern : Char) : StringSeln?
+    return if empty?
+
+    first, rest = first_and_rest
+    first.chr == pattern ? rest : nil
+  end
+
+  def lchop?(pattern : String) : StringSeln?
+    return unless starts_with?(pattern)
+
+    StringSeln.new(@trunk, @byte_start + pattern.bytesize, @byte_end)
+  end
+
+  def rchop?(chr : Char) : StringSeln?
+    return if empty?
+
+    prior, last = prior_and_last
+    last.chr == chr ? prior : nil
+  end
+
+  def rchop?(pattern : String) : StringSeln?
+    return unless ends_with?(pattern)
+
+    StringSeln.new(@trunk, @byte_start, @byte_end - pattern.bytesize)
+  end
+
+  def chop?(l, r) : StringSeln?
+    remainder = self
+    return unless remainder = remainder.lchop?(l)
+    return unless remainder = remainder.rchop?(r)
+
+    remainder
+  end
+
+  def chomp : StringSeln
+    if ends_with?('\r')
+      return prior
+    end
+
+    if ends_with?('\n')
+      prefix = prior
+      if prefix.ends_with?('\r') # \r\n
+        return prefix.prior
+      end
+
+      return prefix
+    end
+
+    self
+  end
+
+  def strip(charset : String = "\n") : StringSeln
+    lstrip(charset).rstrip(charset)
+  end
+
+  def lstrip(charset : String = "\n") : StringSeln
+    _, r = skip_thru(charset)
+    r
+  end
+
+  def rstrip(charset : String = "\n") : StringSeln
+    l, _ = rskip_thru(charset)
+    l
+  end
+
+  def skip_thru_seq(*, limit : UInt32 = UInt32::MAX, & : Char -> T?) : {StringSeln, Array(T), StringSeln} forall T
+    seq = [] of T
+    remainder = self
+
+    until remainder.empty? || limit.zero?
+      first, rest = remainder.first_and_rest
+
+      object = yield first.chr
+      break if object.nil?
+
+      seq << object
+      remainder = rest
+      limit -= 1
+    end
+
+    {StringSeln.between(before_begin, remainder), seq, remainder}
+  end
+
+  def skip_thru(charset : String) : {StringSeln, StringSeln}
+    l, m, r = partition { |chr| !chr.in_set?(charset) }
+    {l, m &+ r}
+  end
+
+  def rskip_thru(charset : String) : {StringSeln, StringSeln}
+    l, m, r = rpartition { |chr| !chr.in_set?(charset) }
+    {l &+ m, r}
+  end
+
+  def skip_to(charset : String) : {StringSeln, StringSeln}
+    l, m, r = partition(&.in_set?(charset))
+    {l, m &+ r}
+  end
+
+  def rskip_to(charset : String) : {StringSeln, StringSeln}
+    l, m, r = rpartition(&.in_set?(charset))
+    {l &+ m, r}
+  end
+
+  # Skips a number of characters from the left.
+  def lskip(nchars : Int) : StringSeln
+    remainder = self
+
+    nchars.times do
+      break if remainder.empty?
+
+      remainder = remainder.rest
+    end
+
+    remainder
+  end
+
+  def ltake?(pattern) : StringSeln?
+    return unless starts_with?(pattern)
+
+    StringSeln.new(@trunk, @byte_start, @byte_start + pattern.bytesize)
+  end
+
+  def find(pattern) : StringSeln
+    each_before_and_after do |before, after|
+      if segment = after.ltake?(pattern)
+        return segment
+      end
+    end
+
+    raise ArgumentError.new("not found")
+  end
+
+  def extend(*, exclusive = true, & : Char -> Bool) : StringSeln
+    l, m, _ = all_after_end.partition { |chr| !(yield chr) }
+    unless exclusive
+      l &+= m
+    end
+
+    StringSeln.between(before_begin, l.after_end)
+  end
+
+  def reverse_extend(*, exclusive = true, & : Char -> Bool) : StringSeln
+    _, m, r = all_before_begin.rpartition { |chr| !(yield chr) }
+    unless exclusive
+      r = m &+ r
+    end
+
+    StringSeln.between(r.before_begin, after_end)
+  end
+
+  def span(other : StringSeln) : StringSeln
+    StringSeln.span(self, other)
+  end
+
+  def upto(other : StringSeln) : StringSeln
+    StringSeln.extend(self, other)
+  end
+
+  # A hand-optimized alternative to `ee.count`. This is about a hundred times faster
+  # than `ee.count` on my machine for basic tasks such as counting newlines, due to
+  # vectorization-friendliness in the single-byte fast path.
+  def count(pattern : Char) : Int32
+    buffer = uninitialized UInt8[4]
+    buffer_size = 0
+
+    pattern.each_byte do |byte|
+      buffer[buffer_size] = byte
+      buffer_size += 1
+    end
+
+    ptr = startptr
+    ptrsize = bytesize
+    count = 0u32
+
+    # Fast path for single-byte chars. This can be auto-vectorized with --mcpu=native.
+    if buffer_size == 1
+      needle = buffer.unsafe_fetch(0)
+
+      ptrsize.times do |index|
+        if ptr[index] == needle
+          # Worst case is count = bytesize. Bytesize is proven to be UInt32.
+          # So an overflow is impossible.
+          count &+= 1
+        end
+      end
+
+      return count.to_i # ?!
+    end
+
+    until ptrsize.zero?
+      match = (0...buffer_size).all? do |index|
+        ptr[index] == buffer.unsafe_fetch(index)
+      end
+
+      if match
+        # Worst case is count = bytesize. Bytesize is proven to be UInt32.
+        # So an overflow is impossible.
+        count &+= 1
+      end
+
+      ptr += 1
+      ptrsize &-= 1
+    end
+
+    count.to_i # ?!
+  end
+
+  # Returns the underlying bytes. The returned slice is read-only.
+  # It is guaranteed to contain valid UTF-8 encoded bytes. It is
+  # guaranteed to start and end at a UTF-8 character boundary.
+  def to_slice : Bytes
+    Bytes.new(startptr, bytesize, read_only: true)
+  end
+
+  def clone : StringSeln
+    self
+  end
+
+  def highlight(io, marker : String = "⏏")
+    b = char_start
+
+    if bytesize.zero?
+      io << @trunk.insert(b, marker)
+      return
+    end
+
+    e = char_end
+
+    io << @trunk.insert(e, marker).insert(b, marker)
+  end
+
+  def inspect(io)
+    io << "…\""
+
+    each_char do |chr|
+      case chr
+      when '"'  then io << "\\\""
+      when '\\' then io << "\\\\"
+      when '\a' then io << "\\a"
+      when '\b' then io << "\\b"
+      when '\e' then io << "\\e"
+      when '\f' then io << "\\f"
+      when '\n' then io << "\\n"
+      when '\r' then io << "\\r"
+      when '\t' then io << "\\t"
+      when '\v' then io << "\\v"
+      when '\0' then io << "\\0"
+      else
+        if chr.printable?
+          io << chr
+        else
+          chr.unicode_escape(io)
+        end
+      end
+    end
+
+    io << "\"…"
+  end
+
+  def to_s(io)
+    io.write(to_slice)
+  end
+
+  def to_s : String
+    if covers_fully?
+      return @trunk
+    end
+
+    @trunk.byte_slice(@byte_start, bytesize)
+  end
+
+  def ==(other : StringSeln) : Bool
+    # Fast path.
+    if @trunk.same?(other.@trunk) && {byte_start, byte_end} == {other.byte_start, other.byte_end}
+      return true
+    end
+
+    to_slice == other.to_slice
+  end
+
+  def ==(other : String) : Bool
+    to_slice == other.to_slice
+  end
+
+  def ==(other : Char) : Bool
+    bytesize == other.bytesize && starts_with?(other)
+  end
+
+  def_hash to_slice
+end
+
+alias StringView = Pf::StringSeln
+
+class String
+  def view : StringView
+    StringView.new(self)
+  end
+
+  def view? : StringView?
+    StringView.new?(self)
+  end
+
+  # Yields string views corresponding to each line in this string. Byte slices
+  # will include *trailing* newlines (i.e. this method does not "take away" any
+  # characters from the string).
+  #
+  # If this string is empty, does not yield anything.
+  def each_line_view(& : StringView ->) : Nil
+    view.each_line { |v| yield v }
+  end
+
+  def ===(other : StringView) : Bool
+    # Fast path
+    unless bytesize == other.bytesize
+      return false
+    end
+
+    to_slice == other.to_slice
   end
 end

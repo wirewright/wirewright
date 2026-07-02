@@ -39,15 +39,10 @@ module Ww::ML
 
     # Constructs a lexeme reader for the given source string.
     #
-    # Set *check valid* to `false` to opt out of an initial UTF-8 validity check.
-    # You are not advised to do that since the entirety of downstream machinery
-    # pretty much assumes valid UTF-8; it's better to raise early and with a helpful
-    # error message; than late and with an unhelpful one.
-    #
     # Raises `SyntaxError` on invalid input.
-    def self.new(source : String, *, check_valid : Bool = true) : Lexer
-      if check_valid && !source.valid_encoding?
-        raise SyntaxError.new("source must be valid UTF-8", source.view.before_begin)
+    def self.new(source : String) : Lexer
+      unless source.valid_encoding?
+        raise SyntaxError.new("source must be valid UTF-8", "".view) # ?!
       end
 
       # NOTE: simdutf saves a millisecond or two on the corpus here, and some
@@ -66,14 +61,21 @@ module Ww::ML
       raise SyntaxError.new(detail, text)
     end
 
+    private def subview(byte_start : Int, byte_end : Int) : StringView
+      # Since we verify above that `@source.valid_encoding?`, we can create
+      # StringViews from it using the unsafe constructor.
+      StringView.new(@source, byte_start.to_u32, byte_end.to_u32)
+    end
+
     # Returns a view of the beginning-of-input.
     private def boi : StringView
-      @source.view(byte_start: 0, bytesize: 0)
+      subview(byte_start: 0, byte_end: @source.bytesize)
     end
 
     # Returns a view of the end-of-input.
     private def eoi : StringView
-      @source.view(byte_start: @source.bytesize, bytesize: 0)
+      bytesize = @source.bytesize
+      subview(byte_start: bytesize, byte_end: bytesize)
     end
 
     # Returns `true` if the cursor is positioned immediately after the beginning-
@@ -90,12 +92,12 @@ module Ww::ML
 
     # Returns a view of the character ahead of the cursor (of EOI if none).
     private def ahead1 : StringView
-      eoi? ? eoi : @source.view(byte_start: @byte_index, bytesize: ahead.bytesize)
+      eoi? ? eoi : subview(byte_start: @byte_index, byte_end: @byte_index + ahead.bytesize)
     end
 
     # Returns a view of the character behind the cursor (of BOI if none).
     private def behind1 : StringView
-      boi? ? boi : @source.view(byte_start: @byte_index - behind.bytesize, bytesize: behind.bytesize)
+      boi? ? boi : subview(byte_start: @byte_index - behind.bytesize, byte_end: @byte_index)
     end
 
     private def unsafe_behind : Rune
@@ -192,7 +194,7 @@ module Ww::ML
       yield
       byte_end = @byte_index
 
-      @source.view(byte_start, byte_end: byte_end)
+      subview(byte_start, byte_end)
     end
 
     private def view_and_object(& : -> T) : {StringView, T} forall T
@@ -258,7 +260,7 @@ module Ww::ML
       begin
         response = yield
 
-        text = @source.view(state[0], byte_end: @byte_index)
+        text = subview(byte_start: state[0], byte_end: @byte_index)
 
         case response
         in TxnRevert
@@ -436,7 +438,7 @@ module Ww::ML
 
       whitespace = view { skip(&.space?) }
 
-      case whitespace.ee.count('\n')
+      case whitespace.count('\n')
       when 1
         ready(Lexeme::Empty.new)
       when 2

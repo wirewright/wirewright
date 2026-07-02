@@ -39,7 +39,7 @@ module Ww::ML
 
       column = column_index + 1
 
-      line_index = extended.prior_string.ee.count('\n')
+      line_index = extended.all_before_begin.count('\n')
       line = line_index + 1
 
       {extended, line, column}
@@ -51,14 +51,7 @@ module Ww::ML
     end
 
     def inline(io : IO) : Nil
-      b = text.char_start
-      e = text.char_end
-
-      if b == e
-        io << text.@string.insert(b, "⏏")
-      else
-        io << text.@string.insert(e, "⏏").insert(b, "⏏")
-      end
+      text.highlight(io)
     end
 
     def inline : String

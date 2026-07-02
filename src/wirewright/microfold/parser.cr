@@ -223,34 +223,26 @@ module Ww::Microfold
     end
 
     def parse?(tables : Tables, parser : Prefix, seln : StringView) : Out
-      return Outcome.rej unless seln.starts_with?(parser.prefix)
+      return Outcome.rej unless rest = seln.lchop?(parser.prefix)
 
-      rest = seln.byte_subview(parser.prefix.bytesize, seln.bytesize)
       parse?(tables, parser.stem, rest)
     end
 
     def parse?(tables : Tables, parser : Suffix, seln : StringView) : Out
-      return Outcome.rej unless seln.ends_with?(parser.suffix)
+      return Outcome.rej unless prior = seln.rchop?(parser.suffix)
 
-      prior = seln.byte_subview(0, seln.bytesize - parser.suffix.bytesize)
       parse?(tables, parser.stem, prior)
     end
 
     def parse?(tables : Tables, parser : Circumfix, seln : StringView) : Out
-      return Outcome.rej unless seln.bytesize >= parser.l.bytesize + parser.r.bytesize
-      return Outcome.rej unless seln.starts_with?(parser.l)
-      return Outcome.rej unless seln.ends_with?(parser.r)
-
-      mid = seln.byte_subview(parser.l.bytesize, seln.bytesize - parser.r.bytesize)
+      return Outcome.rej unless mid = seln.chop?(parser.l, parser.r)
 
       parse?(tables, parser.stem, mid)
     end
 
     def parse?(tables : Tables, parser : Infix, seln : StringView) : Out
       seln.each_before_and_after do |l, r|
-        next unless r.starts_with?(parser.infix)
-
-        r = r.byte_subview(parser.infix.bytesize, r.bytesize)
+        next unless r = r.lchop?(parser.infix)
 
         l_out = parse?(tables, parser.l, l)
         next if l_out.is_a?(Outcome::Rejected)

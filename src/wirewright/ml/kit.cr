@@ -235,7 +235,7 @@ module Ww::ML
         commit << :digits
         commit.with(:radix, radix)
 
-        digitsrc.each_char_view do |chrview|
+        digitsrc.each_char_seln do |chrview|
           next if chrview == '_'
 
           unless digit = chr2nat?(chrview.first_char, radix)
