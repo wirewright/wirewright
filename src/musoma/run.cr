@@ -193,15 +193,10 @@ module MuSoma
   end
 
   def sync(ws : Workspace, agents : AgentPopulation)
-    # Sync agents.
-    pass do
-      agents.sync(ws)
-    end
+    agents.sync(ws)
 
     # Sync Microfold (theme).
-    pass do
-      next unless Var.pending?({ws.state, :rem}, ws.codex)
-
+    if Var.pending?({ws.state, :rem}, ws.codex)
       mu_themed_doc = Term.merge(ws.mu_codex_doc, Term.of(ws.codex.get.theme))
       ws.mu_codex.set(Microfold.codex(mu_themed_doc, rem: ws.state.get[:rem].as_n).unwrap)
     end
@@ -234,23 +229,17 @@ module MuSoma
     end
 
     # Plan: scheduler
-    pass do
-      ws.scheduler.tick do |event|
-        agents.receive(ws, plan, event)
-      end
+    ws.scheduler.tick do |event|
+      agents.receive(ws, plan, event)
     end
 
     # Plan: msgq
-    pass do
-      next unless msg = ws.msgq.shift?
-
+    if msg = ws.msgq.shift?
       agents.receive(ws, plan, msg)
     end
 
     # Rendezvous (execute plan)
-    pass do
-      next if plan.empty?
-
+    if plan.present?
       ws.state.update do |state|
         Term.matchpi?(state, %{{¦ timeline: (_ I _ _ draft_)}}) do
           draft_tree = ws.parser.parse(draft)
@@ -265,9 +254,7 @@ module MuSoma
 
   def step(ws : Workspace, agents : AgentPopulation)
     # step stateR
-    pass do
-      next unless Var.pending?(ws.state, ws.codex)
-
+    if Var.pending?(ws.state, ws.codex)
       requests = Pf::Kit.stack_array(AppRequest, 8)
 
       ws.state.update do |state|
@@ -295,10 +282,7 @@ module MuSoma
       end
     end
 
-    # Step agents
-    pass do
-      agents.step(ws)
-    end
+    agents.step(ws)
   end
 
   def run(args : Array(String) = ARGV) : Nil
