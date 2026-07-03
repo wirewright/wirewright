@@ -199,6 +199,28 @@
   (ni= (infinite? -∞) true)
   (ni= (infinite? indet) false))
 
+;; sum
+(group
+  (ni= (sum ()) 0)
+  (ni= (sum (5)) 5)
+  (ni= (sum (x y z)) 0)
+  (ni= (sum (1 2 3)) 6)
+  (ni= (sum (1 x 2 3)) 6)
+  (ni= (sum (1 x 2 3)) 6)
+  (ni= (sum (1 2 3 4 5)) 15)
+  (ni= (sum (1 2 ∞ 4 5)) ∞))
+
+;; (sum attn)
+(group
+  (ni= (sum (attn ())) 0)
+  (ni= (sum (attn (5))) 5)
+  (ni= (sum (attn (x y z))) 0)
+  (ni= (sum (attn (1 2 3 4 5))) 15)
+  (ni= (sum (attn (1 2 ∞ 4 5))) ∞)
+  (ni= (sum (attn (1 2 3 4 5 x) {+ 1 4 5})) 7)
+  (ni= (sum (attn (1 2 3 4 5 x: 100 y: 200))) 315)
+  (ni= (sum (attn (1 2 3 4 5 x: 100 y: 200) {+ 1 x})) 102))
+
 ;; <
 
 ;; <=
@@ -391,7 +413,63 @@
 
 ;; map
 
+;; data
+(ni= (data (attn (1 2 3 x: "qux") {+ 0 x})) (1 2 3 x: "qux"))
+
+;; mask
+(ni= (mask (attn (1 2 3 x: "qux") {+ 0 x})) {+ 0 x})
+
 ;; gather
+(ni= (gather (attn (1 2 3 x: "qux") {+ 0 x})) (1 x: "qux"))
+
+;; zip
+(group
+  ;; zero selected, zero attmts
+  (ni= (zip (attn (1 2 3) {}) ()) (attn (1 2 3) {}))
+  ;; one selected, zero attmts
+  (ni= (zip (attn (1 2 3) {+ 1}) ()) (attn (1 2 3) {}))
+  (ni= (zip (attn (1 2 3 x: "foo") {+ x}) ()) (attn (1 2 3 x: "foo") {}))
+  ;; many selected, zero attmts
+  (ni= (zip (attn (1 2 3)) ()) (attn (1 2 3) {}))
+  (ni= (zip (attn (1 2 3 x: "foo" y: "bar")) ()) (attn (1 2 3 x: "foo" y: "bar") {}))
+  ;; zero selected, one att
+  (ni= (zip (attn (1 2 3) {}) (x)) (attn (1 2 3) {}))
+  ;; one selected, one att
+  (ni= (zip (attn (1 2 3) {+ 1}) (x)) (attn (1 (2 x) 3) {+ 1}))
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ foo}) {foo: x}) (attn (1 2 3 foo: ("qux" x)) {+ foo}))
+  ;; many selected, one att
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ 1 foo}) {foo: x}) (attn (1 2 3 foo: ("qux" x)) {+ foo}))
+  ;; zero selected, many att
+  (ni= (zip (attn (1 2 3 foo: "qux") {}) (1 2 3 foo: 4)) (attn (1 2 3 foo: "qux") {}))
+  ;; one selected, many att
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ 1}) (1 2 3 foo: 4)) (attn (1 (2 1) 3 foo: "qux") {+ 1}))
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ foo}) (1 2 3 foo: 4)) (attn (1 2 3 foo: ("qux" 4)) {+ foo}))
+  ;; many selected, many att
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ 1 foo}) (x foo: y)) (attn (1 (2 x) 3 foo: ("qux" y)) {+ 1 foo}))
+  ;; more selected than attachments
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ 0 1 foo}) (x)) (attn ((1 x) 2 3 foo: "qux") {+ 0}))
+  ;; less selected than attachments
+  (ni= (zip (attn (1 2 3 foo: "qux") {+ 0 foo}) (x y z foo: a)) (attn ((1 x) 2 3 foo: ("qux" a)) {+ 0 foo}))
+  ;; pair attachments are read by key
+  (ni= (zip (attn {foo: a, bar: b}) {foo: 1, bar: 2}) (attn {foo: (a 1), bar: (b 2)})))
+
+;; reverse
+(group
+  ;; Empty
+  (ni= (-> (attn ()) (reverse _)) (attn ()))
+  ;; One
+  (ni= (-> (attn (1)) (reverse _)) (attn (1)))
+  ;; Many
+  (ni= (-> (attn (1 2 3)) (reverse _)) (attn (3 2 1)))
+  (ni= (-> (iota 5) (attn _) (reverse _) (gather _)) (4 3 2 1 0))
+  ;; None among many
+  (ni= (-> (1 3 5 7) (attn _) (filter _ (%pipe (mod 2) 0)) (data _)) (1 3 5 7))
+  ;; One among many
+  (ni= (-> (1 2 3 5 7) (attn _) (filter _ (%pipe (mod 2) 0)) (data _)) (1 2 3 5 7))
+  ;; Many among many
+  (ni= (-> (1 2 3 4 5 6 7 8) (attn _) (filter _ (%pipe (mod 2) 0)) (reverse _) (data _)) (1 8 3 6 5 4 7 2))
+  ;; Pairs
+  (ni= (-> (1 2 3 4 5 6 7 8 x: 100 y: 201) (attn _) (filter _ (%pipe (mod 2) 0)) (reverse _) (data _)) (1 8 3 6 5 4 7 2 x: 100 y: 201)))
 
 ;; in?
 (ni= (in? (500 ..< ∞) ≈500) true)
@@ -459,3 +537,24 @@
 ;; let
 
 ;; let*
+
+;; Digits
+(nitrene
+  (-> digits
+    (iota (size _))
+    (attn _)
+    (map _ (fn ±p (** 10 p)))
+    (reverse _)
+    (zip _ digits)
+    (map _ (fn (±a ±b) (* a b)))
+    (sum _))
+  (= {digits: qux} 0)
+  (= {digits: ()} 0)
+  (= {digits: (0)} 0)
+  (= {digits: (0 0 0 0)} 0)
+  (= {digits: (1)} 1)
+  (= {digits: (1 0)} 10)
+  (= {digits: (1 2)} 12)
+  (= {digits: (1 2 3)} 123)
+  (= {digits: (1 2 3 4 5 6 7 8 9)} 123456789)
+  (= {digits: (1 2 3 4 5 6 7 8 9 0 0 0)} 123456789000))

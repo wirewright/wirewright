@@ -228,6 +228,25 @@ module Testtool
         annotated(assertions(test), decl, srcmap)
       end
 
+      # |@ testtool.decl.nitrene
+      #
+      # |@pattern
+      # (nitrene program_ children_*)
+      #
+      # |@key program nitrene
+      # The program to test.
+      #
+      # |@key children testtool.nitrene
+      #
+      # |@block
+      # Allows you to "probe" the same program with different tests. Normally you'd
+      # just use `ni=` but when *program* is large that's no longer an option.
+      matchpi %{[nitrene program_ _*]} do
+        assertions(decl.as_d, srcmap, offset: 2) do |item|
+          NitreneDecl.new(production.path, program, item)
+        end
+      end
+
       # |@ testtool.decl.ml
       #
       # |@pattern
@@ -528,6 +547,40 @@ module Testtool
         end
       end
     {% end %}
+  end
+
+  defrecord NitreneDecl, path : NormalPath, program : Term, term : Term
+
+  def assertions(production : NitreneDecl, srcmap : ML::SrcMap) : Array(AssertionNode)
+    program, decl = production.program, production.term
+
+    Term.case(decl, engine: M0) do
+      # |@ testtool.nitrene.equals
+      #
+      # |@pattern
+      # (= vars_dict result_)
+      #
+      # |@key vars
+      # A dictionary of variables to pass to the Nitrene program associated with
+      # the test.
+      #
+      # |@key result nitrene
+      # A nitrene expression to compare the program's result with.
+      #
+      # |@block
+      # Shows *vars* to the Nitrene program associated with the test, and compares its
+      # result with *result*.
+      matchpiT %{(= vars_dict result_)} do
+        test = NitreneTest.new(vars, program, result)
+        annotated(assertions(test), decl, srcmap)
+      end
+
+      otherwise do
+        warn("Ignoring unrecognized nitrene decl: #{decl}", production.path, srcmap)
+
+        [] of AssertionNode
+      end
+    end
   end
 
   defrecord PatternDecl, path : NormalPath, pattern : Term, term : Term

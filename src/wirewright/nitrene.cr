@@ -404,6 +404,10 @@ module Ww::Nitrene
     vars[expr]? || expr
   end
 
+  # TODO: Nontrivial branches in `composite` and `primitive` below must be extracted into
+  # their own functions. Otherwise we're forced to consume a lot of stack-space per call (are we?)
+  # when only one or none of the branches match, which is dangerous in deep calls.
+
   # See `Interpreter`.
   def composite(it : Interpreter, vars : Term::Dict, expr : Term) : Evaln
     unless expr.type.dict?
@@ -437,7 +441,16 @@ module Ww::Nitrene
           return Term.of(:attn, Term[], Term[])
         end
 
-        Term.of(:attn, dict, dict)
+        # TODO: Is there any way at all to optimize this? Maybe dict could
+        # maintain a mask of some sort, or construct it cheaply? We can't
+        # just do `(attn dict dict)` because this breaks equality.
+        mask = Term::Dict.build do |commit|
+          dict.each_entry do |key, _|
+            commit.with(key, true)
+          end
+        end
+
+        Term.of(:attn, dict, mask)
       end
 
       matchpi %{(filter attnQ_ patternQ_)} do
@@ -935,15 +948,70 @@ module Ww::Nitrene
         Term.of(arg.in?(SYM_INFINITY, SYM_NEG_INFINITY))
       end
 
-      # FIXME: These things must use Arith!
+      # |@ nitrene.sum
+      #
+      # |@pattern
+      # (sum attn←(attn _dict _dict))
+      #
+      # |@key attn nitrene.attn
+      #
+      # |@block
+      # Returns the sum of selected arithmetic units (see `nitrene.arith`).
+      #
+      # ```wwml
+      # ;; Sum odd numbers:
+      #
+      # (-> (1 2 3 4 5)
+      #   (filter _ (%pipe (mod 2) 1))
+      #   (sum _))
+      #
+      # ;; => 9
+      # ```
+      matchpiT %{(sum (attn data_dict mask_dict))} do
+        a = ArithConst.new(Term[0])
 
-      matchpi %{(sum ())} do
+        mask.each_entry do |key, _|
+          next unless value = data[key]?
+          next unless b = arith?(value)
+
+          a = add(a, b)
+        end
+
+        render(a)
+      end
+
+      # |@ nitrene.sum
+      #
+      # |@pattern
+      # (sum args_dict)
+      #
+      # |@key args
+      # A dictionary containing arithmetic unit values (see `nitrene.arith`).
+      #
+      # |@block
+      # Returns the sum of arithmetic units in *args* (see `nitrene.arith`).
+      #
+      # ```wwml`
+      # (sum (1 2 3 4 5)) ;; => 15
+      # (sum (1 2 ∞ 4 5)) ;; => ∞
+      # ```
+      matchpi %{(sum args_dict)} do
+        a = ArithConst.new(Term[0])
+
+        args.each_entry do |_, value|
+          next unless b = arith?(value)
+
+          a = add(a, b)
+        end
+
+        render(a)
+      end
+
+      matchpi %{(sum _)} do
         Term.of(0)
       end
 
-      matchpi %{(sum args←(_number+))} do
-        Term.of(args.items.reduce { |a, b| a.as_n + b.as_n })
-      end
+      # TODO: use arith in product!
 
       matchpi %{(product ())} do
         Term.of(1)
@@ -1230,16 +1298,49 @@ module Ww::Nitrene
         Term.of(:attn, data, mask)
       end
 
+      # |@ nitrene.data
+      #
+      # |@pattern
+      # (data attn←(attn _dict _dict))
+      #
+      # |@key attn nitrene.attn
+      # The attention dictionary to extract the data from.
+      #
+      # |@block
+      # Extracts the data part of attention (the first dictionary, i.e.,
+      # `(attn data_dict _dict)`).
+      #
+      # `nitrene.data` keeps *all* entries regardless of the mask. This is different
+      # from `nitrene.gather`, which only keeps selected entries.
+      matchpi %{(data (attn data_dict _dict))} do
+        data
+      end
+
+      # |@ nitrene.mask
+      #
+      # |@pattern
+      # (mask attn←(attn _dict _dict))
+      #
+      # |@key attn nitrene.attn
+      # The attention dictionary to extract the mask from.
+      #
+      # |@block
+      # Extracts the mask part of attention (the second dictionary, i.e.,
+      # `(attn _ mask_dict)`).
+      matchpi %{(mask (attn _dict mask_dict))} do
+        mask
+      end
+
       matchpiT %{(gather (attn data_dict mask_dict))} do
         result = Term::Dict.build do |commit|
           data.items.each_with_index do |item, index|
-            next unless mask[index]?
+            next unless index.in?(mask)
 
             commit << item
           end
 
           data.each_entry(in: Term::Dict.pairspart) do |key, value|
-            next unless mask[key]?
+            next unless key.in?(mask)
 
             commit.with(key, value)
           end
@@ -1250,6 +1351,135 @@ module Ww::Nitrene
 
       matchpi %{(gather _)} do
         Term.of
+      end
+
+      # |@ nitrene.zip
+      #
+      # |@pattern
+      # (zip attn_ attachments_dict)
+      #
+      # |@key attn nitrene.attn
+      #
+      # |@key attachments
+      # A dictionary containing attachments for selected items (read sequentially) and
+      # pairs (read by key).
+      #
+      # |@block
+      # Replaces selected item and pair values with `(value attachment)`. Item
+      # attachments are read sequentially from the itemspart of *attachments*.
+      # Pair attachments are read by key. Leaves unselected items intact. Unselects
+      # entries without a corresponding attachment.
+      #
+      # ```wwml
+      # ;; Convert a list of digits into the corresponding base-10 number:
+      #
+      # (let digits: (1 2 3 4 5)
+      #   (-> digits
+      #     ;; Generate a sequence of increasing numbers: (0 1 2 3 4)
+      #     (iota (itemsize _))
+      #     ;; Convert to attention: (⏏0⏏ ⏏1⏏ ⏏2⏏ ⏏3⏏ ⏏4⏏)
+      #     (attn _)
+      #     ;; Convert to powers of ten: (⏏1⏏ ⏏10⏏ ⏏100⏏ ⏏1000⏏ ⏏10000⏏)
+      #     (map _ (fn ±p (** 10 p)))
+      #     ;; Reverse selected: (⏏10000⏏ ⏏1000⏏ ⏏100⏏ ⏏10⏏ ⏏1⏏)
+      #     (reverse _)
+      #     ;; Annotate with matching digits: (⏏(10000 1)⏏ ⏏(1000 2)⏏ ⏏(100 3)⏏ ⏏(10 4)⏏ ⏏(1 5)⏏)
+      #     (zip _ digits)
+      #     ;; Multiply: (⏏10000⏏ ⏏2000⏏ ⏏300⏏ ⏏40⏏ ⏏5⏏)
+      #     (map _ (fn (±a ±b) (* a b)))
+      #     ;; Sum selected: (10000 2000 300 40 5) -> 12345
+      #     (sum _)))
+      #
+      # ;; => 12345
+      # ```
+      matchpi %{(zip (attn data_dict mask_dict) attachments_dict)} do |mask|
+        result = data.transaction do |commit|
+          cursor = attachments.items
+
+          data.items.each_with_index do |item, index|
+            next unless index.in?(mask)
+
+            if cursor.empty?
+              mask = mask.without(index)
+              next
+            end
+
+            attmt = cursor.first
+            cursor += 1
+
+            commit.with(index, {item, attmt})
+          end
+
+          data.each_entry(in: Term::Dict.pairspart) do |key, value|
+            next unless key.in?(mask)
+
+            unless attmt = attachments[key]?
+              mask = mask.without(key)
+              next
+            end
+
+            commit.with(key, {value, attmt})
+          end
+        end
+
+        Term.of(:attn, result, mask)
+      end
+
+      matchpi %{(zip _ _)} do
+        Term.of(:attn, Term[], Term[])
+      end
+
+      # |@ nitrene.reverse
+      #
+      # |@pattern
+      # (reverse attn_)
+      #
+      # |@key attn nitrene.attn
+      #
+      # |@block
+      # Reverses selected items. Leaves pairs intact.
+      #
+      # ```wwml
+      # ;; Reverse even numbers:
+      #
+      # (-> (1 2 3 4 5 6 7 8)
+      #   ;; Convert to attention: (⏏1⏏ ⏏2⏏ ⏏3⏏ ⏏4⏏ ⏏5⏏ ⏏6⏏ ⏏7⏏ ⏏8⏏)
+      #   (attn _)
+      #   ;; Select even: (1 ⏏2⏏ 3 ⏏4⏏ 5 ⏏6⏏ 7 ⏏8⏏)
+      #   (filter _ (%pipe (mod 2) 0))
+      #   ;; Reverse selected: (1 ⏏8⏏ 3 ⏏6⏏ 5 ⏏4⏏ 7 ⏏2⏏)
+      #   (reverse _)
+      #   ;; Get the data part of attention: (1 8 3 6 5 4 7 2)
+      #   (data _))
+      #
+      # ;; => (1 8 3 6 5 4 7 2)
+      # ```
+      matchpi %{(reverse (attn data_dict mask_dict))} do
+        indices = Pf::Kit.stack_array(UInt32)
+
+        mask.each_entry do |key, _|
+          next unless index = data.index32?(key)
+
+          indices << index
+        end
+
+        indices.reverse!
+
+        result = data.transaction do |commit|
+          n = 0
+          mask.each_entry do |key, _|
+            next unless index = data.index32?(key)
+
+            commit.with(index, data[indices[n]])
+            n += 1
+          end
+        end
+
+        Term.of(:attn, result, mask)
+      end
+
+      matchpi %{(reverse _)} do
+        Term.of(:attn, Term[], Term[])
       end
 
       matchpi %{(in? (b_ ..< e_) value_)} do
