@@ -25,39 +25,39 @@ module Ww::Alloy
   # ^(+ x y)
   #
   # TODO: We should try to be at least a little bit smart here...
-  def register(reftab, path, components, template : NiExpr) : Nil
+  private def register(reftab, path, components, template : NiExpr) : Nil
   end
 
   # ^x ^\x ^*xs
-  def register(reftab, path, components, template : Var | DisplayVar | SpliceVar) : Nil
+  private def register(reftab, path, components, template : Var | DisplayVar | SpliceVar) : Nil
     return if reftab.has_key?(template)
 
     reftab[template] = Set{template.name}
   end
 
-  def register(reftab, path, components, template : NiSplice) : Nil
+  private def register(reftab, path, components, template : NiSplice) : Nil
     register(reftab, path, components, template.expr)
   end
 
-  def register(reftab, path, components, template : Literal) : Nil
+  private def register(reftab, path, components, template : Literal) : Nil
     reftab.put_if_absent(template) { Set(Ref).new }
   end
 
-  def register(reftab, path, components, template : Splice) : Nil
+  private def register(reftab, path, components, template : Splice) : Nil
     return if reftab.has_key?(template)
     return unless refs = refsum?(reftab, path, components, template.children)
 
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : Module) : Nil
+  private def register(reftab, path, components, template : Module) : Nil
     return if reftab.has_key?(template)
 
     refs = template.bindings.to_set { |inner, _| inner }
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : Case) : Nil
+  private def register(reftab, path, components, template : Case) : Nil
     return if reftab.has_key?(template)
 
     fanout = {template.expr}.each.chain(template.branches.each)
@@ -66,7 +66,7 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : CaseWhen) : Nil
+  private def register(reftab, path, components, template : CaseWhen) : Nil
     return if reftab.has_key?(template)
 
     register(reftab, path, components, template.body)
@@ -78,11 +78,11 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : VarsCase) : Nil
+  private def register(reftab, path, components, template : VarsCase) : Nil
     register(reftab, path, components, template.branches)
   end
 
-  def register(reftab, path, components, template : Cond) : Nil
+  private def register(reftab, path, components, template : Cond) : Nil
     return if reftab.has_key?(template)
 
     fanout = {template.expr, template.truthy, template.falsey}
@@ -91,7 +91,7 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : EachItem | EachItemEntry | EachPairEntry | EachEntry) : Nil
+  private def register(reftab, path, components, template : EachItem | EachItemEntry | EachPairEntry | EachEntry) : Nil
     return if reftab.has_key?(template)
 
     fanout = {template.iterable, template.body}
@@ -103,7 +103,7 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : Let) : Nil
+  private def register(reftab, path, components, template : Let) : Nil
     return if reftab.has_key?(template)
 
     fanout = {template.body}.each.chain(template.bindings.each.map { |_, expr| expr })
@@ -117,7 +117,7 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : Site) : Nil
+  private def register(reftab, path, components, template : Site) : Nil
     return if reftab.has_key?(template)
 
     register(reftab, path, components, template.parts.each_value)
@@ -169,7 +169,7 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : Extend) : Nil
+  private def register(reftab, path, components, template : Extend) : Nil
     return if reftab.has_key?(template)
 
     fanout = {template.child, template.extension}
@@ -178,7 +178,7 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, template : Render) : Nil
+  private def register(reftab, path, components, template : Render) : Nil
     return if reftab.has_key?(template)
 
     fanout = {template.subordinate, template.body}
@@ -190,12 +190,16 @@ module Ww::Alloy
     reftab[template] = refs
   end
 
-  def register(reftab, path, components, templates : Enumerable) : Nil
+  private def register(reftab, path, components, templates : Enumerable) : Nil
     templates.each do |template|
       register(reftab, path, components, template)
     end
   end
 
+  # Constructs a _r_eference _t_able for *unit*: a table mapping `Template`
+  # or `CaseWhen` nodes to sets of references (`Ref`) they contain. If a node
+  # is absent in the returned table, then the ref set is unknown; the node is
+  # a "black box" and is assumed to refer to all possible references.
   def refs(unit : Unit) : Reftab
     reftab = {} of Template | CaseWhen => Set(Ref)
 
