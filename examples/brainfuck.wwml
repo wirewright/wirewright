@@ -1,0 +1,182 @@
+;; Reference: https://en.wikipedia.org/wiki/Brainfuck
+
+(comment
+  "NOTE: The order of rules matters here. This also cannot (as readily) be \
+   a rewriter, because the rules *must* cooperate within a single tick \
+   (in this particular arrangement).")
+
+(backsys {@:data, @:program, @:input, @:output}
+  ;; Aux: Begin reading program.
+  {¦ program_string}
+    <> {program: ("" ^program)}
+  ;; Aux: Read more of the program.
+  {¦ program: (_ ahead←(%string nonempty))}
+    <> {(ahead): ^((rune ahead 0) (runes ahead 1 ..= -1))}
+  ;; Aux: Move forward in the program.
+  {¦ program: (behind_string op_string _)}
+    <> {behind: ^(~ behind op), (op): ()}
+  ;; Aux: wait for input in getch mode.
+  {¦ program: (_ op←getch  _) input_: (%string nonempty)}
+    <> {op: (ch ^(-> input (rune _ 0) (ord _))), input: ^(runes input 1 ..= -1)}
+  ;; Aux: if input is not a byte, try getch again.
+  {¦ program: (_ op←(ch _) _)}
+    <> {op: getch}
+  ;; Aux: if input is a byte, finalize `.`.
+  {¦ program: (_ op←(ch inb←(%number u8)) _) data: (_ ±byte _)}
+    <> {(op): (), byte: ^inb}
+  ;; >  Increment the data pointer by one (to point to the next cell to the right).
+  {¦ program: (_ ">" _) data: ((_* `l) ±byte (±r _*))}
+    <> {l: ^byte, byte: ^r, (r): ()}
+  ;; <  Decrement the data pointer by one (to point to the next cell to the left).
+  ;;    Undefined if at 0.
+  {¦ program: (_ "<" _) data: ((_* ±l) ±byte (`r _*))}
+    <> {(l): (), byte: ^l, r: ^byte}
+  ;; +  Increment the byte at the data pointer by one modulo 256.
+  {¦ program: (_ "+" _) data: (_ ±byte _)}
+    <> {byte: ^(mod (+ byte 1) 256)}
+  ;; -  Decrement the byte at the data pointer by one modulo 256.
+  {¦ program: (_ "-" _) data: (_ ±byte _)}
+    <> {byte: ^(mod (- byte 1) 256)}
+  ;; .  Output the byte at the data pointer.
+  {¦ program: (_ "." _) data: (_ ±byte _) output_string}
+    <> {output: ^(~ output (chr byte))}
+  ;; ,  Accept one byte of input, storing its value in the byte at the data pointer.
+  {¦ program: (behind_string op←"," _)}
+    <> {behind: ^(~ behind op) op: getch}
+  ;; [  If the byte at the data pointer is zero, then instead of moving
+  ;;    the instruction pointer forward to the next command, jump it
+  ;;    forward to the command after the matching ] command.
+  ;;
+  ;; NOTE: I suppose we're cheating a little bit here by using balance/rbalance
+  ;; instead of the hardcore "literally move backwards or forwards". The latter
+  ;; is more "cinematic" but it's also slow for larger examples. *Extremely slow*,
+  ;; not just slow the way we are slow right now.
+  {¦ program_: (behind_string op←"[" ahead_string) data: (_ 0 _)}
+    <> {program:
+          (^when ((balance ahead nest: "[" unnest: "]") (l_string r_string))
+            ^((~ behind op l) r))}
+  ;; ]  If the byte at the data pointer is nonzero, then instead of moving
+  ;;    the instruction pointer forward to the next command, jump it back
+  ;;    to the command after the matching [ command.
+  {¦ program_: (behind_string op←"]" ahead_string) data: (_ (%not 0) _)}
+    <> {program:
+          (^when ((rbalance behind nest: "]" unnest: "[") (l_string r_string))
+            ^(l (~ r op ahead)))})
+
+;; Hello World
+(cell @program "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
+
+;; Compute E
+;(cell @program
+  "[e.b -- compute e
+   (c) 2016 Daniel B. Cristofani
+   http://brainfuck.org/]
+
+   >>>>++>+>++>+>>++<+[
+     [>[>>[>>>>]<<<<[[>>>>+<<<<-]<<<<]>>>>>>]+<]>-
+     >>--[+[+++<<<<--]++>>>>--]+[>>>>]<<<<[<<+<+<]<<[
+       >>>>>>[[<<<<+>>>>-]>>>>]<<<<<<<<[<<<<]
+       >>-[<<+>>-]+<<[->>>>[-[+>>>>-]-<<-[>>>>-]++>>+[-<<<<+]+>>>>]<<<<[<<<<]]
+       >[-[<+>-]]+<[->>>>[-[+>>>>-]-<<<-[>>>>-]++>>>+[-<<<<+]+>>>>]<<<<[<<<<]]<<
+     ]>>>+[>>>>]-[+<<<<--]++[<<<<]>>>+[
+       >-[
+         >>[--[++>>+>>--]-<[-[-[+++<<<<-]+>>>>-]]++>+[-<<<<+]++>>+>>]
+         <<[>[<-<<<]+<]>->>>
+       ]+>[>>>>]-[+<<<<--]++<[
+         [>>>>]<<<<[
+           -[+>[<->-]++<[[>-<-]++[<<<<]+>>+>>-]++<<<<-]
+           >-[+[<+[<<<<]>]<+>]+<[->->>>[-]]+<<<<
+         ]
+       ]>[<<<<]>[
+         -[
+           -[
+             +++++[>++++++++<-]>-.>>>-[<<<----.<]<[<<]>>[-]>->>+[
+               [>>>>]+[-[->>>>+>>>>>>>>-[-[+++<<<<[-]]+>>>>-]++[<<<<]]+<<<<]>>>
+             ]+<+<<
+           ]>[
+             -[
+               ->[--[++>>>>--]->[-[-[+++<<<<-]+>>>>-]]++<+[-<<<<+]++>>>>]
+               <<<<[>[<<<<]+<]>->>
+             ]<
+           ]>>>>[--[++>>>>--]-<--[+++>>>>--]+>+[-<<<<+]++>>>>]<<<<<[<<<<]<
+         ]>[>+<<++<]<
+       ]>[+>[--[++>>>>--]->--[+++>>>>--]+<+[-<<<<+]++>>>>]<<<[<<<<]]>>
+     ]>
+   ]
+
+   This program computes the transcendental number e, in decimal. Because this is
+   infinitely long, this program doesn't terminate on its own; you will have to
+   kill it. The fact that it doesn't output any linefeeds may also give certain
+   implementations trouble, including some of mine.")
+
+;(cell @program
+  "[golden.b -- compute golden ratio
+   (c) 2019 Daniel B. Cristofani
+   http://brainfuck.org/]
+
+   +>>>>>>>++>+>+>+>++<[
+       +[
+           --[++>>--]->--[
+               +[
+                   +<+[-<<+]++<<[-[->-[>>-]++<[<<]++<<-]+<<]>>>>-<<<<
+                   <++<-<<++++++[<++++++++>-]<.---<[->.[-]+++++>]>[[-]>>]
+               ]+>>--
+           ]+<+[-<+<+]++>>
+       ]<<<<[[<<]>>[-[+++<<-]+>>-]++[<<]<<<<<+>]
+       >[->>[[>>>[>>]+[-[->>+>>>>-[-[+++<<[-]]+>>-]++[<<]]+<<]<-]<]]>>>>>>>
+   ]
+
+   This program computes the \"golden ratio\" (https://oeis.org/A001622). Because
+   this number is infinitely long, this program doesn't terminate on its own;
+   you will have to kill it.")
+
+;(cell @program
+  "[qsort.b -- quicksort
+   (c) 2016 Daniel B. Cristofani
+   http://brainfuck.org/]
+
+   >>+>>>>>,[>+>>,]>+[--[+<<<-]<[<+>-]<[<[->[<<<+>>>>+<-]<<[>>+>[->]<<[<]
+   <-]>]>>>+<[[-]<[>+<-]<]>[[>>>]+<<<-<[<<[<<<]>>+>[>>>]<-]<<[<<<]>[>>[>>
+   >]<+<<[<<<]>-]]+<<<]+[->>>]>>]>>[.>>>]
+
+   [This program sorts input bytes via quicksort.]")
+
+(comment "The following is a 32x32 (1024-cell) tape.")
+(cell @data
+  (()
+   0
+   (0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+    0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0)))
+
+(cell @input "cba\x00")
+(cell @output "")
