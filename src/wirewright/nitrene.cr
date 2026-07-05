@@ -1559,6 +1559,38 @@ module Ww::Nitrene
         Term.of(text.rpartition(sep))
       end
 
+      matchpi %{(balance text_string ⍊ nest_string unnest_string)}, text: StringView, nest: String, unnest: String do
+        Term.of(balance(text, nest, unnest))
+      end
+
+      matchpi %{(rbalance text_string ⍊ nest_string unnest_string)}, text: StringView, nest: String, unnest: String do
+        Term.of(rbalance(text, nest, unnest))
+      end
+
+      matchpiT %{(chr codepoint←(%number u32))} do
+        begin
+          chr = codepoint.chr
+        rescue ArgumentError
+          continue
+        end
+
+        Term.of(chr)
+      end
+
+      matchpiT %{(chr _)} do
+        Term.of("")
+      end
+
+      matchpiT %{(ord arg_string)}, arg: String do
+        continue if arg.empty?
+
+        Term.of(arg[0].ord)
+      end
+
+      matchpiT %{(ord _)} do
+        Term.of(:indet)
+      end
+
       # TODO: Remove in favor of partition/rpartition
       matchpi %{(line/stem arg_string)}, arg: StringView do
         l, _, _ = arg.partition('\n')
@@ -1660,5 +1692,41 @@ module Ww::Nitrene
   # Returns the resulting term.
   def eval(vars : Term::Dict, expr : Term) : Term
     eval(Interpreter::DEFAULT, vars, expr)
+  end
+
+  private def balance(text : StringView, nest : String, unnest : String)
+    depth = 1
+
+    text.each_before_and_after do |before, after|
+      if before.ends_with?(nest)
+        depth += 1
+      elsif before.ends_with?(unnest)
+        depth -= 1
+      end
+
+      if depth.zero?
+        return before, after
+      end
+    end
+
+    {text.before_begin, text}
+  end
+
+  private def rbalance(text : StringView, nest : String, unnest : String)
+    depth = 1
+
+    text.reverse_each_before_and_after do |before, after|
+      if after.starts_with?(nest)
+        depth += 1
+      elsif after.starts_with?(unnest)
+        depth -= 1
+      end
+
+      if depth.zero?
+        return before, after
+      end
+    end
+
+    {text, text.after_end}
   end
 end

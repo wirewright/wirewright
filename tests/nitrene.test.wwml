@@ -494,6 +494,14 @@
 
 ;; rpartition
 
+;; balance
+
+;; rbalance
+
+;; chr
+
+;; ord
+
 ;; run (prefix, charset)
 
 ;; codepoints
