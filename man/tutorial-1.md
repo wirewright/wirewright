@@ -441,7 +441,7 @@ toplevel←(increment ⟨±n⟩°)
 
 It's useful to think of backmaps as a way to do in-place replacement. However, it is extremely important to understand that backmaps are not *mutating* anything. A backmap is, conceptually, a shorthand for rewrites `=>` like the one above. They do the "tearing down" and "reassembly" of immutable structure for you, which, as I demonstrated above, is the boring & tedious part. Everything stays immutable throughout the whole process; the rewritten term is a completely new term (minus structural sharing).
 
-If we simplify our task a little bit and say we just want to increment all numbers in a list, a backmap would do that in just about twenty characters: `⟨±n⟩° <> {n: ^(+ n 1}`. This rule reads as, for each number item in a dictionary, increment it. If we rewrite `(a b 100 200 c 300)` with this, we get: `(a b 101 201 c 301)`.
+If we simplify our task a little bit and say we just want to increment all numbers in a list, a backmap would do that in just about twenty characters: `⟨±n⟩° <> {n: ^(+ n 1)}`. This rule reads as, for each number item in a dictionary, increment it. If we rewrite `(a b 100 200 c 300)` with this, we get: `(a b 101 201 c 301)`.
 
 The left-hand side of a backmap is the backmap's M1 *pattern*. The right-hand side is called a *backspec* (short for *backmap specification*). It specifies which captures must be replaced, and provides Alloy templates for what they should be replaced with. In each replacement template, all captures are available.
 
@@ -558,12 +558,6 @@ You can do the same using the `--subframes` flag in `irack`; run the example abo
   (cell @y 0)
   (feed @x @y))
 
-;; Subframe 2
-(circuit @subcircuit
-  (cell @x)
-  (cell @y 0)
-  (feed @x @y))
-
 ;; FRAME 1 complete. The above is printed.
 ;; ----------------
 
@@ -571,13 +565,13 @@ You can do the same using the `--subframes` flag in `irack`; run the example abo
 ;; the zero and puts it into `@x`, incrementing it. This produces
 ;; Subframe 3.
 
-;; Subframe 3
+;; Subframe 2
 (circuit @subcircuit
   (cell @x 1)
   (cell @y)
   (feed @x @y))
 
-;; Subframe 4
+;; Subframe 3
 (circuit @subcircuit
   (cell @x)
   (cell @y 1)
@@ -588,13 +582,13 @@ You can do the same using the `--subframes` flag in `irack`; run the example abo
 
 ;; Again, it's the backsystem's turn now.
 
-;; Subframe 5.
+;; Subframe 4.
 (circuit @subcircuit
   (cell @x 2)
   (cell @y)
   (feed @x @y))
   
-;; Subframe 6.
+;; Subframe 5.
 (circuit @subcircuit
   (cell @x)
   (cell @y 2)
