@@ -1217,11 +1217,11 @@ struct Slice(T)
   end
 
   def starts_with?(other : Slice(T)) : Bool
-    size >= other.size && self[0...other.size] == other
+    size >= other.size && trim(other.size) == other
   end
 
   def prefixed_by?(other : Slice(T)) : Bool
-    size > other.size && self[0...other.size] == other
+    size > other.size && trim(other.size) == other
   end
 
   def prepend(object : T) : Slice(T)
@@ -1900,6 +1900,12 @@ module Indexable(T)
 
   def to_readonly_slice(& : T, Int32 -> U) : Slice(U) forall U
     Slice(U).new(size, read_only: true) do |index|
+      yield unsafe_fetch(index), index
+    end
+  end
+
+  def to_slice(& : T, Int32 -> U) : Slice(U) forall U
+    Slice(U).new(size) do |index|
       yield unsafe_fetch(index), index
     end
   end
