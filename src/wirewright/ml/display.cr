@@ -107,6 +107,79 @@ module Ww::ML::Formatter
         end
       end
 
+      matchpi %[((%plural type: _number min: 8))] do
+        # Calculate width.
+        n = term.itemsize
+        width = Math.sqrt(n).ceil.to_i
+
+        # Compute rows.
+        row = [] of String
+        rows = [] of Array(String)
+
+        term.items.each_with_index do |item, index|
+          if row.size == width
+            rows << row
+            row = [] of String
+            next
+          end
+
+          row << ML.compact(item)
+        end
+
+        if row.present?
+          # Pad so that all rows have the same size.
+          (width - row.size).times do
+            row << ""
+          end
+
+          rows << row
+          row = [] of String
+        end
+
+        # Compute column widths.
+        col_widths = rows.transpose.map do |col|
+          col.max_of(&.size)
+        end
+
+        # FIXME: I think Crystal's PrettyPrint is unable to do what I want it to do here which
+        # is more like what we do in prettyR. We expect:
+        #
+        # (cell @data
+        #   (()
+        #    0
+        #    (0 0 0 0 0 0 0 0
+        #     0 0 0 0 0 0 0 0
+        #     0 0 0 0 0 0 0 0
+        #     0 0 0 0 0 0 0 0
+        #     0 0 0 0 0 0 0 0
+        #     0 0 0 0 0 0 0 0
+        #     0 0 0 0 0 0 0 0)))
+        #
+        # What this renders instead is utterly insane. However it still parses & is more compact
+        # than the alternative, so for now we'll keep it. The solution though is our own pretty-printer.
+        pp.group do
+          pp.break
+          pp.text("(")
+
+          pp.nest do
+            rows.each_with_index do |row, row_index|
+              pp.break if row_index > 0
+
+              row.each_with_index do |cell, col_index|
+                break if cell.empty?
+
+                pp.text(" ") if col_index > 0
+
+                col_width = col_widths[col_index]
+                pp.text(cell.ljust(col_width))
+              end
+            end
+
+            pp.text(")")
+          end
+        end
+      end
+
       matchpi %[(_* ¦)] do
         indent = 1
         if (head = term.items.first?) && head.type.symbol?
