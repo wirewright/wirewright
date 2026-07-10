@@ -37,7 +37,7 @@ module Ww::ScanKit
   defrecord Concat, members : Slice(Scanner)
   defcase Capture, name : Term::Sym, member : Scanner
 
-  private def category?(qual : Char) : Category?
+  private def category?(qual : Char) : Char | Category | Nil
     case qual
     when '_' then Category::Char
     when 'a' then Category::Alphabetic
@@ -56,6 +56,8 @@ module Ww::ScanKit
     when 'v' then Category::Vspace
     when 'w' then Category::Word
     when 'x' then Category::HexDigit
+    when '[', ']'
+      qual
     end
   end
 
