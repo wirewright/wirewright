@@ -35,6 +35,12 @@ module Ww
       _, value = put_if_absent?(key) { yield }
       value
     end
+
+    # Caches that are epoch-based can override this. Other caches simply `yield`
+    # for compatibility with epoch-based caches.
+    def epoch(&)
+      yield
+    end
   end
 
   # Disables caching.
