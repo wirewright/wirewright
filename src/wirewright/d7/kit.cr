@@ -250,17 +250,17 @@ module Ww::D7
   # *ancestor* is the last frame seen by the user. Usually this would be the last
   # frame produced by this method. Otherwise it would be the very first circuit,
   # which the caller itself should show to the user as the first frame.
-  def fuse(clf : Classifier, ancestor : Term, subframes : Slice(Term), &fn : Term ->) : Nil
+  def fuse(parser : Parser, ancestor : Term, subframes : Slice(Term), &fn : Term ->) : Nil
     if subframes.empty?
       fn.call(ancestor)
       return
     end
 
-    ancestor_nodes = fuse_map(clf, ancestor)
-    fuse(clf, ancestor, ancestor_nodes, subframes, &fn)
+    ancestor_nodes = fuse_map(parser, ancestor)
+    fuse(parser, ancestor, ancestor_nodes, subframes, &fn)
   end
 
-  private def fuse(clf : Classifier, ancestor : Term, ancestor_nodes : Hash(NodeAddr, Term), subframes : Slice(Term), &fn : Term ->) : Nil
+  private def fuse(parser : Parser, ancestor : Term, ancestor_nodes : Hash(NodeAddr, Term), subframes : Slice(Term), &fn : Term ->) : Nil
     if subframes.empty? # Base case
       fn.call(ancestor)
       return
@@ -268,7 +268,7 @@ module Ww::D7
 
     # Notice that this is an iterator.
     assessments = subframes.each.map do |subframe|
-      nodes = fuse_map(clf, subframe)
+      nodes = fuse_map(parser, subframe)
 
       {subframe: subframe,
        nodes:    nodes,
@@ -289,7 +289,7 @@ module Ww::D7
         # accumulated, or if there is a cut immediately, the line above will emit
         # assessment[:subframe].
 
-        return fuse(clf, assessment[:subframe], assessment[:nodes], subframes + index + 1, &fn)
+        return fuse(parser, assessment[:subframe], assessment[:nodes], subframes + index + 1, &fn)
       end
 
       # Changes are disjoint wrt. acc.
@@ -318,10 +318,10 @@ module Ww::D7
     changed
   end
 
-  private def fuse_map(clf : Classifier, circuit : Term)
+  private def fuse_map(parser : Parser, circuit : Term)
     nodes = {} of NodeAddr => Term
 
-    feature_tree = D7.parse(clf, circuit, reply: UnaugmentedParseTree)
+    feature_tree = parser.parse(circuit, reply: UnaugmentedParseTree)
     D7.each_flat_feature_with_addr(feature_tree) do |feature, addr|
       nodes[addr] = feature.node
     end

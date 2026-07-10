@@ -6017,3 +6017,132 @@
         ((O . . .)
          (. O . .))))))
     ;; ...
+
+;; Parser
+(group
+  (rack
+    (frame
+      (parser (@input -> top -> @output)
+        (digit "0") => 0
+        (digit "1") => 1
+        (digit "2") => 2
+        (digit "3") => 3
+        (digit "4") => 4
+        (digit "5") => 5
+        (digit "6") => 6
+        (digit "7") => 7
+        (digit "8") => 8
+        (digit "9") => 9
+        (nat digits←(many digit min: 1))
+          => ^(-> digits
+                (iota (size _))
+                (attn _)
+                (map _ (fn ±p (** 10 p)))
+                (reverse _)
+                (zip _ digits)
+                (map _ (fn (±a ±b) (* a b)))
+                (sum _))
+        (nat digit)
+        (space " ")
+        (space "\t")
+        (space "\r")
+        (ws (many space))
+        (atom "(" ws a←expr ws ")") => ^a
+        (atom nat)
+        (factor a←atom ws "*" ws b←factor) => ^(* a b)
+        (factor a←atom ws "/" ws b←factor) => ^(/ a b)
+        (factor atom)
+        (sum a←factor ws "+" ws b←sum) => ^(+ a b)
+        (sum a←factor ws "-" ws b←sum) => ^(- a b)
+        (sum factor)
+        (expr sum)
+        (top ws a←expr ws) => ^a)
+
+      (cell @input "1 + 2 * 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 7))
+    end)
+
+  ;; Here we rewrite `ws` using ScanKit.
+  (rack
+    (frame
+      (parser (@input -> top -> @output)
+        (digit "0") => 0
+        (digit "1") => 1
+        (digit "2") => 2
+        (digit "3") => 3
+        (digit "4") => 4
+        (digit "5") => 5
+        (digit "6") => 6
+        (digit "7") => 7
+        (digit "8") => 8
+        (digit "9") => 9
+        (nat digits←(many digit min: 1))
+          => ^(-> digits
+                (iota (size _))
+                (attn _)
+                (map _ (fn ±p (** 10 p)))
+                (reverse _)
+                (zip _ digits)
+                (map _ (fn (±a ±b) (* a b)))
+                (sum _))
+        (nat digit)
+        (ws "[%s]*")
+        (atom "(" ws a←expr ws ")") => ^a
+        (atom nat)
+        (factor a←atom ws "*" ws b←factor) => ^(* a b)
+        (factor a←atom ws "/" ws b←factor) => ^(/ a b)
+        (factor atom)
+        (sum a←factor ws "+" ws b←sum) => ^(+ a b)
+        (sum a←factor ws "-" ws b←sum) => ^(- a b)
+        (sum factor)
+        (expr sum)
+        (top ws a←expr ws) => ^a)
+
+      (cell @input "1 + 2 * 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 7))
+    end)
+
+  ;; We then use the built-in `nat` form instead of defining our own,
+  ;; slow nat.
+  (rack
+    (frame
+      (parser (@input -> top -> @output)
+        (nat (form "[0-9]+" nat))
+        (ws "[%s]*")
+        (atom "(" ws a←expr ws ")") => ^a
+        (atom nat)
+        (factor a←atom ws "*" ws b←factor) => ^(* a b)
+        (factor a←atom ws "/" ws b←factor) => ^(/ a b)
+        (factor atom)
+        (sum a←factor ws "+" ws b←sum) => ^(+ a b)
+        (sum a←factor ws "-" ws b←sum) => ^(- a b)
+        (sum factor)
+        (expr sum)
+        (top ws a←expr ws) => ^a)
+
+      (cell @input "1 + 2 * 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 7))
+    end)
+
+  ;; Elementary form
+  (rack
+    (frame
+      (parser (@input -> top -> @output)
+        (top a←(form "[0-9]+" nat) "-" b←(form "[0-9]+" nat))
+          => (code ^a ^b))
+      (cell @input "100-200")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (code 100 200)))
+    end)
+)

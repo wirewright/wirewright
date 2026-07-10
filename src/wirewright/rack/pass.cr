@@ -1,9 +1,4 @@
 module Ww::Rack
-  # Returns the main Rack pass.
-  def pass(clf : D7::Classifier, prepass = Prepass) : D7::Pass
-    D7::Pass.new { |circuit| step(clf, circuit, prepass) }
-  end
-
   module Prepass
     extend self
 
@@ -27,8 +22,8 @@ module Ww::Rack
   # Array(Node), where Node is a pre-parsed node. We won't need pattern matching
   # here, without it, everything should be pretty very fast, assuming we cache Term -> Node.
   # The Array(Node) can have some indexing attached as well.
-  def step(clf : D7::Classifier, circuit : Term, prepass, *, cache : D7::IParseCache = Uncached(Term, D7::ParseTree).new) : Slice(Term)
-    D7.case(clf, circuit, cache: cache, decorator: prepass) do
+  def step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+    D7.case(parser, circuit, decorator: prepass) do
       rule(<<-WWML) do |tgt|
       [discard @u_] dev
         -> (one u) [cell @u_ _] {name: tgt, max: ∞}

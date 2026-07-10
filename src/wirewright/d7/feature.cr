@@ -212,7 +212,39 @@ module Ww::D7
     feature : Parent,
     children : Slice(UnaugmentedParseTree)
 
-  alias IParseCache = ICache(Term, ParseTree)
+  # A thin wrapper around `D7.parse` that also manages parse caches for `ParseTree`
+  # and `UnaugmentedParseTree`.
+  struct Parser
+    # Returns the D7 classifier used by this parser.
+    getter clf : Classifier
+
+    def initialize(
+      @clf : Classifier,
+      @cache : ICache(Term, ParseTree),
+      @u_cache : ICache(Term, UnaugmentedParseTree),
+    )
+    end
+
+    def self.new(clf : Classifier) : Parser
+      cache = GenerationalCache(Term, ParseTree).new
+      u_cache = GenerationalCache(Term, UnaugmentedParseTree).new
+      new(clf, cache, u_cache)
+    end
+
+    # See `D7.parse`.
+    def parse(circuit : Term, reply : ParseTree.class) : ParseTree
+      @cache.epoch do
+        D7.parse(@clf, circuit, reply: ParseTree, cache: @cache)
+      end
+    end
+
+    # See `D7.parse`.
+    def parse(circuit : Term, reply : UnaugmentedParseTree.class) : UnaugmentedParseTree
+      @u_cache.epoch do
+        D7.parse(@clf, circuit, reply: UnaugmentedParseTree, cache: @u_cache)
+      end
+    end
+  end
 
   # Uses the classifier *clf* to convert a *circuit* into a tree of the kind
   # defined by the *reply* type. *circuit* is considered a `Parent` if it
@@ -220,7 +252,7 @@ module Ww::D7
   #
   # You can also provide an explicit child *range* to pass through to `Parent`;
   # by default, all items are considered.
-  def parse(clf : Classifier, circuit : Term, reply : ParseTree.class, *, cache : IParseCache = Uncached(Term, ParseTree).new, range : Range(UInt32, UInt32)? = nil)
+  def parse(clf : Classifier, circuit : Term, reply : ParseTree.class, *, cache = Uncached(Term, ParseTree).new, range : Range(UInt32, UInt32)? = nil)
     unless nodes = circuit.as_d?
       return InertLeaf.new(feature: inert(circuit))
     end

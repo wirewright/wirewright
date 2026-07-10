@@ -102,10 +102,10 @@ module Ww::D7
   end
 
   # :nodoc:
-  def update(cache : IParseCache, clf : Classifier, circuit : Term, level : Int, &fn : NodeAddr, NodeScope, Flat -> Term) : Term
+  def update(parser : Parser, circuit : Term, level : Int, &fn : NodeAddr, NodeScope, Flat -> Term) : Term
     assert level >= 0
 
-    feature_tree = parse(clf, circuit, reply: ParseTree, cache: cache)
+    feature_tree = parser.parse(circuit, reply: ParseTree)
     repair_tree = update(NodeAddr.empty, NodeScope.empty, feature_tree, level, fn)
     collapse(repair_tree)
   end
@@ -198,7 +198,7 @@ module Ww::D7
   # Replacement proceeds top-down (see `D7` for reasoning).
   #
   # See `D7` for terminology (e.g. subframe vs. substep).
-  def step(cache : IParseCache, clf : Classifier, circuit : Term, &) : Slice(Term)
+  def step(parser : Parser, circuit : Term, &) : Slice(Term)
     substeps = Pf::Kit.stack_array(Term, 8)
 
     MAX_SUBSTEPS.times do |level|
@@ -208,8 +208,8 @@ module Ww::D7
       running = false
 
       # This update() can still modify the circuit -- even though *we* do not
-      # do it, *clf* might.
-      circuit = update(cache, clf, circuit, level) do |addr, scope, flat|
+      # do it, *parser* might.
+      circuit = update(parser, circuit, level) do |addr, scope, flat|
         running = true
 
         case flat
@@ -236,7 +236,7 @@ module Ww::D7
         {hg[node_id].addr, replacement}
       end
 
-      circuit = update(cache, clf, circuit, level) do |addr, scope, flat|
+      circuit = update(parser, circuit, level) do |addr, scope, flat|
         case flat
         in Inert then flat.node
         in Gnd   then addr_patch[addr]? || flat.node

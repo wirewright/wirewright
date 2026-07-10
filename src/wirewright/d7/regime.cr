@@ -291,7 +291,7 @@ module Ww::D7
       end
     end
 
-    private def compatible?(a : Tpath, b : Tpath) : Bool
+    private def self.compatible?(a : Tpath, b : Tpath) : Bool
       if a.size == b.size
         return a != b # if different, then they're compatible
       end
@@ -300,11 +300,11 @@ module Ww::D7
       !lg.starts_with?(sm) # E.g. Tpath[2] and Tpath[2—1] are incompatible.
     end
 
-    private def compatible?(ref : Term, successor : Term, &predicate : Tpath -> Bool) : Bool
+    private def self.compatible?(ref : Term, successor : Term, &predicate : Tpath -> Bool) : Bool
       compatible?(ref, successor, Tpath[], predicate)
     end
 
-    private def compatible?(ref : Term, successor : Term, path, predicate) : Bool
+    private def self.compatible?(ref : Term, successor : Term, path, predicate) : Bool
       if ref == successor
         return true # compatible
       end
@@ -356,7 +356,7 @@ module Ww::D7
       true # compatible
     end
 
-    private def compatible?(orig : Term, rep0 : Term, rep1 : Term) : Bool
+    private def self.compatible?(orig : Term, rep0 : Term, rep1 : Term) : Bool
       affected0 = Pf::Kit.stack_array(Tpath)
 
       _ = compatible?(orig, rep0) do |path|
@@ -376,7 +376,7 @@ module Ww::D7
     # WARNING: This method assumes implicitly that the changes of all *successors*
     # accumulated into *acc* are disjoint. If they conflict, this method will
     # break. You are expected to guard calls to this method with a disjointedness check.
-    private def overlay(acc : Term, ref : Term, successor : Term) : Term
+    private def self.overlay(acc : Term, ref : Term, successor : Term) : Term
       unless (acc_dict = acc.as_d?) && (successor_dict = successor.as_d?)
         return successor
       end
@@ -441,7 +441,7 @@ module Ww::D7
       # something along those lines. This would move them onto another fiber,
       # and we'll be able to process more solutions concurrently in the meantime.
       # This is where the "scheduler" should go.
-      proposals = [] of {Soln, Patch}
+      proposals = [] of Patch
 
       solns.each do |soln|
         next unless proposal = fn.call(soln.match_table, soln.query_index)
@@ -450,13 +450,13 @@ module Ww::D7
           "size of proposal exceeds the number of node participants \
            (#{proposal.size} > #{soln.degree} participants)"
 
-        proposals << {soln, proposal}
+        proposals << proposal
       end
 
-      merge(hg, proposals)
+      Regime.merge(hg, proposals)
     end
 
-    private def merge(hg : Hypergraph, proposals : Array({Soln, Patch})) : Patch
+    def self.merge(hg : Hypergraph, proposals : Array(Patch)) : Patch
       if proposals.empty?
         return Patch.new
       end
@@ -471,7 +471,7 @@ module Ww::D7
 
       probably_conflicts = false
 
-      proposals.each_with_index do |(_, proposal), proposal_index|
+      proposals.each_with_index do |proposal, proposal_index|
         proposal.each do |node_id, rep|
           reps = patchtab.put_if_absent(node_id) { [] of {Term, UInt32} }
           reps << {rep, proposal_index.to_u32}
@@ -513,7 +513,7 @@ module Ww::D7
 
     # Computes the proposal decline set for *patchtab*: declines proposals
     # that conflict.
-    private def decline_set(hg : Hypergraph, patchtab : Hash(NodeId, Array({Term, UInt32}))) : Pf::USet32
+    def self.decline_set(hg : Hypergraph, patchtab : Hash(NodeId, Array({Term, UInt32}))) : Pf::USet32
       Pf::USet32.transaction do |declined|
         patchtab.each do |node_id, reps|
           orig = hg[node_id].term

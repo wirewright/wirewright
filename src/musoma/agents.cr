@@ -482,7 +482,7 @@ module MuSoma
           circuit = MuSoma.hide_single(circuit)
         end
 
-        tree = ws.parser.parse(circuit)
+        tree = ws.parser.parse(circuit, reply: D7::ParseTree)
 
         window_infos = MuSoma.window_infos(mu, tree)
         window_infos.each do |window_info|
@@ -742,139 +742,39 @@ module MuSoma
     end
   end
 
-  class AssemblerAgent
-    @seen : Bytes?
+  class RackAgent
+    @seen_seed : Bytes?
+    @seen_library : Bytes?
+    @machine : Rack::Automaton?
 
-    def initialize(@library_ref : ReadingRef)
-      @state = Rack::Assembler.state
-    end
-
-    # The classifier used specifically for *rules* when you hide the editor.
-    # It calls `hide_single` on incomplete nodes and re-classifies them.
-    #
-    # This classifier exists specifically to allow hiding the editor while
-    # editing rules, to see how the rule instantiates.
-    def self.hideclf : D7::Classifier
-      successor = MuSoma.clf
-
-      ->(node : Term) do
-        feature = successor.call(node)
-        unless feature.is_a?(D7::Inert)
-          return feature
-        end
-
-        unless feature.annotations.incomplete?
-          return feature
-        end
-
-        successor.call(MuSoma.hide_single(feature.node))
-      end
-    end
-
-    def boot(ws : Workspace)
-      ws.extrinsics.add(@library_ref)
-    end
-
-    def sync(ws : Workspace)
-      return unless reading = ws.extrinsics[@library_ref]?
-
-      sync(ws, reading)
-    end
-
-    def sync(ws : Workspace, reading : PathService::ContentReading)
-      return if @seen == reading.blob.digest
-
-      ws.console.send(InfoLog.new("Reload library"))
-
-      @seen = reading.blob.digest
-
-      begin
-        document = ML.document(reading.blob.to_string)
-      rescue e : ML::SyntaxError
-        ws.console.send(ErrLog.new("Library source on disk is invalid, running from memory..."))
-      else
-        ws.library.set(Rack::Assembler.library(document))
-      end
-    end
-
-    def sync(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
-      ws.console.send(ErrLog.new("Library source on disk is absent, running from memory..."))
-    end
-
-    def step(ws : Workspace)
-      return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.library)
-
-      ws.state.update do |state|
-        Term.case(state) do
-          matchpi %{{¦ hide_boolean timeline: (_ I _ (%any . ...) draft_)}} do
-            if hide.true?
-              rclf = AssemblerAgent.hideclf
-              rtree = D7.parse(rclf, draft, reply: D7::ParseTree)
-              wtree = ws.parser.parse(draft)
-            else # hide = false
-              rclf = MuSoma.clf
-              rtree = wtree = ws.parser.parse(draft)
-            end
-
-            draft1 = Rack::Assembler.step(rclf, rtree, wtree, @state, ws.library.get)
-
-            Term.morph(state, {:timeline, 4, draft1})
-          end
-
-          otherwise { state }
-        end
-      end
-    end
-  end
-
-  class CircuitParser
-    def initialize
-      @cache = GenerationalCache(Term, D7::ParseTree).new
-    end
-
-    # NOTE: Assumes the caller will deduplicate consecutive frames.
-    def step(clf : D7::Classifier, circuit : Term, prepass, steppers : Tuple) : Slice(Term)
-      @cache.epoch do
-        subframes = Slice(Term).empty
-
-        steppers.each do |stepper|
-          subframes += stepper.step(clf, circuit, prepass, cache: @cache)
-          circuit = subframes.last
-        end
-
-        subframes
-      end
-    end
-
-    def parse(circuit : Term) : D7::ParseTree
-      @cache.epoch do
-        D7.parse(MuSoma.clf, circuit, reply: D7::ParseTree, cache: @cache)
-      end
-    end
-  end
-
-  class CircuitAgent
-    def initialize(@seed_ref : ReadingRef)
+    def initialize(@library_ref : ReadingRef, @seed_ref : ReadingRef)
       @vantages = VarHash(D7::NodeAddr, Term).new
     end
 
     def boot(ws : Workspace)
+      ws.extrinsics.add(@library_ref)
       ws.extrinsics.add(@seed_ref)
       ws.state.update(&.with(:"seed-path", @seed_ref.path))
+
+      @machine = Rack::Automaton.new(ws.parser, alarm: ws.alarm)
     end
 
     def sync(ws : Workspace)
-      return unless reading = ws.extrinsics[@seed_ref]?
+      if library_reading = ws.extrinsics[@library_ref]?
+        sync_library(ws, library_reading)
+      end
 
-      sync(ws, reading)
+      if seed_reading = ws.extrinsics[@seed_ref]?
+        sync_seed(ws, seed_reading)
+      end
     end
 
-    def sync(ws : Workspace, reading : PathService::ContentReading)
-      return if @seen == reading.blob.digest
+    private def sync_seed(ws : Workspace, reading : PathService::ContentReading)
+      return if @seen_seed == reading.blob.digest
 
       ws.console.send(InfoLog.new("Reload seed"))
 
-      @seen = reading.blob.digest
+      @seen_seed = reading.blob.digest
 
       begin
         document = ML.document(reading.blob.to_string)
@@ -887,8 +787,28 @@ module MuSoma
       end
     end
 
-    def sync(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
+    private def sync_seed(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
       ws.console.send(ErrLog.new("Seed source on disk is absent, running from memory..."))
+    end
+
+    private def sync_library(ws : Workspace, reading : PathService::ContentReading)
+      return if @seen_library == reading.blob.digest
+
+      ws.console.send(InfoLog.new("Reload library"))
+
+      @seen_library = reading.blob.digest
+
+      begin
+        document = ML.document(reading.blob.to_string)
+      rescue e : ML::SyntaxError
+        ws.console.send(ErrLog.new("Library source on disk is invalid, running from memory..."))
+      else
+        ws.library.set(Rack::Assembler.library(document))
+      end
+    end
+
+    private def sync_library(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
+      ws.console.send(ErrLog.new("Library source on disk is absent, running from memory..."))
     end
 
     def receive(ws, plan, msg : MediaService::WindowDescriptionChanged)
@@ -946,7 +866,8 @@ module MuSoma
     end
 
     def step(ws : Workspace)
-      return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.codex) || @vantages.pending?
+      return unless machine = @machine
+      return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.codex, ws.library) || @vantages.pending?
 
       history_limit = ws.codex.get.history_limit
 
@@ -954,8 +875,7 @@ module MuSoma
         Term.case(state) do
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
             prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
-
-            drafts1 = ws.parser.step(MuSoma.clf, draft, prepass, steppers: {Rack::Tspace, Rack})
+            drafts1 = machine.next_frames(draft, prepass: prepass, library: ws.library.get)
             draft1 = drafts1.last
 
             status1 = status

@@ -68,7 +68,7 @@ module Ww::D7
       # interesting problem, you see, and that's exactly NOT what we're
       # doing here right now.
       @node_edges = {} of NodeId => Array(AbsEdge)
-      @edge_nodes = {} of AbsEdge => Array(NodeId)
+      @edge_nodes = {} of AbsEdge => Pf::USet32
     end
 
     # Mutates this hypergraph to add a node with the given *addr*, *scope*,
@@ -114,8 +114,7 @@ module Ww::D7
       edges = @node_edges.put_if_absent(node_id) { [] of AbsEdge }
       edges << edge
 
-      members = @edge_nodes.put_if_absent(edge) { [] of NodeId }
-      members << node_id
+      @edge_nodes[edge] = (@edge_nodes[edge]? || Pf::USet32.new).add(node_id)
     end
 
     # Mutates this hypergraph to unsubscribe a node with the given *node id*
@@ -133,7 +132,7 @@ module Ww::D7
       pass do
         next unless members = @edge_nodes[edge]?
 
-        members.delete(node_id)
+        @edge_nodes[edge] = members = members.delete(node_id)
         next unless members.empty?
 
         @edge_nodes.delete(edge)
@@ -167,6 +166,24 @@ module Ww::D7
     # Yields only nodes with the given *head* (if any).
     def each_node_with_head(head : Term, & : Node ->) : Nil
       return unless bucket = @head_index[head]?
+
+      bucket.each do |node_id|
+        yield @nodes[node_id]
+      end
+    end
+
+    # A more restricted query which works with both *head* and *memberof*.
+    def each_node_with_head(head : Term, *, memberof edges : Enumerable(AbsEdge), & : Node ->) : Nil
+      return unless bucket = @head_index[head]?
+
+      edges.each do |edge|
+        return if bucket.empty?
+        return unless members = @edge_nodes[edge]?
+
+        # The `&` below will most likely call `UInt64#&`, which is basically
+        # as fast as we can get.
+        bucket &= members
+      end
 
       bucket.each do |node_id|
         yield @nodes[node_id]

@@ -64,7 +64,7 @@ module MuSoma
     library : Var(Rack::Assembler::RuleLibrary),
     mu_codex_doc : Term,
     mu_codex : Var(Microfold::SyncCodex),
-    parser : CircuitParser,
+    parser : D7::Parser,
     msgq : BlockingQueue(Msg),
     alarm : BlockingSignal,
     scheduler : Scheduler
@@ -107,7 +107,7 @@ module MuSoma
     extrinsics.add(microfold_ref)
 
     # Misc.
-    parser = CircuitParser.new
+    parser = D7::Parser.new(MuSoma.clf)
     scheduler = Scheduler.new
 
     Workspace.new(
@@ -125,8 +125,7 @@ module MuSoma
       @distill : DistillAgent,
       @extrinsics : ExtrinsicsAgent,
       @write : WriteAgent,
-      @assembler : AssemblerAgent,
-      @circuit : CircuitAgent,
+      @rack : RackAgent,
       @mouse : MouseAgent,
       @keyboard : KeyboardAgent,
       @scheduler : SchedulerAgent,
@@ -137,8 +136,7 @@ module MuSoma
     def boot(workspace : Workspace)
       # In no particular order.
       @editor.boot(workspace)
-      @assembler.boot(workspace)
-      @circuit.boot(workspace)
+      @rack.boot(workspace)
     end
 
     def sync(workspace : Workspace) : Nil
@@ -147,8 +145,7 @@ module MuSoma
 
       # In no particular order.
       @editor.sync(workspace)
-      @assembler.sync(workspace)
-      @circuit.sync(workspace)
+      @rack.sync(workspace)
     end
 
     def present(workspace : Workspace) : Nil
@@ -167,7 +164,7 @@ module MuSoma
     def receive(workspace : Workspace, request : AppRequest) : Nil
       # In no particular order.
       @app.receive(workspace, request)
-      @circuit.receive(workspace, request)
+      @rack.receive(workspace, request)
     end
 
     def receive(workspace : Workspace, plan : Plan, msg : Msg) : Nil
@@ -175,7 +172,7 @@ module MuSoma
       @app.receive(workspace, plan, msg)
       @extrinsics.receive(workspace, plan, msg)
       @write.receive(workspace, plan, msg)
-      @circuit.receive(workspace, plan, msg)
+      @rack.receive(workspace, plan, msg)
       @mouse.receive(workspace, plan, msg)
       @keyboard.receive(workspace, plan, msg)
       @database.receive(workspace, plan, msg)
@@ -187,8 +184,7 @@ module MuSoma
       # probably come last. The other ones are "eyeballed".
       @pretty.step(ws)
       @editor.step(ws)
-      @assembler.step(ws)
-      @circuit.step(ws)
+      @rack.step(ws)
     end
   end
 
@@ -217,7 +213,7 @@ module MuSoma
     # if it is paused. However while paused we prevent the circuit from affecting
     # the real world.
     Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ (%any . ...) draft_)}}) do
-      draft_tree = ws.parser.parse(draft)
+      draft_tree = ws.parser.parse(draft, reply: D7::ParseTree)
 
       EntangleContinuation.entangle(ws, plan, *agents.entangle) do |sink|
         D7.each_flat_feature_with_addr(draft_tree) do |feature, addr|
@@ -242,7 +238,7 @@ module MuSoma
     if plan.present?
       ws.state.update do |state|
         Term.matchpi?(state, %{{¦ timeline: (_ I _ _ draft_)}}) do
-          draft_tree = ws.parser.parse(draft)
+          draft_tree = ws.parser.parse(draft, reply: D7::ParseTree)
           draft1 = MuSoma.perturb(draft_tree, plan)
           state = Term.morph(state, {:timeline, 4, draft1})
         end
@@ -349,8 +345,7 @@ module MuSoma
       distill: DistillAgent.new,
       extrinsics: ExtrinsicsAgent.new,
       write: WriteAgent.new,
-      assembler: AssemblerAgent.new(library_ref),
-      circuit: CircuitAgent.new(input_ref),
+      rack: RackAgent.new(library_ref, input_ref),
       mouse: MouseAgent.new,
       keyboard: KeyboardAgent.new,
       scheduler: SchedulerAgent.new,

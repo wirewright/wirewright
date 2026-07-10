@@ -75,16 +75,10 @@ module Testtool
   defrecord RackTest, seed : Term, frames : Array(Term)
 
   def run(test : RackTest, assets, stat, complaints) : Nil
-    assembler_state = Rack::Assembler.state
-
-    frames = D7.coarse_frames(Rack.clf, test.seed,
-      Rack::Tspace.pass(Rack.clf),
-      Rack::Assembler.pass(Rack.clf, Rack.clf, assembler_state),
-      Rack.pass(Rack.clf),
-    )
+    frames = Rack::Automaton.frames(test.seed)
 
     # Skip through seed.
-    before = frames.next
+    before = test.seed
 
     test.frames.each do |after|
       if before.is_a?(Iterator::Stop)

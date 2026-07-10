@@ -500,10 +500,10 @@ module Ww::Rack::Assembler
     D7.repair(tree) { |child| instantiate(vars, recipe, child) }
   end
 
-  def step(rclf : D7::Classifier, rtree : D7::ParseTree, wtree : D7::ParseTree, state : State, library : RuleLibrary = RuleLibrary.empty) : Term
+  def step(clf : D7::Classifier, tree : D7::ParseTree, state : State, library : RuleLibrary) : Term
     # Find rule definitions. This is an unavoidable scan of the tree.
     # Cues help us skip some paths not containing a rule.
-    defns = rule_defns(library, rtree)
+    defns = rule_defns(library, tree)
 
     # See what changed.
     events = diff(state.rules, defns)
@@ -511,29 +511,19 @@ module Ww::Rack::Assembler
     # If anything changed, generate invalidations & sync state.
     invalidations = Slice(SlotInvalidation).empty
     if events.present?
-      invalidations = update(rclf, state, events)
+      invalidations = update(clf, state, events)
     end
 
     # Broadcast invalidations and produce a repair tree. This is another
     # unavoidable scan & rewrite of the tree. Most often this does nothing
     # or close to nothing, so we optimize for that. We use cues as well.
-    repair_tree = broadcast(state, wtree, invalidations)
+    repair_tree = broadcast(state, tree, invalidations)
 
     D7.collapse(repair_tree)
   end
 
-  def step(rclf : D7::Classifier, wclf : D7::Classifier, state : State, circuit : Term, library : RuleLibrary = RuleLibrary.empty)
-    rtree = D7.parse(rclf, circuit, reply: D7::ParseTree)
-    if rclf == wclf
-      wtree = rtree
-    else
-      wtree = D7.parse(wclf, circuit, reply: D7::ParseTree)
-    end
-
-    step(rclf, rtree, wtree, state, library)
-  end
-
-  def pass(rclf : D7::Classifier, wclf : D7::Classifier, state : State) : D7::Pass
-    D7::Pass.new { |circuit| Slice[step(rclf, wclf, state, circuit)] }
+  def step(state : State, parser : D7::Parser, library : RuleLibrary, circuit : Term) : Slice(Term)
+    rtree = parser.parse(circuit, reply: D7::ParseTree)
+    Slice[step(parser.clf, rtree, state, library)]
   end
 end

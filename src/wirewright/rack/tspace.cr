@@ -31,17 +31,12 @@ module Ww::Rack::Tspace
 
   defrecord Appearance, id : D7::NodeId, tspace : Term, matchee : Term
 
-  # Returns the termspace pass.
-  def pass(clf : D7::Classifier) : D7::Pass
-    D7::Pass.new { |circuit| step(clf, circuit, Prepass) }
-  end
-
-  def step(clf : D7::Classifier, circuit : Term, prepass, cache : D7::IParseCache = Uncached(Term, D7::ParseTree).new) : Slice(Term)
+  def step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
     sensors = [] of Sensor
     appearances = [] of Appearance
 
     # Find candidates for an exchange.
-    _ = D7.case(clf, circuit, decorator: prepass, cache: cache) do
+    _ = D7.case(parser, circuit, decorator: prepass) do
       rule(<<-WWML) do |dev|
       [sensor (tspace_ pattern_ @dst_) template_] dev
         -> (one dst) [cell @dst_] {name: dst}
@@ -129,7 +124,7 @@ module Ww::Rack::Tspace
       stimuli[sensor.id] = expansions
     end
 
-    D7.case(clf, circuit, decorator: prepass, cache: cache) do
+    D7.case(parser, circuit, decorator: prepass) do
       rule(<<-WWML) do |dev, dst|
       [sensor (_ _ @dst_) _] dev
         -> (one dst) [cell @dst_] {name: dst}

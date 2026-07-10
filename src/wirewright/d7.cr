@@ -163,7 +163,7 @@ module Ww::D7
   #   end
   # end
   # ```
-  macro case(clf, circuit, *, decorator = nil, cache = Uncached(::Ww::Term, ::Ww::D7::ParseTree).new, &block)
+  macro case(parser, circuit, *, decorator = nil, &block)
     {%
       unless block
         raise "expected a block containing one or more `rule`s"
@@ -208,9 +208,7 @@ module Ww::D7
       {{@type}}::Regime.new(Slice.new(%queries, {{branches.size}}, read_only: true))
     end
 
-    %clf = {{clf}}
-
-    {{@type}}.step({{cache}}, %clf, {{circuit}}) do |%hg|
+    {{@type}}.step({{parser}}, {{circuit}}) do |%hg|
       {% if decorator %}
       {{decorator}}.call(%hg) do |%hg|
       {% end %}
@@ -242,68 +240,6 @@ module Ww::D7
         {% end %}
       end
     end
-  end
-
-  # A D7 pass takes a circuit term (the previous *frame*), and returns some
-  # number of *substeps*. The last substep is the next *frame*.
-  #
-  # See `D7` for general explanation & terminology.
-  #
-  # - The resulting slice is read-only.
-  # - The resulting slice is guaranteed to contain at least one subframe.
-  # - Substeps may repeat. Thus, the next frame may be equal to the previous frame.
-  alias Pass = Term -> Slice(Term)
-
-  private class CoarseFrameIterator
-    include Iterator(Term)
-
-    def initialize(@clf : Classifier, @circuit : Term, @passes : Indexable(Pass))
-      @memo = @circuit
-      @ahead = Deque{@circuit}
-    end
-
-    def next
-      if circuit = @ahead.shift?
-        return circuit
-      end
-
-      state = @circuit
-
-      subframes = @passes.to_readonly_slice do |pass|
-        substeps = pass.call(state)
-        state = substeps.last # Coarse
-      end
-
-      if @circuit == state
-        return Iterator.stop
-      end
-
-      D7.fuse(@clf, @memo, subframes) do |frame|
-        next if @memo == frame
-
-        @ahead << frame
-        @memo = frame
-      end
-
-      @circuit = state
-      @ahead.shift
-    end
-  end
-
-  # Constructs an iterator for running a chain of *passes* in a single
-  # step, fusing their frames coarsely (i.e., discarding prior subframes)
-  # to obtain one or more "preview frames", which are subsequently produced
-  # by the iterator.
-  #
-  # NOTE: Whether the iterator terminates depends on the given *circuit*. E.g.
-  # if it oscillates, the iterator will not terminate.
-  def coarse_frames(clf : Classifier, circuit : Term, passes : Indexable(Pass)) : Iterator(Term)
-    CoarseFrameIterator.new(clf, circuit, passes)
-  end
-
-  # :ditto:
-  def coarse_frames(clf : Classifier, circuit : Term, *passes : Pass) : Iterator(Term)
-    coarse_frames(clf, circuit, passes)
   end
 end
 

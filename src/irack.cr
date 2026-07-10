@@ -58,79 +58,66 @@ module InteractiveRack
       abort "syntax error"
     end
 
-    circuit = seed
-    assembler_state = Rack::Assembler.state
-    frame_count = 0u64
-    t = [] of Time::Span
-    cache = GenerationalCache(Term, D7::ParseTree).new
+    if show_subframes
+      display_mask = Rack::Automaton::DisplayMask::Subframe
+    else
+      display_mask = Rack::Automaton::DisplayMask::Frame
+    end
 
-    puts ML.display(circuit, maxwidth: 80)
+    machine = Rack::Automaton.new(measure: detailed, display_mask: display_mask)
+
+    circuit = seed
+    frame_count = 1u64
+    subframe_count = 1u64
+
+    if detailed
+      puts ";; Seed"
+    end
+
+    puts ML.display(seed, maxwidth: 80)
+
     if single_step
       gets
     end
 
     loop do
-      circuit0 = circuit
+      circuit, action = machine.blocking_next(circuit)
 
-      subframes = Slice[circuit]
+      case action
+      in Rack::Automaton::DisplaySubframe
+        next unless show_subframes
 
-      dt = Time.measure do
-        cache.epoch do
-          subframes += Rack::Tspace.step(Rack.clf, subframes.last, Rack::Prepass, cache: cache)
-        end
-
-        cache.epoch do
-          rtree = D7.parse(Rack.clf, subframes.last, cache: cache, reply: D7::ParseTree)
-          wtree = rtree
-          subframes += Slice[Rack::Assembler.step(Rack.clf, rtree, wtree, assembler_state)]
-        end
-
-        cache.epoch do
-          subframes += Rack.step(Rack.clf, subframes.last, Rack::Prepass, cache: cache)
-        end
-      end
-
-      subn = 0
-
-      D7.fuse(Rack.clf, circuit, subframes) do |subframe|
-        if show_subframes && circuit != subframe
-          if detailed
-            puts ";; Subframe #{subn + 1} of frame #{frame_count + 1}" # count from 1
-          end
-
-          puts ML.display(subframe, maxwidth: 80)
-          puts
-          if single_step
-            gets
-          end
-          subn += 1
-        end
-
-        circuit = subframe
-      end
-
-      break if circuit0 == circuit # Quiescence
-
-      unless show_subframes
         if detailed
-          puts ";; Frame #{frame_count + 1}" # count from 1
+          puts ";; Subframe #{subframe_count} of frame #{frame_count}"
         end
 
-        puts ML.display(circuit, maxwidth: 80) # Show frame
+        puts ML.display(action.content, maxwidth: 80)
+
         if single_step
           gets
         end
-      end
 
-      frame_count += 1
-      t << dt
-      if t.size >= 32
-        t = [t.median]
-      end
-    end
+        subframe_count += 1
+      in Rack::Automaton::DisplayFrame
+        if detailed
+          puts ";; Frame #{frame_count}"
+        end
 
-    if detailed
-      puts "| frame_count=#{frame_count} lowpass(median(frametime))=#{t.median.humanize}"
+        puts ML.display(action.content, maxwidth: 80)
+
+        if detailed
+          puts "| frame_count=#{frame_count} rec_median(frametime, 32)=#{machine.median.humanize}"
+        end
+
+        if single_step
+          gets
+        end
+
+        subframe_count = 1
+        frame_count += 1
+      in Rack::Automaton::End
+        break
+      end
     end
   end
 end

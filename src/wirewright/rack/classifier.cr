@@ -532,6 +532,10 @@ module Ww::Rack
         end
       end
 
+      matchpi %{[parser (@input_ -> _symbol -> @output_) _*]} do
+        D7.gnd(node, input, output)
+      end
+
       otherwise do
         D7.inert(node)
       end
