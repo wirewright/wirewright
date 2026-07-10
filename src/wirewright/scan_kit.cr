@@ -220,25 +220,8 @@ module Ww::ScanKit
 
     min = 1u32
     max = 1u32
-
-    case pattern
-    when .starts_with?('+')
-      pattern = pattern.rest
-      # [a-zA-Z%d]+⏏
-      max = UInt32::MAX
-    when .starts_with?('*')
-      pattern = pattern.rest
-      # [a-zA-Z%d]*⏏
-      min = 0u32
-      max = UInt32::MAX
-    when .starts_with?('{')
-      # [a-zA-Z%d]⏏{n,}  [a-zA-Z%d]⏏{m,n}
-      if row = quantifier?(pattern)
-        min, max, pattern = row
-        # [a-zA-Z%d]{n,}⏏  [a-zA-Z%d]{m,n}⏏
-      end
-    else
-      # [a-zA-Z%d]⏏
+    if row = quantifier?(pattern)
+      min, max, pattern = row
     end
 
     scanner = Charset.new(
@@ -253,47 +236,64 @@ module Ww::ScanKit
   end
 
   private def quantifier?(pattern : Pf::StringSeln) : {UInt32, UInt32, Pf::StringSeln}?
-    return unless pattern.starts_with?('{')
-    pattern = pattern.rest
-    # {⏏,3}  {⏏1,}  {⏏1,3}
+    case pattern
+    when .starts_with?('?')
+      pattern = pattern.rest
+      # [a-zA-Z%d]?⏏
+      {0u32, 1u32, pattern}
+    when .starts_with?('+')
+      pattern = pattern.rest
+      # [a-zA-Z%d]+⏏
+      {1u32, UInt32::MAX, pattern}
+    when .starts_with?('*')
+      pattern = pattern.rest
+      # [a-zA-Z%d]*⏏
+      {0u32, UInt32::MAX, pattern}
+    when .starts_with?('{')
+      # [a-zA-Z%d]⏏{1,}  [a-zA-Z%d]⏏{1,3}
+      pattern = pattern.rest
+      # {⏏,3}  {⏏1,}  {⏏1,3}
 
-    _, lo_digits, pattern = pattern.skip_thru_seq { |chr| chr.ascii_number? ? chr.to_u32 : nil }
+      _, lo_digits, pattern = pattern.skip_thru_seq { |chr| chr.ascii_number? ? chr.to_u32 : nil }
 
-    # {1⏏ , 2}
-    pattern = pattern.lstrip(" ")
-    # {1 ⏏, 2}
+      # {1⏏ , 2}
+      pattern = pattern.lstrip(" ")
+      # {1 ⏏, 2}
 
-    return unless pattern.starts_with?(',') # {1⏏  {⏏
-    pattern = pattern.rest
-    # {,⏏3}  {1,⏏}  {1,⏏3}
+      return unless pattern.starts_with?(',') # {1⏏  {⏏
+      pattern = pattern.rest
+      # {,⏏3}  {1,⏏}  {1,⏏3}
 
-    # {1,⏏ 2}
-    pattern = pattern.lstrip(" ")
-    # {1, ⏏2}
+      # {1,⏏ 2}
+      pattern = pattern.lstrip(" ")
+      # {1, ⏏2}
 
-    _, hi_digits, pattern = pattern.skip_thru_seq { |chr| chr.ascii_number? ? chr.to_u32 : nil }
-    # {,3⏏}  {1,⏏}  {1,3⏏}
+      _, hi_digits, pattern = pattern.skip_thru_seq { |chr| chr.ascii_number? ? chr.to_u32 : nil }
+      # {,3⏏}  {1,⏏}  {1,3⏏}
 
-    return unless pattern.starts_with?('}') # {1,⏏
-    pattern = pattern.rest
-    # {,3}⏏  {1,}⏏  {1,3}⏏
+      return unless pattern.starts_with?('}') # {1,⏏
+      pattern = pattern.rest
+      # {,3}⏏  {1,}⏏  {1,3}⏏
 
-    # Sanity: 0-9999.
-    return unless lo_digits.size <= 4
-    return unless hi_digits.size <= 4
+      # Sanity: 0-9999.
+      return unless lo_digits.size <= 4
+      return unless hi_digits.size <= 4
 
-    lo = lo_digits.reduce(0u32) { |n, digit| n*10 + digit }
-    if hi_digits.empty?
-      # {1,}
-      hi = UInt32::MAX
+      lo = lo_digits.reduce(0u32) { |n, digit| n*10 + digit }
+      if hi_digits.empty?
+        # {1,}
+        hi = UInt32::MAX
+      else
+        hi = hi_digits.reduce(0u32) { |n, digit| n*10 + digit }
+      end
+
+      # Sanity.
+      return unless lo <= hi
+
+      {lo, hi, pattern}
     else
-      hi = hi_digits.reduce(0u32) { |n, digit| n*10 + digit }
+      # [a-zA-Z%d]⏏
     end
-
-    # Sanity.
-    return unless lo <= hi
-
-    {lo, hi, pattern}
   end
 
   private def atom?(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
