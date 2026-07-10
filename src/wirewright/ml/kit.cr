@@ -94,7 +94,7 @@ module Ww::ML
       end
 
       digits, src = src.skip_to("/eE.")
-      num, _ = digits_to_number(digits, exact: exact)
+      num, _ = nat(digits, exact: exact)
 
       if src.starts_with?('/')
         src = src.rest
@@ -105,7 +105,7 @@ module Ww::ML
           raise SyntaxError.new("expected at least one digit for the denominator", densrc.before_begin)
         end
 
-        den, _ = digits_to_number(densrc, exact: exact)
+        den, _ = nat(densrc, exact: exact)
         if den.zero?
           raise SyntaxError.new("division by zero", densrc)
         end
@@ -123,7 +123,7 @@ module Ww::ML
           raise SyntaxError.new("expected at least one fractional part digit after `.`; did you mean `#{ML.compact(num)}.0`?", frsrc.before_begin)
         end
 
-        frpart, frlen = digits_to_number(frsrc, exact: exact)
+        frpart, frlen = nat(frsrc, exact: exact)
         num += frpart * Term[1]/(Term[10] ** frlen)
       end
 
@@ -147,7 +147,7 @@ module Ww::ML
           raise SyntaxError.new("expected at least one digit for the exponent", mantissasrc.before_begin)
         end
 
-        mantissa, _ = digits_to_number(mantissasrc, exact: exact)
+        mantissa, _ = nat(mantissasrc, exact: exact)
         num = Term.of(:sci, num, sign * mantissa)
       end
 
@@ -159,7 +159,7 @@ module Ww::ML
     # underscores this isn't simply `digitsrc.size`).
     #
     # Raises `SyntaxError` on invalid input.
-    def digits_to_number(digitsrc : StringView, *, exact : Bool) : {Term::Num, Term::Num}
+    def nat(digitsrc : StringView, *, exact : Bool) : {Term::Num, Term::Num}
       # Validate
       digitsrc.each_split do |l, m, r|
         case m
