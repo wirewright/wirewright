@@ -49,6 +49,8 @@ include Ww
 
 require "./wirewright/m1"
 require "./wirewright/rho"
+require "./wirewright/scan_kit"
+require "./wirewright/parse_kit"
 require "../baz5"
 require "./wirewright/d7"
 require "../libtermbox2"
