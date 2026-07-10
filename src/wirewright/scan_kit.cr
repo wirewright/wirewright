@@ -2,7 +2,7 @@
 module Ww::ScanKit
   extend self
 
-  alias Scanner = Char | Category | Charset | Concat | Capture
+  alias Scanner = Char | Category | Charset | Simultaneously | Concat | Capture
 
   @[Flags]
   enum Category
@@ -33,6 +33,7 @@ module Ww::ScanKit
     max : UInt32,
     answer : Bool
 
+  defrecord Simultaneously, members : Slice(Scanner)
   defrecord Concat, members : Slice(Scanner)
   defcase Capture, name : Term::Sym, member : Scanner
 
@@ -366,9 +367,31 @@ module Ww::ScanKit
     {scanner.as(Scanner), pattern}
   end
 
-  def scanner(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}
+  private def simult?(lhs : Scanner, pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
+    rhs = Pf::Kit.stack_array(Scanner, 4)
+
+    # x⏏~y
+    while pattern.starts_with?('~') && pattern.size > 1
+      ahead = pattern.rest
+      break unless row = atom?(ahead) || capture?(ahead)
+
+      pattern = pattern.rest
+      # x~⏏y
+
+      scanner, pattern = row
+      rhs << scanner
+    end
+
+    return if rhs.empty?
+
+    members = Slice[lhs] + rhs.to_unsafe_readonly_slice!
+
+    {Simultaneously.new(members).as(Scanner), pattern}
+  end
+
+  private def scanner(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}
     if row = atom?(pattern) || capture?(pattern)
-      return row
+      return simult?(*row) || row
     end
 
     assert !pattern.empty?
@@ -590,6 +613,35 @@ module Ww::ScanKit
     return unless member?(scanner, text)
 
     text.rest
+  end
+
+  def match?(scanner : Simultaneously, log : CaptureLog, text : Pf::StringSeln) : Pf::StringSeln?
+    safepoint = safepoint(log)
+
+    candidates = Pf::Kit.stack_array(Pf::StringSeln, 4)
+
+    scanner.members.each do |member|
+      unless ahead = match?(member, log, text)
+        rollback(log, safepoint)
+        return
+      end
+
+      candidates << ahead
+    end
+
+    candidates.max_by?(&.byte_end)
+  end
+
+  def match?(scanner : Simultaneously, log : NoLog, text : Pf::StringSeln) : Pf::StringSeln?
+    candidates = Pf::Kit.stack_array(Pf::StringSeln, 4)
+
+    scanner.members.each do |member|
+      return unless ahead = match?(member, log, text)
+
+      candidates << ahead
+    end
+
+    candidates.max_by?(&.byte_end)
   end
 
   def match?(scanner : Concat, log : CaptureLog, text : Pf::StringSeln) : Pf::StringSeln?

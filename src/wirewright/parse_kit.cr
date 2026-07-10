@@ -152,6 +152,18 @@ module Ww::ParseKit
       # (e.g., `(name)←[a-zA-Z]`). In order to bind to a *sequence* of atoms,
       # use `()`. For example, `Deadline is date←(day←%|dd|/month←%|dd|/year←%|dddd|), firm`.
       #
+      # ## Matching multiple atoms simultaneously
+      #
+      # Use `~` to match multiple atoms simultaneously (i.e., at the same position):
+      # `[0-9]~[^1-3]` means "match digits excluding 1-3", whereas `[0-9]~[a-z]` is
+      # the same as `[0-9a-z]`.
+      #
+      # More `~`s can be chained: `[0-9]~[a-z]~[^a-f]` is the same as `[0-9a-z]~[^a-f]`,
+      # meaning "match digits and ASCII lowercase, but exclude letters a-f".
+      #
+      # For `~` members, all start at the same position in the text, but only
+      # the longest wins.
+      #
       # ## Literal matching
       #
       # The whitespace character ` ` receives special treatment outside of character
