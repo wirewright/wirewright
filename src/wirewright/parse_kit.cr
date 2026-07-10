@@ -206,13 +206,13 @@ module Ww::ParseKit
       # |@ parsekit.parselet.any
       #
       # |@pattern
-      # (any members_*)
+      # [any members_*]
       #
       # |@key members parsekit.parselet
       #
       # |@block
       # Sequential or: tries to match each of *members* in turn.
-      matchpi %{(any  _*)} do
+      matchpi %{[any  _*]} do
         subterms = term.items.move(1)
         members = subterms.to_readonly_slice { |subterm| parselet(subterm, observed).as(Parselet) }
         OrdChoice.new(members)
@@ -221,14 +221,14 @@ module Ww::ParseKit
       # |@ parsekit.parselet.max
       #
       # |@pattern
-      # (max members_*)
+      # [max members_*]
       #
       # |@key members parsekit.parselet
       #
       # |@block
       # Parallel or: tries all of *members* simultaneously, and picks the member
       # whose match is the longest.
-      matchpi %{(max _*)} do
+      matchpi %{[max _*]} do
         subterms = term.items.move(1)
         members = subterms.to_readonly_slice { |subterm| parselet(subterm, observed).as(Parselet) }
         MaxChoice.new(members)
@@ -237,13 +237,13 @@ module Ww::ParseKit
       # |@ parsekit.parselet.seq
       #
       # |@pattern
-      # (seq members_*)
+      # [seq members_*]
       #
       # |@key members parsekit.parselet
       #
       # |@block
       # Matches a sequence of *members*.
-      matchpi %{(seq _*)} do
+      matchpi %{[seq _*]} do
         subterms = term.items.move(1)
         parselets = subterms.to_readonly_slice { |subterm| parselet(subterm, observed).as(Parselet) }
         Seq.new(parselets, observed)
@@ -273,20 +273,20 @@ module Ww::ParseKit
       # |@ parsekit.parselet.maybe
       #
       # |@pattern
-      # (maybe member_)
+      # [maybe member_]
       #
       # |@key member parsekit.parselet
       #
       # |@block
       # Matches zero or one instances of *member*. Shorthand for `(many _ min: 0 max: 1)`.
-      matchpi %{(maybe subterm_)} do
+      matchpi %{[maybe subterm_]} do
         Many.new(0u32, 1u32, parselet(subterm, observed), observed)
       end
 
       # |@ parsekit.parselet.capture
       #
       # |@pattern
-      # (%'%let name_ member_)
+      # [%'%let name_ member_]
       #
       # |@key name
       # The name of the capture.
@@ -296,14 +296,14 @@ module Ww::ParseKit
       # |@block
       # Captures the result of matching *member*. We use `%let` to "inherit"
       # the syntax `_←_`.
-      matchpi %{(%'%let name_ subterm_)} do
+      matchpi %{[%'%let name_ subterm_]} do
         Capture.new(name, parselet(subterm, observed: true))
       end
 
       # |@ parsekit.parselet.loc
       #
       # |@pattern
-      # (loc name_ member_)
+      # [loc name_ member_]
       #
       # |@key name
       # The name of the capture.
@@ -324,14 +324,14 @@ module Ww::ParseKit
       # | `rune-end`     | The index of the rune where the match for *member* ends (zero-based).   |
       # | `byte-begin`   | The index of the byte where the match for *member* starts (zero-based). |
       # | `byte-end`     | The index of the byte where the match for *member* ends (zero-based).   |
-      matchpi %{(loc name_ subterm_)} do
+      matchpi %{[loc name_ subterm_]} do
         Location.new(name, parselet(subterm, observed))
       end
 
       # |@ parsekit.parselet.find
       #
       # |@pattern
-      # (find member_)
+      # [find member_]
       #
       # |@key member parsekit.parselet
       #
@@ -339,14 +339,14 @@ module Ww::ParseKit
       # Searches for *member* in the remainder of the string. That is, the remainder
       # of the string should not necessarily start with *member*; some characters can
       # be skipped.
-      matchpi %{(find subterm_)} do
+      matchpi %{[find subterm_]} do
         Find.new(parselet(subterm, observed))
       end
 
       # |@ parsekit.parselet.form
       #
       # |@pattern
-      # (form member_ spec_)
+      # [form member_ spec_]
       #
       # |@key member parsekit.parselet
       # The parselet to use to capture some characters for *spec*. This can be as
@@ -365,7 +365,7 @@ module Ww::ParseKit
       # meaning the entire parse is aborted with an error pointing to the appropriate
       # location in the text. Use `parsekit.formspec.default` to return a fallback
       # term instead.
-      matchpi %{(form subterm_ specQ_)} do
+      matchpi %{[form subterm_ specQ_]} do
         continue unless spec = form_spec?(specQ)
 
         Form.new(parselet(subterm, observed: false), spec)
@@ -394,7 +394,22 @@ module Ww::ParseKit
         NatForm.new
       end
 
-      matchpi %{(default subterm_ fallback_)} do
+      # |@ parsekit.formspec.default
+      #
+      # |@pattern
+      # (default member_ fallback_)
+      #
+      # |@key member parsekit.formspec
+      # The spec whose errors should be intercepted.
+      #
+      # |@key fallback
+      # The fallback term.
+      #
+      # |@block
+      # Intercepts errors from *member* and replaces them with the given *fallback*
+      # term. This prevents parsing from aborting the parse if *member* is unsatisfied
+      # with the underlying text.
+      matchpi %{[default subterm_ fallback_]} do
         continue unless member = form_spec?(subterm)
 
         DefaultForm.new(member, fallback)
