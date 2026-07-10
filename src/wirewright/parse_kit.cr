@@ -270,6 +270,19 @@ module Ww::ParseKit
         Many.new(min.to(UInt32), max.to(UInt32), parselet(subterm, observed), observed)
       end
 
+      # |@ parsekit.parselet.maybe
+      #
+      # |@pattern
+      # (maybe member_)
+      #
+      # |@key member parsekit.parselet
+      #
+      # |@block
+      # Matches zero or one instances of *member*. Shorthand for `(many _ min: 0 max: 1)`.
+      matchpi %{(maybe subterm_)} do
+        Many.new(0u32, 1u32, parselet(subterm, observed), observed)
+      end
+
       # |@ parsekit.parselet.capture
       #
       # |@pattern
