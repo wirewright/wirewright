@@ -463,7 +463,7 @@ module Ww::ParseKit
         # |@ parsekit.grammar.rule
         #
         # |@pattern
-        # [rule (name_symbol parselets_+) template_]
+        # [rule (name_symbol (%plural parselets min: 2)) template_]
         #
         # |@key name
         # The name of the rule.
@@ -500,6 +500,28 @@ module Ww::ParseKit
         # Gives a name to a parselet without providing a template.
         matchpiT %{[name_symbol parseletQ_]} do
           production = AliasProduction.new(parselet(parseletQ, observed: false))
+          bucket = productions.put_if_absent(name) { [] of Production }
+          bucket << production
+        end
+
+        # |@ parsekit.grammar.alias
+        #
+        # |@pattern
+        # [name_symbol (%plural parselets min: 2)]
+        #
+        # |@key name
+        # The name of the rule.
+        #
+        # |@key parselets parsekit.parselet
+        # The sequence of parselets.
+        #
+        # |@block
+        # Gives a name to a sequence of *parselets* without providing a template.
+        matchpiT %{[name_symbol _ _ _*]} do
+          subterms = item.items.move(1)
+          members = subterms.to_readonly_slice { |parseletQ| parselet(parseletQ, observed: false) }
+          parselet = Seq.new(members, observed: false)
+          production = AliasProduction.new(parselet)
           bucket = productions.put_if_absent(name) { [] of Production }
           bucket << production
         end
