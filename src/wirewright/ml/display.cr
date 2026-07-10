@@ -171,7 +171,7 @@ module Ww::ML::Formatter
                 pp.text(" ") if col_index > 0
 
                 col_width = col_widths[col_index]
-                pp.text(cell.ljust(col_width))
+                pp.text(cell.rjust(col_width))
               end
             end
 
