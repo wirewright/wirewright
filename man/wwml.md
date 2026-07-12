@@ -635,6 +635,8 @@ Escape sequences are initiated by `\`.
 
 - `\"` is the same as `\x22` (`"`)
 - `\\` is the same as `\x5C` (`\`)
+- `\b` is the same as `\x08` (ASCII backspace)
+- `\f` is the same as `\x0C` (ASCII formfeed)
 - `\n` is the same as `\x0A` (newline character)
 - `\t` is the same as `\x09` (tab)
 - `\r` is the same as `\x0D` (carriage return)

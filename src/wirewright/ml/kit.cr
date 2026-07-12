@@ -334,6 +334,18 @@ module Ww::ML
         return '\\', src
       end
 
+      if src.starts_with?('b')
+        src = src.rest
+        # \b⏏
+        return '\b', src
+      end
+
+      if src.starts_with?('f')
+        src = src.rest
+        # \f⏏
+        return '\f', src
+      end
+
       if src.starts_with?('n')
         src = src.rest
         # \n⏏
@@ -390,7 +402,7 @@ module Ww::ML
         return unescape1u(src)
       end
 
-      raise SyntaxError.new("invalid escape character, expected one of: `\"⸢ntrxu\\` or newline", src.first)
+      raise SyntaxError.new("invalid escape character, expected one of: `\"⸢bfntrxu\\` or newline", src.first)
     end
 
     # Characters that can be used in a Unicode codepoint name.
