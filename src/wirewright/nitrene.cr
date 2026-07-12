@@ -1280,6 +1280,23 @@ module Ww::Nitrene
         Term.flatten(arg, depth: depth)
       end
 
+      matchpiT %{(map (attn data_dict mask_dict) head_symbol)} do |data, mask|
+        data = data.transaction do |commit|
+          mask.each_entry do |key, _|
+            unless value = data[key]?
+              mask = mask.without(key)
+              next
+            end
+
+            # ?!
+            rep = eval(it, vars.with(:arg, value), Term.of(head, :arg))
+            commit.with(key, rep)
+          end
+        end
+
+        Term.of(:attn, data, mask)
+      end
+
       matchpiT %{(map (attn data_dict mask_dict) (fn pattern_ bodyQ_))} do |data, mask|
         data = data.transaction do |commit|
           mask.each_entry do |key, _|
@@ -1589,6 +1606,85 @@ module Ww::Nitrene
 
       matchpiT %{(ord _)} do
         Term.of(:indet)
+      end
+
+      # |@ nitrene.join
+      #
+      # |@pattern
+      # (join arg←(attn _dict _dict))
+      #
+      # |@key arg nitrene.attn
+      #
+      # |@block
+      # Concatenates all selected strings in the itemspart of the attention's
+      # data dict, inorder (key 0 onwards).
+      #
+      # ```wwml
+      # (join (attn ("a" "b" "c"))) ;; => "abc"
+      # ```
+
+      matchpiT %{(join (attn data_dict mask_dict))} do
+        whole = String.build do |io|
+          data.items.each_with_index do |item, index|
+            next unless item = item.as_s?
+            next unless index.in?(mask)
+
+            io << item.to(String)
+          end
+        end
+
+        Term.of(whole)
+      end
+
+      # |@ nitrene.join
+      #
+      # |@pattern
+      # (join arg_dict)
+      #
+      # |@key arg
+      # The dictionary to join the items of.
+      #
+      # |@block
+      # Concatenates all strings in the itemspart of the *arg* dictionary,
+      # inorder (key 0 onwards).
+      #
+      # ```wwml
+      # (join ("a" "b" "c")) ;; => "abc"
+      # ```
+
+      # Fast path
+      matchpi %{(join (item_string))} do
+        item
+      end
+
+      matchpiT %{(join arg_dict)} do
+        capacity = 64u64
+
+        # If there aren't a lot of items, let's do an extra scan to determine
+        # the exact bytesize needed.
+        if arg.itemsize < 64
+          capacity = 0u64
+
+          arg.items.each do |item|
+            next unless item = item.as_s?
+
+            capacity &+= item.to(String).bytesize
+          end
+
+          if capacity.zero? # Necessarily an empty string.
+            return Term.of("")
+          end
+        end
+
+        whole = String.build(capacity) do |io|
+          arg.items.each do |item|
+            next unless item = item.as_s?
+
+            io << item.to(String)
+          end
+        end
+
+        Term.of(whole)
       end
 
       # TODO: Remove in favor of partition/rpartition

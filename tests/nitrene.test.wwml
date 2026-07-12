@@ -502,6 +502,30 @@
 
 ;; ord
 
+;; join (attn)
+(group
+  (ni= (join (attn ())) "")
+  (ni= (join (attn ("x"))) "x")
+  (ni= (join (attn ("x" "y" "z"))) "xyz")
+  (ni=
+    (-> (iota 10)
+        (attn _)
+        (filter _ (%pipe (mod 2) 0))
+        (map _ ml/compact)
+        (join _))
+    "02468"))
+
+;; join (dict)
+(group
+  (ni= (join ()) "")
+  (ni= (join (1)) "")
+  (ni= (join ("")) "")
+  (ni= (join ("x")) "x")
+  (ni= (join ("x" 1)) "x")
+  (ni= (join ("x" "y")) "xy")
+  (ni= (join ("x" "y" "z")) "xyz")
+  (ni= (join (a "x" b "y" "z")) "xyz"))
+
 ;; run (prefix, charset)
 
 ;; codepoints
