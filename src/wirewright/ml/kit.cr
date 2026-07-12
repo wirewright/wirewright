@@ -13,6 +13,13 @@ module Ww::ML
         raise ArgumentError.new
       end
 
+      # Special case for unary, digit can't be zero because (most? all?)
+      # math would break. Use digit `1` instead.
+      if radix == Term[1]
+        return unless chr == '1'
+        return Term[1]
+      end
+
       if Term[11] <= radix <= Term[36]
         # Normalize
         chr = chr.upcase

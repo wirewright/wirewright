@@ -504,6 +504,7 @@ is useful in other contexts) can be given by a sequence of one or two postfix su
 digits. Minimum allowed radix is 1. Maximum allowed radix is 62.
 
 Characters from the following set are used **inorder, as the radix increases**: `0-9A-Za-z`.
+Note, however, that in unary, we use `1` for digits instead of `0`.
 
 Radices less than or equal to 36 are case-insensitive.
 

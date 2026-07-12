@@ -226,7 +226,8 @@
 
 ;; Numbers
 (ml
-  (= ⎡00000₁⎤ ⎡(digits 0 0 0 0 0 radix: 1)⎤)
+  (= ⎡11111₁⎤ ⎡(digits 1 1 1 1 1 radix: 1)⎤)
+  (- ⎡⏏0⏏0000₁⎤ ⎡invalid digit `0` for radix `1`⎤)
   (= ⎡0₂⎤ ⎡(digits 0 radix: 2)⎤)
   (= ⎡1₂⎤ ⎡(digits 1 radix: 2)⎤)
   (= ⎡1011₂⎤ ⎡10_11₂⎤ ⎡(digits 1 0 1 1 radix: 2)⎤)
