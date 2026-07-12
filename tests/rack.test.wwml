@@ -6133,6 +6133,324 @@
       (cell @output 7))
     end)
 
+  ;; Finally, let's rewrite the grammar using left recursion and test it
+  ;; more thoroughly. We'll use an AST instead of evaluating it immediately.
+  (rack
+    (frame
+      (parser (@input -> top -> @output)
+        (nat (form "[0-9]+" nat))
+        (ws "[%s]*")
+        (atom "(" ws a←expr ws ")") => ^a
+        (atom nat)
+        ;; Make factor right-recursive
+        (factor a←atom ws "*" ws b←factor) => (* ^a ^b)
+        (factor a←atom ws "/" ws b←factor) => (/ ^a ^b)
+        (factor atom)
+        ;; Make sum left-recursive
+        (sum a←sum ws "+" ws b←factor) => (+ ^a ^b)
+        (sum a←sum ws "-" ws b←factor) => (- ^a ^b)
+        (sum factor)
+        (expr sum)
+        (top ws a←expr ws) => ^a)
+      (queue (@front @back)
+        ("1" "1 + 2" "1 + 2 + 3" "1 - 2" "1 - 2 - 3" "1 - (2 - 3)" "1 * 2 * 3"
+         "(1 * 2) * 3" "1 / 2 / 3" "(1 / 2) / 3" "1 + 2 * 3" "(1 + 2)*3" "1/2 + 3/4"
+         "1/(2 + 3/4)" "1*2 - 3*4 - 5*6" "1*2 + 3*4 - 5*6" "1 + 2 - 3" "1 - 2 + 3"
+         "1 + 2 - 3 + 4" "1 - 2 + 3 - 4" "1 + 2 + 3 - 4 + 5" "1 - 2 - 3 + 4 - 5"
+         "1*2 + 3*4 - 5*6 + 7*8" "1*2 - 3*4 + 5*6 - 7*8" "1/2 + 3/4 - 5/6 + 7/8"
+         "1*2 + 3/4 - 5*6 + 7/8" "(1 + 2) - (3 + 4)" "1 + (2 - 3) + 4" "(1 + 2) - 3 + 4"
+         "1 + (2*3 - 4*5)" "(1*2 + 3*4) - (5*6 + 7*8)" "1 + (2 - 3) + (4 - 5) + 6" "1*2/3*4"
+         "1/2*3/4" "(1*2)/3*4" "(1*2)/(3*4)" "1+2-3" "1 +2- 3" "1+ 2 -3" "1   +   2   -   3"
+         "1 + 2 - 3 + 4 - 5 + 6 - 7 + 8" "1 + 2 - 3 + 4 - 5" "1 - 2 + 3 - 4 + 5" "1*2 + 3 - 4*5 + 6 - 7*8"
+         "1 + 2*3 - 4 + 5*6 - 7" "1 + 2 - 3 + 4 - 5 + 6 - 7 + 8 - 9 + 10 - 11 + 12"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 1))
+    (frame/tail
+      (cell @input "1 + 2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 2)))
+    (frame/tail
+      (cell @input "1 + 2 + 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1 - 2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- 1 2)))
+    (frame/tail
+      (cell @input "1 - 2 - 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- 1 2) 3)))
+    (frame/tail
+      (cell @input "1 - (2 - 3)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- 1 (- 2 3))))
+    (frame/tail
+      (cell @input "1 * 2 * 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* 1 (* 2 3))))
+    (frame/tail
+      (cell @input "(1 * 2) * 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* (* 1 2) 3)))
+    (frame/tail
+      (cell @input "1 / 2 / 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (/ 1 (/ 2 3))))
+    (frame/tail
+      (cell @input "(1 / 2) / 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (/ (/ 1 2) 3)))
+    (frame/tail
+      (cell @input "1 + 2 * 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 (* 2 3))))
+    (frame/tail
+      (cell @input "(1 + 2)*3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1/2 + 3/4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (/ 1 2) (/ 3 4))))
+    (frame/tail
+      (cell @input "1/(2 + 3/4)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (/ 1 (+ 2 (/ 3 4)))))
+    (frame/tail
+      (cell @input "1*2 - 3*4 - 5*6")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- (* 1 2) (* 3 4)) (* 5 6))))
+    (frame/tail
+      (cell @input "1*2 + 3*4 - 5*6")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (* 1 2) (* 3 4)) (* 5 6))))
+    (frame/tail
+      (cell @input "1 + 2 - 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1 - 2 + 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- 1 2) 3)))
+    (frame/tail
+      (cell @input "1 + 2 - 3 + 4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ 1 2) 3) 4)))
+    (frame/tail
+      (cell @input "1 - 2 + 3 - 4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (- 1 2) 3) 4)))
+    (frame/tail
+      (cell @input "1 + 2 + 3 - 4 + 5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (+ 1 2) 3) 4) 5)))
+    (frame/tail
+      (cell @input "1 - 2 - 3 + 4 - 5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (- (- 1 2) 3) 4) 5)))
+    (frame/tail
+      (cell @input "1*2 + 3*4 - 5*6 + 7*8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (* 1 2) (* 3 4)) (* 5 6)) (* 7 8))))
+    (frame/tail
+      (cell @input "1*2 - 3*4 + 5*6 - 7*8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (- (* 1 2) (* 3 4)) (* 5 6)) (* 7 8))))
+    (frame/tail
+      (cell @input "1/2 + 3/4 - 5/6 + 7/8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (/ 1 2) (/ 3 4)) (/ 5 6)) (/ 7 8))))
+    (frame/tail
+      (cell @input "1*2 + 3/4 - 5*6 + 7/8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (* 1 2) (/ 3 4)) (* 5 6)) (/ 7 8))))
+    (frame/tail
+      (cell @input "(1 + 2) - (3 + 4)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ 1 2) (+ 3 4))))
+    (frame/tail
+      (cell @input "1 + (2 - 3) + 4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ 1 (- 2 3)) 4)))
+    (frame/tail
+      (cell @input "(1 + 2) - 3 + 4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ 1 2) 3) 4)))
+    (frame/tail
+      (cell @input "1 + (2*3 - 4*5)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 (- (* 2 3) (* 4 5)))))
+    (frame/tail
+      (cell @input "(1*2 + 3*4) - (5*6 + 7*8)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (* 1 2) (* 3 4)) (+ (* 5 6) (* 7 8)))))
+    (frame/tail
+      (cell @input "1 + (2 - 3) + (4 - 5) + 6")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ (+ 1 (- 2 3)) (- 4 5)) 6)))
+    ;; Factor
+    (frame/tail
+      (cell @input "1*2/3*4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* 1 (/ 2 (* 3 4)))))
+    (frame/tail
+      (cell @input "1/2*3/4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (/ 1 (* 2 (/ 3 4)))))
+    (frame/tail
+      (cell @input "(1*2)/3*4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (/ (* 1 2) (* 3 4))))
+    (frame/tail
+      (cell @input "(1*2)/(3*4)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (/ (* 1 2) (* 3 4))))
+    ;; Whitespace
+    (frame/tail
+      (cell @input "1+2-3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1 +2- 3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1+ 2 -3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1   +   2   -   3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ 1 2) 3)))
+    ;; Misc
+    (frame/tail
+      (cell @input "1 + 2 - 3 + 4 - 5 + 6 - 7 + 8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (- (+ (- (+ 1 2) 3) 4) 5) 6) 7) 8)))
+    (frame/tail
+      (cell @input "1 + 2 - 3 + 4 - 5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (- (+ 1 2) 3) 4) 5)))
+    (frame/tail
+      (cell @input "1 - 2 + 3 - 4 + 5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (- 1 2) 3) 4) 5)))
+    (frame/tail
+      (cell @input "1*2 + 3 - 4*5 + 6 - 7*8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (- (+ (* 1 2) 3) (* 4 5)) 6) (* 7 8))))
+    (frame/tail
+      (cell @input "1 + 2*3 - 4 + 5*6 - 7")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (+ (- (+ 1 (* 2 3)) 4) (* 5 6)) 7)))
+    (frame/tail
+      (cell @input "1 + 2 - 3 + 4 - 5 + 6 - 7 + 8 - 9 + 10 - 11 + 12")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (- (+ (- (+ (- (+ (- (+ (- (+ 1 2) 3) 4) 5) 6) 7) 8) 9) 10) 11) 12)))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
   ;; Elementary form
   (rack
     (frame
@@ -6839,8 +7157,8 @@
   (rack
     (frame
       (parser (@input -> a -> @output)
-        (a x←a "a") => (one ^x)
         (a x←a "aa") => (two ^x)
+        (a x←a "a") => (one ^x)
         (a "a") => leaf)
       (queue (@front @back)
         ("" "a" "aa" "aaa" "aaaa" "aaaaa" "aaaaaa"))
@@ -7067,7 +7385,7 @@
       (cell @output))
     (frame/tail
       (cell @input)
-      (cell @output (N "x")))
+      (cell @output "x"))
     (frame/tail
       (cell @input "xx")
       (cell @output))

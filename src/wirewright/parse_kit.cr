@@ -659,8 +659,8 @@ module Ww::ParseKit
     def initialize(@ref : UInt64, @byte : UInt64)
     end
 
-    def self.new(production : Production, text : Pf::StringSeln)
-      new(production.object_id, text.byte_start.to_u64)
+    def self.new(head : Term::Sym, text : Pf::StringSeln)
+      new(head.@bits, text.byte_start.to_u64)
     end
 
     def hash(hasher)
@@ -929,7 +929,8 @@ module Ww::ParseKit
 
     # Match the optional part.
     (parselet.max - parselet.min).times do |index|
-      if index > 0 # Match separator
+      # Match separator.
+      if parselet.min > 0 || index > 0
         π = parse(ctx, parselet.sep, text)
         case π
         in Ok
@@ -1043,48 +1044,27 @@ module Ww::ParseKit
     end
   end
 
-  def parse(ctx : Context, production : RuleProduction | AliasProduction, text : Pf::StringSeln) : Parseout
-    key = MemoKey.new(production, text)
-    if π = ctx.memo[key]?
+  def parse(ctx : Context, production : RuleProduction, text : Pf::StringSeln) : Parseout
+    π = parse(ctx, production.parselet, text)
+    unless π.is_a?(Ok)
       return π
     end
 
-    ctx.tick
+    result = Thunk.new(production.template, π.captures)
+    Ok.new(π.match, CaptureLog.empty, result, π.ahead)
+  end
 
-    zero_memo = ctx.memo.assoc(key, Refusal.new)
-    best_memo = zero_memo
-    best_out : Ok? = nil
-
-    loop do
-      ctx.memo = zero_memo
-
-      π = parse(ctx, production.parselet, text)
-      case π
-      in Ok
-        break if best_out && best_out.ahead.byte_start >= π.ahead.byte_start
-      in Refusal, Err
-        break # Longest match or failure
-      end
-
-      best_out = π
-
-      case production
-      in RuleProduction
-        result = Thunk.new(production.template, best_out.captures)
-      in AliasProduction
-        if best_out.captures.empty?
-          result = best_out.result
-        else
-          result = best_out.captures
-        end
-      end
-
-      best_out = Ok.new(best_out.match, CaptureLog.empty, result, best_out.ahead)
-      best_memo = ctx.memo.assoc(key, best_out)
-      zero_memo = zero_memo.assoc(key, best_out)
+  def parse(ctx : Context, production : AliasProduction, text : Pf::StringSeln) : Parseout
+    π = parse(ctx, production.parselet, text)
+    unless π.is_a?(Ok)
+      return π
     end
 
-    best_out || Refusal.new
+    if π.captures.empty?
+      Ok.new(π.match, CaptureLog.empty, π.result, π.ahead)
+    else
+      Ok.new(π.match, CaptureLog.empty, π.captures, π.ahead)
+    end
   end
 
   def parse(ctx : Context, bucket : Array(Production), text : Pf::StringSeln) : Parseout
@@ -1101,10 +1081,39 @@ module Ww::ParseKit
   end
 
   def parse(ctx : Context, ref : Term::Sym, text : Pf::StringSeln) : Parseout
-    if bucket = ctx.grammar.productions[ref]?
-      parse(ctx, bucket, text)
-    else
-      Refusal.new
+    key = MemoKey.new(ref, text)
+    if π = ctx.memo[key]?
+      return π
     end
+
+    unless bucket = ctx.grammar.productions[ref]?
+      return Refusal.new
+    end
+
+    ctx.tick
+
+    zero_memo = ctx.memo.assoc(key, Refusal.new)
+    best_memo = zero_memo
+    best_out : Ok? = nil
+
+    loop do
+      ctx.memo = zero_memo
+
+      π = parse(ctx, bucket, text)
+      case π
+      in Ok
+        break if best_out && best_out.ahead.byte_start >= π.ahead.byte_start
+      in Refusal, Err
+        break # Longest match or failure
+      end
+
+      best_out = π
+      best_memo = ctx.memo.assoc(key, best_out)
+      zero_memo = zero_memo.assoc(key, best_out)
+    end
+
+    ctx.memo = best_memo
+
+    best_out || Refusal.new
   end
 end
