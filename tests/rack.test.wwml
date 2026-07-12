@@ -6145,4 +6145,1206 @@
       (cell @input)
       (cell @output (code 100 200)))
     end)
-)
+
+  ;; Elementary many with separator
+  (rack
+    (frame
+      (parser (@input -> xs -> @output)
+        (xs lst←(many num ",")) => ^lst
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("" "1" "12" "1,2" "12,3" "12,34" "1,2,3" "1,2,3,4"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ()))
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1)))
+    (frame/tail
+      (cell @input "12")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (12)))
+    (frame/tail
+      (cell @input "1,2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "12,3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (12 3)))
+    (frame/tail
+      (cell @input "12,34")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (12 34)))
+    (frame/tail
+      (cell @input "1,2,3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2 3)))
+    (frame/tail
+      (cell @input "1,2,3,4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2 3 4)))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Many with separator (trailing: true)
+  (rack
+    (frame
+      (parser (@input -> xs -> @output)
+        (xs lst←(many num "," trailing: true)) => ^lst
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("" "," "1" "1," "1,2" "1,2," "1,2,3" "1,2,3,"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ()))
+    (frame/tail
+      (cell @input ",")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1)))
+    (frame/tail
+      (cell @input "1,")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1)))
+    (frame/tail
+      (cell @input "1,2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1,2,")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1,2,3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2 3)))
+    (frame/tail
+      (cell @input "1,2,3,")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2 3)))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Basic direct left recursion (same head)
+  (rack
+    (frame
+      (parser (@input -> expr -> @output)
+        (expr (any (seq a←expr "+" b←num) num))
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("1" "1+2" "1+2+3" "1+2+3+4"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 1))
+    (frame/tail
+      (cell @input "1+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {a: 1, b: 2}))
+    (frame/tail
+      (cell @input "1+2+3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {a: {a: 1, b: 2}, b: 3}))
+    (frame/tail
+      (cell @input "1+2+3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {a: {a: {a: 1, b: 2}, b: 3}, b: 4}))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Basic indirect left recursion
+  (rack
+    (frame
+      (parser (@input -> expr -> @output)
+        (expr a←term "-" b←nat) => (- ^a ^b)
+        (expr nat)
+        (term expr)
+        (nat (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("1" "123" "1-2" "12-3" "1-2-3" "12-3-4" "12-34-5" "12-34-56"
+         "1-2-3-4-5-6-7-8-9" "1-23-4-56-78-9"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 1))
+    (frame/tail
+      (cell @input "123")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 123))
+    (frame/tail
+      (cell @input "1-2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- 1 2)))
+    (frame/tail
+      (cell @input "12-3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- 12 3)))
+    (frame/tail
+      (cell @input "1-2-3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- 1 2) 3)))
+    (frame/tail
+      (cell @input "12-3-4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- 12 3) 4)))
+    (frame/tail
+      (cell @input "12-34-5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- 12 34) 5)))
+    (frame/tail
+      (cell @input "12-34-56")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- 12 34) 56)))
+    (frame/tail
+      (cell @input "1-2-3-4-5-6-7-8-9")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- (- (- (- (- (- (- 1 2) 3) 4) 5) 6) 7) 8) 9)))
+    (frame/tail
+      (cell @input "1-23-4-56-78-9")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (- (- (- (- (- 1 23) 4) 56) 78) 9)))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Nested recursion at different positions
+  (rack
+    (frame
+      (parser (@input -> expr -> @output)
+        (expr a←expr "+" b←expr) => (+ ^a ^b)
+        (expr "(" x←expr ")") => ^x
+        (expr num)
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("1" "1+2" "1+2+3" "1+2+3+4" "(1)" "(1+2)" "(1+2)+3" "((1+2)+3)+4"
+         "((1+2)+3)+4+5" "((1+2)+3)+(4+5)" "(((1+2)+3)+4)+5"
+         "5+((1+2)+((3)+4))"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 1))
+    (frame/tail
+      (cell @input "1+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 2)))
+    (frame/tail
+      (cell @input "1+2+3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 (+ 2 3))))
+    (frame/tail
+      (cell @input "1+2+3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 (+ 2 (+ 3 4)))))
+    (frame/tail
+      (cell @input "(1)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 1))
+    (frame/tail
+      (cell @input "(1+2)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 2)))
+    (frame/tail
+      (cell @input "(1+2)+3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "((1+2)+3)+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ (+ 1 2) 3) 4)))
+    (frame/tail
+      (cell @input "((1+2)+3)+4+5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ (+ 1 2) 3) (+ 4 5))))
+    (frame/tail
+      (cell @input "((1+2)+3)+(4+5)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ (+ 1 2) 3) (+ 4 5))))
+    (frame/tail
+      (cell @input "(((1+2)+3)+4)+5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ (+ (+ 1 2) 3) 4) 5)))
+    (frame/tail
+      (cell @input "5+((1+2)+((3)+4))")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 5 (+ (+ 1 2) (+ 3 4)))))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Mutual recursion with multiple growth opportunities
+  (rack
+    (frame
+      (parser (@input -> expr -> @output)
+        (expr a←expr "+" b←term) => (+ ^a ^b)
+        (expr term)
+        (term a←term "*" b←factor) => (* ^a ^b)
+        (term factor)
+        (factor num)
+        (factor "(" a←expr ")") => ^a
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("0" "42" "1+2" "3*4" "1+2+3" "2*3*4" "1+2*3" "2*3+4" "1*2+3*4" "1+2*3+4"
+         "(1+2)*3" "1*(2+3)" "((7))" "((1+2))*((3+4))" "1+2*3+4*5+6" "1*(2+3*(4+5))"
+         "((1+2)*(3+(4*5+6))*7)+8"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "0")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 0))
+    (frame/tail
+      (cell @input "42")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 42))
+    (frame/tail
+      (cell @input "1+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 2)))
+    (frame/tail
+      (cell @input "3*4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* 3 4)))
+    (frame/tail
+      (cell @input "1+2+3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "2*3*4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* (* 2 3) 4)))
+    (frame/tail
+      (cell @input "1+2*3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ 1 (* 2 3))))
+    (frame/tail
+      (cell @input "2*3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (* 2 3) 4)))
+    (frame/tail
+      (cell @input "1*2+3*4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (* 1 2) (* 3 4))))
+    (frame/tail
+      (cell @input "1+2*3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ 1 (* 2 3)) 4)))
+    (frame/tail
+      (cell @input "(1+2)*3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* (+ 1 2) 3)))
+    (frame/tail
+      (cell @input "1*(2+3)")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* 1 (+ 2 3))))
+    (frame/tail
+      (cell @input "((7))")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 7))
+    (frame/tail
+      (cell @input "((1+2))*((3+4))")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* (+ 1 2) (+ 3 4))))
+    (frame/tail
+      (cell @input "1+2*3+4*5+6")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (+ (+ 1 (* 2 3)) (* 4 5)) 6)))
+    (frame/tail
+      (cell @input "1*(2+3*(4+5))")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (* 1 (+ 2 (* 3 (+ 4 5))))))
+    (frame/tail
+      (cell @input "((1+2)*(3+(4*5+6))*7)+8")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (* (* (+ 1 2) (+ 3 (+ (* 4 5) 6))) 7) 8)))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Recursion beneath repetition
+  (rack
+    (frame
+      (parser (@input -> list -> @output)
+        (list x←expr xs←(many expr' min: 0)) => (^x ^*xs)
+        (expr' ws x←expr) => ^x
+        (expr a←expr "+" b←num) => (+ ^a ^b)
+        (expr num)
+        (ws " ")
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("0" "1+2" "1 2" "1\t2" "1\n2" "1\r\n2" "1 \t \n 2" "1+2\t3+4"
+         "1+2\n3\n4+5" "1\n\n2+3\n\n\n4" "1+2+3\n4+5+6" "10\t20+30\n40+50+60"
+         "1+2\n\t3\t\t4+5+6\n7" "12345+67890\n42\t100+200+300"
+         "1\n2+3\t4\n5+6+7\t\t8+9"
+         ;; Failure
+         "" "1+" "+1" "1 +2" "1+ 2" "1 + 2" "1\t+2" "1+\n2"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "0")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (0)))
+    (frame/tail
+      (cell @input "1+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ((+ 1 2))))
+    (frame/tail
+      (cell @input "1 2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1\t2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1\n2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1\r\n2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1 \t \n 2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 2)))
+    (frame/tail
+      (cell @input "1+2\t3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ((+ 1 2) (+ 3 4))))
+    (frame/tail
+      (cell @input "1+2\n3\n4+5")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ((+ 1 2) 3 (+ 4 5))))
+    (frame/tail
+      (cell @input "1\n\n2+3\n\n\n4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 (+ 2 3) 4)))
+    (frame/tail
+      (cell @input "1+2+3\n4+5+6")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ((+ (+ 1 2) 3) (+ (+ 4 5) 6))))
+    (frame/tail
+      (cell @input "10\t20+30\n40+50+60")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (10 (+ 20 30) (+ (+ 40 50) 60))))
+    (frame/tail
+      (cell @input "1+2\n\t3\t\t4+5+6\n7")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ((+ 1 2) 3 (+ (+ 4 5) 6) 7)))
+    (frame/tail
+      (cell @input "12345+67890\n42\t100+200+300")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output ((+ 12345 67890) 42 (+ (+ 100 200) 300))))
+    (frame/tail
+      (cell @input "1\n2+3\t4\n5+6+7\t\t8+9")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (1 (+ 2 3) 4 (+ (+ 5 6) 7) (+ 8 9))))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1+")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "+1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1 +2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1+ 2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1 + 2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1\t+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1+\n2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    end)
+
+  ;; Nullable left recursion
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a l←(maybe a) r←"a"))
+      (queue (@front @back)
+        ("" "a" "aa" "aaa" "aaaa" "aaaaa" "aaaaaa"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "a")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {l: () r: "a"}))
+    (frame/tail
+      (cell @input "aa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {l: ({l: (), r: "a"}) r: "a"}))
+    (frame/tail
+      (cell @input "aaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {l: ({l: ({l: (), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail
+      (cell @input "aaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail
+      (cell @input "aaaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {l: ({l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail
+      (cell @input "aaaaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output {l: ({l: ({l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Ambiguous growth
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a x←a "a") => (one ^x)
+        (a x←a "aa") => (two ^x)
+        (a "a") => leaf)
+      (queue (@front @back)
+        ("" "a" "aa" "aaa" "aaaa" "aaaaa" "aaaaaa"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "a")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output leaf))
+    (frame/tail
+      (cell @input "aa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (one leaf)))
+    (frame/tail
+      (cell @input "aaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (two leaf)))
+    (frame/tail
+      (cell @input "aaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (one (two leaf))))
+    (frame/tail
+      (cell @input "aaaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (two (two leaf))))
+    (frame/tail
+      (cell @input "aaaaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (one (two (two leaf)))))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Left recursion with optional many
+  (rack
+    (frame
+      (parser (@input -> expr -> @output)
+        (expr l←(maybe expr) "+" r←num) => (+ ^l ^r)
+        (expr num)
+        (num (form "[0-9]+" nat)))
+      (queue (@front @back)
+        ("1" "+1" "1+2" "+1+2" "1+2+3" "+1+2+3" "1+2+3+4" "+1+2+3+4" "123+456"
+         "123+456+789" "+10+20+30+40+50" "1+22+333+4444" "999+1" "+7+8+9+10+11+12"
+         ;; Failure
+         "" "+" "1+" "++1" "1++2" "+1+" "1+2+" "1+2+3+"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output 1))
+    (frame/tail
+      (cell @input "+1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ () 1)))
+    (frame/tail
+      (cell @input "1+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (1) 2)))
+    (frame/tail
+      (cell @input "+1+2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ () 1)) 2)))
+    (frame/tail
+      (cell @input "1+2+3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ (1) 2)) 3)))
+    (frame/tail
+      (cell @input "+1+2+3")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ ((+ () 1)) 2)) 3)))
+    (frame/tail
+      (cell @input "1+2+3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ ((+ (1) 2)) 3)) 4)))
+    (frame/tail
+      (cell @input "+1+2+3+4")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ ((+ ((+ () 1)) 2)) 3)) 4)))
+    (frame/tail
+      (cell @input "123+456")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (123) 456)))
+    (frame/tail
+      (cell @input "123+456+789")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ (123) 456)) 789)))
+    (frame/tail
+      (cell @input "+10+20+30+40+50")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ ((+ ((+ ((+ () 10)) 20)) 30)) 40)) 50)))
+    (frame/tail
+      (cell @input "1+22+333+4444")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ ((+ (1) 22)) 333)) 4444)))
+    (frame/tail
+      (cell @input "999+1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ (999) 1)))
+    (frame/tail
+      (cell @input "+7+8+9+10+11+12")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (+ ((+ ((+ ((+ ((+ ((+ () 7)) 8)) 9)) 10)) 11)) 12)))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "+")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1+")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "++1")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1++2")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "+1+")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1+2+")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "1+2+3+")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a l←a "") => (N ^l)
+        (a "x") => "x")
+      (queue (@front @back)
+        ("" "x" "xx" "xxx"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "x")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (N "x")))
+    (frame/tail
+      (cell @input "xx")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure due to cyclic production, we simply shouldn't crash or SEGFAULT!
+    (frame/tail
+      (cell @input "xxx")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a l←a "x") => (N ^l)
+        (a "") => empty)
+      (queue (@front @back)
+        ("" "x" "xx" "xxx"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output empty))
+    (frame/tail
+      (cell @input "x")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (N empty)))
+    (frame/tail
+      (cell @input "xx")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (N (N empty))))
+    (frame/tail
+      (cell @input "xxx")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (N (N (N empty)))))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Infinite cycles should not crash anything
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a a))
+      (cell @input "abc")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a a ""))
+      (cell @input "abc")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a "" a))
+      (cell @input "abc")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a b)
+        (b a))
+      (cell @input "abc")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a b)
+        (b c "" d)
+        (c a)
+        (d b))
+      (cell @input "abc")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end)
+
+  ;; Another degenerate grammar
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a b)
+        (b a)
+        (b "x") => x)
+      (queue (@front @back)
+         ("" "x" "xx" "xxx"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "x")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output x))
+    (frame/tail
+      (cell @input "xx")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "xxx")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    end)
+
+  ;; More indirect left recursion
+  (rack
+    (frame
+      (parser (@input -> a -> @output)
+        (a l←b "a") => (a ^l a)
+        (a "x") => x
+        (b l←a "b") => (b ^l b)
+        (b "y") => y)
+      (queue (@front @back)
+         ("x" "ya" "xba" "yaba" "xbaba" "yababa"
+          ;; Failure
+          "" "y" "a" "b" "xb" "yab" "xbb" "xbaa" "yxba" "xbaaba"
+          ;; Stress
+          "xbabababababababababababababababababababababababababababababababababababababababababababababababababa"))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    (frame/tail
+      (cell @input "x")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output x))
+    (frame/tail
+      (cell @input "ya")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (a y a)))
+    (frame/tail
+      (cell @input "xba")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (a (b x b) a)))
+    (frame/tail
+      (cell @input "yaba")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (a (b (a y a) b) a)))
+    (frame/tail
+      (cell @input "xbaba")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (a (b (a (b x b) a) b) a)))
+    (frame/tail
+      (cell @input "yababa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output (a (b (a (b (a y a) b) a) b) a)))
+    (frame/tail
+      (cell @input "")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "y")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "a")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "b")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "xb")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "yab")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "xbb")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "xbaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "yxba")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    (frame/tail
+      (cell @input "xbaaba")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output)) ;; failure
+    ;; Stress
+    (frame/tail
+      (cell @input "xbabababababababababababababababababababababababababababababababababababababababababababababababababa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output
+        (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b (a (b x b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a) b) a)))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end))

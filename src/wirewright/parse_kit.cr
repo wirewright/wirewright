@@ -1,13 +1,17 @@
-# A tiny string parsing language. Used mainly by `Rack::Parser`.
+# A tiny string parsing language. Used mainly by `Rack::Parser`, which
+# implements the `rack.parser` node.
 #
-# As far as I understand, what I implemented here is basically PEG.
-#
-# NOTE: It's quite hard to deal with left-recursion in PEGs so I'm just
-# returning `Refusal` on left recursion. Maybe there's a way to fix this,
-# because left recursion is sometimes useful.
+# This is an implementation of what I can loosely identify as a Packrat
+# parser, but with some extensions. Mainly, it is extended with support
+# for direct and indirect left recursion; additionally, I added a longest-
+# match choice operator, which, I suppose, turns this into something that
+# is not a PEG after all.
 #
 # See `parsekit.parselet` for docs on parselets. See `parsekit.grammar` for docs on
 # the way we define grammars.
+#
+# References:
+# - ["Packrat parsers can support left recursion" (Warth et al.)](https://doi.org/10.1145/1328408.1328424).
 module Ww::ParseKit
   extend self
 
@@ -19,7 +23,7 @@ module Ww::ParseKit
   # to work, though.
 
   alias Parselet = Reject | Stringp | RuleRef | OrdChoice | MaxChoice |
-                   Seq | Many | Capture | Location | Find | Form
+                   Seq | Many | ManySep | Capture | Location | Find | Form
 
   defrecord Reject
   defrecord Stringp, pattern : ScanKit::Pattern, observed : Bool
@@ -28,6 +32,7 @@ module Ww::ParseKit
   defrecord MaxChoice, members : Slice(Parselet)
   defrecord Seq, members : Slice(Parselet), observed : Bool
   defcase Many, min : UInt32, max : UInt32, member : Parselet, observed : Bool
+  defcase ManySep, min : UInt32, max : UInt32, member : Parselet, sep : Parselet, trailing : Bool, observed : Bool
   defcase Capture, name : Term, member : Parselet
   defcase Location, name : Term, member : Parselet
   defcase Find, member : Parselet
@@ -268,6 +273,46 @@ module Ww::ParseKit
       # Matches *min* to *max* instances of *member*.
       matchpi %{(many subterm_ ⍊ min_: (%optional 0 (%number u32)) max_: (%optional 4096 (%number u32)))} do
         Many.new(min.to(UInt32), max.to(UInt32), parselet(subterm, observed), observed)
+      end
+
+      # |@ parsekit.parselet.many
+      #
+      # |@pattern
+      # (many member_ sep_ ⍊
+      #   min_: (%optional 0 (%number u32))
+      #   max_: (%optional 4096 (%number u32))
+      #   trailing⋮ false)
+      #
+      # |@key member parsekit.parselet
+      #
+      # |@key sep parsekit.parselet
+      # If the separator emits no captures, it is suppressed from the output of
+      # `many` (accessible e.g. by capturing `r←(many _*)`) Otherwise it is included.
+      #
+      # |@key min
+      # The minimum number of instances of *member*.
+      #
+      # |@key max
+      # The maximum number of instances of *member*.
+      #
+      # |@key trailing
+      # Whether to allow a trailing instance of *sep*.
+      #
+      # |@block
+      # Matches *min* to *max* instances of *member* separated by *sep*, with an optional
+      # trailing separator if *trailing* is `true`.
+      matchpi(<<-WWML) do
+      (many subterm_ sep_ ⍊
+        min_: (%optional 0 (%number u32))
+        max_: (%optional 4096 (%number u32))
+        trailing⋮ false)
+      WWML
+        ManySep.new(min.to(UInt32), max.to(UInt32),
+          parselet(subterm, observed),
+          parselet(sep, observed),
+          trailing.to(Bool),
+          observed,
+        )
       end
 
       # |@ parsekit.parselet.maybe
@@ -557,8 +602,6 @@ module Ww::ParseKit
     end
   end
 
-  alias Memo = Hash(MemoKey, SkimOut)
-
   struct MemoKey
     # :nodoc:
     def initialize(@ref : UInt64, @byte : UInt64)
@@ -575,17 +618,26 @@ module Ww::ParseKit
     def hash : UInt64
       Int.mix(@ref, @byte)
     end
+
+    def inspect(io)
+      io << "("
+      @ref.to_s(io, base: 32)
+      io << "|"
+      io << @byte
+      io << ")"
+    end
   end
 
   # :nodoc:
   defcase Context,
     grammar : Grammar,
-    oracle : Memo,
-    path : Set(MemoKey),
+    memo : Pf::Map(MemoKey, Parseout),
     checkpoint : (UInt64 ->),
     clock : UInt64
 
   class Context
+    setter memo
+
     def tick : Nil
       @checkpoint.call(@clock)
       @clock += 1
@@ -593,161 +645,69 @@ module Ww::ParseKit
   end
 
   def context(grammar : Grammar, checkpoint : UInt64 ->)
-    oracle = {} of MemoKey => SkimOut
-    path = Set(MemoKey).new
-    Context.new(grammar, oracle, path, checkpoint, clock: 0u64)
+    memo = Pf::Map(MemoKey, Parseout).new
+    Context.new(grammar, memo, checkpoint, clock: 0u64)
   end
 
   def context(grammar : Grammar)
     context(grammar, ->(clock : UInt64) { })
   end
 
-  alias SkimOut = Pf::StringSeln | Err | Refusal
-
-  def skim(ctx : Context, parselet : Reject, text : Pf::StringSeln) : SkimOut
-    Refusal.new
-  end
-
-  def skim(ctx : Context, parselet : Stringp, text : Pf::StringSeln) : SkimOut
-    ScanKit.test?(parselet.pattern, text) || Refusal.new
-  end
-
-  def skim(ctx : Context, parselet : RuleRef, text : Pf::StringSeln) : SkimOut
-    skim(ctx, parselet.name, text)
-  end
-
-  def skim(ctx : Context, parselet : OrdChoice, text : Pf::StringSeln) : SkimOut
-    parselet.members.each do |branch|
-      π = skim(ctx, branch, text)
-      next if π.is_a?(Refusal)
-      return π
-    end
-
-    Refusal.new
-  end
-
-  def skim(ctx : Context, parselet : MaxChoice, text : Pf::StringSeln) : SkimOut
-    candidates = Pf::Kit.stack_array(Pf::StringSeln, 4)
-
-    parselet.members.each do |branch|
-      case π = skim(ctx, branch, text)
-      in Pf::StringSeln
-        candidates << π
-      in Err
-        return π
-      in Refusal
-      end
-    end
-
-    candidates.max_by?(&.bytesize) || Refusal.new
-  end
-
-  def skim(ctx : Context, parselet : Seq, text : Pf::StringSeln) : SkimOut
-    parselet.members.each do |member|
-      π = skim(ctx, member, text)
-      unless π.is_a?(Pf::StringSeln)
-        return π
-      end
-
-      text = π
-    end
-
-    text
-  end
-
-  def skim(ctx : Context, parselet : Many, text : Pf::StringSeln) : SkimOut
-    assert parselet.min <= parselet.max
-
-    # Match the required part.
-    parselet.min.times do
-      π = skim(ctx, parselet.member, text)
-      unless π.is_a?(Pf::StringSeln)
-        return π
-      end
-
-      text = π
-    end
-
-    # Match the optional part.
-    (parselet.max - parselet.min).times do
-      case π = skim(ctx, parselet.member, text)
-      in Pf::StringSeln
-        text = π
-      in Err
-        return π
-      in Refusal
-        break
-      end
-    end
-
-    text
-  end
-
-  def skim(ctx : Context, parselet : Capture | Location | Form, text : Pf::StringSeln) : SkimOut
-    skim(ctx, parselet.member, text)
-  end
-
-  def skim(ctx : Context, parselet : Find, text : Pf::StringSeln) : SkimOut
-    text.each_before_and_after do |_, after|
-      case π = skim(ctx, parselet.member, after)
-      in Pf::StringSeln, Err then return π
-      in Refusal
-      end
-    end
-
-    Refusal.new
-  end
-
-  def skim(ctx : Context, production : RuleProduction | AliasProduction, text : Pf::StringSeln) : SkimOut
-    key = MemoKey.new(production, text)
-    if π = ctx.oracle[key]?
-      return π
-    end
-
-    unless ctx.path.add?(key)
-      # PEG parsers cannot easily handle left-recursion. Here we simply
-      # refuse to parse.
-      return Refusal.new
-    end
-
-    ctx.tick
-
-    begin
-      π = skim(ctx, production.parselet, text)
-      ctx.oracle[key] = π
-    ensure
-      ctx.path.delete(key)
-    end
-
-    π
-  end
-
-  def skim(ctx : Context, bucket : Array(Production), text : Pf::StringSeln) : SkimOut
-    bucket.each_with_index do |production, rank|
-      π = skim(ctx, production, text)
-      unless π.is_a?(Refusal)
-        return π
-      end
-    end
-
-    Refusal.new
-  end
-
-  def skim(ctx : Context, ref : Term::Sym, text : Pf::StringSeln) : SkimOut
-    unless bucket = ctx.grammar.productions[ref]?
-      return Refusal.new
-    end
-
-    skim(ctx, bucket, text)
-  end
-
   alias Parseout = Ok | Err | Refusal
 
   defrecord Ok,
     match : Pf::StringSeln,
-    captures : Term::Dict,
-    result : Term,
+    captures : CaptureLog,
+    result : Result,
     ahead : Pf::StringSeln
+
+  # Instead of using a `Pf::Map` or some other map for capture entries we simply
+  # use a log, which is fast enough for the common case. Deduplication occurs
+  # on replay.
+  #
+  # Note also that since a log can only support adding and updating entries
+  # (but not removing them), checks such as `CaptureLog#empty?` remain valid
+  # and well-defined.
+  alias CaptureLog = Slice(CaptureEntry)
+
+  defrecord CaptureEntry, name : Term, value : Result
+
+  alias Result = Term | Thunk | CaptureLog | MatchList
+
+  defrecord Thunk, template : Alloy::CompiledTemplate, captures : CaptureLog
+  defrecord MatchList, items : Slice(MatchListItem)
+
+  alias MatchListItem = Result
+
+  def resolve(object : Term) : Term
+    object
+  end
+
+  def resolve(object : MatchList) : Term
+    result = Term::Dict.build do |commit|
+      object.items.each do |item|
+        commit << resolve(item)
+      end
+    end
+
+    Term.of(result)
+  end
+
+  def resolve(object : CaptureLog) : Term
+    Term.of(resolve_log(object))
+  end
+
+  def resolve_log(log : CaptureLog) : Term::Dict
+    Term::Dict.build do |commit|
+      log.each do |entry|
+        commit.with(entry.name, resolve(entry.value))
+      end
+    end
+  end
+
+  def resolve(object : Thunk) : Term
+    Alloy.render(object.template, locals: resolve_log(object.captures))
+  end
 
   def parse(ctx : Context, parselet : Reject, text : Pf::StringSeln) : Parseout
     Refusal.new
@@ -767,7 +727,11 @@ module Ww::ParseKit
       result = Term.of("")
     end
 
-    Ok.new(match, captures, result, ahead)
+    capture_list = captures.ee.to_readonly_slice do |(name, value)|
+      CaptureEntry.new(name, value)
+    end
+
+    Ok.new(match, capture_list, result, ahead)
   end
 
   def parse(ctx : Context, parselet : RuleRef, text : Pf::StringSeln) : Parseout
@@ -803,66 +767,123 @@ module Ww::ParseKit
   def parse(ctx : Context, parselet : Seq, text : Pf::StringSeln) : Parseout
     start = text
 
-    captures = Term[]
-    match = Term::Dict.build do |commit|
-      parselet.members.each do |member|
-        π = parse(ctx, member, text)
-        unless π.is_a?(Ok)
-          return π
-        end
+    captures = Pf::Kit.stack_array(CaptureEntry, 8)
+    items = Pf::Kit.stack_array(MatchListItem, 8)
 
-        if parselet.observed
-          if π.captures.empty?
-            commit << π.result
-          else
-            commit << π.captures
-          end
-        end
-
-        captures = Term.union(captures, π.captures)
-        text = π.ahead
+    parselet.members.each do |member|
+      π = parse(ctx, member, text)
+      unless π.is_a?(Ok)
+        return π
       end
+
+      if parselet.observed
+        if π.captures.empty?
+          items << π.result
+        else
+          items << π.captures
+        end
+      end
+
+      captures.concat(π.captures)
+      text = π.ahead
     end
 
-    Ok.new(start.upto(text), captures, Term.of(match), text)
+    Ok.new(start.upto(text), captures.to_unsafe_readonly_slice!, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
   def parse(ctx : Context, parselet : Many, text : Pf::StringSeln) : Parseout
     assert parselet.min <= parselet.max
 
     start = text
+    items = Pf::Kit.stack_array(MatchListItem, 8)
 
-    match = Term::Dict.build do |commit|
-      # Match the required part.
-      parselet.min.times do
-        π = parse(ctx, parselet.member, text)
+    # Match the required part.
+    parselet.min.times do
+      π = parse(ctx, parselet.member, text)
+      unless π.is_a?(Ok)
+        return π
+      end
+
+      if parselet.observed
+        if π.captures.empty?
+          items << π.result
+        else
+          items << π.captures
+        end
+      end
+
+      text = π.ahead
+    end
+
+    # Match the optional part.
+    (parselet.max - parselet.min).times do
+      case π = parse(ctx, parselet.member, text)
+      in Ok
+        if parselet.observed
+          if π.captures.empty?
+            items << π.result
+          else
+            items << π.captures
+          end
+        end
+
+        text = π.ahead
+      in Err
+        return π
+      in Refusal
+        break
+      end
+    end
+
+    Ok.new(start.upto(text), CaptureLog.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
+  end
+
+  def parse(ctx : Context, parselet : ManySep, text : Pf::StringSeln) : Parseout
+    assert parselet.min <= parselet.max
+
+    start = text
+    items = Pf::Kit.stack_array(MatchListItem, 8)
+
+    # Match the required part.
+    parselet.min.times do |index|
+      if index > 0 # Match separator
+        π = parse(ctx, parselet.sep, text)
         unless π.is_a?(Ok)
           return π
         end
 
-        if parselet.observed
-          if π.captures.empty?
-            commit << π.result
-          else
-            commit << π.captures
-          end
+        if parselet.observed && !π.captures.empty?
+          items << π.captures
         end
 
         text = π.ahead
       end
 
-      # Match the optional part.
-      (parselet.max - parselet.min).times do
-        case π = parse(ctx, parselet.member, text)
-        in Ok
-          if parselet.observed
-            if π.captures.empty?
-              commit << π.result
-            else
-              commit << π.captures
-            end
-          end
+      π = parse(ctx, parselet.member, text)
+      unless π.is_a?(Ok)
+        return π
+      end
 
+      if parselet.observed
+        if π.captures.empty?
+          items << π.result
+        else
+          items << π.captures
+        end
+      end
+
+      text = π.ahead
+    end
+
+    # Match the optional part.
+    (parselet.max - parselet.min).times do |index|
+      if index > 0 # Match separator
+        π = parse(ctx, parselet.sep, text)
+        case π
+        in Ok
+          if parselet.observed && !π.captures.empty?
+            items << π.captures
+          end
           text = π.ahead
         in Err
           return π
@@ -870,9 +891,41 @@ module Ww::ParseKit
           break
         end
       end
+
+      case π = parse(ctx, parselet.member, text)
+      in Ok
+        if parselet.observed
+          if π.captures.empty?
+            items << π.result
+          else
+            items << π.captures
+          end
+        end
+
+        text = π.ahead
+      in Err
+        return π
+      in Refusal
+        break
+      end
     end
 
-    Ok.new(start.upto(text), Term[], Term.of(match), text)
+    # Match optional trailing separator.
+    if items.present? && parselet.trailing
+      π = parse(ctx, parselet.sep, text)
+      case π
+      in Ok
+        if parselet.observed && !π.captures.empty?
+          items << π.captures
+        end
+        text = π.ahead
+      in Err
+        return π
+      in Refusal
+      end
+    end
+
+    Ok.new(start.upto(text), CaptureLog.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
   def parse(ctx : Context, parselet : Capture, text : Pf::StringSeln) : Parseout
@@ -881,7 +934,8 @@ module Ww::ParseKit
       return π
     end
 
-    captures = π.captures.with(parselet.name, π.result)
+    capture = CaptureEntry.new(parselet.name, π.result)
+    captures = π.captures.append(capture)
     Ok.new(π.match, captures, π.result, π.ahead)
   end
 
@@ -907,7 +961,8 @@ module Ww::ParseKit
       commit.with(:"byte-end", match.byte_end)
     end
 
-    Ok.new(match, π.captures.with(parselet.name, report), π.result, π.ahead)
+    capture = CaptureEntry.new(parselet.name, Term.of(report))
+    Ok.new(match, π.captures.append(capture), π.result, π.ahead)
   end
 
   def parse(ctx : Context, parselet : Find, text : Pf::StringSeln) : Parseout
@@ -936,53 +991,56 @@ module Ww::ParseKit
     end
   end
 
-  def parse(ctx : Context, key : MemoKey, production : RuleProduction, text : Pf::StringSeln) : Parseout
-    unless ctx.path.add?(key)
-      return Refusal.new
+  def parse(ctx : Context, production : RuleProduction | AliasProduction, text : Pf::StringSeln) : Parseout
+    key = MemoKey.new(production, text)
+    if π = ctx.memo[key]?
+      return π
     end
 
     ctx.tick
 
-    begin
-      case π = parse(ctx, production.parselet, text)
+    zero_memo = ctx.memo.assoc(key, Refusal.new)
+    best_memo = zero_memo
+    best_out : Ok? = nil
+
+    loop do
+      ctx.memo = zero_memo
+
+      π = parse(ctx, production.parselet, text)
+      case π
       in Ok
-        result = Alloy.render(production.template, locals: π.captures)
-        Ok.new(π.match, Term[], result, π.ahead)
-      in Err, Refusal
-        π
+        break if best_out && best_out.ahead.byte_start >= π.ahead.byte_start
+      in Refusal, Err
+        break # Longest match or failure
       end
-    ensure
-      ctx.path.delete(key)
-    end
-  end
 
-  def parse(ctx : Context, key : MemoKey, production : AliasProduction, text : Pf::StringSeln) : Parseout
-    # It is possible to do weird stuff such as `(x x)` (alias `x` is `x`)
-    # so we have to protect aliases as well.
-    unless ctx.path.add?(key)
-      return Refusal.new
+      best_out = π
+
+      case production
+      in RuleProduction
+        result = Thunk.new(production.template, best_out.captures)
+      in AliasProduction
+        if best_out.captures.empty?
+          result = best_out.result
+        else
+          result = best_out.captures
+        end
+      end
+
+      best_out = Ok.new(best_out.match, CaptureLog.empty, result, best_out.ahead)
+      best_memo = ctx.memo.assoc(key, best_out)
+      zero_memo = zero_memo.assoc(key, best_out)
     end
 
-    begin
-      parse(ctx, production.parselet, text)
-    ensure
-      ctx.path.delete(key)
-    end
+    best_out || Refusal.new
   end
 
   def parse(ctx : Context, bucket : Array(Production), text : Pf::StringSeln) : Parseout
-    bucket.each_with_index do |production, rank|
-      key = MemoKey.new(production, text)
+    bucket.each do |production|
+      π = parse(ctx, production, text)
 
-      case cached = ctx.oracle[key]?
-      in Pf::StringSeln, Nil # Known match or not visited
-        case π = parse(ctx, key, production, text)
-        in Ok, Err
-          return π
-        in Refusal
-        end
-      in Err # Known mismatch
-        return cached
+      case π
+      in Ok, Err then return π
       in Refusal
       end
     end

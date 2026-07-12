@@ -17,7 +17,7 @@ module Ww::Rack::Parser
 
   alias ParseStatus = Completed | Pending
 
-  defrecord Completed, result : ParseKit::Parseout
+  defrecord Completed, result : Term | ParseKit::Refusal | ParseKit::Err
   defrecord Pending
 
   def state(alarm : BlockingSignal) : State
@@ -138,9 +138,9 @@ module Ww::Rack::Parser
       D7.patches(
         D7.patch(source[:node], {2, nil}),
         D7.patches(targets) do |target|
-          case π = status.result
-          in ParseKit::Ok
-            D7.patch(target, {2, π.result})
+          case result = status.result
+          in Term
+            D7.patch(target, {2, result})
           in ParseKit::Refusal, ParseKit::Err
             D7::Patch.new
           end
@@ -215,20 +215,23 @@ module Ww::Rack::Parser
     end
 
     ctx = ParseKit.context(grammar, checkpoint)
+    π = ParseKit.parse(ctx, parse.top, view)
 
-    # Use ParseKit.skim() to populate the oracle.
-    case π = ParseKit.skim(ctx, parse.top, view)
-    in Pf::StringSeln # ok
-      π = ParseKit.parse(ctx, parse.top, view)
-    in ParseKit::Refusal, ParseKit::Err
-      # If skim reports an error or refuses we don't have to parse() -- skim()
-      # err and refusal is compatible with parse()'s.
+    case π
+    in ParseKit::Ok
+      if π.ahead.empty?
+        result = ParseKit.resolve(π.result)
+      else
+        result = ParseKit::Err.new("expected end-of-input", π.ahead)
+      end
+    in ParseKit::Err, ParseKit::Refusal
+      result = π
     end
 
     lock.synchronize do
       next unless table.has_key?(parse) # Canceled
 
-      table[parse] = Completed.new(π)
+      table[parse] = Completed.new(result)
     end
   end
 
