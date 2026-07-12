@@ -125,13 +125,12 @@ module Ww::D7
   # at the target depth (so evaluation stops at it, without descending
   # into *range*).
   #
-  # Importantly, it makes no sense for *cont* to contain circuits, recursively,
-  # even though they are permitted by types and will work. The way they will work,
-  # though, is rather degenerate -- the evaluator will simply proceed into their
-  # *leaf*, recursively; never evaluating them as circuits. In other words, if
-  # *leaf* emits a circuit, that circuit is always a leaf, and so its *leaf* function
-  # is called, and so on, until some sort of base case where there is no circuit
-  # (or infinitely if there is no base case).
+  # Importantly, it makes little sense for *leaf* to contain circuits recursively.
+  # Even though they are permitted by the types and will work, the way they will
+  # work is rather degenerate -- the evaluator will simply proceed into their
+  # *leaf*s in turn; never considering them as circuits. In other words, if
+  # *leaf* contains or is a circuit, that circuit is always also treated as a leaf,
+  # and so its *leaf* is used, and so on, until some sort of base case.
   defcase Circuit,
     node : Term::Dict,
     range : Range(UInt32, UInt32),
@@ -144,11 +143,6 @@ module Ww::D7
     assert range.exclusive? && range.subrange_of?(0u32...node.uitemsize)
 
     Circuit.new(node, range, leaf)
-  end
-
-  # :ditto:
-  def circuit(node : Term::Dict) : Circuit
-    circuit(node, 0u32...node.uitemsize) { inert(Term.of(node)) }
   end
 
   # A tree of `Feature`s.
