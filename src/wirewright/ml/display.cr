@@ -117,13 +117,12 @@ module Ww::ML::Formatter
         rows = [] of Array(String)
 
         term.items.each_with_index do |item, index|
+          row << ML.compact(item)
+
           if row.size == width
             rows << row
             row = [] of String
-            next
           end
-
-          row << ML.compact(item)
         end
 
         if row.present?
