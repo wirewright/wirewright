@@ -7347,4 +7347,59 @@
     (frame/tail
       (cell @input)
       (cell @output))
+    end)
+
+  ;; Radix in nat form
+  (rack
+    (frame
+      ;; Unary
+      (parser (@input1 -> num -> @output1)
+        (num (form "[1]+" (nat radix: 1))))
+      ;; Binary
+      (parser (@input2 -> num -> @output2)
+        (num (form "[%b]+" (nat radix: 2))))
+      ;; Ternary
+      (parser (@input3 -> num -> @output3)
+        (num (form "[012]+" (nat radix: 3))))
+      ;; Octal
+      (parser (@input8 -> num -> @output8)
+        (num (form "[%o]+" (nat radix: 8))))
+      ;; Hex
+      (parser (@input16 -> num -> @output16)
+        (num (form "[%x]+" (nat radix: 16))))
+      ;; Base32
+      (parser (@input32 -> num -> @output32)
+        (num (form "[0-9A-V]+" (nat radix: 32))))
+      ;; Base62
+      (parser (@input62 -> num -> @output62)
+        (num (form "[0-9a-zA-Z]+" (nat radix: 62))))
+      (cell @input1 "11111")
+      (cell @output1)
+      (cell @input2 "0101010")
+      (cell @output2)
+      (cell @input3 "1120")
+      (cell @output3)
+      (cell @input8 "52")
+      (cell @output8)
+      (cell @input16 "deadbeef")
+      (cell @output16)
+      (cell @input32 "HELLO")
+      (cell @output32)
+      (cell @input62 "HELLOworld123")
+      (cell @output62))
+    (frame/tail
+      (cell @input1)
+      (cell @output1 5)
+      (cell @input2)
+      (cell @output2 42)
+      (cell @input3)
+      (cell @output3 42)
+      (cell @input8)
+      (cell @output8 42)
+      (cell @input16)
+      (cell @output16 3735928559)
+      (cell @input32)
+      (cell @output32 18306744)
+      (cell @input62)
+      (cell @output62 55592961823144174755099))
     end))

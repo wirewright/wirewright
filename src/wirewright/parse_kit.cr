@@ -430,13 +430,29 @@ module Ww::ParseKit
       # nat
       #
       # |@block
-      # Accepts a natural number. The result is a number term.
+      # A shorthand for `(nat radix: 10)`.
+      matchpi %{nat} do
+        NatForm.new(radix: 10u32)
+      end
+
+      # |@ parsekit.formspec.nat
       #
-      # - The number can consist of digits `[0-9_]`.
+      # |@pattern
+      # (nat ¦ radix_: (%number 1 <= (whole _) <= 62))
+      #
+      # |@key radix
+      # The radix to use.
+      #
+      # |@block
+      # Accepts a natural number expressed in the given *radix*. The result is
+      # a number term.
+      #
+      # - The number can consist of digits of the given *radix* (see *radix* for info).
+      # - The number can contain underscores.
       # - The number must not start with an underscore.
       # - The number must not end with an underscore.
-      matchpi %{nat} do
-        NatForm.new
+      matchpi %{(nat ¦ radix_: (%number 1 <= (whole _) <= 62))} do
+        NatForm.new(radix.to(UInt32))
       end
 
       # |@ parsekit.formspec.default
@@ -583,14 +599,50 @@ module Ww::ParseKit
 
   alias FormSpec = NatForm | DefaultForm
 
-  defrecord NatForm
+  defrecord NatForm, radix : UInt32 do
+    assert 1 <= radix <= 62
+  end
+
   defcase DefaultForm, member : FormSpec, fallback : Term
 
+  def digit?(spec : NatForm, text : Pf::StringSeln) : Term::Num?
+    return unless text.size == 1
+
+    ML::Kit.chr2nat?(text.chr, Term[spec.radix])
+  end
+
   def eval(spec : NatForm, text : Pf::StringSeln) : Term | Err
-    value, _ = ML::Kit.nat(text, exact: true)
-    Term.of(value)
-  rescue e : ML::SyntaxError
-    Err.new(e.detail, e.text)
+    n = Term[0]
+
+    # Validate
+    text.each_split do |l, m, r|
+      if d = digit?(spec, m)
+        # Append digit.
+        n = n * Term[spec.radix] + d
+        next
+      end
+
+      if m == '_'
+        if l.empty?
+          return Err.new("leading underscores not allowed in number", m)
+        end
+
+        if r.empty?
+          return Err.new("trailing underscores not allowed in number", m)
+        end
+
+        if r.starts_with?('_')
+          return Err.new("multiple consecutive underscores not allowed in number", m)
+        end
+
+        # Skip underscores.
+        next
+      end
+
+      return Err.new("unexpected characters found in number", m &+ r)
+    end
+
+    Term.of(n)
   end
 
   def eval(spec : DefaultForm, text : Pf::StringSeln) : Term
