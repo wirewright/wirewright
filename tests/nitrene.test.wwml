@@ -526,6 +526,17 @@
   (ni= (join ("x" "y" "z")) "xyz")
   (ni= (join (a "x" b "y" "z")) "xyz"))
 
+;; reduce*
+(nitrene
+  (-> xs
+      (attn _)
+      (filter _ (%pipe (mod 2) 0))
+      (reduce* (0 _) (fn (±m ±n) (+ m n))))
+  (= {xs: ()} 0)
+  (= {xs: (1)} 0)
+  (= {xs: (1 2 3)} 2)
+  (= {xs: (0 1 2 3 4 5 6 7 8 9)} 20))
+
 ;; run (prefix, charset)
 
 ;; codepoints
@@ -561,6 +572,18 @@
 ;; filter
 
 ;; morph
+
+;; reduce
+(nitrene
+  (reduce (0 xs)
+    (fn (±n m←(%pipe (mod 2) 0))
+      (+ n m)))
+  (= {xs: ()} 0)
+  (= {xs: (1)} 0)
+  (= {xs: (1 2 3)} 2)
+  (= {xs: (1 2 3 4 5 6)} 12)
+  (= {xs: (0 1 2 3 4 5 6)} 12))
+
 
 ;; ->
 

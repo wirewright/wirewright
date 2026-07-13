@@ -408,6 +408,9 @@ module Ww::Nitrene
   # their own functions. Otherwise we're forced to consume a lot of stack-space per call (are we?)
   # when only one or none of the branches match, which is dangerous in deep calls.
 
+  # TODO: all attention functions should end with `*`, e.g., `reduce*`, `sum*`. Their non-
+  # attention counterparts (if any) should not end with it (e.g., `reduce`, `sum`).
+
   # See `Interpreter`.
   def composite(it : Interpreter, vars : Term::Dict, expr : Term) : Evaln
     unless expr.type.dict?
@@ -525,6 +528,61 @@ module Ww::Nitrene
         end
 
         M1.backmap(backsys, matchee)
+      end
+
+      # |@ nitrene.composite.reduce
+      #
+      # |@pattern
+      # (reduce (initial_ arg_) (fn pattern_ body_))
+      #
+      # |@key initial nitrene
+      # An expression computing the initial value for the accumulator.
+      #
+      # |@key arg nitrene
+      # An expression computing the dictionary to iterate over.
+      #
+      # |@key pattern m1.operator
+      # The M1 pattern to accept pairs `(acc_ item_)`. *item* is an item
+      # of *arg*. *acc* is the running value of the accumulator, starting
+      # with *initial*. Items that are rejected by the pattern are skipped.
+      # The captures for items that are accepted are provided to *body*.
+      #
+      # |@key body nitrene
+      # An expression to evaluate for each pair matched by *pattern*. Captures
+      # made by *pattern* are available in the body.
+      #
+      # |@block
+      # Iterates over the items of the dictionary produced by *arg*,
+      # pairing each accepted item with the running accumulator value.
+      # The accumulator starts with *initial*.
+      #
+      # ```wwml
+      # ;; Sum even numbers (iterative, i.e., without using attentions).
+      #
+      # (let xs: (1 2 3 4 5 6)
+      #   (reduce (0 xs)
+      #     (fn (±n m←(%pipe (mod 2) 0))
+      #       (+ n m))))
+      # ;; => 12
+      # ```
+      #
+      # See also: `nitrene.reduce*`.
+      matchpiT %{(reduce (initialQ_ argQ_) (fn pattern_ bodyQ_))} do
+        acc = eval(it, vars, initialQ)
+        arg = eval(it, vars, argQ)
+
+        unless arg = arg.as_d?
+          return acc
+        end
+
+        arg.items.each do |item|
+          input = Term.of(acc, item)
+          next unless env = M1.match?(pattern, input)
+
+          acc = eval(it, Term.union(vars, env), bodyQ)
+        end
+
+        Term.of(acc)
       end
 
       matchpi %{(-> argQ_ _*)} do
@@ -1685,6 +1743,57 @@ module Ww::Nitrene
         end
 
         Term.of(whole)
+      end
+
+      # |@ nitrene.reduce*
+      #
+      # |@pattern
+      # (reduce* (initial_ arg←(attn data_dict mask_dict))
+      #   (fn pattern_ bodyQ_))
+      #
+      # |@key initial
+      # The initial value for the accumulator.
+      #
+      # |@key arg nitrene.attn
+      # The attention whose items to iterate over.
+      #
+      # |@key pattern m1.operator
+      # The pattern to use to accept or reject pairs `(acc_ item_)`. *acc* is
+      # the running value of the accumulator, and *item* is an item from *arg*.
+      # Captures made by the pattern are available to *body*.
+      #
+      # |@key body nitrene
+      # An expression to evaluate for each pair matched by *pattern*. Captures
+      # made by *pattern* are available in the body.
+      #
+      # |@block
+      # Iterates over selected values, letting each value selected by *pattern*
+      # to contribute to the accumulator (starting with *initial*). Returns
+      # the resulting value of the accumulator.
+      #
+      # ```wwml
+      # ;; Sum even numbers in 0 ..< 10:
+      #
+      # (-> (iota 10) ;; Generate the list (0 1 ... 9)
+      #     (attn _) ;; Convert to attention
+      #     (filter _ (%pipe (mod 2) 0)) ;; Select even
+      #     (reduce* (0 _) (fn (±m ±n) (+ m n)))) ;; Sum
+      #
+      # ;; => 20
+      # ```
+      matchpiT %{(reduce* (initial_ (attn data_dict mask_dict)) (fn pattern_ bodyQ_))} do
+        acc = initial
+
+        data.items.each_with_index do |item, index|
+          next unless index.in?(mask)
+
+          input = Term.of(acc, item)
+          next unless env = M1.match?(pattern, input)
+
+          acc = eval(it, Term.union(vars, env), bodyQ)
+        end
+
+        acc
       end
 
       # TODO: Remove in favor of partition/rpartition
