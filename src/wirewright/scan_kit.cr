@@ -2,7 +2,7 @@
 module Ww::ScanKit
   extend self
 
-  alias Scanner = Char | Category | Charset | Simultaneously | Concat | Capture
+  alias Scanner = Char | Category | Charset | Concat | Capture
 
   @[Flags]
   enum Category
@@ -25,15 +25,17 @@ module Ww::ScanKit
     Grapheme
   end
 
+  defrecord CharChoice,
+    chars = Slice(Char).empty,
+    ranges = Slice(Range(Char, Char)).empty,
+    categories = Category::None
+
   defrecord Charset,
-    chars : Slice(Char),
-    ranges : Slice(Range(Char, Char)),
-    categories : Category,
     min : UInt32,
     max : UInt32,
-    answer : Bool
+    positive : CharChoice,
+    negative : CharChoice
 
-  defrecord Simultaneously, members : Slice(Scanner)
   defrecord Concat, members : Slice(Scanner)
   defcase Capture, name : Term::Sym, member : Scanner
 
@@ -56,6 +58,7 @@ module Ww::ScanKit
     when 'v' then Category::Vspace
     when 'w' then Category::Word
     when 'x' then Category::HexDigit
+    when '^' then '^'
     when '[', ']'
       qual
     end
@@ -169,56 +172,78 @@ module Ww::ScanKit
     {(head0.chr..head2.chr), pattern}
   end
 
+  # ⏏a-zA-Z%d -> a-zA-Z%d⏏^
+  # ⏏a-zA-Z%d -> a-zA-Z%d⏏]
+  private def char_choice?(pattern : Pf::StringSeln) : {CharChoice, Pf::StringSeln}?
+    chars = Pf::Kit.stack_array(Char, 8)
+    ranges = Pf::Kit.stack_array(Range(Char, Char), 4)
+    categories = Category::None
+
+    loop do
+      break if pattern.starts_with?(']') || pattern.starts_with?('^')
+
+      # [⏏%]
+      if pattern.starts_with?("%]")
+        pattern = pattern.rest
+        # [%⏏]
+        chars << '%'
+        break
+      end
+
+      if row = char_unit?(pattern)
+        # [a-z⏏
+        unit, pattern = row
+        # [a-z⏏A-Z%d]
+        # [a-zA-Z⏏%d]
+        # [a-zA-Z%d⏏]
+
+        case unit
+        in Char
+          chars << unit
+        in Range(Char, Char)
+          ranges << unit
+        in Category
+          categories |= unit
+        end
+
+        next
+      end
+
+      return
+    end
+
+    choice = CharChoice.new(
+      chars.to_unsafe_readonly_slice!,
+      ranges.to_unsafe_readonly_slice!,
+      categories,
+    )
+
+    {choice, pattern}
+  end
+
   private def charset?(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
     # ⏏[a-zA-Z%d]
     return unless pattern.starts_with?('[')
     pattern = pattern.rest
     # [⏏a-zA-Z%d]
 
-    if negated = pattern.starts_with?('^')
+    return unless row = char_choice?(pattern)
+
+    positive, pattern = row
+    negative = CharChoice.new
+
+    if pattern.starts_with?('^')
       pattern = pattern.rest
-      # [^⏏a-zA-Z%d]
-    end
+      # [a-z^⏏a-f]
 
-    chars = Pf::Kit.stack_array(Char, 8)
-    ranges = Pf::Kit.stack_array(Range(Char, Char), 4)
-    categories = Category::None
-
-    loop do
-      if pattern.starts_with?(']')
-        pattern = pattern.rest
-        # [a-zA-Z%d]⏏
-        break
-      end
-
-      # [⏏%]
-      if pattern.starts_with?("%]")
-        pattern = pattern.rest.rest
-        # [%]⏏
-
-        chars << '%'
-        break
-      end
-
-      unless row = char_unit?(pattern)
-        # [a-z⏏
-        return
-      end
-
-      unit, pattern = row
-      # [a-z⏏A-Z%d]
-      # [a-zA-Z⏏%d]
-      # [a-zA-Z%d⏏]
-
-      case unit
-      in Char
-        chars << unit
-      in Range(Char, Char)
-        ranges << unit
-      in Category
-        categories |= unit
+      if row = char_choice?(pattern)
+        negative, pattern = row
       end
     end
+
+    return unless pattern.starts_with?(']')
+    pattern = pattern.rest
+    # [a-z^a-f⏏]
 
     min = 1u32
     max = 1u32
@@ -226,14 +251,7 @@ module Ww::ScanKit
       min, max, pattern = row
     end
 
-    scanner = Charset.new(
-      chars.to_unsafe_readonly_slice!,
-      ranges.to_unsafe_readonly_slice!,
-      categories,
-      min, max,
-      answer: negated ? false : true
-    )
-
+    scanner = Charset.new(min, max, positive, negative)
     {scanner.as(Scanner), pattern}
   end
 
@@ -369,31 +387,9 @@ module Ww::ScanKit
     {scanner.as(Scanner), pattern}
   end
 
-  private def simult?(lhs : Scanner, pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
-    rhs = Pf::Kit.stack_array(Scanner, 4)
-
-    # x⏏~y
-    while pattern.starts_with?('~') && pattern.size > 1
-      ahead = pattern.rest
-      break unless row = atom?(ahead) || capture?(ahead)
-
-      pattern = pattern.rest
-      # x~⏏y
-
-      scanner, pattern = row
-      rhs << scanner
-    end
-
-    return if rhs.empty?
-
-    members = Slice[lhs] + rhs.to_unsafe_readonly_slice!
-
-    {Simultaneously.new(members).as(Scanner), pattern}
-  end
-
   private def scanner(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}
     if row = atom?(pattern) || capture?(pattern)
-      return simult?(*row) || row
+      return row
     end
 
     assert !pattern.empty?
@@ -403,13 +399,9 @@ module Ww::ScanKit
 
     # Whitespace in the pattern is equivalent to `[%s]+`.
     if chr == ' '
-      scanner = Charset.new(
-        chars: Slice(Char).empty,
-        ranges: Slice(Range(Char, Char)).empty,
-        categories: Category::Space,
-        min: 1u32,
-        max: UInt32::MAX,
-        answer: true,
+      scanner = Charset.new(min: 1u32, max: UInt32::MAX,
+        positive: CharChoice.new(categories: :space),
+        negative: CharChoice.new,
       )
       return scanner.as(Scanner), pattern
     end
@@ -502,6 +494,10 @@ module Ww::ScanKit
     end
   end
 
+  private def empty?(choice : CharChoice) : Bool
+    choice.chars.empty? && choice.ranges.empty? && choice.categories.none?
+  end
+
   private def member?(category : Category, text : Pf::StringSeln) : Bool
     return false if text.empty?
 
@@ -580,24 +576,35 @@ module Ww::ScanKit
     false
   end
 
-  private def member?(charset : Charset, text : Pf::StringSeln) : Bool
+  private def member?(choice : CharChoice, text : Pf::StringSeln) : Bool
     return false if text.empty?
 
     chr = text.first_char
 
-    if charset.chars.any? { |candidate| chr == candidate }
-      return charset.answer
+    if choice.chars.any? { |candidate| candidate == chr }
+      return true
     end
 
-    if charset.ranges.any? { |range| chr.in?(range) }
-      return charset.answer
+    if choice.ranges.any? { |range| chr.in?(range) }
+      return true
     end
 
-    if member?(charset.categories, text)
-      return charset.answer
+    if member?(choice.categories, chr)
+      return true
     end
 
-    !charset.answer
+    false
+  end
+
+  private def member?(charset : Charset, text : Pf::StringSeln) : Bool
+    # If the positive side is empty as in the pattern [^a-z], only consider
+    # the negative side, because otherwise the positive side would be a nevermatch
+    # that blocks any progress.
+    if empty?(charset.positive)
+      return !member?(charset.negative, text)
+    end
+
+    member?(charset.positive, text) && !member?(charset.negative, text)
   end
 
   def match?(scanner : Char, log : Log, text : Pf::StringSeln) : Pf::StringSeln?
@@ -615,35 +622,6 @@ module Ww::ScanKit
     return unless member?(scanner, text)
 
     text.rest
-  end
-
-  def match?(scanner : Simultaneously, log : CaptureLog, text : Pf::StringSeln) : Pf::StringSeln?
-    safepoint = safepoint(log)
-
-    candidates = Pf::Kit.stack_array(Pf::StringSeln, 4)
-
-    scanner.members.each do |member|
-      unless ahead = match?(member, log, text)
-        rollback(log, safepoint)
-        return
-      end
-
-      candidates << ahead
-    end
-
-    candidates.max_by?(&.byte_end)
-  end
-
-  def match?(scanner : Simultaneously, log : NoLog, text : Pf::StringSeln) : Pf::StringSeln?
-    candidates = Pf::Kit.stack_array(Pf::StringSeln, 4)
-
-    scanner.members.each do |member|
-      return unless ahead = match?(member, log, text)
-
-      candidates << ahead
-    end
-
-    candidates.max_by?(&.byte_end)
   end
 
   def match?(scanner : Concat, log : CaptureLog, text : Pf::StringSeln) : Pf::StringSeln?

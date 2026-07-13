@@ -120,8 +120,20 @@ module Ww::ParseKit
       # example, `[a-z%]`. In fact, the recommended way to escape `%` by itself,
       # `[%]`, is a special case of this.
       #
-      # You can negate a character set by writing `^` immediately after the opening
-      # bracket. For example, `[^a-zA-Z]` matches all characters that are *not* in `[a-zA-Z]`.
+      # Character sets have an optional "negative" part which you can use to subtract some
+      # characters from the set. The negative part starts with `^`. For example, the pattern
+      # `[a-z^%x]` matches a character that is in range `a-z` but is not a hex character
+      # `[a-fA-F0-9]`.
+      #
+      # A negative-only character set starts with an empty positive part: `[^`. An empty
+      # positive part matches any character. The negative part then tells which characters to
+      # reject. For example, the pattern `[^a-z]` matches any character that is not in
+      # the set `a-z`.
+      #
+      # As a curiosity, the above means `[]` will never match (the positive part is empty
+      # and the negative part is absent), but `[^]` is equivalent to `%_` (the positive part
+      # is empty but the negative part is present, therefore, the base case is to match any
+      # character, and then the negative part doesn't subtract anything from that).
       #
       # A *quantifier* can be attached to a character set. For example, `[a-z]{0,3}`, `[0-9]*`.
       #
@@ -133,7 +145,7 @@ module Ww::ParseKit
       # | `{,n}`     | 0 up to *n* times. *n* is restricted to 1-4 digits.                  |
       # | `{m,n}`    | *m* up to *n* times. Both *m* and *n* are restricted to 1-4 digits.  |
       #
-      # Whitespace around the comma in `,` `{}` quantifiers is ignored.
+      # Whitespace around the comma `,` in `{}` quantifiers is ignored.
       #
       # > [!NOTE]
       # > You cannot use quantifiers with categories: the pattern`%d*` does not mean
@@ -157,18 +169,6 @@ module Ww::ParseKit
       # (e.g., `(name)←[a-zA-Z]`). In order to bind to a *sequence* of atoms,
       # use `()`. For example, `Deadline is date←(day←%|dd|/month←%|dd|/year←%|dddd|), firm`.
       #
-      # ## Matching multiple atoms simultaneously
-      #
-      # Use `~` to match multiple atoms simultaneously (i.e., at the same position):
-      # `[0-9]~[^1-3]` means "match digits excluding 1-3", whereas `[0-9]~[a-z]` is
-      # the same as `[0-9a-z]`.
-      #
-      # More `~`s can be chained: `[0-9]~[a-z]~[^a-f]` is the same as `[0-9a-z]~[^a-f]`,
-      # meaning "match digits and ASCII lowercase, but exclude letters a-f".
-      #
-      # For `~` members, all start at the same position in the text, but only
-      # the longest wins.
-      #
       # ## Literal matching
       #
       # The whitespace character ` ` receives special treatment outside of character
@@ -176,22 +176,34 @@ module Ww::ParseKit
       # "desugars" into the vastly less readable `%d%d[%s]+%d%d[%s]+%d%d%d%d`. To
       # match a literal whitespace character, wrap it in a character set: `[ ]`.
       #
-      # Characters that receive no special treatment are handled literally. Therefore,
-      # a pattern such as `abc` matches the characters `a`, `b`, `c` literally.
+      # Characters with no special treatment are handled literally. Therefore, for example,
+      # the pattern `abc` matches the sequence of characters `a`, `b`, `c` literally.
       #
       # ### Escaping special characters
       #
       # Most special characters can be escaped using the character set notation `[...]`.
-      # Here is how you can escape special characters.
+      # For example, to escape `%`, you can use `[%]`. Then e.g. `[%]x` will match
+      # the sequence of characters `%`, `x` literally.
       #
-      # | Character                      | How to escape                                                                                                                                                                                                                                                     |
-      # | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-      # | `[`                            | `%[` (we have to have this as a special case because character sets cannot include bare brackets `[]`).                                                                                                                                                           |
-      # | `]`                            | `%]` (we have to have this as a special case because character sets cannot include bare brackets `[]`).                                                                                                                                                           |
-      # | `\|`                           | `[\|]` (where necessary, normally you can just use `\|`).                                                                                                                                                                                                         |
-      # | `(`, `)`, `%`, `←`, and others | `[(]`, `[)]`, `[%]`, `[←]`, etc.                                                                                                                                                                                                                                  |
-      # | ` ` (whitespace)               | `[ ]`                                                                                                                                                                                                                                                             |
-      # | `^` in character sets          | If you have a nonempty character set, put `^` in a nonfirst position (e.g., `[a-z^]`, or `[a-z^%]` here also escaping `%`). If you want to match simply `^`, `[^]` won't work (it's an empty negated set, whose meaning is the same as `%_`); just use bare  `^`. |
+      # To escape parts of the charcater set notation itself, namely `[`, `]`, and `^`,
+      # use `%` as detailed in the table below.
+      #
+      # | Character | How to escape |
+      # | --------- | ------------- |
+      # | `[`       | `%[`          |
+      # | `]`       | `%]`          |
+      # | `^`       | `%^`          |
+      #
+      # For example, here is how the string `[a-z^%x]` can be escaped: `%[a-z^[%]x%]`.
+      # Here, `[`, `]` were replaced by `%[` and `%]`, correspondingly; and other special
+      # characters, including `%` itself, were replaced by character sets, e.g. `[%]`.
+      #
+      # Note that `^` doesn't have to be escaped outside of character sets. The only
+      # reason you might want to use `%^` is in character sets themselves, if you want
+      # to include `^` as one possible choice for the character. For example, `[a-z%^]`
+      # allows characters in the range `a-z` or the caret `^`. So, for example, `^qux` will
+      # match. On the other hand, `[\x20-\u{10FFFF}^%x%^]` matches all printable characters
+      # *excluding* hex characters `[a-fA-F0-9]` and the caret `^`.
       matchpi %{_string} do
         pattern = ScanKit.recognize(term.to(String), anchor_l: true, anchor_r: false)
         Stringp.new(pattern, observed)
