@@ -463,6 +463,31 @@ module Ww::ScanKit
     recognize(pattern.view)
   end
 
+  private def nullable?(scanner : Char | Category) : Bool
+    false
+  end
+
+  private def nullable?(scanner : Charset) : Bool
+    scanner.min.zero?
+  end
+
+  private def nullable?(scanner : Concat) : Bool
+    scanner.members.all? { |member| nullable?(member) }
+  end
+
+  private def nullable?(scanner : Capture) : Bool
+    nullable?(scanner.member)
+  end
+
+  private def nullable?(scanner : Empty) : Bool
+    true
+  end
+
+  # Returns `true` if *pattern* can match the empty string.
+  def nullable?(pattern : Pattern) : Bool
+    nullable?(pattern.scanner)
+  end
+
   alias Log = CaptureLog | NoLog
 
   defrecord NoLog
