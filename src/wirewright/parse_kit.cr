@@ -497,11 +497,169 @@ module Ww::ParseKit
   defcase RuleProduction, parselet : Parselet, template : Alloy::CompiledTemplate
   defcase AliasProduction, parselet : Parselet
 
-  defrecord Grammar, productions : Hash(Term::Sym, Array(Production))
+  private def nullable?(productions, path, parselet : Reject) : Bool
+    false
+  end
+
+  private def nullable?(productions, path, parselet : Stringp) : Bool
+    ScanKit.nullable?(parselet.pattern)
+  end
+
+  private def nullable?(productions, path, parselet : RuleRef) : Bool
+    unless overloads = productions[parselet.name]?
+      return false # Production not found is a Reject, which is not nullable.
+    end
+
+    nullable?(productions, path, overloads)
+  end
+
+  private def nullable?(productions, path, parselet : OrdChoice | MaxChoice) : Bool
+    parselet.members.any? { |member| nullable?(productions, path, member) }
+  end
+
+  private def nullable?(productions, path, parselet : Seq) : Bool
+    # For example, `(seq "" "x")` as a whole is not nullable even
+    # though the first member is. On the other hand `(seq "" "[%d]?")`
+    # is nullable because all its members are nullable.
+    parselet.members.all? { |member| nullable?(productions, path, member) }
+  end
+
+  private def nullable?(productions, path, parselet : Many) : Bool
+    parselet.min.zero? || nullable?(productions, path, parselet.member)
+  end
+
+  private def nullable?(productions, path, parselet : ManySep) : Bool
+    parselet.min.zero? || (nullable?(productions, path, parselet.member) && nullable?(productions, path, parselet.sep))
+  end
+
+  private def nullable?(productions, path, parselet : Capture | Location | Find | Form) : Bool
+    nullable?(productions, path, parselet.member)
+  end
+
+  private def nullable?(productions, path, production : Production) : Bool
+    unless path.add?(production)
+      return false # Do not follow cycles. Assume cycles are not nullable.
+    end
+
+    begin
+      nullable?(productions, path, production.parselet)
+    ensure
+      path.delete(production)
+    end
+  end
+
+  private def nullable?(productions, path, overloads : Array(Production)) : Bool
+    overloads.any? { |overload| nullable?(productions, path, overload) }
+  end
+
+  # Returns `true` if *object* can match the empty string.
+  private def nullable?(productions, object : Parselet | Production | Array(Production)) : Bool
+    path = Set(Production).new
+    path.compare_by_identity
+    nullable?(productions, path, object)
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Reject) : Bool
+    false
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Stringp) : Bool
+    false
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : RuleRef) : Bool
+    if pivot == parselet.name
+      return true
+    end
+
+    unless overloads = productions[parselet.name]?
+      return false # Production not found is a Reject, which is not left-recursive.
+    end
+
+    left_recursive?(productions, path, pivot, overloads)
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : OrdChoice | MaxChoice) : Bool
+    parselet.members.any? do |member|
+      left_recursive?(productions, path, pivot, member)
+    end
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Seq) : Bool
+    return false unless head = parselet.members.first?
+
+    parselet.members.each do |member|
+      if left_recursive?(productions, path, pivot, member)
+        return true
+      end
+
+      # If a non-nullable member is in the way, the rule is not left recursive.
+      #
+      # For example:
+      #   (x "-" x)
+      #
+      # This rule is not left-recursive because `"-"` is not left-recursive, and
+      # it is also not nullable. On the other hand, consider:
+      #
+      #   (x "[-]?" x)
+      #
+      # Here, `"[-]?"` is nullable; therefore, even though it is not left-recursive,
+      # there is a chance it might be skipped; therefore, we must continue searching.
+      # Then we find `x` and decide the rule is left-recursive, which is indeed
+      # the case here.
+      break unless nullable?(productions, path, member)
+    end
+
+    false
+  end
+
+  # For Many and ManySep, we're conservative: even if there's a min: 0 in the way,
+  # we'll still consider the rule left-recursive.
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Many | ManySep | Capture | Location | Find | Form) : Bool
+    left_recursive?(productions, path, pivot, parselet.member)
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, production : Production) : Bool
+    unless path.add?(production)
+      return false # Do not follow cycles.
+    end
+
+    begin
+      left_recursive?(productions, path, pivot, production.parselet)
+    ensure
+      path.delete(production)
+    end
+  end
+
+  private def left_recursive?(productions, path, pivot : Term::Sym, overloads : Array(Production)) : Bool
+    overloads.any? do |overload|
+      left_recursive?(productions, path, pivot, overload)
+    end
+  end
+
+  # Returns `true` if any *overload* of *pivot* is left-recursive.
+  private def left_recursive?(productions, pivot : Term::Sym, overloads : Array(Production)) : Bool
+    path = Set(Production).new
+    path.compare_by_identity
+    left_recursive?(productions, path, pivot, overloads)
+  end
+
+  # TODO: Intern so that it becomes
+  #   productions : Slice(Production)
+  #   left_recursive : Pf::USet32
+  defrecord Grammar,
+    productions : Hash(Term::Sym, Array(Production)),
+    left_recursive : Set(Term::Sym)
+
+  # flatten overload buckets to obtain productions slice
+  # construct ranges hash (sym => range)
+  # productions = productions.map |overload|
+  #   intern(ranges hash, overload)
+  # productions
 
   def grammar(ruleset : Term) : Grammar
     unless ruleset = ruleset.as_d?
-      return Grammar.new({} of Term::Sym => Array(Production))
+      return Grammar.new(({} of Term::Sym => Array(Production)), Set(Term::Sym).new)
     end
 
     productions = {} of Term::Sym => Array(Production)
@@ -529,8 +687,8 @@ module Ww::ParseKit
         # to the rule.
         matchpiT %{[rule (name_symbol parseletQ_) templateQ_]} do
           production = RuleProduction.new(parselet(parseletQ, observed: false), template: Alloy.compile(templateQ))
-          bucket = productions.put_if_absent(name) { [] of Production }
-          bucket << production
+          overloads = productions.put_if_absent(name) { [] of Production }
+          overloads << production
         end
 
         # |@ parsekit.grammar.rule
@@ -555,8 +713,8 @@ module Ww::ParseKit
           members = subterms.to_readonly_slice { |parseletQ| parselet(parseletQ, observed: false) }
           parselet = Seq.new(members, observed: false)
           production = RuleProduction.new(parselet, template: Alloy.compile(templateQ))
-          bucket = productions.put_if_absent(name) { [] of Production }
-          bucket << production
+          overloads = productions.put_if_absent(name) { [] of Production }
+          overloads << production
         end
 
         # |@ parsekit.grammar.alias
@@ -573,8 +731,8 @@ module Ww::ParseKit
         # Gives a name to a parselet without providing a template.
         matchpiT %{[name_symbol parseletQ_]} do
           production = AliasProduction.new(parselet(parseletQ, observed: false))
-          bucket = productions.put_if_absent(name) { [] of Production }
-          bucket << production
+          overloads = productions.put_if_absent(name) { [] of Production }
+          overloads << production
         end
 
         # |@ parsekit.grammar.alias
@@ -595,15 +753,23 @@ module Ww::ParseKit
           members = subterms.to_readonly_slice { |parseletQ| parselet(parseletQ, observed: false) }
           parselet = Seq.new(members, observed: false)
           production = AliasProduction.new(parselet)
-          bucket = productions.put_if_absent(name) { [] of Production }
-          bucket << production
+          overloads = productions.put_if_absent(name) { [] of Production }
+          overloads << production
         end
 
         otherwise { }
       end
     end
 
-    Grammar.new(productions)
+    left_recursive = Set(Term::Sym).new
+
+    productions.each do |name, production|
+      next unless left_recursive?(productions, name, production)
+
+      left_recursive << name
+    end
+
+    Grammar.new(productions, left_recursive)
   end
 
   defrecord Err, detail : String, text : Pf::StringSeln
@@ -1091,9 +1257,9 @@ module Ww::ParseKit
     end
   end
 
-  def parse(ctx : Context, bucket : Array(Production), text : Pf::StringSeln) : Parseout
-    bucket.each do |production|
-      π = parse(ctx, production, text)
+  def parse(ctx : Context, overloads : Array(Production), text : Pf::StringSeln) : Parseout
+    overloads.each do |overload|
+      π = parse(ctx, overload, text)
 
       case π
       in Ok, Err then return π
@@ -1110,11 +1276,16 @@ module Ww::ParseKit
       return π
     end
 
-    unless bucket = ctx.grammar.productions[ref]?
+    unless overloads = ctx.grammar.productions[ref]?
       return Refusal.new
     end
 
     ctx.tick
+
+    # Fast path for rules that are not left-recursive.
+    unless ref.in?(ctx.grammar.left_recursive)
+      return parse(ctx, overloads, text)
+    end
 
     zero_memo = ctx.memo.assoc(key, Refusal.new)
     best_memo = zero_memo
@@ -1123,7 +1294,7 @@ module Ww::ParseKit
     loop do
       ctx.memo = zero_memo
 
-      π = parse(ctx, bucket, text)
+      π = parse(ctx, overloads, text)
       case π
       in Ok
         break if best_out && best_out.ahead.byte_start >= π.ahead.byte_start
