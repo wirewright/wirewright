@@ -159,20 +159,22 @@ module Ww
         HTTP::Client.get(target, headers: HTTP::Headers{"User-Agent" => "Wirewright"}) do |response|
           Log.trace { "received response on #{target} with status: #{response.status}" }
 
-          body = Term::Blob.build(classify: false) do |dst|
+          # TODO: We have to account for the server's MIME type. The server is, ideally,
+          # smarter than us. However, some servers are dumb, and they ruin everything --
+          # lots of machinery in Wirewright relies on having a correct MIME type. For example,
+          # Python's built-in `http.server`, which I sometimes use for testing, correctly
+          # detects `application/json`, but fails to set `charset=...`, which in turn makes
+          # other components treat the JSON as an opaque blob, which isn't most desirable
+          # (even though it also isn't necessarily wrong).
+          #
+          # NOTE, though, that in adversarial settings (for which Wirewright isn't (yet?) designed!)
+          # our MIME detector, `PantoMIME`, can become a target; it can be fooled, and then one can
+          # exploit vulnerabilities in code processing the misclassified blob -- I'm sure there are
+          # plenty of vulnerabilities in there. Right now, though, it's not really a problem, since
+          # again, Wirewright is experimental and not designed to work in adversarial settings.
+          body = Term::Blob.build do |dst|
             IO.copy(response.body_io, dst)
           end
-
-          # If the server tells us the MIME type, use that, otherwise, we'll try to
-          # guess it.
-          #
-          # If the server says application/octet-stream, aka binary, then we'll try to
-          # classify it ourselves as well. I'm not sure how good the idea is, but I'm
-          # getting unreliable mime_types on some platforms without this.
-          if (mime_type = response.mime_type) && mime_type.media_type != "application/octet-stream"
-            classif = Term::Blob::Classif.of(mime_type)
-          end
-          body.classify!(classif)
 
           case response.status
           when .success?
