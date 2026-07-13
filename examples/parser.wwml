@@ -1,0 +1,102 @@
+(comment
+  "This is a simple JSON parser example. Note that this isn't (going to be) \
+   the recommended way to work with JSON. We'll have better, faster ways. However, \
+   to demo general-purpose parsing, JSON is OK.")
+
+(figure
+  (comment
+    "This little contraption connects @front to @input while @gate is nonempty. \
+     Simultaneously, it makes sure @gate is nonempty for just one tick.")
+  (cell @msg)
+  (backsys {@:msg @:front @:input @:output}
+    ;; Fallback (catches e.g. clear something that's empty).
+    {¦ msg_} <> {(msg): ()}
+    {¦ msg_: feed front_ -input_}
+      <> {(msg): (), (front): (), input: ^front}
+    {¦ msg_: clear output_}
+      <> {(msg): (), (output): ()})
+  (group style: "content flow-col gap-3 py-3 my-3 border-t border-b border-theme-highlight-med"
+    (p style: "text-theme-text font-sans font-lg"
+      "Some controls for you :^)")
+    (group style: "flow-row gap-3"
+      (slot (Button (@msg feed) "Feed @front to @input"))
+      (slot (Button (@msg clear) "Clear @output")))))
+
+(queue (@front @back)
+  (⎡"x"⎤
+   ⎡{"x": 100}⎤
+   ⎡{"x": 1e0, "y": [12e-3, "hello\nworld", true]}⎤
+   ⎡[true, null, false]⎤
+   ⎡{"x": true, "y": null, "z": false}⎤))
+
+(cell @input)
+(cell @output)
+
+((I modify: true structural: true multiline: true compose: true) ("" * "") 0)
+
+(parser (@input -> json -> @output)
+  (json element)
+  (value object)
+  (value array)
+  (value string)
+  (value number)
+  (value "true") => true
+  (value "false") => false
+  (value "null") => null
+  ;; Parse objects. Each member, e.g., "x": 100, gets converted to a singleton
+  ;; dict, here that'd be {"x": 100}. Then the object literal unions them
+  ;; all together into one dictionary.
+  (object "{" ws "}") => {}
+  (object "{" members←(many member "," min: 1 trailing: true) "}")
+    => ^(reduce ({} members)
+          (fn (memo_dict (k_ v←(%not null)))
+            (union memo (entry k v))))
+  (member ws key←string ws ":" value←element) => (^key ^value)
+  ;; Similarly, parse arrays. Here, `many` does the job of concatenating
+  ;; elements for us.
+  (array "[" ws "]") => ()
+  (array "[" elements←(many element "," min: 1 trailing: true) "]")
+    => ^elements
+  (element ws mid←value ws) => ^mid
+  ;; Parse strings. To save on `join`s, instead of doing them per-character,
+  ;; we do them per *segment*. Segments are delimited by escape sequences,
+  ;; and end on the end-of-string.
+  (string "\"" content←(many segment) "\"") => ^(join content)
+  (segment chr←"[\x20-\u{10FFFF}^\"\\]+") => ^chr
+  (segment "\\" chr←escape) => ^chr
+  ;; Decode escape sequences.
+  (escape "\"") => "\""
+  (escape "\\") => "\\"
+  (escape "/") => "/"
+  (escape "b") => "\b"
+  (escape "f") => "\f"
+  (escape "n") => "\n"
+  (escape "r") => "\r"
+  (escape "t") => "\t"
+  (escape "u" codepoint←(form "%x%x%x%x" (nat base: 16)))
+    => ^(chr codepoint)
+  ;; Instead of writing `(number sign nat (maybe fraction) (maybe exponent))`,
+  ;; which would be rather cumbersome to unpack due to all the maybes, here
+  ;; we simply enumerate all possible ways to write a number.
+  (number S←sign base←nat fr←fraction exp←exponent)
+    => ^(* S (+ base fr) exp)
+  (number S←sign base←nat fr←fraction)
+    => ^(* S (+ base fr))
+  (number S←sign base←nat exp←exponent)
+    => ^(* S base exp)
+  (number S←sign base←nat)
+    => ^(* S base)
+  ;; Parse sign. No sign means positive.
+  (sign "+") => 1
+  (sign "-") => -1
+  (sign "") => 1
+  ;; Parse natural numbers. Make sure the number starts with a nonzero digit.
+  (nat (form "[1-9][0-9]+" nat))
+  (nat (form "[0-9]" nat))
+  ;; Parse and decode fractions.
+  (fraction "." value←(form digits←"[0-9]+" nat))
+    => ^(/ value (** 10 (charcount digits)))
+  ;; Parse and decode exponent.
+  (exponent "[eE]" S←sign value←(form "[0-9]+" nat))
+    => ^(* S (** 10 value))
+  (ws "[ \n\r\t]*"))
