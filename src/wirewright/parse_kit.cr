@@ -644,18 +644,9 @@ module Ww::ParseKit
     left_recursive?(productions, path, pivot, overloads)
   end
 
-  # TODO: Intern so that it becomes
-  #   productions : Slice(Production)
-  #   left_recursive : Pf::USet32
   defrecord Grammar,
     productions : Hash(Term::Sym, Array(Production)),
     left_recursive : Set(Term::Sym)
-
-  # flatten overload buckets to obtain productions slice
-  # construct ranges hash (sym => range)
-  # productions = productions.map |overload|
-  #   intern(ranges hash, overload)
-  # productions
 
   def grammar(ruleset : Term) : Grammar
     unless ruleset = ruleset.as_d?
@@ -772,6 +763,133 @@ module Ww::ParseKit
     Grammar.new(productions, left_recursive)
   end
 
+  defrecord GrammarF,
+    productions : Slice(ProductionEntryF),
+    rangemap : Hash(Term::Sym, RuleRefF)
+
+  defrecord ProductionEntryF, left_recursive : Bool, production : ProductionF
+
+  alias ProductionF = RuleProductionF | AliasProductionF
+
+  defrecord RuleProductionF, parselet : ParseletF, template : Alloy::CompiledTemplate
+  defrecord AliasProductionF, parselet : ParseletF
+
+  alias ParseletF = Reject | Stringp | RuleRefF | OrdChoiceF | MaxChoiceF |
+                    SeqF | ManyF | ManySepF | CaptureF | LocationF | FindF | FormF
+
+  # NOTE: *end* is exclusive.
+  defrecord RuleRefF, begin : UInt32, end : UInt32
+  defrecord OrdChoiceF, members : Slice(ParseletF)
+  defrecord MaxChoiceF, members : Slice(ParseletF)
+  defrecord SeqF, members : Slice(ParseletF), observed : Bool
+  defcase ManyF, min : UInt32, max : UInt32, member : ParseletF, observed : Bool
+  defcase ManySepF, min : UInt32, max : UInt32, member : ParseletF, sep : ParseletF, trailing : Bool, observed : Bool
+  defcase CaptureF, name : Term, member : ParseletF
+  defcase LocationF, name : Term, member : ParseletF
+  defcase FindF, member : ParseletF
+  defcase FormF, member : ParseletF, spec : FormSpec
+
+  private def flatten(rangemap, parselet : Reject | Stringp)
+    parselet
+  end
+
+  private def flatten(rangemap, parselet : RuleRef)
+    rangemap[parselet.name]? || Reject.new
+  end
+
+  private def flatten(rangemap, parselet : OrdChoice)
+    members = parselet.members.to_readonly_slice do |member|
+      flatten(rangemap, member).as(ParseletF)
+    end
+    OrdChoiceF.new(members)
+  end
+
+  private def flatten(rangemap, parselet : MaxChoice)
+    members = parselet.members.to_readonly_slice do |member|
+      flatten(rangemap, member).as(ParseletF)
+    end
+    MaxChoiceF.new(members)
+  end
+
+  private def flatten(rangemap, parselet : Seq)
+    members = parselet.members.to_readonly_slice do |member|
+      flatten(rangemap, member).as(ParseletF)
+    end
+    SeqF.new(members, parselet.observed)
+  end
+
+  private def flatten(rangemap, parselet : Many)
+    member = flatten(rangemap, parselet.member)
+    ManyF.new(parselet.min, parselet.max, member, parselet.observed)
+  end
+
+  private def flatten(rangemap, parselet : ManySep)
+    member = flatten(rangemap, parselet.member)
+    sep = flatten(rangemap, parselet.sep)
+    ManySepF.new(parselet.min, parselet.max, member, sep, parselet.trailing, parselet.observed)
+  end
+
+  private def flatten(rangemap, parselet : Capture)
+    member = flatten(rangemap, parselet.member)
+    CaptureF.new(parselet.name, member)
+  end
+
+  private def flatten(rangemap, parselet : Location)
+    member = flatten(rangemap, parselet.member)
+    LocationF.new(parselet.name, member)
+  end
+
+  private def flatten(rangemap, parselet : Find)
+    member = flatten(rangemap, parselet.member)
+    FindF.new(member)
+  end
+
+  private def flatten(rangemap, parselet : Form)
+    member = flatten(rangemap, parselet.member)
+    FormF.new(member, parselet.spec)
+  end
+
+  private def flatten(rangemap, production : RuleProduction)
+    parselet = flatten(rangemap, production.parselet)
+    RuleProductionF.new(parselet, production.template)
+  end
+
+  private def flatten(rangemap, production : AliasProduction)
+    parselet = flatten(rangemap, production.parselet)
+    AliasProductionF.new(parselet)
+  end
+
+  # Converts a `Grammar` into a flat grammar `GrammarF`.
+  #
+  # Flattening removes hash lookups and some pointer indirection for
+  # productions, in favor of a (couple of) neighboring memory fetches.
+  # More concretely, `RuleRef`s are replaced by `RuleRefF`s, which point
+  # to ranges of inlined grammar production overloads.
+  def flatten(grammar : Grammar) : GrammarF
+    rangemap = {} of Term::Sym => RuleRefF
+    size = 0u32
+
+    # Declaration order is memory order.
+    grammar.productions.each do |name, overloads|
+      rangemap[name] = RuleRefF.new(begin: size, end: size + overloads.size)
+      size += overloads.size
+    end
+
+    entries = Pf::Kit.stack_array(ProductionEntryF, 32)
+
+    grammar.productions.each do |name, overloads|
+      lr = name.in?(grammar.left_recursive)
+
+      overloads.each do |overload|
+        overload_f = flatten(rangemap, overload)
+        entry = ProductionEntryF.new(lr, overload_f)
+        entries << entry
+      end
+    end
+
+    GrammarF.new(entries.to_unsafe_readonly_slice!, rangemap)
+  end
+
   defrecord Err, detail : String, text : Pf::StringSeln
   defrecord Refusal
 
@@ -837,8 +955,9 @@ module Ww::ParseKit
     def initialize(@ref : UInt64, @byte : UInt64)
     end
 
-    def self.new(head : Term::Sym, text : Pf::StringSeln)
-      new(head.@bits, text.byte_start.to_u64)
+    def self.new(ref : RuleRefF, text : Pf::StringSeln)
+      ref_bits = (ref.begin.to_u64 << 32) | ref.end
+      new(ref_bits, text.byte_start.to_u64)
     end
 
     def hash(hasher)
@@ -860,7 +979,7 @@ module Ww::ParseKit
 
   # :nodoc:
   defcase Context,
-    grammar : Grammar,
+    grammar : GrammarF,
     memo : Pf::Map(MemoKey, Parseout),
     checkpoint : (UInt64 ->),
     clock : UInt64
@@ -874,12 +993,12 @@ module Ww::ParseKit
     end
   end
 
-  def context(grammar : Grammar, checkpoint : UInt64 ->)
+  def context(grammar : GrammarF, checkpoint : UInt64 ->)
     memo = Pf::Map(MemoKey, Parseout).new
     Context.new(grammar, memo, checkpoint, clock: 0u64)
   end
 
-  def context(grammar : Grammar)
+  def context(grammar : GrammarF)
     context(grammar, ->(clock : UInt64) { })
   end
 
@@ -976,11 +1095,56 @@ module Ww::ParseKit
     Ok.new(match, capture_list, result, ahead)
   end
 
-  def parse(ctx : Context, parselet : RuleRef, text : Pf::StringSeln) : Parseout
-    parse(ctx, parselet.name, text)
+  def parse(ctx : Context, ref : RuleRefF, text : Pf::StringSeln) : Parseout
+    key = MemoKey.new(ref, text)
+    if π = ctx.memo[key]?
+      return π
+    end
+
+    overloads = (ctx.grammar.productions + ref.begin).trim(ref.end - ref.begin)
+    unless head = overloads.first?
+      return Refusal.new # Missing toplevel rule compiles to this.
+    end
+
+    ctx.tick
+
+    # Fast path for rules that are not left-recursive.
+    #
+    # NOTE: All *overloads* share the same left_recursive value. It's enough
+    # to just check one. Unfortunately it isn't easy to achieve the layout
+    # ... | Bool ProductionEntryF ProductionEntryF ... ProductionEntryF | Bool ...
+    # in Crystal, i.e., pack just a single boolean as a header inline with
+    # ProductionEntryFs. So we have to resort to this implicit assumption.
+    unless head.left_recursive
+      return parse(ctx, overloads, text)
+    end
+
+    zero_memo = ctx.memo.assoc(key, Refusal.new)
+    best_memo = zero_memo
+    best_out : Ok? = nil
+
+    loop do
+      ctx.memo = zero_memo
+
+      π = parse(ctx, overloads, text)
+      case π
+      in Ok
+        break if best_out && best_out.ahead.byte_start >= π.ahead.byte_start
+      in Refusal, Err
+        break # Longest match or failure
+      end
+
+      best_out = π
+      best_memo = ctx.memo.assoc(key, best_out)
+      zero_memo = zero_memo.assoc(key, best_out)
+    end
+
+    ctx.memo = best_memo
+
+    best_out || Refusal.new
   end
 
-  def parse(ctx : Context, parselet : OrdChoice, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : OrdChoiceF, text : Pf::StringSeln) : Parseout
     parselet.members.each do |branch|
       π = parse(ctx, branch, text)
       next if π.is_a?(Refusal)
@@ -990,7 +1154,7 @@ module Ww::ParseKit
     Refusal.new
   end
 
-  def parse(ctx : Context, parselet : MaxChoice, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : MaxChoiceF, text : Pf::StringSeln) : Parseout
     candidates = Pf::Kit.stack_array(Ok, 4)
 
     parselet.members.each do |branch|
@@ -1006,7 +1170,7 @@ module Ww::ParseKit
     candidates.max_by?(&.match.bytesize) || Refusal.new
   end
 
-  def parse(ctx : Context, parselet : Seq, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : SeqF, text : Pf::StringSeln) : Parseout
     start = text
 
     captures = Pf::Kit.stack_array(CaptureEntry, 8)
@@ -1033,7 +1197,7 @@ module Ww::ParseKit
     Ok.new(start.upto(text), captures.to_unsafe_readonly_slice!, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
-  def parse(ctx : Context, parselet : Many, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : ManyF, text : Pf::StringSeln) : Parseout
     assert parselet.min <= parselet.max
 
     start = text
@@ -1080,7 +1244,7 @@ module Ww::ParseKit
     Ok.new(start.upto(text), CaptureLog.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
-  def parse(ctx : Context, parselet : ManySep, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : ManySepF, text : Pf::StringSeln) : Parseout
     assert parselet.min <= parselet.max
 
     start = text
@@ -1171,7 +1335,7 @@ module Ww::ParseKit
     Ok.new(start.upto(text), CaptureLog.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
-  def parse(ctx : Context, parselet : Capture, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : CaptureF, text : Pf::StringSeln) : Parseout
     π = parse(ctx, parselet.member, text)
     unless π.is_a?(Ok)
       return π
@@ -1182,7 +1346,7 @@ module Ww::ParseKit
     Ok.new(π.match, captures, π.result, π.ahead)
   end
 
-  def parse(ctx : Context, parselet : Location, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : LocationF, text : Pf::StringSeln) : Parseout
     π = parse(ctx, parselet.member, text)
     unless π.is_a?(Ok)
       return π
@@ -1208,7 +1372,7 @@ module Ww::ParseKit
     Ok.new(match, π.captures.append(capture), π.result, π.ahead)
   end
 
-  def parse(ctx : Context, parselet : Find, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : FindF, text : Pf::StringSeln) : Parseout
     text.each_before_and_after do |_, after|
       case π = parse(ctx, parselet.member, after)
       in Ok, Err then return π
@@ -1219,7 +1383,7 @@ module Ww::ParseKit
     Refusal.new
   end
 
-  def parse(ctx : Context, parselet : Form, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, parselet : FormF, text : Pf::StringSeln) : Parseout
     case π = parse(ctx, parselet.member, text)
     in Err, Refusal
       return π
@@ -1234,7 +1398,7 @@ module Ww::ParseKit
     end
   end
 
-  def parse(ctx : Context, production : RuleProduction, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, production : RuleProductionF, text : Pf::StringSeln) : Parseout
     π = parse(ctx, production.parselet, text)
     unless π.is_a?(Ok)
       return π
@@ -1244,7 +1408,7 @@ module Ww::ParseKit
     Ok.new(π.match, CaptureLog.empty, result, π.ahead)
   end
 
-  def parse(ctx : Context, production : AliasProduction, text : Pf::StringSeln) : Parseout
+  def parse(ctx : Context, production : AliasProductionF, text : Pf::StringSeln) : Parseout
     π = parse(ctx, production.parselet, text)
     unless π.is_a?(Ok)
       return π
@@ -1257,9 +1421,9 @@ module Ww::ParseKit
     end
   end
 
-  def parse(ctx : Context, overloads : Array(Production), text : Pf::StringSeln) : Parseout
-    overloads.each do |overload|
-      π = parse(ctx, overload, text)
+  def parse(ctx : Context, entries : Slice(ProductionEntryF), text : Pf::StringSeln) : Parseout
+    entries.each do |entry|
+      π = parse(ctx, entry.production, text)
 
       case π
       in Ok, Err then return π
@@ -1270,45 +1434,11 @@ module Ww::ParseKit
     Refusal.new
   end
 
-  def parse(ctx : Context, ref : Term::Sym, text : Pf::StringSeln) : Parseout
-    key = MemoKey.new(ref, text)
-    if π = ctx.memo[key]?
-      return π
-    end
-
-    unless overloads = ctx.grammar.productions[ref]?
+  def parse(ctx : Context, top : Term::Sym, text : Pf::StringSeln) : Parseout
+    unless ref = ctx.grammar.rangemap[top]?
       return Refusal.new
     end
 
-    ctx.tick
-
-    # Fast path for rules that are not left-recursive.
-    unless ref.in?(ctx.grammar.left_recursive)
-      return parse(ctx, overloads, text)
-    end
-
-    zero_memo = ctx.memo.assoc(key, Refusal.new)
-    best_memo = zero_memo
-    best_out : Ok? = nil
-
-    loop do
-      ctx.memo = zero_memo
-
-      π = parse(ctx, overloads, text)
-      case π
-      in Ok
-        break if best_out && best_out.ahead.byte_start >= π.ahead.byte_start
-      in Refusal, Err
-        break # Longest match or failure
-      end
-
-      best_out = π
-      best_memo = ctx.memo.assoc(key, best_out)
-      zero_memo = zero_memo.assoc(key, best_out)
-    end
-
-    ctx.memo = best_memo
-
-    best_out || Refusal.new
+    parse(ctx, ref, text)
   end
 end

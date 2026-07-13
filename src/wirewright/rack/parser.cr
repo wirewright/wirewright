@@ -9,7 +9,7 @@ module Ww::Rack::Parser
     alarm : BlockingSignal,
     lock : Sync::Mutex,
     table : Hash(Parse, ParseStatus),
-    grammars : Hash(Term, ParseKit::Grammar),
+    grammars : Hash(Term, ParseKit::GrammarF),
     seen_rulesets : Set(Term),
     seen_parses : Set(Parse)
 
@@ -24,7 +24,7 @@ module Ww::Rack::Parser
     State.new(alarm,
       lock: Sync::Mutex.new,
       table: {} of Parse => ParseStatus,
-      grammars: {} of Term => ParseKit::Grammar,
+      grammars: {} of Term => ParseKit::GrammarF,
       seen_parses: Set(Parse).new,
       seen_rulesets: Set(Term).new,
     )
@@ -213,7 +213,7 @@ module Ww::Rack::Parser
     # fiber as well.
     grammar = lock.synchronize do
       grammars.put_if_absent(parse.ruleset) do
-        ParseKit.grammar(parse.ruleset)
+        ParseKit.flatten(ParseKit.grammar(parse.ruleset))
       end
     end
 
