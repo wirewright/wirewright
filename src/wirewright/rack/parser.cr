@@ -31,9 +31,29 @@ module Ww::Rack::Parser
   end
 
   def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    D7.step(parser, circuit) do |hg|
+    assert state.seen_parses.empty?
+    assert state.seen_rulesets.empty?
+
+    subframes = D7.step(parser, circuit) do |hg|
       prepass.call(hg) { |hg| step(state, hg) }
     end
+
+    # See which parses / rulesets were canceled and remove them from
+    # the associated tables in *state*.
+    state.lock.synchronize do
+      state.table.select! do |parse, _|
+        parse.in?(state.seen_parses)
+      end
+
+      state.grammars.select! do |ruleset, _|
+        ruleset.in?(state.seen_rulesets)
+      end
+    end
+
+    state.seen_parses.clear
+    state.seen_rulesets.clear
+
+    subframes
   end
 
   defrecord Transfer,
@@ -43,9 +63,6 @@ module Ww::Rack::Parser
     ruleset : Term
 
   private def step(state : State, hg : D7::Hypergraph) : D7::Patch
-    assert state.seen_parses.empty?
-    assert state.seen_rulesets.empty?
-
     proposals = [] of D7::Patch
 
     hg.each_node_with_head(Term.of(:parser)) do |node|
@@ -66,21 +83,6 @@ module Ww::Rack::Parser
 
       proposals << proposal
     end
-
-    # See which parses / rulesets were canceled and remove them from
-    # the associated tables.
-    state.lock.synchronize do
-      state.table.select! do |parse, _|
-        parse.in?(state.seen_parses)
-      end
-
-      state.grammars.select! do |ruleset, _|
-        ruleset.in?(state.seen_rulesets)
-      end
-    end
-
-    state.seen_parses.clear
-    state.seen_rulesets.clear
 
     D7::Regime.merge(hg, proposals)
   end
@@ -176,7 +178,7 @@ module Ww::Rack::Parser
         next unless clock % 256 == 0
 
         now = Time.instant
-        duration = start.not_nil! - now
+        duration = now - start.not_nil!
         if duration >= deadline
           raise Canceled.new
         end
