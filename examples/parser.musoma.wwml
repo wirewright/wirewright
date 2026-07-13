@@ -1,7 +1,8 @@
 (comment
   "This is a simple JSON parser example. Note that this isn't (going to be) \
    the recommended way to work with JSON. We'll have better, faster ways. However, \
-   to demo general-purpose parsing, JSON is OK.")
+   to demo general-purpose parsing, JSON is OK.\n\n\
+   Reference: https://json.org/")
 
 (figure
   (comment

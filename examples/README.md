@@ -1,0 +1,2 @@
+- Examples labeled with `.musoma.wwml` should be run using MuSoma.
+- Examples labeled with `.rack.wwml` can be run with irack or MuSoma.

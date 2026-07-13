@@ -51,7 +51,7 @@ is about ~200 lines of code, *including* comments, blank lines, etc. Starting fr
 
 https://github.com/user-attachments/assets/5ec961a9-61f9-4761-91a3-428de10b709f
 
-Reference: `examples/calculator.wwml`.
+Reference: `examples/calculator.musoma.wwml`.
 
 ### SQLite
 
@@ -60,6 +60,8 @@ as a black box that takes queries and spits out responses after some time. Start
 (which is pure; i.e., the database is not changed as I move through time).
 
 https://github.com/user-attachments/assets/63624868-23b3-4990-9993-90dfd700d85e
+
+Reference: `examples/sqlite.musoma.wwml`.
 
 ### Bounce
 
@@ -70,7 +72,7 @@ responsible for animating `backsys`, `circuit`, etc. themselves.
 
 https://github.com/user-attachments/assets/8c4d54ae-669a-49fd-b9c5-4ff2528b3c33
 
-Reference: `examples/bounce.wwml`.
+Reference: `examples/bounce.rack.wwml`.
 
 ### Merge sort
 
@@ -78,7 +80,7 @@ This example demonstrates how merge sort (or something very much like it...) can
 
 https://github.com/user-attachments/assets/3213e84f-2696-49a0-a286-5908f77ecbcd
 
-Reference: `examples/msort.wwml`.
+Reference: `examples/msort.rack.wwml`.
 
 ## Tutorials
 
@@ -223,7 +225,7 @@ chmod +x musoma-x86_64.AppImage
 Then you should be able to run one of the examples.
 
 ```console
-./musoma-x86_64.AppImage examples/calculator.wwml
+./musoma-x86_64.AppImage examples/calculator.musoma.wwml
 ```
 
 If you want to start with an empty file, you'd probably want to have an editor in it. So create
@@ -262,7 +264,7 @@ to visit the `runtime/codices` directory. If you're interested in how those "inc
 do (or relate to?) interactivity, go to `runtime/soma.lib.wwml`.
 
 For the latter, you are advised to use MuSoma, by the way, so that everything renders nicely.
-Consider opening MuSoma with the input example `examples/input.wwml`; then click the arrows &
+Consider opening MuSoma with the input example `examples/input.musoma.wwml`; then click the arrows &
 pan around; this should get you acquainted with symbolic *paradise*! On the latter, now, look, I *love*
 the notation, but from the outside, it probably looks like a bizarre mix of APL and Lisp. Wha te ver, huh?
 
