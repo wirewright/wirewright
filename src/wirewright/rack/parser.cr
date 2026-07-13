@@ -182,8 +182,9 @@ module Ww::Rack::Parser
         end
       end
     rescue Canceled
-      # If inline parsing is too slow we parse on a worker fiber.
-      spawn do
+      # If inline parsing is too slow we parse on a worker fiber. We only lose
+      # the amount of work done during *deadline*.
+      spawn(name: "Rack::Parser worker") do
         parse(lock, table, grammars, parse) do |clock|
           next if clock.zero?
           next unless clock % 256 == 0
@@ -215,23 +216,12 @@ module Ww::Rack::Parser
     end
 
     ctx = ParseKit.context(grammar, checkpoint)
-    π = ParseKit.parse(ctx, parse.top, view)
-
-    case π
-    in ParseKit::Ok
-      if π.ahead.empty?
-        result = ParseKit.resolve(π.result)
-      else
-        result = ParseKit::Err.new("expected end-of-input", π.ahead)
-      end
-    in ParseKit::Err, ParseKit::Refusal
-      result = π
-    end
+    π = ParseKit.resolve(ParseKit.parse(ctx, parse.top, view))
 
     lock.synchronize do
       next unless table.has_key?(parse) # Canceled
 
-      table[parse] = Completed.new(result)
+      table[parse] = Completed.new(π)
     end
   end
 

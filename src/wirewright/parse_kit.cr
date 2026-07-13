@@ -773,6 +773,18 @@ module Ww::ParseKit
     Alloy.render(object.template, locals: resolve_log(object.captures))
   end
 
+  def resolve(object : Ok) : Term | Err | Refusal
+    unless object.ahead.empty?
+      return Err.new("expected end-of-input", object.ahead)
+    end
+
+    resolve(object.result)
+  end
+
+  def resolve(object : Err | Refusal) : Term | Err | Refusal
+    object
+  end
+
   def parse(ctx : Context, parselet : Reject, text : Pf::StringSeln) : Parseout
     Refusal.new
   end
