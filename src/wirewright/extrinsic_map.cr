@@ -1,10 +1,4 @@
-module MuSoma
-  alias ExtrinsicRef = ReadingRef | ReportRef | ResourceRef
-
-  defrecord ReadingRef, path : NormalPath
-  defrecord ReportRef, path : NormalPath
-  defrecord ResourceRef, query : ResourceService::Query
-
+module Ww
   # A uniform surface API for services that work with *extrinsics*: file
   # system readings, reports, HTTP, etc. Also sets watch handles for paths
   # where possible and manages automatic, transparent invalidation with
@@ -18,6 +12,14 @@ module MuSoma
   # "cushioning" your calls while the rendezvous is being arranged.
   class ExtrinsicMap
     Log = ::Log.for(self)
+
+    alias Ref = ReadingRef | ReportRef | ResourceRef
+
+    defrecord ReadingRef, path : NormalPath
+    defrecord ReportRef, path : NormalPath
+    defrecord ResourceRef, query : ResourceService::Query
+
+    defrecord Reload
 
     # :nodoc:
     alias ReadingMap = PromiseMap(NormalPath, PathService::Reading)
@@ -37,7 +39,7 @@ module MuSoma
     # Constructs an extrinsic map.
     #
     # - *alarm* is called on any invalidation.
-    # - *msgq* must be thread-safe, and respond to `#<<(UpdateRefs)`.
+    # - *msgq* must be thread-safe, and respond to `#<<(Reload)`.
     def self.new(msgq, alarm : BlockingSignal) : ExtrinsicMap
       readings = PromiseMap(NormalPath, PathService::Reading).new
       reports = PromiseMap(NormalPath, PathService::Report).new
@@ -76,10 +78,6 @@ module MuSoma
       def receive(msg : PathService::Notification) : Nil
         Log.trace { msg.class }
 
-        # We don't have any info on which resources correspond to which paths,
-        # so invalidate all of them and rely on deeper caches (if any)!
-        @resources.invalidate
-
         handle(msg)
       end
 
@@ -90,7 +88,7 @@ module MuSoma
       end
 
       private def handle(msg : PathService::ReadingInvalid) : Nil
-        return unless @readings.invalidate?(msg.path)
+        return unless @resources.invalidate? || @readings.invalidate?(msg.path)
 
         reload_refs
       end
@@ -101,20 +99,20 @@ module MuSoma
         #
         # Invalidate the path itself for file observers, or directory observers
         # to refresh entries.
-        return unless @reports.invalidate?(msg.path.parent, msg.path)
+        return unless @resources.invalidate? || @reports.invalidate?(msg.path.parent, msg.path)
 
         reload_refs
       end
 
       private def handle(msg : PathService::ReadingReady) : Nil
-        return unless @readings.includes?(msg.path)
+        return unless @resources.invalidate? || @readings.includes?(msg.path)
 
         # If there's a race it's just a spurious wakeup/reload.
         reload_refs
       end
 
       private def handle(msg : PathService::ReportReady) : Nil
-        return unless @reports.includes?(msg.path) || @reports.includes?(msg.path.parent)
+        return unless @resources.invalidate? || @reports.includes?(msg.path) || @reports.includes?(msg.path.parent)
 
         # If there's a race it's just a spurious wakeup/reload.
         reload_refs
@@ -123,17 +121,33 @@ module MuSoma
       private def handle(msg : HTTPService::ResponseReady) : Nil
         # Only resources from the resource map can be affected by HTTP invalidation
         # at the moment.
-        @resources.invalidate
+        return unless @resources.invalidate?
 
         reload_refs
       end
 
       private def reload_refs : Nil
-        Log.trace { "ReloadRefs" }
+        Log.trace { "Reload" }
 
-        @msgq << ReloadRefs.new
+        @msgq << Reload.new
         @alarm.call
       end
+    end
+
+    def includes?(ref : ReadingRef) : Bool
+      @readings.includes?(ref.path)
+    end
+
+    def includes?(ref : ReportRef) : Bool
+      @reports.includes?(ref.path)
+    end
+
+    def includes?(ref : ResourceRef) : Bool
+      @resources.includes?(ref.query)
+    end
+
+    def size : Int32
+      @readings.size + @reports.size + @resources.size
     end
 
     # Returns the current value of *ref*.
@@ -149,6 +163,12 @@ module MuSoma
     # Returns the current value of *ref*.
     def []?(ref : ResourceRef) : ResourceService::Response?
       @resources[ref.query]?
+    end
+
+    def each_ref(& : Ref ->) : Nil
+      @readings.each_key { |path| yield ReadingRef.new(path) }
+      @reports.each_key { |path| yield ReportRef.new(path) }
+      @resources.each_key { |query| yield ResourceRef.new(query) }
     end
 
     # Adds *ref* to the map. After adding *ref*, you can start polling
@@ -169,6 +189,7 @@ module MuSoma
     # :ditto:
     def add(ref : ResourceRef) : Nil
       @resources.add(ref.query) { ResourceService.get(ref.query) }
+      @resources.touch(ref.query)
     end
 
     # Removes *ref* from the map.

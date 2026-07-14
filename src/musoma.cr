@@ -9,7 +9,6 @@ module MuSoma
 end
 
 require "./musoma/var"
-require "./musoma/extrinsic_map"
 require "./musoma/translate"
 require "./musoma/scheduler"
 require "./musoma/editor"

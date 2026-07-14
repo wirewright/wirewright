@@ -116,13 +116,13 @@ module MuSoma
   private def perturb(node : Term, action : UpdateRefs) : Term
     Term.case(node) do
       matchpi %{[path-report path_string _?]}, path: NormalPath do
-        state = action.ext[ReportRef.new(path)]?
+        state = action.ext[ExtrinsicMap::ReportRef.new(path)]?
 
         Term.morph(node, {2, MuSoma.translate(state)})
       end
 
       matchpi %{[path-reading path_string _?]}, path: NormalPath do
-        state = action.ext[ReadingRef.new(path)]?
+        state = action.ext[ExtrinsicMap::ReadingRef.new(path)]?
 
         Term.morph(node, {2, MuSoma.translate(state)})
       end
@@ -130,7 +130,7 @@ module MuSoma
       matchpi %{[resource term_ _?]} do
         continue unless query = ResourceService.query?(term)
 
-        state = action.ext[ResourceRef.new(query)]?
+        state = action.ext[ExtrinsicMap::ResourceRef.new(query)]?
 
         Term.morph(node, {2, MuSoma.translate(state)})
       end

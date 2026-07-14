@@ -72,9 +72,9 @@ module MuSoma
   # Constructs a workspace.
   def workspace(
     console : Channel(ConsoleWidget),
-    input_ref : ReadingRef,
-    codex_ref : ReadingRef,
-    microfold_ref : ReadingRef,
+    input_ref : ExtrinsicMap::ReadingRef,
+    codex_ref : ExtrinsicMap::ReadingRef,
+    microfold_ref : ExtrinsicMap::ReadingRef,
   ) : Workspace
     # Runloop.
     msgq = BlockingQueue(Msg).new
@@ -297,7 +297,7 @@ module MuSoma
 
     # Parse arguments.
     unless input_arg = args.first?
-      console.send(CriticalLog.new("Expected a file argument (try `examples/calculator.wwml` your MuSoma download has an `examples` directory)"))
+      console.send(CriticalLog.new("Expected a file argument (try `examples/calculator.musoma.wwml` your MuSoma download has an `examples` directory)"))
       Fiber.yield
       return
     end
@@ -310,12 +310,12 @@ module MuSoma
 
     console.send(InfoLog.new("Initializing refs"))
 
-    input_ref = ReadingRef.new(NormalPath[input_arg])
+    input_ref = ExtrinsicMap::ReadingRef.new(NormalPath[input_arg])
     # TODO: Use ResourceRef instead of manually resolving runtime!
-    library_ref = ReadingRef.new(NormalPath[runtime / "soma.lib.wwml"])
-    codex_ref = ReadingRef.new(NormalPath[runtime / "codices/musoma.codex.wwml"])
-    editR_ref = ReadingRef.new(NormalPath[runtime / "codices/editR.codex.wwml"])
-    microfold_ref = ReadingRef.new(NormalPath[runtime / "codices/ufold.codex.wwml"])
+    library_ref = ExtrinsicMap::ReadingRef.new(NormalPath[runtime / "soma.lib.wwml"])
+    codex_ref = ExtrinsicMap::ReadingRef.new(NormalPath[runtime / "codices/musoma.codex.wwml"])
+    editR_ref = ExtrinsicMap::ReadingRef.new(NormalPath[runtime / "codices/editR.codex.wwml"])
+    microfold_ref = ExtrinsicMap::ReadingRef.new(NormalPath[runtime / "codices/ufold.codex.wwml"])
 
     console.send(InfoLog.new("Initializing workspace"))
 

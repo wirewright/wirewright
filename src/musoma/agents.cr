@@ -1,8 +1,6 @@
 module MuSoma
-  alias Msg = MediaService::WindowDescriptionChanged | ReloadRefs | WriteFinished | Scheduler::Event | DatabaseTaskCompleted
+  alias Msg = MediaService::WindowDescriptionChanged | ExtrinsicMap::Reload | WriteFinished | Scheduler::Event | DatabaseTaskCompleted
   alias Plan = Set(Perturbation)
-
-  defrecord ReloadRefs
 
   # Emitted for each term in state's `requests: (_*)`.
   defrecord AppRequest, term : Term
@@ -43,7 +41,7 @@ module MuSoma
   end
 
   class EditorAgent
-    def initialize(@codex_ref : ReadingRef)
+    def initialize(@codex_ref : ExtrinsicMap::ReadingRef)
       @seen = Bytes.empty
       @editR = Rho.noR
     end
@@ -622,10 +620,10 @@ module MuSoma
 
   class ExtrinsicsAgent
     def initialize
-      @refs = Set(ExtrinsicRef).new
+      @refs = Set(ExtrinsicMap::Ref).new
     end
 
-    def receive(ws, plan, msg : ReloadRefs) : Nil
+    def receive(ws, plan, msg : ExtrinsicMap::Reload) : Nil
       plan << UpdateRefs.new(ws.extrinsics)
     end
 
@@ -635,7 +633,7 @@ module MuSoma
     def entangle?(ws : Workspace, plan, nodes) : Bool
       return false unless Var.pending?({ws.state, :timeline})
 
-      wants_refs = Set(ExtrinsicRef).new
+      wants_refs = Set(ExtrinsicMap::Ref).new
       missing_refs = false
 
       nodes.each_with_addr do |node, _|
@@ -646,7 +644,7 @@ module MuSoma
           end
 
           matchpi %{[path-report path_string _?]}, path: NormalPath do
-            wants_refs << ReportRef.new(path)
+            wants_refs << ExtrinsicMap::ReportRef.new(path)
           end
 
           matchpi %{[path-reading _string]} do
@@ -655,7 +653,7 @@ module MuSoma
           end
 
           matchpi %{[path-reading path_string _?]}, path: NormalPath do
-            wants_refs << ReadingRef.new(path)
+            wants_refs << ExtrinsicMap::ReadingRef.new(path)
           end
 
           matchpi %{[resource _]} do
@@ -666,7 +664,7 @@ module MuSoma
           matchpi %{[resource term_ _?]} do
             next unless query = ResourceService.query?(term)
 
-            wants_refs << ResourceRef.new(query)
+            wants_refs << ExtrinsicMap::ResourceRef.new(query)
           end
 
           otherwise { }
@@ -747,7 +745,7 @@ module MuSoma
     @seen_library : Bytes?
     @machine : Rack::Automaton?
 
-    def initialize(@library_ref : ReadingRef, @seed_ref : ReadingRef)
+    def initialize(@library_ref : ExtrinsicMap::ReadingRef, @seed_ref : ExtrinsicMap::ReadingRef)
       @vantages = VarHash(D7::NodeAddr, Term).new
     end
 
@@ -1170,7 +1168,7 @@ module MuSoma
   end
 
   class CodexAgent
-    def initialize(@codex_ref : ReadingRef)
+    def initialize(@codex_ref : ExtrinsicMap::ReadingRef)
       @seen = Bytes.empty
     end
 

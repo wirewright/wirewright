@@ -25,6 +25,7 @@ require "./wirewright/m0"
 require "./wirewright/tpath"
 require "./wirewright/outcome"
 require "./wirewright/service"
+require "./wirewright/extrinsic_map"
 
 require "./wirewright/path_monitor"
 require "./wirewright/path_server"

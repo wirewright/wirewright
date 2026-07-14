@@ -2395,6 +2395,7 @@ class SyncHash(K, V)
     end
   end
 
+
   def []=(key : K, value : V)
     @lock.write { @hash[key] = value }
   end
@@ -2411,6 +2412,13 @@ class SyncHash(K, V)
     @lock.read do
       return unless value = @hash[key]?
       yield value
+    end
+  end
+
+  def update(key : K, &)
+    @lock.read do
+      return unless value = @hash[key]?
+      @hash[key] = yield value
     end
   end
 
@@ -3584,6 +3592,18 @@ class PromiseMap(K, V)
     @lock.synchronize { @promises.has_key?(key) }
   end
 
+  def size : Int32
+    @lock.synchronize { @promises.size }
+  end
+
+  def each_key(& : K ->) : Nil
+    @lock.synchronize do
+      @promises.each_key do |key|
+        yield key
+      end
+    end
+  end
+
   # Polls the promise for *key*. Returns `nil` if no such promise exists,
   # or if the promise rejects (in that case it will keep rejecting until
   # you invalidate it).
@@ -3592,6 +3612,12 @@ class PromiseMap(K, V)
     return unless result = promise.poll?
 
     result.unwrap?
+  end
+
+  def touch(key : K) : Nil
+    return unless promise = @lock.synchronize { @promises[key]? }
+
+    _ = promise.poll?
   end
 
   # Registers a source for *key*.
@@ -3651,13 +3677,20 @@ class PromiseMap(K, V)
     invalidated
   end
 
-  # Invalidates all promises.
-  def invalidate : Nil
+  # Invalidates all promises. Returns `true` if at least one promise was
+  # invalidated.
+  def invalidate? : Bool
     @lock.synchronize do
+      if @sources.empty?
+        return false
+      end
+
       @promises.clear
       @sources.each do |key, source|
         @promises[key] = source.call
       end
+
+      true
     end
   end
 end
