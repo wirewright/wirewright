@@ -464,7 +464,7 @@ module Ww::D7
 
   # Applies a perturbation *fn* to ground and parent node terms. Parents
   # are perturbed after their children.
-  def perturb(tree : ParseTree | UnaugmentedParentNode, *, cue_disj : Indexable(Term::Sym) = Tuple.new, &fn : Term, NodeAddr -> Term) : Term
+  def perturb(tree : ParseTree | UnaugmentedParentNode, *, cue_disj : Indexable(Term::Sym) = Slice(Term::Sym).empty, &fn : Term, NodeAddr -> Term) : Term
     perturb(tree, cue_disj, NodeAddr.empty, fn)
   end
 
