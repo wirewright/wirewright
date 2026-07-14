@@ -87,6 +87,37 @@ module Ww
       def initialize(@ctx : Inotify::Context)
         @watching = Bimap(NormalPath, Inotify::WatchRef).new
         @polling = Set(NormalPath).new
+
+        # @possibly_removed lets us delay EntryRemoved, which in turn lets us
+        # avoid junk intermediate results from some atomic write patterns.
+        # For example, the editor I use, Helix, can give us *sometimes*:
+        #
+        #   (path ("/tmp/a" reading) (present "hello"))
+        #   ;; I modify /tmp/a -> "world"
+        #   (path ("/tmp/a" reading))
+        #   (path ("/tmp/a" reading) (present ""))
+        #   (path ("/tmp/a" reading) (present "world"))
+        #
+        # These correspond to random-ish samples of the atomic write pattern
+        # as it progresses through writing the file. If we delay removal-checking,
+        # however, we achieve the following (I guess with high probability; I wonder
+        # how many other ways there are of the OS / editors failing us):
+        #
+        #   (path ("/tmp/a" reading) (present "hello"))
+        #   ;; Modify /tmp/a -> "world"
+        #   (path ("/tmp/a" reading) (present "world"))
+        #
+        # The trade-off is that removal notification is now delayed to
+        # the next heartbeat:
+        #
+        #   (path ("/tmp/a" reading) (present "hello"))
+        #   ;; Remove /tmp/a
+        #   ;; At most 1 second passes
+        #   (path ("/tmp/a" reading) (absent "..."))
+        #
+        # ... which is an OK trade-off, I guess. Atomic edits are more common than
+        # removals in *my* practice.
+        @possibly_removed = Set(NormalPath).new
       end
 
       def receive(msg : Msg) : Nil
@@ -107,12 +138,21 @@ module Ww
         polling = @polling
         @polling = Set(NormalPath).new
 
+        possibly_removed = @possibly_removed
+        @possibly_removed = Set(NormalPath).new
+
         polling.each do |path|
           # This will either transfer path to @watching, or back to @polling.
           watch(path)
           next unless path.in?(@watching)
 
           PathMonitorService.broadcast(EntryCreated.new(path))
+        end
+
+        possibly_removed.each do |path|
+          next if File.exists?(path.unwrap)
+
+          PathMonitorService.broadcast(EntryRemoved.new(path))
         end
       ensure
         msg.wg.done
@@ -128,32 +168,38 @@ module Ww
         end
 
         if msg.mask.create?
+          @possibly_removed.delete(member)
           PathMonitorService.broadcast(EntryCreated.new(member))
         end
 
         if msg.mask.attrib?
+          @possibly_removed.delete(member)
           PathMonitorService.broadcast(EntryChanged.new(member))
         end
 
         if msg.mask.delete? || msg.mask.moved_from?
-          PathMonitorService.broadcast(EntryRemoved.new(member))
+          @possibly_removed << member
         end
 
         if msg.mask.modify?
+          @possibly_removed.delete(member)
           PathMonitorService.broadcast(FileModified.new(member))
         end
 
         if msg.mask.close_write? || msg.mask.moved_to?
+          @possibly_removed.delete(member)
           PathMonitorService.broadcast(FileCommitted.new(member))
         end
 
         if msg.mask.delete_self? || msg.mask.move_self?
           @watching.delete(path)
+          # We'll notify immediately, below.
+          @possibly_removed.delete(member)
 
           # This will either transfer path back to @watching, or go to @polling.
           watch(path)
 
-          PathMonitorService.broadcast(EntryCreated.new(path))
+          PathMonitorService.broadcast(EntryRemoved.new(member))
         end
       end
 

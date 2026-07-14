@@ -214,7 +214,7 @@ module Ww
         # For directory entry events.
         PathService.invalidate(msg.path.parent, Report)
 
-        if msg.is_a?(PathMonitorService::FileCommitted)
+        if msg.is_a?(PathMonitorService::FileCommitted) || msg.is_a?(PathMonitorService::EntryRemoved)
           PathService.invalidate(msg.path, Reading)
         end
       end
