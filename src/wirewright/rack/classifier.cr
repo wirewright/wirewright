@@ -68,6 +68,37 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      matchpi %{[node (edge←(%'edge capture_) pattern_) child0_]} do
+        leaf = pass do
+          next D7.inert(node) unless env = M1.match?(pattern, child0)
+
+          if view0 = env[capture]?
+            mix0 = Term.of(:cell, edge, view0)
+          else
+            mix0 = Term.of(:cell, edge)
+          end
+
+          D7.mixture(node, mix0) do |mix1|
+            backspec = Term[]
+
+            Term.case(mix1) do
+              matchpi %{(cell @_)} do
+                backspec = Term.entries({ { {capture}, Term[] } })
+              end
+
+              matchpi %{(cell @_ value_)} do
+                backspec = Term.entries({ {capture, Term.of(:"^verbatim", value)} })
+              end
+            end
+
+            child1 = M1.backmap(pattern, Term.of(backspec), child0)
+            Term.morph(node, {2, child1})
+          end
+        end
+
+        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
+      end
+
       matchpi %{[circuit @edge_ children0_*]} do
         if children0.empty?
           mix0 = Term.of(:cell, edge)
