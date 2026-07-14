@@ -217,5 +217,20 @@ module Ww::D7
         end
       end
     end
+
+    def propose(*heads : Symbol, & : Node -> Patch?) : Slice(Patch)
+      proposals = Pf::Kit.stack_array(Patch, 8)
+
+      heads.each do |head|
+        each_node_with_head(Term.of(head)) do |node|
+          proposal = yield node
+          next if proposal.nil?
+
+          proposals << proposal
+        end
+      end
+
+      proposals.to_unsafe_readonly_slice!
+    end
   end
 end

@@ -35,7 +35,9 @@ module Ww::Rack::Parser
     assert state.seen_rulesets.empty?
 
     subframes = D7.step(parser, circuit) do |hg|
-      prepass.call(hg) { |hg| step(state, hg) }
+      prepass.call(hg) do |hg|
+        D7::Regime.merge(hg, proposals: step(state, hg))
+      end
     end
 
     # See which parses / rulesets were canceled and remove them from
@@ -62,29 +64,17 @@ module Ww::Rack::Parser
     output : D7::AbsEdge,
     ruleset : Term
 
-  private def step(state : State, hg : D7::Hypergraph) : D7::Patch
-    proposals = [] of D7::Patch
-
-    hg.each_node_with_head(Term.of(:parser)) do |node|
-      variant = nil
-
+  private def step(state : State, hg : D7::Hypergraph) : Slice(D7::Patch)
+    hg.propose(:parser) do |node|
       Term.case(node.term) do
         matchpiT %{[parser (@input_ -> top_symbol -> @output_) ruleset_*]} do
           variant = Transfer.new(node.resolve(input), top, node.resolve(output), ruleset)
+          step(state, hg, node, variant)
         end
 
         otherwise { }
       end
-
-      next if variant.nil?
-
-      proposal = step(state, hg, node, variant)
-      next if proposal.nil?
-
-      proposals << proposal
     end
-
-    D7::Regime.merge(hg, proposals)
   end
 
   private def step(state : State, hg : D7::Hypergraph, node : D7::Node, variant : Transfer) : D7::Patch?

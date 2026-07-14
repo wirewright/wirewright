@@ -456,7 +456,7 @@ module Ww::D7
       Regime.merge(hg, proposals)
     end
 
-    def self.merge(hg : Hypergraph, proposals : Array(Patch)) : Patch
+    def self.merge(hg : Hypergraph, proposals : Indexable(Patch)) : Patch
       if proposals.empty?
         return Patch.new
       end
