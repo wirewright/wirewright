@@ -1,7 +1,8 @@
 ;; Reference: https://en.wikipedia.org/wiki/Brainfuck
 
 (comment
-  "NOTE: The order of rules matters here. This also cannot (as readily) be \
+  "NOTE: The order of rules matters here. It determines the winner, i.e., \
+   rules lower down win on conflict. This, too, cannot (as readily) be \
    a rewriter, because the rules *must* cooperate within a single tick \
    (in this particular arrangement).")
 
