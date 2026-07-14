@@ -2,7 +2,7 @@ module MuSoma
   # MuSoma classifier.
   #
   # This is the central place where MuSoma-specific nodes are defined and documented
-  # (e.g. `window`, `path-report`).
+  # (e.g. `window`, `figure`).
   #
   # The MuSoma classifier eventually calls the Rack classifier, `Rack.clf`.
   def clf : D7::Classifier
@@ -61,25 +61,6 @@ module MuSoma
         end
 
         matchpi %{[mouse _*]}, %{[input _*]}, %{[keyboard _*]} do
-          D7.gnd(node)
-        end
-
-        matchpi %{[path-report _string _?]} do
-          D7.gnd(node)
-        end
-
-        matchpi %{[path-reading _string _?]} do
-          D7.gnd(node)
-        end
-
-        matchpi %{[resource _ _?]} do
-          D7.gnd(node)
-        end
-
-        matchpi(
-          %{[file-sink _string _blob]},
-          %{[file-sink _string _string]},
-        ) do
           D7.gnd(node)
         end
 

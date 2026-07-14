@@ -567,6 +567,22 @@ module Ww::Rack
         D7.gnd(node, input, output)
       end
 
+      matchpi %{[path (_string reading)]}, %{[path (_string reading) _]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[path (_string report)]}, %{[path (_string report) _]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[path (_string sink) _]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[resource _]}, %{[resource _ _]} do
+        D7.gnd(node)
+      end
+
       otherwise do
         D7.inert(node)
       end

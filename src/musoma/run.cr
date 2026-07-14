@@ -123,8 +123,6 @@ module MuSoma
       @editor : EditorAgent,
       @pretty : PrettyAgent,
       @distill : DistillAgent,
-      @extrinsics : ExtrinsicsAgent,
-      @write : WriteAgent,
       @rack : RackAgent,
       @mouse : MouseAgent,
       @keyboard : KeyboardAgent,
@@ -158,7 +156,7 @@ module MuSoma
 
     def entangle
       # In no particular order.
-      {@extrinsics, @write, @keyboard, @scheduler, @database}
+      {@keyboard, @scheduler, @database}
     end
 
     def receive(workspace : Workspace, request : AppRequest) : Nil
@@ -170,8 +168,6 @@ module MuSoma
     def receive(workspace : Workspace, plan : Plan, msg : Msg) : Nil
       # In no particular order.
       @app.receive(workspace, plan, msg)
-      @extrinsics.receive(workspace, plan, msg)
-      @write.receive(workspace, plan, msg)
       @rack.receive(workspace, plan, msg)
       @mouse.receive(workspace, plan, msg)
       @keyboard.receive(workspace, plan, msg)
@@ -343,8 +339,6 @@ module MuSoma
       editor: EditorAgent.new(editR_ref),
       pretty: PrettyAgent.new,
       distill: DistillAgent.new,
-      extrinsics: ExtrinsicsAgent.new,
-      write: WriteAgent.new,
       rack: RackAgent.new(library_ref, input_ref),
       mouse: MouseAgent.new,
       keyboard: KeyboardAgent.new,

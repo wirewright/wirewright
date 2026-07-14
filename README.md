@@ -371,7 +371,7 @@ You'll see a window appear to the left containing the text.
 Type (replacing /any/path with some path, e.g. `/tmp`):
 
 ```wwml
-(path-report "/any/path")
+(path ("/any/path" report))
 ```
 
 **PLEASE hit Esc to go to Normal mode if you have epilepsy at this point**,
@@ -386,12 +386,12 @@ small, depending on the directory you picked) symbolic object, which is updated
 live by Wirewright.
 
 You can use Ctrl-Backspace to remove the term before the editor in Insert mode.
-For example: `a (path-report "/tmp" ...) I b`, hit C-backspace, `a I b`.
+For example: `a (path ("/tmp" report) ...) I b`, hit C-backspace, `a I b`.
 
 Similarly, you can try:
 
 ```wwml
-(path-reading "/path/to/file")
+(path ("/path/to/file" reading))
 ```
 
 Which is basically the closest Wirewright gets to something like Python's `open(_, "r")`.

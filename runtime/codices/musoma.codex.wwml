@@ -592,21 +592,25 @@ history-limit: 128
 
 ;; Path report widget
 
-(path-report-widget addr_ [path-report path_string report_])
+(path-report-widget addr_ path_string report_)
   => (group detail: (dict block)
             multiline: true
        (term path-report) ;; l0
-       (term ^path) ;; l1
+       (group detail: (dict generic) ;; l1
+         (term ^path)
+         (term report))
        (group) ;; empty mid
        (group detail: (path-report ^addr ^path ^report))) ;; r
 
 ;; Path reading widget
 
-(path-reading-widget addr_ [path-reading path_string reading_])
+(path-reading-widget addr_ path_string reading_)
   => (group detail: (dict block)
             multiline: true
-       (term path-reading) ;; l0
-       (term ^path) ;; l1
+       (term path) ;; l0
+       (group detail: (dict generic) ;; l1
+         (term ^path)
+         (term reading))
        (group) ;; empty mid
        (group detail: (path-reading ^addr ^path ^reading))) ;; r
 

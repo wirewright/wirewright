@@ -38,15 +38,15 @@ module Ww
 
     # Constructs an extrinsic map.
     #
-    # - *alarm* is called on any invalidation.
+    # - *alarm* is `#call`ed on invalidation.
     # - *msgq* must be thread-safe, and respond to `#<<(Reload)`.
-    def self.new(msgq, alarm : BlockingSignal) : ExtrinsicMap
+    def self.new(msgq : Q?, alarm : A) : ExtrinsicMap forall Q, A
       readings = PromiseMap(NormalPath, PathService::Reading).new
       reports = PromiseMap(NormalPath, PathService::Report).new
       resources = PromiseMap(ResourceService::Query, ResourceService::Response).new
 
       wg = WaitGroup.new(2)
-      msgloop = Msgloop.new(msgq, alarm, readings, reports, resources)
+      msgloop = Msgloop(Q, A).new(msgq, alarm, readings, reports, resources)
 
       spawn(name: "ExtrinsicMap path invalidation relay") do
         PathService.listen(wg) do |notification|
@@ -65,10 +65,14 @@ module Ww
       new(readings, reports, resources)
     end
 
-    private class Msgloop(Q)
+    def self.new(alarm) : ExtrinsicMap
+      new(nil, alarm)
+    end
+
+    private class Msgloop(Q, A)
       def initialize(
-        @msgq : Q,
-        @alarm : BlockingSignal,
+        @msgq : Q?,
+        @alarm : A,
         @readings : ReadingMap,
         @reports : ReportMap,
         @resources : ResourceMap,
@@ -129,7 +133,9 @@ module Ww
       private def reload_refs : Nil
         Log.trace { "Reload" }
 
-        @msgq << Reload.new
+        if queue = @msgq
+          queue << Reload.new
+        end
         @alarm.call
       end
     end

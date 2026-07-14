@@ -236,12 +236,12 @@ module MuSoma
           Term.of(:"closed-slot-widget", addr, call)
         end
 
-        matchpi %{[path-reading path_string _]} do
-          Term.of(:"path-reading-widget", addr, node)
+        matchpi %{[path (path_string reading) reading_]} do
+          Term.of(:"path-reading-widget", addr, path, reading)
         end
 
-        matchpi %{[path-report path_string _]} do
-          Term.of(:"path-report-widget", addr, node)
+        matchpi %{[path (path_string report) report_]} do
+          Term.of(:"path-report-widget", addr, path, report)
         end
 
         matchpi %{(section title_string _* ⍊ -open)} do
@@ -618,134 +618,13 @@ module MuSoma
     end
   end
 
-  class ExtrinsicsAgent
-    def initialize
-      @refs = Set(ExtrinsicMap::Ref).new
-    end
-
-    def receive(ws, plan, msg : ExtrinsicMap::Reload) : Nil
-      plan << UpdateRefs.new(ws.extrinsics)
-    end
-
-    def receive(ws, plan, msg) : Nil
-    end
-
-    def entangle?(ws : Workspace, plan, nodes) : Bool
-      return false unless Var.pending?({ws.state, :timeline})
-
-      wants_refs = Set(ExtrinsicMap::Ref).new
-      missing_refs = false
-
-      nodes.each_with_addr do |node, _|
-        Term.case(node) do
-          matchpi %{[path-report _string]} do
-            missing_refs = true
-            continue
-          end
-
-          matchpi %{[path-report path_string _?]}, path: NormalPath do
-            wants_refs << ExtrinsicMap::ReportRef.new(path)
-          end
-
-          matchpi %{[path-reading _string]} do
-            missing_refs = true
-            continue
-          end
-
-          matchpi %{[path-reading path_string _?]}, path: NormalPath do
-            wants_refs << ExtrinsicMap::ReadingRef.new(path)
-          end
-
-          matchpi %{[resource _]} do
-            missing_refs = true
-            continue
-          end
-
-          matchpi %{[resource term_ _?]} do
-            next unless query = ResourceService.query?(term)
-
-            wants_refs << ExtrinsicMap::ResourceRef.new(query)
-          end
-
-          otherwise { }
-        end
-      end
-
-      # Ref diff.
-      added_refs = wants_refs - @refs
-      discarded_refs = @refs - wants_refs
-
-      discarded_refs.each { |ref| ws.extrinsics.delete(ref) }
-      added_refs.each { |ref| ws.extrinsics.add(ref) }
-      @refs = wants_refs
-
-      if missing_refs
-        plan << UpdateRefs.new(ws.extrinsics)
-      end
-
-      true
-    end
-  end
-
-  class WriteAgent
-    def receive(ws, plan, msg : WriteFinished) : Nil
-      plan << FinishWrites.new(msg.path, msg.content)
-    end
-
-    def receive(ws, plan, msg) : Nil
-    end
-
-    def entangle?(ws : Workspace, plan, nodes) : Bool
-      return false unless Var.pending?({ws.state, :timeline})
-
-      writes = {} of NormalPath => Term::Blob | Term::Str
-
-      nodes.each_with_addr do |node, _|
-        Term.case(node) do
-          matchpi %{[file-sink path_string content_blob]}, path: NormalPath do
-            writes[path] = content.as_blob
-          end
-
-          matchpi %{[file-sink path_string content_string]}, path: NormalPath do
-            writes[path] = content.as_s
-          end
-
-          otherwise { }
-        end
-      end
-
-      return true unless writes.present?
-
-      schedule(ws.msgq, ws.alarm, writes)
-
-      true
-    end
-
-    def schedule(msgq, alarm, writes)
-      writes.each do |path, content|
-        spawn do
-          content_ = content
-          if content_.is_a?(Term::Str)
-            # NOTE: Converting Str to Blob is cheap except for digest generation,
-            # which is O(N).
-            content_ = Term[content_.as_s.to_slice]
-          end
-
-          PathService.write(path, content_).wait
-
-          msgq << WriteFinished.new(path, content)
-          alarm.call
-        end
-      end
-    end
-  end
-
   class RackAgent
     @seen_seed : Bytes?
     @seen_library : Bytes?
-    @machine : Rack::Automaton?
+    @automaton : Rack::Automaton?
 
     def initialize(@library_ref : ExtrinsicMap::ReadingRef, @seed_ref : ExtrinsicMap::ReadingRef)
+      @epoch = 0u64
       @vantages = VarHash(D7::NodeAddr, Term).new
     end
 
@@ -754,7 +633,7 @@ module MuSoma
       ws.extrinsics.add(@seed_ref)
       ws.state.update(&.with(:"seed-path", @seed_ref.path))
 
-      @machine = Rack::Automaton.new(ws.parser, alarm: ws.alarm)
+      @automaton = Rack::Automaton.new(ws.parser, alarm: ws.alarm)
     end
 
     def sync(ws : Workspace)
@@ -864,8 +743,14 @@ module MuSoma
     end
 
     def step(ws : Workspace)
-      return unless machine = @machine
-      return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.codex, ws.library) || @vantages.pending?
+      return unless automaton = @automaton
+
+      epoch = automaton.epoch
+      if @epoch == epoch
+        return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.codex, ws.library) || @vantages.pending?
+      end
+
+      @epoch = epoch
 
       history_limit = ws.codex.get.history_limit
 
@@ -873,7 +758,7 @@ module MuSoma
         Term.case(state) do
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
             prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
-            drafts1 = machine.next_frames(draft, prepass: prepass, library: ws.library.get)
+            drafts1 = automaton.next_frames(draft, prepass: prepass, library: ws.library.get)
             draft1 = drafts1.last
 
             status1 = status

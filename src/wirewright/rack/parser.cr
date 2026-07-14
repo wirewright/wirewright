@@ -6,7 +6,7 @@ module Ww::Rack::Parser
   # NOTE: *lock* applies to *table* and *grammars*. *seen_* sets are owned
   # by step() in a thread-unsafe way.
   defcase State,
-    alarm : BlockingSignal,
+    epoch : Automaton::Epoch,
     lock : Sync::Mutex,
     table : Hash(Parse, ParseStatus),
     grammars : Hash(Term, ParseKit::GrammarF),
@@ -20,8 +20,8 @@ module Ww::Rack::Parser
   defrecord Completed, result : Term | ParseKit::Refusal | ParseKit::Err
   defrecord Pending
 
-  def state(alarm : BlockingSignal) : State
-    State.new(alarm,
+  def state(epoch : Automaton::Epoch) : State
+    State.new(epoch,
       lock: Sync::Mutex.new,
       table: {} of Parse => ParseStatus,
       grammars: {} of Term => ParseKit::GrammarF,
@@ -111,7 +111,7 @@ module Ww::Rack::Parser
         state.table[parse] = Pending.new
       end
 
-      run(state.lock, state.table, state.grammars, parse, state.alarm)
+      run(state.lock, state.table, state.grammars, parse, state.epoch)
 
       # Refresh status.
       status = state.lock.synchronize { state.table[parse]? }
@@ -150,7 +150,7 @@ module Ww::Rack::Parser
     @callstack = CallStack.empty
   end
 
-  private def run(lock, table, grammars, parse : Parse, alarm)
+  private def run(lock, table, grammars, parse : Parse, epoch)
     begin
       start = nil
       deadline = 128.microseconds
@@ -191,7 +191,7 @@ module Ww::Rack::Parser
       rescue Canceled
         # Nothing to do. The table already lacks *parse*.
       ensure
-        alarm.call
+        epoch.call
       end
     end
   end
@@ -217,9 +217,7 @@ module Ww::Rack::Parser
     end
   end
 
-  # Returns `true` if parses are ongoing at the moment. The caller is expected
-  # to wait for them (see `wait`). As an alternative to `wait`, the caller can
-  # pass their own `BlockingSignal` to `state` (this is what e.g. MuSoma does).
+  # Returns `true` if parses are ongoing at the moment.
   def pending?(state : State) : Bool
     state.lock.synchronize do
       # There is no way that anything can be added to the table anymore. No

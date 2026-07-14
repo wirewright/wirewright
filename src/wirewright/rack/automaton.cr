@@ -25,11 +25,11 @@
 # (feed @x @y @x)
 # WWML
 #
-# machine = Rack::Automaton.new
+# automaton = Rack::Automaton.new
 # circuit = seed
 #
 # loop do
-#   circuit, action = machine.blocking_next(circuit)
+#   circuit, action = automaton.blocking_next(circuit)
 #
 #   case action
 #   in Rack::Automaton::DisplayFrame
@@ -79,11 +79,30 @@ class Ww::Rack::Automaton
     Subframe
   end
 
-  # Constructs a Rack machine.
+  class Epoch
+    def initialize(@alarm : BlockingSignal)
+      @value = Atomic(UInt64).new(0u64)
+    end
+
+    def get : UInt64
+      @value.get(:relaxed)
+    end
+
+    def call : Nil
+      @value.add(1, :relaxed)
+      @alarm.call
+    end
+
+    def wait(epoch : UInt64) : UInt64
+      @alarm.wait(epoch)
+    end
+  end
+
+  # Constructs a Rack automaton.
   #
   # - *parser* is the parser to use to parse circuits.
-  # - *alarm* will be passed to asynchronous components of `Rack` so that they
-  #   can notify you that some piece of asynchronous work was completed.
+  # - *alarm* will be passed to asynchronous subsystems of `Rack` so that they
+  #   can notify you that some piece of asynchronous work has completed.
   # - *measure* enables or disables frame time measurement (see also: `median`;
   #   disabled by default).
   # - *mask* specifies the `DisplayAction` classes to emit.
@@ -93,15 +112,22 @@ class Ww::Rack::Automaton
     @measure : Bool = false,
     @display_mask : DisplayMask = DisplayMask::Frame,
   )
-    @alarm_epoch = 0u64
+    # Automaton state.
+    @epoch = Epoch.new(@alarm)
     @display = Deque(DisplayAction).new
-    @parser_state = Parser.state(@alarm)
-    @assembler_state = Assembler.state
+
+    # Auxiliary state.
+    @alarm_epoch = 0u64
     @t = [] of Time::Span
     @first = false
+
+    # Subsystem state.
+    @parser_state = Parser.state(@epoch)
+    @extrinsic_state = Extrinsics.state(@epoch)
+    @assembler_state = Assembler.state
   end
 
-  # Constructs a machine using the standard classifier `Rack.clf`.
+  # Constructs an automaton using the standard classifier `Rack.clf`.
   #
   # See the other overload to learn about *kwargs*.
   def self.new(**kwargs) : Automaton
@@ -133,7 +159,42 @@ class Ww::Rack::Automaton
     @t << dt
   end
 
-  # Advances the machine by one abstract step by evolving *circuit*. Returns
+  def epoch : UInt64
+    @epoch.get
+  end
+
+  # Returns `true` if the underlying asynchronous subsystems of Rack are busy.
+  # This often determines whether the circuit truly reached quiescence, or is
+  # just "asynchronously busy".
+  def pending? : Bool
+    Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state)
+  end
+
+  private def step(subframes, frames, circuit : Term, prepass, library) : Nil
+    subframes << circuit
+
+    subframes.concat(Assembler.step(@assembler_state, @parser, library, subframes.last))
+    frames << subframes.last
+
+    subframes.concat(Tspace.step(@parser, subframes.last, prepass))
+    frames << subframes.last
+
+    # TODO: the following step()s must eventually contribute to the same hypergraph
+    # instead of being staged like they are here. The subsystem nodes such as `parser`
+    # or `rewriter` are conceptually members of the Rack step; not distinct steps
+    # such as `Tspace` or `Assembler`.
+
+    subframes.concat(Parser.step(@parser_state, @parser, subframes.last, prepass))
+    frames << subframes.last
+
+    subframes.concat(Extrinsics.step(@extrinsic_state, @parser, subframes.last, prepass))
+    frames << subframes.last
+
+    subframes.concat(Rack.step(@parser, subframes.last, prepass))
+    frames << subframes.last
+  end
+
+  # Advances the automaton by one abstract step by evolving *circuit*. Returns
   # the evolved circuit (can be the same as *circuit*) and an action for you
   # to run.
   def next(circuit : Term, prepass = Rack::Prepass, library = Assembler::RuleLibrary.empty) : {Term, Action}
@@ -146,20 +207,8 @@ class Ww::Rack::Automaton
     frames = Pf::Kit.stack_array(Term, 4)
     subframes = Pf::Kit.stack_array(Term, 8)
 
-    subframes << circuit
-
     measure do
-      subframes.concat(Assembler.step(@assembler_state, @parser, library, subframes.last))
-      frames << subframes.last
-
-      subframes.concat(Tspace.step(@parser, subframes.last, prepass))
-      frames << subframes.last
-
-      subframes.concat(Parser.step(@parser_state, @parser, subframes.last, prepass))
-      frames << subframes.last
-
-      subframes.concat(Rack.step(@parser, subframes.last, prepass))
-      frames << subframes.last
+      step(subframes, frames, circuit, prepass, library)
     end
 
     fused = Pf::Kit.stack_array(Term, 8)
@@ -210,17 +259,14 @@ class Ww::Rack::Automaton
       return circuit, item
     end
 
-    unless circuit0 == circuit
+    unless frames.all? { |frame| circuit0 == frame }
       return circuit, Again.new
     end
 
     # If there's nothing new to display, this means we're probably quiescent.
     # Check if any asynchronous work is in progress.
 
-    # Make `pending?` queries.
-    pending = Parser.pending?(@parser_state)
-
-    if pending
+    if pending?
       return circuit, Wait.new
     end
 
@@ -241,7 +287,7 @@ class Ww::Rack::Automaton
       in DisplayAction, End
         return circuit, action
       in Wait
-        @alarm_epoch = @alarm.wait(@alarm_epoch)
+        @alarm_epoch = @epoch.wait(@alarm_epoch)
       end
     end
   end
@@ -276,13 +322,13 @@ class Ww::Rack::Automaton
   private class FrameIterator
     include Iterator(Term)
 
-    def initialize(@machine : Automaton, seed : Term)
+    def initialize(@automaton : Automaton, seed : Term)
       @circuit = seed
     end
 
     def next
       loop do
-        @circuit, action = @machine.blocking_next(@circuit)
+        @circuit, action = @automaton.blocking_next(@circuit)
 
         case action
         in Again
@@ -302,7 +348,7 @@ class Ww::Rack::Automaton
   # NOTE: The iterator is not guaranteed to terminate; this depends entirely
   # on *seed*. For example, oscillators will not terminate.
   #
-  # NOTE: Certain configurations of the machine (such as machines constructed
+  # NOTE: Certain configurations of the automaton (such as automata constructed
   # with `DisplayMask::None`) will not return even on `Iterator#next` on infinite
   # *seed*s (e.g. an oscillator), because such configurations assume completion;
   # so for *seeds* that cannot complete, they will basically cause a busy-loop
@@ -317,7 +363,7 @@ class Ww::Rack::Automaton
   #
   # If no measurements were taken, returns the zero time span.
   #
-  # NOTE: You must opt into frame time measurement by constructing a machine
+  # NOTE: You must opt into frame time measurement by constructing an automaton
   # with `measure: true`. See also: `Automaton.new`.
   def median : Time::Span
     if @t.empty?

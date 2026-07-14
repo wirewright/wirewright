@@ -5,7 +5,7 @@ module MuSoma
   alias Perturbation = GlobalPerturbation | TargetedPerturbation
 
   # Global perturbations do target any node in particular.
-  alias GlobalPerturbation = UpdateMice | UpdateRefs | FinishWrites | Scheduler::Event | DatabaseTaskCompleted
+  alias GlobalPerturbation = UpdateMice | Scheduler::Event | DatabaseTaskCompleted
 
   # Targeted perturbations target a specific node, identified by its `addr`.
   alias TargetedPerturbation = UpdateInput
@@ -13,9 +13,6 @@ module MuSoma
   defrecord UpdateMice,
     prev : Slice(MediaService::Mouse),
     now : Slice(MediaService::Mouse)
-
-  defrecord UpdateRefs, ext : ExtrinsicMap
-  defrecord FinishWrites, path : NormalPath, content : Term::Blob | Term::Str
 
   alias UpdateInput = UpdateFocus | UpdateKeyboardState
 
@@ -105,52 +102,6 @@ module MuSoma
         end
 
         Term.of(result)
-      end
-
-      otherwise do
-        node
-      end
-    end
-  end
-
-  private def perturb(node : Term, action : UpdateRefs) : Term
-    Term.case(node) do
-      matchpi %{[path-report path_string _?]}, path: NormalPath do
-        state = action.ext[ExtrinsicMap::ReportRef.new(path)]?
-
-        Term.morph(node, {2, MuSoma.translate(state)})
-      end
-
-      matchpi %{[path-reading path_string _?]}, path: NormalPath do
-        state = action.ext[ExtrinsicMap::ReadingRef.new(path)]?
-
-        Term.morph(node, {2, MuSoma.translate(state)})
-      end
-
-      matchpi %{[resource term_ _?]} do
-        continue unless query = ResourceService.query?(term)
-
-        state = action.ext[ExtrinsicMap::ResourceRef.new(query)]?
-
-        Term.morph(node, {2, MuSoma.translate(state)})
-      end
-
-      otherwise do
-        node
-      end
-    end
-  end
-
-  private def perturb(node : Term, action : FinishWrites) : Term
-    Term.case(node) do
-      matchpi %{[file-sink path_string content_]}, path: NormalPath do
-        continue unless path == action.path
-        continue unless content == action.content
-
-        # If a sink observed a write to its desired location, with its desired
-        # content, then the write is complete, regardless of whether this particular
-        # sink ordered the write.
-        Term.morph(node, {2, nil})
       end
 
       otherwise do
