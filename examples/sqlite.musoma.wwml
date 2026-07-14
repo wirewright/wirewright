@@ -75,7 +75,7 @@
   {¦ msg: insert -query_ -response name: [name-l_string name-r_string], age: [age-l_string age-r_string]}
     <> {query: (exec "insert into contacts values (?, ?)" ^(~ name-l name-r) ^(~ age-l age-r))}
   {¦ msg_: insert -query response_: (ok _) name_ age_ ⋮err}
-    <> {msg: refresh, (response): (), name: ["" ""], age: ["" ""], (err): ()}
+    <> {msg: refresh, (response): (), name: ("" ""), age: ("" ""), (err): ()}
   {¦ msg_: insert -query response_: [err detail_string] ⋮err}
     <> {(msg): (), (response): (), err: (p ^detail style: "text-theme-attention-fg")}
   {¦ msg: (delete name_string) -query_ -response_}
