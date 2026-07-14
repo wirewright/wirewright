@@ -464,26 +464,43 @@ module Ww::D7
 
   # Applies a perturbation *fn* to ground and parent node terms. Parents
   # are perturbed after their children.
-  def perturb(tree : ParseTree | UnaugmentedParentNode, &fn : Term, NodeAddr -> Term) : Term
-    perturb(tree, NodeAddr.empty, fn)
+  def perturb(tree : ParseTree | UnaugmentedParentNode, *, cue_disj : Indexable(Term::Sym) = Tuple.new, &fn : Term, NodeAddr -> Term) : Term
+    perturb(tree, cue_disj, NodeAddr.empty, fn)
   end
 
-  private def perturb(tree : InertLeaf, addr, fn) : Term
-    tree.feature.node
+  private def perturb(tree : InertLeaf, cue_disj, addr, fn) : Term
+    tree.feature.node # unchanged
   end
 
-  private def perturb(tree : GndLeaf, addr, fn) : Term
-    fn.call(tree.feature.node, addr)
+  private def perturb(tree : GndLeaf, cue_disj, addr, fn) : Term
+    node = tree.feature.node
+
+    unless dict = node.as_d?
+      return node # unchanged
+    end
+
+    unless cue_disj.any? { |cue| dict.probably_includes?(cue) }
+      return node # unchanged
+    end
+
+    fn.call(node, addr)
   end
 
-  private def perturb(tree : MixtureNode | ScopeNode, addr, fn) : Term
-    collapse(repair(tree) { |child| perturb(child, addr, fn) })
+  private def perturb(tree : MixtureNode | ScopeNode, cue_disj, addr, fn) : Term
+    collapse(repair(tree) { |child| perturb(child, cue_disj, addr, fn) })
   end
 
-  private def perturb(tree : ParentNode | UnaugmentedParentNode, addr, fn) : Term
+  private def perturb(tree : ParentNode | UnaugmentedParentNode, cue_disj, addr, fn) : Term
+    node = tree.feature.node
+    range = tree.feature.range
+
+    unless cue_disj.any? { |cue| node.probably_includes?(cue) }
+      return Term.of(node) # unchanged
+    end
+
     repair = repair(tree) do |child, index|
-      key = tree.feature.range.begin + index
-      perturb(child, addr.append(key), fn)
+      key = range.begin + index
+      perturb(child, cue_disj, addr.append(key), fn)
     end
 
     # repair : ParentRepair
