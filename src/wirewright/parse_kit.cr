@@ -764,10 +764,9 @@ module Ww::ParseKit
   end
 
   defrecord GrammarF,
-    productions : Slice(ProductionEntryF),
-    rangemap : Hash(Term::Sym, RuleRefF)
-
-  defrecord ProductionEntryF, left_recursive : Bool, production : ProductionF
+    productions : Slice(ProductionF),
+    left_recursive : BitArray,
+    refmap : Hash(Term::Sym, RuleRefF)
 
   alias ProductionF = RuleProductionF | AliasProductionF
 
@@ -778,7 +777,7 @@ module Ww::ParseKit
                     SeqF | ManyF | ManySepF | CaptureF | LocationF | FindF | FormF
 
   # NOTE: *end* is exclusive.
-  defrecord RuleRefF, begin : UInt32, end : UInt32
+  defrecord RuleRefF, ord : UInt32, begin : UInt32, end : UInt32
   defrecord OrdChoiceF, members : Slice(ParseletF)
   defrecord MaxChoiceF, members : Slice(ParseletF)
   defrecord SeqF, members : Slice(ParseletF), observed : Bool
@@ -789,73 +788,73 @@ module Ww::ParseKit
   defcase FindF, member : ParseletF
   defcase FormF, member : ParseletF, spec : FormSpec
 
-  private def flatten(rangemap, parselet : Reject | Stringp)
+  private def flatten(refmap, parselet : Reject | Stringp)
     parselet
   end
 
-  private def flatten(rangemap, parselet : RuleRef)
-    rangemap[parselet.name]? || Reject.new
+  private def flatten(refmap, parselet : RuleRef)
+    refmap[parselet.name]? || Reject.new
   end
 
-  private def flatten(rangemap, parselet : OrdChoice)
+  private def flatten(refmap, parselet : OrdChoice)
     members = parselet.members.to_readonly_slice do |member|
-      flatten(rangemap, member).as(ParseletF)
+      flatten(refmap, member).as(ParseletF)
     end
     OrdChoiceF.new(members)
   end
 
-  private def flatten(rangemap, parselet : MaxChoice)
+  private def flatten(refmap, parselet : MaxChoice)
     members = parselet.members.to_readonly_slice do |member|
-      flatten(rangemap, member).as(ParseletF)
+      flatten(refmap, member).as(ParseletF)
     end
     MaxChoiceF.new(members)
   end
 
-  private def flatten(rangemap, parselet : Seq)
+  private def flatten(refmap, parselet : Seq)
     members = parselet.members.to_readonly_slice do |member|
-      flatten(rangemap, member).as(ParseletF)
+      flatten(refmap, member).as(ParseletF)
     end
     SeqF.new(members, parselet.observed)
   end
 
-  private def flatten(rangemap, parselet : Many)
-    member = flatten(rangemap, parselet.member)
+  private def flatten(refmap, parselet : Many)
+    member = flatten(refmap, parselet.member)
     ManyF.new(parselet.min, parselet.max, member, parselet.observed)
   end
 
-  private def flatten(rangemap, parselet : ManySep)
-    member = flatten(rangemap, parselet.member)
-    sep = flatten(rangemap, parselet.sep)
+  private def flatten(refmap, parselet : ManySep)
+    member = flatten(refmap, parselet.member)
+    sep = flatten(refmap, parselet.sep)
     ManySepF.new(parselet.min, parselet.max, member, sep, parselet.trailing, parselet.observed)
   end
 
-  private def flatten(rangemap, parselet : Capture)
-    member = flatten(rangemap, parselet.member)
+  private def flatten(refmap, parselet : Capture)
+    member = flatten(refmap, parselet.member)
     CaptureF.new(parselet.name, member)
   end
 
-  private def flatten(rangemap, parselet : Location)
-    member = flatten(rangemap, parselet.member)
+  private def flatten(refmap, parselet : Location)
+    member = flatten(refmap, parselet.member)
     LocationF.new(parselet.name, member)
   end
 
-  private def flatten(rangemap, parselet : Find)
-    member = flatten(rangemap, parselet.member)
+  private def flatten(refmap, parselet : Find)
+    member = flatten(refmap, parselet.member)
     FindF.new(member)
   end
 
-  private def flatten(rangemap, parselet : Form)
-    member = flatten(rangemap, parselet.member)
+  private def flatten(refmap, parselet : Form)
+    member = flatten(refmap, parselet.member)
     FormF.new(member, parselet.spec)
   end
 
-  private def flatten(rangemap, production : RuleProduction)
-    parselet = flatten(rangemap, production.parselet)
+  private def flatten(refmap, production : RuleProduction)
+    parselet = flatten(refmap, production.parselet)
     RuleProductionF.new(parselet, production.template)
   end
 
-  private def flatten(rangemap, production : AliasProduction)
-    parselet = flatten(rangemap, production.parselet)
+  private def flatten(refmap, production : AliasProduction)
+    parselet = flatten(refmap, production.parselet)
     AliasProductionF.new(parselet)
   end
 
@@ -866,28 +865,28 @@ module Ww::ParseKit
   # More concretely, `RuleRef`s are replaced by `RuleRefF`s, which point
   # to ranges of inlined grammar production overloads.
   def flatten(grammar : Grammar) : GrammarF
-    rangemap = {} of Term::Sym => RuleRefF
+    refmap = {} of Term::Sym => RuleRefF
     size = 0u32
 
     # Declaration order is memory order.
-    grammar.productions.each do |name, overloads|
-      rangemap[name] = RuleRefF.new(begin: size, end: size + overloads.size)
+    grammar.productions.each_with_index do |(name, overloads), ord|
+      refmap[name] = RuleRefF.new(ord.to_u32, begin: size, end: size + overloads.size)
       size += overloads.size
     end
 
-    entries = Pf::Kit.stack_array(ProductionEntryF, 32)
+    productions = Pf::Kit.stack_array(ProductionF, 32)
+    left_recursive = BitArray.new(grammar.productions.size)
 
-    grammar.productions.each do |name, overloads|
-      lr = name.in?(grammar.left_recursive)
+    grammar.productions.each_with_index do |(name, overloads), ord|
+      left_recursive[ord] = name.in?(grammar.left_recursive)
 
       overloads.each do |overload|
-        overload_f = flatten(rangemap, overload)
-        entry = ProductionEntryF.new(lr, overload_f)
-        entries << entry
+        overload_f = flatten(refmap, overload)
+        productions << overload_f
       end
     end
 
-    GrammarF.new(entries.to_unsafe_readonly_slice!, rangemap)
+    GrammarF.new(productions.to_unsafe_readonly_slice!, left_recursive, refmap)
   end
 
   defrecord Err, detail : String, text : Pf::StringSeln
@@ -1101,21 +1100,12 @@ module Ww::ParseKit
       return π
     end
 
-    overloads = (ctx.grammar.productions + ref.begin).trim(ref.end - ref.begin)
-    unless head = overloads.first?
-      return Refusal.new # Missing toplevel rule compiles to this.
-    end
-
     ctx.tick
 
+    overloads = (ctx.grammar.productions + ref.begin).trim(ref.end - ref.begin)
+
     # Fast path for rules that are not left-recursive.
-    #
-    # NOTE: All *overloads* share the same left_recursive value. It's enough
-    # to just check one. Unfortunately it isn't easy to achieve the layout
-    # ... | Bool ProductionEntryF ProductionEntryF ... ProductionEntryF | Bool ...
-    # in Crystal, i.e., pack just a single boolean as a header inline with
-    # ProductionEntryFs. So we have to resort to this implicit assumption.
-    unless head.left_recursive
+    unless ctx.grammar.left_recursive[ref.ord]
       return parse(ctx, overloads, text)
     end
 
@@ -1421,9 +1411,9 @@ module Ww::ParseKit
     end
   end
 
-  def parse(ctx : Context, entries : Slice(ProductionEntryF), text : Pf::StringSeln) : Parseout
-    entries.each do |entry|
-      π = parse(ctx, entry.production, text)
+  def parse(ctx : Context, productions : Slice(ProductionF), text : Pf::StringSeln) : Parseout
+    productions.each do |production|
+      π = parse(ctx, production, text)
 
       case π
       in Ok, Err then return π
@@ -1435,7 +1425,7 @@ module Ww::ParseKit
   end
 
   def parse(ctx : Context, top : Term::Sym, text : Pf::StringSeln) : Parseout
-    unless ref = ctx.grammar.rangemap[top]?
+    unless ref = ctx.grammar.refmap[top]?
       return Refusal.new
     end
 
