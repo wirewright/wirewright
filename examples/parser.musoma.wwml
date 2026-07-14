@@ -74,19 +74,15 @@
   (escape "n") => "\n"
   (escape "r") => "\r"
   (escape "t") => "\t"
-  (escape "u" codepoint←(form "%x%x%x%x" (nat base: 16)))
+  (escape "u" codepoint←(form "%|xxxx|" (nat radix: 16)))
     => ^(chr codepoint)
   ;; Instead of writing `(number sign nat (maybe fraction) (maybe exponent))`,
   ;; which would be rather cumbersome to unpack due to all the maybes, here
   ;; we simply enumerate all possible ways to write a number.
-  (number S←sign base←nat fr←fraction exp←exponent)
-    => ^(* S (+ base fr) exp)
-  (number S←sign base←nat fr←fraction)
-    => ^(* S (+ base fr))
-  (number S←sign base←nat exp←exponent)
-    => ^(* S base exp)
-  (number S←sign base←nat)
-    => ^(* S base)
+  (number S←sign base←nat fr←fraction exp←exponent) => ^(* S (+ base fr) exp)
+  (number S←sign base←nat fr←fraction) => ^(* S (+ base fr))
+  (number S←sign base←nat exp←exponent) => ^(* S base exp)
+  (number S←sign base←nat) => ^(* S base)
   ;; Parse sign. No sign means positive.
   (sign "+") => 1
   (sign "-") => -1
@@ -99,5 +95,5 @@
     => ^(/ value (** 10 (charcount digits)))
   ;; Parse and decode exponent.
   (exponent "[eE]" S←sign value←(form "[0-9]+" nat))
-    => ^(* S (** 10 value))
+    => ^(** 10 (* S value))
   (ws "[ \n\r\t]*"))

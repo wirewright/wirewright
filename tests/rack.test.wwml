@@ -6167,267 +6167,95 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 1))
-    (frame/tail
-      (cell @input "1 + 2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 2)))
-    (frame/tail
-      (cell @input "1 + 2 + 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1 - 2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- 1 2)))
-    (frame/tail
-      (cell @input "1 - 2 - 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- 1 2) 3)))
-    (frame/tail
-      (cell @input "1 - (2 - 3)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- 1 (- 2 3))))
-    (frame/tail
-      (cell @input "1 * 2 * 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* 1 (* 2 3))))
-    (frame/tail
-      (cell @input "(1 * 2) * 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* (* 1 2) 3)))
-    (frame/tail
-      (cell @input "1 / 2 / 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (/ 1 (/ 2 3))))
-    (frame/tail
-      (cell @input "(1 / 2) / 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (/ (/ 1 2) 3)))
-    (frame/tail
-      (cell @input "1 + 2 * 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 (* 2 3))))
-    (frame/tail
-      (cell @input "(1 + 2)*3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1/2 + 3/4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (/ 1 2) (/ 3 4))))
-    (frame/tail
-      (cell @input "1/(2 + 3/4)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (/ 1 (+ 2 (/ 3 4)))))
-    (frame/tail
-      (cell @input "1*2 - 3*4 - 5*6")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- (* 1 2) (* 3 4)) (* 5 6))))
-    (frame/tail
-      (cell @input "1*2 + 3*4 - 5*6")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ (* 1 2) (* 3 4)) (* 5 6))))
-    (frame/tail
-      (cell @input "1 + 2 - 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1 - 2 + 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- 1 2) 3)))
-    (frame/tail
-      (cell @input "1 + 2 - 3 + 4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ 1 2) 3) 4)))
-    (frame/tail
-      (cell @input "1 - 2 + 3 - 4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ (- 1 2) 3) 4)))
-    (frame/tail
-      (cell @input "1 + 2 + 3 - 4 + 5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ (+ 1 2) 3) 4) 5)))
-    (frame/tail
-      (cell @input "1 - 2 - 3 + 4 - 5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ (- (- 1 2) 3) 4) 5)))
-    (frame/tail
-      (cell @input "1*2 + 3*4 - 5*6 + 7*8")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ (* 1 2) (* 3 4)) (* 5 6)) (* 7 8))))
-    (frame/tail
-      (cell @input "1*2 - 3*4 + 5*6 - 7*8")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ (- (* 1 2) (* 3 4)) (* 5 6)) (* 7 8))))
-    (frame/tail
-      (cell @input "1/2 + 3/4 - 5/6 + 7/8")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ (/ 1 2) (/ 3 4)) (/ 5 6)) (/ 7 8))))
-    (frame/tail
-      (cell @input "1*2 + 3/4 - 5*6 + 7/8")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ (* 1 2) (/ 3 4)) (* 5 6)) (/ 7 8))))
-    (frame/tail
-      (cell @input "(1 + 2) - (3 + 4)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ 1 2) (+ 3 4))))
-    (frame/tail
-      (cell @input "1 + (2 - 3) + 4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ 1 (- 2 3)) 4)))
-    (frame/tail
-      (cell @input "(1 + 2) - 3 + 4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ 1 2) 3) 4)))
-    (frame/tail
-      (cell @input "1 + (2*3 - 4*5)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 (- (* 2 3) (* 4 5)))))
-    (frame/tail
-      (cell @input "(1*2 + 3*4) - (5*6 + 7*8)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ (* 1 2) (* 3 4)) (+ (* 5 6) (* 7 8)))))
-    (frame/tail
-      (cell @input "1 + (2 - 3) + (4 - 5) + 6")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ (+ 1 (- 2 3)) (- 4 5)) 6)))
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output 1))
+    (frame/tail (cell @input "1 + 2") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 2)))
+    (frame/tail (cell @input "1 + 2 + 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ 1 2) 3)))
+    (frame/tail (cell @input "1 - 2") (cell @output))
+    (frame/tail (cell @input) (cell @output (- 1 2)))
+    (frame/tail (cell @input "1 - 2 - 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- 1 2) 3)))
+    (frame/tail (cell @input "1 - (2 - 3)") (cell @output))
+    (frame/tail (cell @input) (cell @output (- 1 (- 2 3))))
+    (frame/tail (cell @input "1 * 2 * 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (* 1 (* 2 3))))
+    (frame/tail (cell @input "(1 * 2) * 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (* (* 1 2) 3)))
+    (frame/tail (cell @input "1 / 2 / 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (/ 1 (/ 2 3))))
+    (frame/tail (cell @input "(1 / 2) / 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (/ (/ 1 2) 3)))
+    (frame/tail (cell @input "1 + 2 * 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 (* 2 3))))
+    (frame/tail (cell @input "(1 + 2)*3") (cell @output))
+    (frame/tail (cell @input) (cell @output (* (+ 1 2) 3)))
+    (frame/tail (cell @input "1/2 + 3/4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (/ 1 2) (/ 3 4))))
+    (frame/tail (cell @input "1/(2 + 3/4)") (cell @output))
+    (frame/tail (cell @input) (cell @output (/ 1 (+ 2 (/ 3 4)))))
+    (frame/tail (cell @input "1*2 - 3*4 - 5*6") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- (* 1 2) (* 3 4)) (* 5 6))))
+    (frame/tail (cell @input "1*2 + 3*4 - 5*6") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ (* 1 2) (* 3 4)) (* 5 6))))
+    (frame/tail (cell @input "1 + 2 - 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ 1 2) 3)))
+    (frame/tail (cell @input "1 - 2 + 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- 1 2) 3)))
+    (frame/tail (cell @input "1 + 2 - 3 + 4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ 1 2) 3) 4)))
+    (frame/tail (cell @input "1 - 2 + 3 - 4") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ (- 1 2) 3) 4)))
+    (frame/tail (cell @input "1 + 2 + 3 - 4 + 5") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ (+ 1 2) 3) 4) 5)))
+    (frame/tail (cell @input "1 - 2 - 3 + 4 - 5") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ (- (- 1 2) 3) 4) 5)))
+    (frame/tail (cell @input "1*2 + 3*4 - 5*6 + 7*8") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ (* 1 2) (* 3 4)) (* 5 6)) (* 7 8))))
+    (frame/tail (cell @input "1*2 - 3*4 + 5*6 - 7*8") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ (- (* 1 2) (* 3 4)) (* 5 6)) (* 7 8))))
+    (frame/tail (cell @input "1/2 + 3/4 - 5/6 + 7/8") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ (/ 1 2) (/ 3 4)) (/ 5 6)) (/ 7 8))))
+    (frame/tail (cell @input "1*2 + 3/4 - 5*6 + 7/8") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ (* 1 2) (/ 3 4)) (* 5 6)) (/ 7 8))))
+    (frame/tail (cell @input "(1 + 2) - (3 + 4)") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ 1 2) (+ 3 4))))
+    (frame/tail (cell @input "1 + (2 - 3) + 4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ 1 (- 2 3)) 4)))
+    (frame/tail (cell @input "(1 + 2) - 3 + 4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ 1 2) 3) 4)))
+    (frame/tail (cell @input "1 + (2*3 - 4*5)") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 (- (* 2 3) (* 4 5)))))
+    (frame/tail (cell @input "(1*2 + 3*4) - (5*6 + 7*8)") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ (* 1 2) (* 3 4)) (+ (* 5 6) (* 7 8)))))
+    (frame/tail (cell @input "1 + (2 - 3) + (4 - 5) + 6") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ (+ 1 (- 2 3)) (- 4 5)) 6)))
     ;; Factor
-    (frame/tail
-      (cell @input "1*2/3*4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* 1 (/ 2 (* 3 4)))))
-    (frame/tail
-      (cell @input "1/2*3/4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (/ 1 (* 2 (/ 3 4)))))
-    (frame/tail
-      (cell @input "(1*2)/3*4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (/ (* 1 2) (* 3 4))))
-    (frame/tail
-      (cell @input "(1*2)/(3*4)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (/ (* 1 2) (* 3 4))))
+    (frame/tail (cell @input "1*2/3*4") (cell @output))
+    (frame/tail (cell @input) (cell @output (* 1 (/ 2 (* 3 4)))))
+    (frame/tail (cell @input "1/2*3/4") (cell @output))
+    (frame/tail (cell @input) (cell @output (/ 1 (* 2 (/ 3 4)))))
+    (frame/tail (cell @input "(1*2)/3*4") (cell @output))
+    (frame/tail (cell @input) (cell @output (/ (* 1 2) (* 3 4))))
+    (frame/tail (cell @input "(1*2)/(3*4)") (cell @output))
+    (frame/tail (cell @input) (cell @output (/ (* 1 2) (* 3 4))))
     ;; Whitespace
-    (frame/tail
-      (cell @input "1+2-3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1 +2- 3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1+ 2 -3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1   +   2   -   3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ 1 2) 3)))
+    (frame/tail (cell @input "1+2-3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ 1 2) 3)))
+    (frame/tail (cell @input "1 +2- 3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ 1 2) 3)))
+    (frame/tail (cell @input "1+ 2 -3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ 1 2) 3)))
+    (frame/tail (cell @input "1   +   2   -   3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ 1 2) 3)))
     ;; Misc
-    (frame/tail
-      (cell @input "1 + 2 - 3 + 4 - 5 + 6 - 7 + 8")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ (- (+ (- (+ 1 2) 3) 4) 5) 6) 7) 8)))
-    (frame/tail
-      (cell @input "1 + 2 - 3 + 4 - 5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (+ (- (+ 1 2) 3) 4) 5)))
-    (frame/tail
-      (cell @input "1 - 2 + 3 - 4 + 5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (- (+ (- 1 2) 3) 4) 5)))
+    (frame/tail (cell @input "1 + 2 - 3 + 4 - 5 + 6 - 7 + 8") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ (- (+ (- (+ 1 2) 3) 4) 5) 6) 7) 8)))
+    (frame/tail (cell @input "1 + 2 - 3 + 4 - 5") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (+ (- (+ 1 2) 3) 4) 5)))
+    (frame/tail (cell @input "1 - 2 + 3 - 4 + 5") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (- (+ (- 1 2) 3) 4) 5)))
     (frame/tail
       (cell @input "1*2 + 3 - 4*5 + 6 - 7*8")
       (cell @output))
@@ -6476,57 +6304,23 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ()))
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1)))
-    (frame/tail
-      (cell @input "12")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (12)))
-    (frame/tail
-      (cell @input "1,2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "12,3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (12 3)))
-    (frame/tail
-      (cell @input "12,34")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (12 34)))
-    (frame/tail
-      (cell @input "1,2,3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2 3)))
-    (frame/tail
-      (cell @input "1,2,3,4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2 3 4)))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output ()))
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output (1)))
+    (frame/tail (cell @input "12") (cell @output))
+    (frame/tail (cell @input) (cell @output (12)))
+    (frame/tail (cell @input "1,2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "12,3") (cell @output))
+    (frame/tail (cell @input) (cell @output (12 3)))
+    (frame/tail (cell @input "12,34") (cell @output))
+    (frame/tail (cell @input) (cell @output (12 34)))
+    (frame/tail (cell @input "1,2,3") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2 3)))
+    (frame/tail (cell @input "1,2,3,4") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2 3 4)))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Many with separator (trailing: true)
@@ -6541,57 +6335,23 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ()))
-    (frame/tail
-      (cell @input ",")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1)))
-    (frame/tail
-      (cell @input "1,")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1)))
-    (frame/tail
-      (cell @input "1,2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1,2,")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1,2,3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2 3)))
-    (frame/tail
-      (cell @input "1,2,3,")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2 3)))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output ()))
+    (frame/tail (cell @input ",") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output (1)))
+    (frame/tail (cell @input "1,") (cell @output))
+    (frame/tail (cell @input) (cell @output (1)))
+    (frame/tail (cell @input "1,2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1,2,") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1,2,3") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2 3)))
+    (frame/tail (cell @input "1,2,3,") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2 3)))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Basic direct left recursion (same head)
@@ -6606,33 +6366,15 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 1))
-    (frame/tail
-      (cell @input "1+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {a: 1, b: 2}))
-    (frame/tail
-      (cell @input "1+2+3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {a: {a: 1, b: 2}, b: 3}))
-    (frame/tail
-      (cell @input "1+2+3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {a: {a: {a: 1, b: 2}, b: 3}, b: 4}))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output 1))
+    (frame/tail (cell @input "1+2") (cell @output))
+    (frame/tail (cell @input) (cell @output {a: 1, b: 2}))
+    (frame/tail (cell @input "1+2+3") (cell @output))
+    (frame/tail (cell @input) (cell @output {a: {a: 1, b: 2}, b: 3}))
+    (frame/tail (cell @input "1+2+3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output {a: {a: {a: 1, b: 2}, b: 3}, b: 4}))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Basic indirect left recursion
@@ -6650,69 +6392,27 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 1))
-    (frame/tail
-      (cell @input "123")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 123))
-    (frame/tail
-      (cell @input "1-2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- 1 2)))
-    (frame/tail
-      (cell @input "12-3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- 12 3)))
-    (frame/tail
-      (cell @input "1-2-3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- 1 2) 3)))
-    (frame/tail
-      (cell @input "12-3-4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- 12 3) 4)))
-    (frame/tail
-      (cell @input "12-34-5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- 12 34) 5)))
-    (frame/tail
-      (cell @input "12-34-56")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- 12 34) 56)))
-    (frame/tail
-      (cell @input "1-2-3-4-5-6-7-8-9")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- (- (- (- (- (- (- 1 2) 3) 4) 5) 6) 7) 8) 9)))
-    (frame/tail
-      (cell @input "1-23-4-56-78-9")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (- (- (- (- (- 1 23) 4) 56) 78) 9)))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output 1))
+    (frame/tail (cell @input "123") (cell @output))
+    (frame/tail (cell @input) (cell @output 123))
+    (frame/tail (cell @input "1-2") (cell @output))
+    (frame/tail (cell @input) (cell @output (- 1 2)))
+    (frame/tail (cell @input "12-3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- 12 3)))
+    (frame/tail (cell @input "1-2-3") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- 1 2) 3)))
+    (frame/tail (cell @input "12-3-4") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- 12 3) 4)))
+    (frame/tail (cell @input "12-34-5") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- 12 34) 5)))
+    (frame/tail (cell @input "12-34-56") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- 12 34) 56)))
+    (frame/tail (cell @input "1-2-3-4-5-6-7-8-9") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- (- (- (- (- (- (- 1 2) 3) 4) 5) 6) 7) 8) 9)))
+    (frame/tail (cell @input "1-23-4-56-78-9") (cell @output))
+    (frame/tail (cell @input) (cell @output (- (- (- (- (- 1 23) 4) 56) 78) 9)))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Nested recursion at different positions
@@ -6731,81 +6431,31 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 1))
-    (frame/tail
-      (cell @input "1+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 2)))
-    (frame/tail
-      (cell @input "1+2+3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 (+ 2 3))))
-    (frame/tail
-      (cell @input "1+2+3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 (+ 2 (+ 3 4)))))
-    (frame/tail
-      (cell @input "(1)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 1))
-    (frame/tail
-      (cell @input "(1+2)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 2)))
-    (frame/tail
-      (cell @input "(1+2)+3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "((1+2)+3)+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ (+ 1 2) 3) 4)))
-    (frame/tail
-      (cell @input "((1+2)+3)+4+5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ (+ 1 2) 3) (+ 4 5))))
-    (frame/tail
-      (cell @input "((1+2)+3)+(4+5)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ (+ 1 2) 3) (+ 4 5))))
-    (frame/tail
-      (cell @input "(((1+2)+3)+4)+5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ (+ (+ 1 2) 3) 4) 5)))
-    (frame/tail
-      (cell @input "5+((1+2)+((3)+4))")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 5 (+ (+ 1 2) (+ 3 4)))))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output 1))
+    (frame/tail (cell @input "1+2") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 2)))
+    (frame/tail (cell @input "1+2+3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 (+ 2 3))))
+    (frame/tail (cell @input "1+2+3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 (+ 2 (+ 3 4)))))
+    (frame/tail (cell @input "(1)") (cell @output))
+    (frame/tail (cell @input) (cell @output 1))
+    (frame/tail (cell @input "(1+2)") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 2)))
+    (frame/tail (cell @input "(1+2)+3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ 1 2) 3)))
+    (frame/tail (cell @input "((1+2)+3)+4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ (+ 1 2) 3) 4)))
+    (frame/tail (cell @input "((1+2)+3)+4+5") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ (+ 1 2) 3) (+ 4 5))))
+    (frame/tail (cell @input "((1+2)+3)+(4+5)") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ (+ 1 2) 3) (+ 4 5))))
+    (frame/tail (cell @input "(((1+2)+3)+4)+5") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ (+ (+ 1 2) 3) 4) 5)))
+    (frame/tail (cell @input "5+((1+2)+((3)+4))") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 5 (+ (+ 1 2) (+ 3 4)))))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Mutual recursion with multiple growth opportunities
@@ -6827,111 +6477,41 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "0")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 0))
-    (frame/tail
-      (cell @input "42")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 42))
-    (frame/tail
-      (cell @input "1+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 2)))
-    (frame/tail
-      (cell @input "3*4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* 3 4)))
-    (frame/tail
-      (cell @input "1+2+3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "2*3*4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* (* 2 3) 4)))
-    (frame/tail
-      (cell @input "1+2*3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ 1 (* 2 3))))
-    (frame/tail
-      (cell @input "2*3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (* 2 3) 4)))
-    (frame/tail
-      (cell @input "1*2+3*4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (* 1 2) (* 3 4))))
-    (frame/tail
-      (cell @input "1+2*3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ 1 (* 2 3)) 4)))
-    (frame/tail
-      (cell @input "(1+2)*3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* (+ 1 2) 3)))
-    (frame/tail
-      (cell @input "1*(2+3)")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* 1 (+ 2 3))))
-    (frame/tail
-      (cell @input "((7))")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 7))
-    (frame/tail
-      (cell @input "((1+2))*((3+4))")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* (+ 1 2) (+ 3 4))))
-    (frame/tail
-      (cell @input "1+2*3+4*5+6")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (+ (+ 1 (* 2 3)) (* 4 5)) 6)))
-    (frame/tail
-      (cell @input "1*(2+3*(4+5))")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (* 1 (+ 2 (* 3 (+ 4 5))))))
-    (frame/tail
-      (cell @input "((1+2)*(3+(4*5+6))*7)+8")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (* (* (+ 1 2) (+ 3 (+ (* 4 5) 6))) 7) 8)))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "0") (cell @output))
+    (frame/tail (cell @input) (cell @output 0))
+    (frame/tail (cell @input "42") (cell @output))
+    (frame/tail (cell @input) (cell @output 42))
+    (frame/tail (cell @input "1+2") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 2)))
+    (frame/tail (cell @input "3*4") (cell @output))
+    (frame/tail (cell @input) (cell @output (* 3 4)))
+    (frame/tail (cell @input "1+2+3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ 1 2) 3)))
+    (frame/tail (cell @input "2*3*4") (cell @output))
+    (frame/tail (cell @input) (cell @output (* (* 2 3) 4)))
+    (frame/tail (cell @input "1+2*3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ 1 (* 2 3))))
+    (frame/tail (cell @input "2*3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (* 2 3) 4)))
+    (frame/tail (cell @input "1*2+3*4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (* 1 2) (* 3 4))))
+    (frame/tail (cell @input "1+2*3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ 1 (* 2 3)) 4)))
+    (frame/tail (cell @input "(1+2)*3") (cell @output))
+    (frame/tail (cell @input) (cell @output (* (+ 1 2) 3)))
+    (frame/tail (cell @input "1*(2+3)") (cell @output))
+    (frame/tail (cell @input) (cell @output (* 1 (+ 2 3))))
+    (frame/tail (cell @input "((7))") (cell @output))
+    (frame/tail (cell @input) (cell @output 7))
+    (frame/tail (cell @input "((1+2))*((3+4))") (cell @output))
+    (frame/tail (cell @input) (cell @output (* (+ 1 2) (+ 3 4))))
+    (frame/tail (cell @input "1+2*3+4*5+6") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (+ (+ 1 (* 2 3)) (* 4 5)) 6)))
+    (frame/tail (cell @input "1*(2+3*(4+5))") (cell @output))
+    (frame/tail (cell @input) (cell @output (* 1 (+ 2 (* 3 (+ 4 5))))))
+    (frame/tail (cell @input "((1+2)*(3+(4*5+6))*7)+8") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (* (* (+ 1 2) (+ 3 (+ (* 4 5) 6))) 7) 8)))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Recursion beneath repetition
@@ -6955,144 +6535,52 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "0")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (0)))
-    (frame/tail
-      (cell @input "1+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ((+ 1 2))))
-    (frame/tail
-      (cell @input "1 2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1\t2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1\n2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1\r\n2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1 \t \n 2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 2)))
-    (frame/tail
-      (cell @input "1+2\t3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ((+ 1 2) (+ 3 4))))
-    (frame/tail
-      (cell @input "1+2\n3\n4+5")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ((+ 1 2) 3 (+ 4 5))))
-    (frame/tail
-      (cell @input "1\n\n2+3\n\n\n4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 (+ 2 3) 4)))
-    (frame/tail
-      (cell @input "1+2+3\n4+5+6")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ((+ (+ 1 2) 3) (+ (+ 4 5) 6))))
-    (frame/tail
-      (cell @input "10\t20+30\n40+50+60")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (10 (+ 20 30) (+ (+ 40 50) 60))))
-    (frame/tail
-      (cell @input "1+2\n\t3\t\t4+5+6\n7")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ((+ 1 2) 3 (+ (+ 4 5) 6) 7)))
-    (frame/tail
-      (cell @input "12345+67890\n42\t100+200+300")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output ((+ 12345 67890) 42 (+ (+ 100 200) 300))))
-    (frame/tail
-      (cell @input "1\n2+3\t4\n5+6+7\t\t8+9")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (1 (+ 2 3) 4 (+ (+ 5 6) 7) (+ 8 9))))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1+")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "+1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1 +2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1+ 2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1 + 2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1\t+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1+\n2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
+    (frame/tail (cell @input "0") (cell @output))
+    (frame/tail (cell @input) (cell @output (0)))
+    (frame/tail (cell @input "1+2") (cell @output))
+    (frame/tail (cell @input) (cell @output ((+ 1 2))))
+    (frame/tail (cell @input "1 2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1\t2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1\n2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1\r\n2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1 \t \n 2") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "1+2\t3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output ((+ 1 2) (+ 3 4))))
+    (frame/tail (cell @input "1+2\n3\n4+5") (cell @output))
+    (frame/tail (cell @input) (cell @output ((+ 1 2) 3 (+ 4 5))))
+    (frame/tail (cell @input "1\n\n2+3\n\n\n4") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 (+ 2 3) 4)))
+    (frame/tail (cell @input "1+2+3\n4+5+6") (cell @output))
+    (frame/tail (cell @input) (cell @output ((+ (+ 1 2) 3) (+ (+ 4 5) 6))))
+    (frame/tail (cell @input "10\t20+30\n40+50+60") (cell @output))
+    (frame/tail (cell @input) (cell @output (10 (+ 20 30) (+ (+ 40 50) 60))))
+    (frame/tail (cell @input "1+2\n\t3\t\t4+5+6\n7") (cell @output))
+    (frame/tail (cell @input) (cell @output ((+ 1 2) 3 (+ (+ 4 5) 6) 7)))
+    (frame/tail (cell @input "12345+67890\n42\t100+200+300") (cell @output))
+    (frame/tail (cell @input) (cell @output ((+ 12345 67890) 42 (+ (+ 100 200) 300))))
+    (frame/tail (cell @input "1\n2+3\t4\n5+6+7\t\t8+9") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 (+ 2 3) 4 (+ (+ 5 6) 7) (+ 8 9))))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "+1") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1 +2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1+ 2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1 + 2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1\t+2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1+\n2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
     end)
 
   ;; Nullable left recursion
@@ -7106,51 +6594,21 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "a")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {l: () r: "a"}))
-    (frame/tail
-      (cell @input "aa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {l: ({l: (), r: "a"}) r: "a"}))
-    (frame/tail
-      (cell @input "aaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {l: ({l: ({l: (), r: "a"}), r: "a"}) r: "a"}))
-    (frame/tail
-      (cell @input "aaaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
-    (frame/tail
-      (cell @input "aaaaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {l: ({l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
-    (frame/tail
-      (cell @input "aaaaaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output {l: ({l: ({l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "a") (cell @output))
+    (frame/tail (cell @input) (cell @output {l: () r: "a"}))
+    (frame/tail (cell @input "aa") (cell @output))
+    (frame/tail (cell @input) (cell @output {l: ({l: (), r: "a"}) r: "a"}))
+    (frame/tail (cell @input "aaa") (cell @output))
+    (frame/tail (cell @input) (cell @output {l: ({l: ({l: (), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail (cell @input "aaaa") (cell @output))
+    (frame/tail (cell @input) (cell @output {l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail (cell @input "aaaaa") (cell @output))
+    (frame/tail (cell @input) (cell @output {l: ({l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail (cell @input "aaaaaa") (cell @output))
+    (frame/tail (cell @input) (cell @output {l: ({l: ({l: ({l: ({l: ({l: (), r: "a"}), r: "a"}), r: "a"}), r: "a"}), r: "a"}) r: "a"}))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Ambiguous growth
@@ -7166,51 +6624,21 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "a")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output leaf))
-    (frame/tail
-      (cell @input "aa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (one leaf)))
-    (frame/tail
-      (cell @input "aaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (two leaf)))
-    (frame/tail
-      (cell @input "aaaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (one (two leaf))))
-    (frame/tail
-      (cell @input "aaaaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (two (two leaf))))
-    (frame/tail
-      (cell @input "aaaaaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (one (two (two leaf)))))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "a") (cell @output))
+    (frame/tail (cell @input) (cell @output leaf))
+    (frame/tail (cell @input "aa") (cell @output))
+    (frame/tail (cell @input) (cell @output (one leaf)))
+    (frame/tail (cell @input "aaa") (cell @output))
+    (frame/tail (cell @input) (cell @output (two leaf)))
+    (frame/tail (cell @input "aaaa") (cell @output))
+    (frame/tail (cell @input) (cell @output (one (two leaf))))
+    (frame/tail (cell @input "aaaaa") (cell @output))
+    (frame/tail (cell @input) (cell @output (two (two leaf))))
+    (frame/tail (cell @input "aaaaaa") (cell @output))
+    (frame/tail (cell @input) (cell @output (one (two (two leaf)))))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Left recursion with optional many
@@ -7229,138 +6657,50 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output 1))
-    (frame/tail
-      (cell @input "+1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ () 1)))
-    (frame/tail
-      (cell @input "1+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (1) 2)))
-    (frame/tail
-      (cell @input "+1+2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ () 1)) 2)))
-    (frame/tail
-      (cell @input "1+2+3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ (1) 2)) 3)))
-    (frame/tail
-      (cell @input "+1+2+3")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ ((+ () 1)) 2)) 3)))
-    (frame/tail
-      (cell @input "1+2+3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ ((+ (1) 2)) 3)) 4)))
-    (frame/tail
-      (cell @input "+1+2+3+4")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ ((+ ((+ () 1)) 2)) 3)) 4)))
-    (frame/tail
-      (cell @input "123+456")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (123) 456)))
-    (frame/tail
-      (cell @input "123+456+789")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ (123) 456)) 789)))
-    (frame/tail
-      (cell @input "+10+20+30+40+50")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ ((+ ((+ ((+ () 10)) 20)) 30)) 40)) 50)))
-    (frame/tail
-      (cell @input "1+22+333+4444")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ ((+ (1) 22)) 333)) 4444)))
-    (frame/tail
-      (cell @input "999+1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ (999) 1)))
-    (frame/tail
-      (cell @input "+7+8+9+10+11+12")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (+ ((+ ((+ ((+ ((+ ((+ () 7)) 8)) 9)) 10)) 11)) 12)))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "+")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1+")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "++1")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1++2")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "+1+")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1+2+")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "1+2+3+")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
+    (frame/tail (cell @input "1") (cell @output))
+    (frame/tail (cell @input) (cell @output 1))
+    (frame/tail (cell @input "+1") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ () 1)))
+    (frame/tail (cell @input "1+2") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (1) 2)))
+    (frame/tail (cell @input "+1+2") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ () 1)) 2)))
+    (frame/tail (cell @input "1+2+3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ (1) 2)) 3)))
+    (frame/tail (cell @input "+1+2+3") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ ((+ () 1)) 2)) 3)))
+    (frame/tail (cell @input "1+2+3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ ((+ (1) 2)) 3)) 4)))
+    (frame/tail (cell @input "+1+2+3+4") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ ((+ ((+ () 1)) 2)) 3)) 4)))
+    (frame/tail (cell @input "123+456") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (123) 456)))
+    (frame/tail (cell @input "123+456+789") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ (123) 456)) 789)))
+    (frame/tail (cell @input "+10+20+30+40+50") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ ((+ ((+ ((+ () 10)) 20)) 30)) 40)) 50)))
+    (frame/tail (cell @input "1+22+333+4444") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ ((+ (1) 22)) 333)) 4444)))
+    (frame/tail (cell @input "999+1") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ (999) 1)))
+    (frame/tail (cell @input "+7+8+9+10+11+12") (cell @output))
+    (frame/tail (cell @input) (cell @output (+ ((+ ((+ ((+ ((+ ((+ () 7)) 8)) 9)) 10)) 11)) 12)))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "++1") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1++2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "+1+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1+2+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1+2+3+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
     end)
 
   (rack
@@ -7374,30 +6714,14 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "x")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output "x"))
-    (frame/tail
-      (cell @input "xx")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure due to cyclic production, we simply shouldn't crash or SEGFAULT!
-    (frame/tail
-      (cell @input "xxx")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "x") (cell @output))
+    (frame/tail (cell @input) (cell @output "x"))
+    (frame/tail (cell @input "xx") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure due to cyclic production, we simply shouldn't crash or SEGFAULT!
+    (frame/tail (cell @input "xxx") (cell @output))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   (rack
@@ -7411,33 +6735,15 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output empty))
-    (frame/tail
-      (cell @input "x")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (N empty)))
-    (frame/tail
-      (cell @input "xx")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (N (N empty))))
-    (frame/tail
-      (cell @input "xxx")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (N (N (N empty)))))
-    (frame/tail
-      (cell @input)
-      (cell @output))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output empty))
+    (frame/tail (cell @input "x") (cell @output))
+    (frame/tail (cell @input) (cell @output (N empty)))
+    (frame/tail (cell @input "xx") (cell @output))
+    (frame/tail (cell @input) (cell @output (N (N empty))))
+    (frame/tail (cell @input "xxx") (cell @output))
+    (frame/tail (cell @input) (cell @output (N (N (N empty)))))
+    (frame/tail (cell @input) (cell @output))
     end)
 
   ;; Infinite cycles should not crash anything
@@ -7558,102 +6864,38 @@
       (discard @output)
       (cell @input)
       (cell @output))
-    (frame/tail
-      (cell @input "x")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output x))
-    (frame/tail
-      (cell @input "ya")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (a y a)))
-    (frame/tail
-      (cell @input "xba")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (a (b x b) a)))
-    (frame/tail
-      (cell @input "yaba")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (a (b (a y a) b) a)))
-    (frame/tail
-      (cell @input "xbaba")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (a (b (a (b x b) a) b) a)))
-    (frame/tail
-      (cell @input "yababa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output (a (b (a (b (a y a) b) a) b) a)))
-    (frame/tail
-      (cell @input "")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "y")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "a")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "b")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "xb")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "yab")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "xbb")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "xbaa")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "yxba")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
-    (frame/tail
-      (cell @input "xbaaba")
-      (cell @output))
-    (frame/tail
-      (cell @input)
-      (cell @output)) ;; failure
+    (frame/tail (cell @input "x") (cell @output))
+    (frame/tail (cell @input) (cell @output x))
+    (frame/tail (cell @input "ya") (cell @output))
+    (frame/tail (cell @input) (cell @output (a y a)))
+    (frame/tail (cell @input "xba") (cell @output))
+    (frame/tail (cell @input) (cell @output (a (b x b) a)))
+    (frame/tail (cell @input "yaba") (cell @output))
+    (frame/tail (cell @input) (cell @output (a (b (a y a) b) a)))
+    (frame/tail (cell @input "xbaba") (cell @output))
+    (frame/tail (cell @input) (cell @output (a (b (a (b x b) a) b) a)))
+    (frame/tail (cell @input "yababa") (cell @output))
+    (frame/tail (cell @input) (cell @output (a (b (a (b (a y a) b) a) b) a)))
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "y") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "a") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "b") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "xb") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "yab") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "xbb") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "xbaa") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "yxba") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "xbaaba") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
     ;; Stress
     (frame/tail
       (cell @input "xbabababababababababababababababababababababababababababababababababababababababababababababababababa")
@@ -7720,4 +6962,258 @@
       (cell @output32 18306744)
       (cell @input62)
       (cell @output62 55592961823144174755099))
+    end)
+
+  (rack
+    (frame
+      (parser (@input -> json -> @output)
+        (json element)
+        (value object)
+        (value array)
+        (value string)
+        (value number)
+        (value "true") => true
+        (value "false") => false
+        (value "null") => null
+        (object "{" ws "}") => {}
+        (object "{" members←(many member "," min: 1 trailing: true) "}")
+          => ^(reduce ({} members)
+                (fn (memo_dict (k_ v←(%not null)))
+                  (union memo (entry k v))))
+        (member ws key←string ws ":" value←element) => (^key ^value)
+        (array "[" ws "]") => ()
+        (array "[" elements←(many element "," min: 1 trailing: true) "]") => ^elements
+        (element ws mid←value ws) => ^mid
+        (string "\"" content←(many segment) "\"") => ^(join content)
+        (segment chr←"[\x20-\u{10FFFF}^\"\\]+") => ^chr
+        (segment "\\" chr←escape) => ^chr
+        (escape "\"") => "\""
+        (escape "\\") => "\\"
+        (escape "/") => "/"
+        (escape "b") => "\b"
+        (escape "f") => "\f"
+        (escape "n") => "\n"
+        (escape "r") => "\r"
+        (escape "t") => "\t"
+        (escape "u" codepoint←(form "%|xxxx|" (nat radix: 16))) => ^(chr codepoint)
+        (number S←sign base←nat fr←fraction exp←exponent) => ^(* S (+ base fr) exp)
+        (number S←sign base←nat fr←fraction) => ^(* S (+ base fr))
+        (number S←sign base←nat exp←exponent) => ^(* S base exp)
+        (number S←sign base←nat) => ^(* S base)
+        (sign "+") => 1
+        (sign "-") => -1
+        (sign "") => 1
+        (nat (form "[1-9][0-9]+" nat))
+        (nat (form "[0-9]" nat))
+        (fraction "." value←(form digits←"[0-9]+" nat))
+          => ^(/ value (** 10 (charcount digits)))
+        (exponent "[eE]" S←sign value←(form "[0-9]+" nat))
+          => ^(** 10 (* S value))
+        (ws "[ \n\r\t]*"))
+      (queue (@front @back)
+        ("true" "false" "null" "\n\r\ttrue\t\r\n" "TRUE" "null1" "" "0" "9" "-0" "+0"
+         "1234567890" "-12345" "+12345" "01" "00" "0.0" "0.123" "-0.0001" "+0.5"
+         "1." ".5" "0.00" "1e2" "1e+2" "1e-2" "-1e-3" "1.23E+4" "1e" "1e+"
+         "1e-" "1.2e3.4" "+" "-"  ⎡""⎤ ⎡"a"⎤ ⎡"hello world"⎤ ⎡"\""⎤ ⎡"\\"⎤
+         ⎡"\b\f\r\n\t"⎤ ⎡"\u0000"⎤ ⎡"\u001F"⎤ ⎡"\u1234"⎤ ⎡"\uABCD"⎤ ⎡"\uabcd"⎤
+         ⎡"\uaBcD"⎤ "\"unescaped \nchar\"" "\"un-\nescaped\\nworld\"" ⎡"⎤ ⎡"\⎤
+         ⎡"\a"⎤ ⎡"\u12"⎤ ⎡"\u123g"⎤ ⎡"normal and \u0020space"⎤ ⎡"\u{10FFFF}"⎤
+         ⎡"·"⎤ "\"\u[:poop:]\""  "[]" "[ ]" "[\n\r\t]" "[1]" "[1,2,3]" "[1, 2, 3]"
+         "[1,2,]" "[1,]" "[,]" "[1,,2]" "[1,2" "1,2]" "[[]]" "[[1, 2], [3, 4]]"
+         "[1, [2, [3, 4]]]" ⎡[true, null, "a", 1.5]⎤  ⎡{}⎤ ⎡{ }⎤ ⎡{"a": 1}⎤
+         ⎡{"a": 1, "b": 2}⎤ ⎡{"a": 1,}⎤ ⎡{"a": 1, "b": 2,}⎤ ⎡{"a": {"b": {"c": 3},}}⎤
+         ⎡{"a": [1, 2], "b": {"c": true}}⎤ ⎡{a: 1}⎤ ⎡{"a" 1}⎤ ⎡{"a":}⎤
+         ⎡{"a": 1,, "b": 2}⎤ ⎡{"a": null}⎤ ⎡{"a": 1, "b": 2⎤ ⎡{"a": 1} {"b": 2}⎤
+         ⎡{"a": 1, "a": 2}⎤ ⎡{"a": 1, "b": null, "c": 2}⎤))
+      (feed @front @input)
+      (discard @output)
+      (cell @input)
+      (cell @output))
+    ;; Literals
+    (frame/tail (cell @input "true") (cell @output))
+    (frame/tail (cell @input) (cell @output true))
+    (frame/tail (cell @input "false") (cell @output))
+    (frame/tail (cell @input) (cell @output false))
+    (frame/tail (cell @input "null") (cell @output))
+    (frame/tail (cell @input) (cell @output null))
+    (frame/tail (cell @input "\n\r\ttrue\t\r\n") (cell @output))
+    (frame/tail (cell @input) (cell @output true))
+    (frame/tail (cell @input "TRUE") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "null1") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    ;; Numbers
+    (frame/tail (cell @input "0") (cell @output))
+    (frame/tail (cell @input) (cell @output 0))
+    (frame/tail (cell @input "9") (cell @output))
+    (frame/tail (cell @input) (cell @output 9))
+    (frame/tail (cell @input "-0") (cell @output))
+    (frame/tail (cell @input) (cell @output 0))
+    (frame/tail (cell @input "+0") (cell @output))
+    (frame/tail (cell @input) (cell @output 0))
+    (frame/tail (cell @input "1234567890") (cell @output))
+    (frame/tail (cell @input) (cell @output 1234567890))
+    (frame/tail (cell @input "-12345") (cell @output))
+    (frame/tail (cell @input) (cell @output -12345))
+    (frame/tail (cell @input "+12345") (cell @output))
+    (frame/tail (cell @input) (cell @output 12345))
+    (frame/tail (cell @input "01") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "00") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "0.0") (cell @output))
+    (frame/tail (cell @input) (cell @output 0))
+    (frame/tail (cell @input "0.123") (cell @output))
+    (frame/tail (cell @input) (cell @output 0.123))
+    (frame/tail (cell @input "-0.0001") (cell @output))
+    (frame/tail (cell @input) (cell @output -0.0001))
+    (frame/tail (cell @input "+0.5") (cell @output))
+    (frame/tail (cell @input) (cell @output 0.5))
+    (frame/tail (cell @input "1.") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ".5") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "0.00") (cell @output))
+    (frame/tail (cell @input) (cell @output 0))
+    (frame/tail (cell @input "1e2") (cell @output))
+    (frame/tail (cell @input) (cell @output 100))
+    (frame/tail (cell @input "1e+2") (cell @output))
+    (frame/tail (cell @input) (cell @output 100))
+    (frame/tail (cell @input "1e-2") (cell @output))
+    (frame/tail (cell @input) (cell @output 0.01))
+    (frame/tail (cell @input "-1e-3") (cell @output))
+    (frame/tail (cell @input) (cell @output -0.001))
+    (frame/tail (cell @input "1.23E+4") (cell @output))
+    (frame/tail (cell @input) (cell @output 12300))
+    (frame/tail (cell @input "1e") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1e+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1e-") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1.2e3.4") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "+") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "-") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    ;; Strings
+    (frame/tail (cell @input ⎡""⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output ""))
+    (frame/tail (cell @input ⎡"a"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "a"))
+    (frame/tail (cell @input ⎡"hello world"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "hello world"))
+    (frame/tail (cell @input ⎡"\""⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\""))
+    (frame/tail (cell @input ⎡"\\"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\\"))
+    (frame/tail (cell @input ⎡"\b\f\r\n\t"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\b\f\r\n\t"))
+    (frame/tail (cell @input ⎡"\u0000"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\x00"))
+    (frame/tail (cell @input ⎡"\u001F"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\x1F"))
+    (frame/tail (cell @input ⎡"\u1234"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\u{1234}"))
+    (frame/tail (cell @input ⎡"\uABCD"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\u{ABCD}"))
+    (frame/tail (cell @input ⎡"\uabcd"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\u{ABCD}"))
+    (frame/tail (cell @input ⎡"\uaBcD"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "\u{ABCD}"))
+    (frame/tail (cell @input "\"unescaped \nchar\"") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure (unescaped newline)
+    (frame/tail (cell @input "\"un-\nescaped\\nworld\"") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure (unescaped newline)
+    (frame/tail (cell @input ⎡"⎤) (cell @output)) ;; "
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡"\⎤) (cell @output)) ;; "
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡"\a"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡"\u12"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡"\u123g"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡"normal and \u0020space"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "normal and  space"))
+    (frame/tail (cell @input ⎡"\u{10FFFF}"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡"·"⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output "·")) ;; failure
+    (frame/tail (cell @input "\"\u[:poop:]\"") (cell @output))
+    (frame/tail (cell @input) (cell @output "\u[:poop:]"))
+    ;; Arrays
+    (frame/tail (cell @input "[]") (cell @output))
+    (frame/tail (cell @input) (cell @output ()))
+    (frame/tail (cell @input "[ ]") (cell @output))
+    (frame/tail (cell @input) (cell @output ()))
+    (frame/tail (cell @input "[\n\r\t]") (cell @output))
+    (frame/tail (cell @input) (cell @output ()))
+    (frame/tail (cell @input "[1]") (cell @output))
+    (frame/tail (cell @input) (cell @output (1)))
+    (frame/tail (cell @input "[1,2,3]") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2 3)))
+    (frame/tail (cell @input "[1, 2, 3]") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2 3)))
+    (frame/tail (cell @input "[1,2,]") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 2)))
+    (frame/tail (cell @input "[1,]") (cell @output))
+    (frame/tail (cell @input) (cell @output (1)))
+    (frame/tail (cell @input "[,]") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "[1,,2]") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "[1,2") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "1,2]") (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input "[[]]") (cell @output))
+    (frame/tail (cell @input) (cell @output (())))
+    (frame/tail (cell @input "[[1, 2], [3, 4]]") (cell @output))
+    (frame/tail (cell @input) (cell @output ((1 2) (3 4))))
+    (frame/tail (cell @input "[1, [2, [3, 4]]]") (cell @output))
+    (frame/tail (cell @input) (cell @output (1 (2 (3 4)))))
+    (frame/tail (cell @input ⎡[true, null, "a", 1.5]⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output (true null "a" 1.5)))
+    ;; Objects
+    (frame/tail (cell @input ⎡{}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {}))
+    (frame/tail (cell @input ⎡{ }⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {}))
+    (frame/tail (cell @input ⎡{"a": 1}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": 1}))
+    (frame/tail (cell @input ⎡{"a": 1, "b": 2}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": 1, "b": 2}))
+    (frame/tail (cell @input ⎡{"a": 1,}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": 1}))
+    (frame/tail (cell @input ⎡{"a": 1, "b": 2,}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": 1, "b": 2}))
+    (frame/tail (cell @input ⎡{"a": {"b": {"c": 3},}}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": {"b": {"c": 3}}}))
+    (frame/tail (cell @input ⎡{"a": [1, 2], "b": {"c": true}}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": (1 2), "b": {"c": true}}))
+    (frame/tail (cell @input ⎡{a: 1}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡{"a" 1}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡{"a":}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡{"a": 1,, "b": 2}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡{"a": null}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {}))
+    (frame/tail (cell @input ⎡{"a": 1, "b": 2⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡{"a": 1} {"b": 2}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @input ⎡{"a": 1, "a": 2}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": 2}))
+    (frame/tail (cell @input ⎡{"a": 1, "b": null, "c": 2}⎤) (cell @output))
+    (frame/tail (cell @input) (cell @output {"a": 1, "c": 2}))
+    ;; End
+    (frame/tail (cell @input) (cell @output))
     end))
