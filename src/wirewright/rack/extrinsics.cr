@@ -89,6 +89,14 @@ module Ww::Rack::Extrinsics
     added.each { |ref| state.extrinsics.add(ref) }
     removed.each { |ref| state.extrinsics.delete(ref) }
 
+    # If anything we've added is immediately available (e.g. from cache), bump
+    # epoch immediately. Otherwise there'd be no one to notify us, and we'd
+    # hang forever waiting for something that's already there.
+    available = added.any? { |ref| !!state.extrinsics[ref]? }
+    if available
+      state.epoch.call
+    end
+
     # Sync writes.
     wsync(state.epoch,
       write_progress,
