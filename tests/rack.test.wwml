@@ -7234,4 +7234,81 @@
       (cell @output))
     ;; Parses
     (frame/tail
-      (cell @output ("Samantha" "Daniel" "John" "Barbara")))))
+      (cell @output ("Samantha" "Daniel" "John" "Barbara"))))
+
+  ;; Parse people.json from the testtool server using our JSON grammar
+  (rack
+    (frame
+      (parser (@input -> json -> @output)
+        (json element)
+        (value object)
+        (value array)
+        (value string)
+        (value number)
+        (value "true") => true
+        (value "false") => false
+        (value "null") => null
+        (object "{" ws "}") => {}
+        (object "{" members←(many member "," min: 1 trailing: true) "}")
+          => ^(reduce ({} members)
+                (fn (memo_dict (k_ v←(%not null)))
+                  (union memo (entry k v))))
+        (member ws key←string ws ":" value←element) => (^key ^value)
+        (array "[" ws "]") => ()
+        (array "[" elements←(many element "," min: 1 trailing: true) "]") => ^elements
+        (element ws mid←value ws) => ^mid
+        (string "\"" content←(many segment) "\"") => ^(join content)
+        (segment chr←"[\x20-\u{10FFFF}^\"\\]+") => ^chr
+        (segment "\\" chr←escape) => ^chr
+        (escape "\"") => "\""
+        (escape "\\") => "\\"
+        (escape "/") => "/"
+        (escape "b") => "\b"
+        (escape "f") => "\f"
+        (escape "n") => "\n"
+        (escape "r") => "\r"
+        (escape "t") => "\t"
+        (escape "u" codepoint←(form "%|xxxx|" (nat radix: 16))) => ^(chr codepoint)
+        (number S←sign base←nat fr←fraction exp←exponent) => ^(* S (+ base fr) exp)
+        (number S←sign base←nat fr←fraction) => ^(* S (+ base fr))
+        (number S←sign base←nat exp←exponent) => ^(* S base exp)
+        (number S←sign base←nat) => ^(* S base)
+        (sign "+") => 1
+        (sign "-") => -1
+        (sign "") => 1
+        (nat (form "[1-9][0-9]+" nat))
+        (nat (form "[0-9]" nat))
+        (fraction "." value←(form digits←"[0-9]+" nat))
+          => ^(/ value (** 10 (charcount digits)))
+        (exponent "[eE]" S←sign value←(form "[0-9]+" nat))
+          => ^(** 10 (* S value))
+        (ws "[ \n\r\t]*"))
+      (node (@input (resource _ (present input_string)))
+        (resource (uri "http://127.0.0.1:9812/people.json")))
+      (cell @output))
+    ;; It downloaded the resource.
+    (frame pattern: true
+      ⟨(node (@input _) (resource _ (present _string)))⟩)
+    ;; It parsed it.
+    (frame/tail
+      (cell @output
+        ({"age": 21 "friends": ({"index": 0 "name": "Sofia Hoffman" "relatives": ({"index": 0 "name": "Wendi Henderson"} {"index": 1 "name": "Flynn Drake"} {"index": 2 "name": "Phoebe Vasquez"})} {"index": 1 "name": "Kerri Galloway" "relatives": ({"index": 0 "name": "Anne Burch"} {"index": 1 "name": "Hayden Key"} {"index": 2 "name": "Short Meadows"})} {"index": 2 "name": "Wright Anderson" "relatives": ({"index": 0 "name": "Lesa Vang"} {"index": 1 "name": "Bowen Ayala"} {"index": 2 "name": "Roslyn Cash"} {"index": 3 "name": "Deidre Jimenez"})}) "index": 0 "isActive": true "name": "Cora Burks"}
+         {"age": 26 "friends": () "index": 1 "isActive": false "name": "Herrera Price"}
+         {"age": 21 "friends": () "index": 2 "isActive": true "name": "Tonya Robles"}
+         {"age": 22 "friends": ({"index": 0 "name": "Lorna Wilson" "relatives": ({"index": 0 "name": "Edna Mosley"} {"index": 1 "name": "Kathie Benson"} {"index": 2 "name": "Young Warren"})}) "index": 3 "isActive": true "name": "Macdonald Booker"}
+         {"age": 32 "friends": ({"index": 0 "name": "Allison Gilbert" "relatives": ({"index": 0 "name": "Naomi Hale"} {"index": 1 "name": "Brown Miller"})} {"index": 1 "name": "Katelyn Hoover" "relatives": ({"index": 0 "name": "Paula Gates"} {"index": 1 "name": "Mccarthy Hughes"} {"index": 2 "name": "Wilson Mann"} {"index": 3 "name": "Amber Stephenson"} {"index": 4 "name": "Socorro Walker"})} {"index": 2 "name": "Gayle Stevens" "relatives": ({"index": 0 "name": "Kellie Greer"} {"index": 1 "name": "Daisy Bright"} {"index": 2 "name": "Magdalena Jacobs"} {"index": 3 "name": "Parker Garcia"})}) "index": 4 "isActive": true "name": "Alvarez Buchanan"}
+         {"age": 32 "friends": ({"index": 0 "name": "Shanna Patrick" "relatives": ()} {"index": 1 "name": "Stafford Oconnor" "relatives": ({"index": 0 "name": "Noelle Leblanc"} {"index": 1 "name": "Rosalinda Graham"})}) "index": 5 "isActive": false "name": "Conley Hamilton"}
+         {"age": 32 "friends": ({"index": 0 "name": "Warren Munoz" "relatives": ({"index": 0 "name": "Esmeralda Trujillo"} {"index": 1 "name": "Skinner Stout"})} {"index": 1 "name": "Flossie Whitfield" "relatives": ({"index": 0 "name": "Obrien Mathews"} {"index": 1 "name": "Thelma Macias"} {"index": 2 "name": "Lambert Greene"} {"index": 3 "name": "Justine Allison"} {"index": 4 "name": "Juanita Daniels"})} {"index": 2 "name": "Elsa Bradley" "relatives": ({"index": 0 "name": "Leon Underwood"} {"index": 1 "name": "Catalina Schroeder"} {"index": 2 "name": "Ochoa England"})}) "index": 6 "isActive": true "name": "Jessie Juarez"}
+         {"age": 30 "friends": () "index": 7 "isActive": false "name": "Addie Franco"}
+         {"age": 40 "friends": () "index": 8 "isActive": false "name": "Fay Mcmahon"}
+         {"age": 22 "friends": ({"index": 0 "name": "Jillian Chavez" "relatives": ({"index": 0 "name": "Tonia Clark"} {"index": 1 "name": "Dianna Snyder"})} {"index": 1 "name": "Roxie Fernandez" "relatives": ({"index": 0 "name": "Renee Maddox"} {"index": 1 "name": "Mitchell Cooley"})} {"index": 2 "name": "Boone Steele" "relatives": ({"index": 0 "name": "Caitlin Sheppard"} {"index": 1 "name": "Heidi Hood"} {"index": 2 "name": "Bartlett Winters"} {"index": 3 "name": "Cabrera Forbes"})}) "index": 9 "isActive": false "name": "Valenzuela Valencia"}
+         {"age": 21 "friends": ({"index": 0 "name": "Velma Pitts" "relatives": ({"index": 0 "name": "Haney Mcfadden"} {"index": 1 "name": "Humphrey Pacheco"} {"index": 2 "name": "Cindy Stanley"})}) "index": 10 "isActive": false "name": "Claudine Carroll"}
+         {"age": 37 "friends": ({"index": 0 "name": "Graciela Armstrong" "relatives": ({"index": 0 "name": "Bertha Glover"} {"index": 1 "name": "Leann Hurst"} {"index": 2 "name": "Scott Lowe"})} {"index": 1 "name": "Heather Nash" "relatives": ({"index": 0 "name": "Olive Frazier"} {"index": 1 "name": "Hudson Raymond"} {"index": 2 "name": "Key Brennan"} {"index": 3 "name": "Tanya Guerra"})}) "index": 11 "isActive": false "name": "Samantha Bell"}
+         {"age": 27 "friends": ({"index": 0 "name": "Michael Ferrell" "relatives": ()}) "index": 12 "isActive": true "name": "Imogene Conway"}
+         {"age": 37 "friends": ({"index": 0 "name": "Vicky Hanson" "relatives": ({"index": 0 "name": "Chris Mullen"} {"index": 1 "name": "Nolan Mays"})} {"index": 1 "name": "Geraldine Bradshaw" "relatives": ({"index": 0 "name": "Julia Strong"} {"index": 1 "name": "Fuller Compton"} {"index": 2 "name": "Leonard Huff"} {"index": 3 "name": "Mcdowell Baker"} {"index": 4 "name": "Chandler Dunlap"})} {"index": 2 "name": "Cassie Lawrence" "relatives": ()}) "index": 13 "isActive": false "name": "Kristen Lara"}
+         {"age": 26 "friends": () "index": 14 "isActive": true "name": "Talley Jarvis"}
+         {"age": 40 "friends": ({"index": 0 "name": "Marissa Scott" "relatives": ({"index": 0 "name": "Rosanna Rose"} {"index": 1 "name": "Latoya Fleming"} {"index": 2 "name": "Tommie Cobb"} {"index": 3 "name": "Mai Ingram"} {"index": 4 "name": "Jennifer Randall"})}) "index": 15 "isActive": false "name": "Holly Tyler"}
+         {"age": 27 "friends": ({"index": 0 "name": "Vinson Mclean" "relatives": ({"index": 0 "name": "Collins Lane"} {"index": 1 "name": "Ellison Pratt"})} {"index": 1 "name": "Ava Wiggins" "relatives": ()}) "index": 16 "isActive": true "name": "Conner Bishop"}
+         {"age": 32 "friends": ({"index": 0 "name": "Bertie Morris" "relatives": ({"index": 0 "name": "Janna Yates"})} {"index": 1 "name": "Trujillo Reid" "relatives": ()} {"index": 2 "name": "Valarie Mendez" "relatives": ({"index": 0 "name": "Maldonado Waters"} {"index": 1 "name": "Tamara Hutchinson"} {"index": 2 "name": "Coleen Brady"} {"index": 3 "name": "Ruth Jefferson"} {"index": 4 "name": "Carmen Lindsay"})}) "index": 17 "isActive": false "name": "Gloria Strickland"}
+         {"age": 24 "friends": () "index": 18 "isActive": false "name": "Tammi Hansen"}
+         {"age": 22 "friends": ({"index": 0 "name": "Keisha Blanchard" "relatives": ({"index": 0 "name": "Hull Donaldson"} {"index": 1 "name": "Helene Townsend"} {"index": 2 "name": "Osborne Powers"} {"index": 3 "name": "Delores Castillo"})} {"index": 1 "name": "Kate Chambers" "relatives": ({"index": 0 "name": "Shannon Griffith"} {"index": 1 "name": "Luella Riggs"} {"index": 2 "name": "Regina Bass"} {"index": 3 "name": "Mclean Knight"})}) "index": 19 "isActive": true "name": "Lawanda Duke"})))))
