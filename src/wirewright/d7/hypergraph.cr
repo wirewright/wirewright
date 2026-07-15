@@ -218,8 +218,11 @@ module Ww::D7
       end
     end
 
-    def propose(*heads : Symbol, & : Node -> Patch?) : Slice(Patch)
-      proposals = Pf::Kit.stack_array(Patch, 8)
+    def propose(*heads : Symbol, & : Node -> Patch?) : Array(Patch)
+      # FIXME: stack_array miscompiles for some reason... We *really* need
+      # to rewrite Pf::Map, its representation is too hard for Crystal
+      # to compile...
+      proposals = [] of Patch
 
       heads.each do |head|
         each_node_with_head(Term.of(head)) do |node|
@@ -230,7 +233,7 @@ module Ww::D7
         end
       end
 
-      proposals.to_unsafe_readonly_slice!
+      proposals
     end
   end
 end
