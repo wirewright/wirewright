@@ -22,10 +22,11 @@ module Ww::ParseKit
   # the word doesn't mean exactly what we use it for here. It seems generic enough
   # to work, though.
 
-  alias Parselet = Reject | Stringp | RuleRef | OrdChoice | MaxChoice |
-                   Seq | Many | ManySep | Capture | Location | Find | Form
+  alias Parselet = Refuse | Abort | Stringp | RuleRef | OrdChoice | MaxChoice |
+                   Seq | Many | ManySep | Capture | Location | Find | Form | Expect
 
-  defrecord Reject
+  defrecord Refuse, detail : String
+  defrecord Abort, detail : String
   defrecord Stringp, pattern : ScanKit::Pattern, observed : Bool
   defrecord RuleRef, name : Term::Sym
   defrecord OrdChoice, members : Slice(Parselet)
@@ -37,6 +38,7 @@ module Ww::ParseKit
   defcase Location, name : Term, member : Parselet
   defcase Find, member : Parselet
   defcase Form, member : Parselet, spec : FormSpec
+  defcase Expect, member : Parselet, detail : String?
 
   def parselet(term : Term, observed : Bool) : Parselet
     Term.case(term) do
@@ -428,8 +430,108 @@ module Ww::ParseKit
         Form.new(parselet(subterm, observed: false), spec)
       end
 
+      # |@ parsekit.parselet.expect
+      #
+      # |@pattern
+      # [expect detail_string member_]
+      #
+      # |@key detail
+      # The replacement for details of refusals.
+      #
+      # |@key member parsekit.parselet
+      #
+      # |@block
+      # Promotes refusals flowing up from *member* into errors. Errors abort
+      # parsing immediately (i.e., they do not trigger backtracking).
+      #
+      # See also: `parsekit.parselet.refuse`, `parsekit.parselet.abort`.
+      matchpi %{[expect detail_string subterm_]}, detail: String do
+        Expect.new(parselet(subterm, observed), detail)
+      end
+
+      # |@ parsekit.parselet.expect
+      #
+      # |@pattern
+      # [expect member_]
+      #
+      # |@key member parsekit.parselet
+      #
+      # |@block
+      # Promotes refusals flowing up from *member* into errors. Errors abort
+      # parsing immediately (i.e., they do not trigger backtracking).
+      #
+      # See also: `parsekit.parselet.refuse`, `parsekit.parselet.abort`.
+      matchpi %{[expect subterm_]} do
+        Expect.new(parselet(subterm, observed), detail: nil)
+      end
+
+      # |@ parsekit.parselet.refuse
+      #
+      # |@pattern
+      # [refuse detail_string]
+      #
+      # |@key detail
+      # The message to use.
+      #
+      # |@block
+      # If reached, unconditionally refuses with *detail*. This is useful as
+      # a catch-all "error branch" that provides a descriptive general error
+      # rather than showing the error corresponding to the longest match.
+      #
+      # See also: `parsekit.parselet.abort`.
+      #
+      # ```wwml
+      # (top "a") => 1
+      # (top "b") => 2
+      # (top (refuse "expected `a` or `b`"))
+      #
+      # ;; Parse "a": ok, 1
+      # ;; Parse "b": ok, 1
+      # ;; Parse "c": refusal, "expected `a` or `b`"
+      # ```
+      matchpi %{[refuse detail_string]}, detail: String do
+        Refuse.new(detail)
+      end
+
+      # |@ parsekit.parselet.abort
+      #
+      # |@pattern
+      # [abort detail_string]
+      #
+      # |@key detail
+      # The message to use.
+      #
+      # |@block
+      # If reached, unconditionally aborts parsing with *detail*. This is useful
+      # as a catch-all "error branch" that provides a descriptive general error
+      # rather than showing the error corresponding to the longest match.
+      #
+      # See also: `parsekit.parselet.refuse`.
+      #
+      # ```wwml
+      # (top foo)
+      # (top bar)
+      #
+      # (foo "a") => 1
+      # (foo "b") => 2
+      # (foo (abort "expected `a` or `b`"))
+      #
+      # (bar "c") => 3
+      #
+      # ;; Parse "a": ok, 1
+      # ;; Parse "b": ok, 1
+      # ;; Parse "c": error, "expected `a` or `b`"
+      # ;;
+      # ;; IMPORTANT: Notice how `"c"` does not reach `bar`. This is because
+      # ;; overload choice is *ordered*, and `abort` is reached in `foo` before
+      # ;; `top`'s `bar` branch is considered.
+      # ```
+      matchpi %{[abort detail_string]}, detail: String do
+        Abort.new(detail)
+      end
+
       otherwise do
-        Reject.new
+        Refuse.new("unrecognized parselet term: #{term}")
       end
     end
   end
@@ -497,7 +599,7 @@ module Ww::ParseKit
   defcase RuleProduction, parselet : Parselet, template : Alloy::CompiledTemplate
   defcase AliasProduction, parselet : Parselet
 
-  private def nullable?(productions, path, parselet : Reject) : Bool
+  private def nullable?(productions, path, parselet : Refuse | Abort) : Bool
     false
   end
 
@@ -507,7 +609,7 @@ module Ww::ParseKit
 
   private def nullable?(productions, path, parselet : RuleRef) : Bool
     unless overloads = productions[parselet.name]?
-      return false # Production not found is a Reject, which is not nullable.
+      return false # Production not found is a Refuse, which is not nullable.
     end
 
     nullable?(productions, path, overloads)
@@ -532,7 +634,7 @@ module Ww::ParseKit
     parselet.min.zero? || (nullable?(productions, path, parselet.member) && nullable?(productions, path, parselet.sep))
   end
 
-  private def nullable?(productions, path, parselet : Capture | Location | Find | Form) : Bool
+  private def nullable?(productions, path, parselet : Capture | Location | Find | Form | Expect) : Bool
     nullable?(productions, path, parselet.member)
   end
 
@@ -559,7 +661,7 @@ module Ww::ParseKit
     nullable?(productions, path, object)
   end
 
-  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Reject) : Bool
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Refuse | Abort) : Bool
     false
   end
 
@@ -573,7 +675,7 @@ module Ww::ParseKit
     end
 
     unless overloads = productions[parselet.name]?
-      return false # Production not found is a Reject, which is not left-recursive.
+      return false # Production not found is a Refuse, which is not left-recursive.
     end
 
     left_recursive?(productions, path, pivot, overloads)
@@ -615,7 +717,7 @@ module Ww::ParseKit
 
   # For Many and ManySep, we're conservative: even if there's a min: 0 in the way,
   # we'll still consider the rule left-recursive.
-  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Many | ManySep | Capture | Location | Find | Form) : Bool
+  private def left_recursive?(productions, path, pivot : Term::Sym, parselet : Many | ManySep | Capture | Location | Find | Form | Expect) : Bool
     left_recursive?(productions, path, pivot, parselet.member)
   end
 
@@ -773,8 +875,9 @@ module Ww::ParseKit
   defrecord RuleProductionF, parselet : ParseletF, template : Alloy::CompiledTemplate
   defrecord AliasProductionF, parselet : ParseletF
 
-  alias ParseletF = Reject | Stringp | RuleRefF | OrdChoiceF | MaxChoiceF |
-                    SeqF | ManyF | ManySepF | CaptureF | LocationF | FindF | FormF
+  alias ParseletF = Refuse | Abort | Stringp | RuleRefF | OrdChoiceF | MaxChoiceF |
+                    SeqF | ManyF | ManySepF | CaptureF | LocationF | FindF | FormF |
+                    ExpectF
 
   # NOTE: *end* is exclusive.
   defrecord RuleRefF, ord : UInt32, begin : UInt32, end : UInt32
@@ -787,13 +890,14 @@ module Ww::ParseKit
   defcase LocationF, name : Term, member : ParseletF
   defcase FindF, member : ParseletF
   defcase FormF, member : ParseletF, spec : FormSpec
+  defcase ExpectF, member : ParseletF, detail : String?
 
-  private def flatten(refmap, parselet : Reject | Stringp)
+  private def flatten(refmap, parselet : Refuse | Abort | Stringp)
     parselet
   end
 
   private def flatten(refmap, parselet : RuleRef)
-    refmap[parselet.name]? || Reject.new
+    refmap[parselet.name]? || Refuse.new("rule not found: #{parselet.name}")
   end
 
   private def flatten(refmap, parselet : OrdChoice)
@@ -848,6 +952,11 @@ module Ww::ParseKit
     FormF.new(member, parselet.spec)
   end
 
+  private def flatten(refmap, parselet : Expect)
+    member = flatten(refmap, parselet.member)
+    ExpectF.new(member, parselet.detail)
+  end
+
   private def flatten(refmap, production : RuleProduction)
     parselet = flatten(refmap, production.parselet)
     RuleProductionF.new(parselet, production.template)
@@ -890,7 +999,7 @@ module Ww::ParseKit
   end
 
   defrecord Err, detail : String, text : Pf::StringSeln
-  defrecord Refusal
+  defrecord Refusal, detail : String, text : Pf::StringSeln
 
   alias FormSpec = NatForm | DefaultForm
 
@@ -1057,20 +1166,31 @@ module Ww::ParseKit
     Alloy.render(object.template, locals: resolve_log(object.captures))
   end
 
-  def resolve(object : Ok) : Term | Err | Refusal
+  def resolve(object : Ok) : Term | Err
     unless object.ahead.empty?
-      return Err.new("expected end-of-input", object.ahead)
+      return Err.new("expected end-of-input", object.ahead.before_begin)
     end
 
     resolve(object.result)
   end
 
-  def resolve(object : Err | Refusal) : Term | Err | Refusal
+  def resolve(object : Err) : Term | Err
     object
   end
 
-  def parse(ctx : Context, parselet : Reject, text : Pf::StringSeln) : Parseout
-    Refusal.new
+  def resolve(object : Refusal) : Term | Err
+    Err.new(object.detail, object.text)
+  end
+
+  # Refusal messages can be overridden using e.g. `parsekit.parselet.refusal`.
+  DEFAULT_REFUSAL_DETAIL = "unexpected input"
+
+  def parse(ctx : Context, parselet : Refuse, text : Pf::StringSeln) : Parseout
+    Refusal.new(parselet.detail, text.before_begin)
+  end
+
+  def parse(ctx : Context, parselet : Abort, text : Pf::StringSeln) : Parseout
+    Err.new(parselet.detail, text.before_begin)
   end
 
   def parse(ctx : Context, parselet : Stringp, text : Pf::StringSeln) : Parseout
@@ -1079,7 +1199,7 @@ module Ww::ParseKit
     ctx.tick
 
     unless row = ScanKit.match?(parselet.pattern, text)
-      return Refusal.new
+      return Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)
     end
 
     captures, ahead = row
@@ -1111,7 +1231,9 @@ module Ww::ParseKit
       return parse(ctx, overloads, text)
     end
 
-    zero_memo = ctx.memo.assoc(key, Refusal.new)
+    refusal = Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)
+
+    zero_memo = ctx.memo.assoc(key, refusal)
     best_memo = zero_memo
     best_out : Ok? = nil
 
@@ -1133,20 +1255,28 @@ module Ww::ParseKit
 
     ctx.memo = best_memo
 
-    best_out || Refusal.new
+    best_out || refusal
   end
 
   def parse(ctx : Context, parselet : OrdChoiceF, text : Pf::StringSeln) : Parseout
+    max : Refusal? = nil
+
     parselet.members.each do |branch|
       π = parse(ctx, branch, text)
-      next if π.is_a?(Refusal)
-      return π
+      unless π.is_a?(Refusal)
+        return π
+      end
+
+      if max.nil? || max.text.byte_start <= π.text.byte_start
+        max = π
+      end
     end
 
-    Refusal.new
+    max || Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)
   end
 
   def parse(ctx : Context, parselet : MaxChoiceF, text : Pf::StringSeln) : Parseout
+    max : Refusal? = nil
     candidates = Pf::Kit.stack_array(Ok, 4)
 
     parselet.members.each do |branch|
@@ -1156,10 +1286,13 @@ module Ww::ParseKit
       in Err
         return π
       in Refusal
+        if max.nil? || max.text.byte_start <= π.text.byte_start
+          max = π
+        end
       end
     end
 
-    candidates.max_by?(&.match.bytesize) || Refusal.new
+    candidates.max_by?(&.match.bytesize) || max || Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)
   end
 
   def parse(ctx : Context, parselet : SeqF, text : Pf::StringSeln) : Parseout
@@ -1372,7 +1505,7 @@ module Ww::ParseKit
       end
     end
 
-    Refusal.new
+    Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)
   end
 
   def parse(ctx : Context, parselet : FormF, text : Pf::StringSeln) : Parseout
@@ -1388,6 +1521,15 @@ module Ww::ParseKit
     in Err
       result
     end
+  end
+
+  def parse(ctx : Context, parselet : ExpectF, text : Pf::StringSeln) : Parseout
+    π = parse(ctx, parselet.member, text)
+    if π.is_a?(Refusal)
+      return Err.new(parselet.detail || π.detail, π.text)
+    end
+
+    π
   end
 
   def parse(ctx : Context, production : RuleProductionF, text : Pf::StringSeln) : Parseout
@@ -1414,21 +1556,26 @@ module Ww::ParseKit
   end
 
   def parse(ctx : Context, productions : Slice(ProductionF), text : Pf::StringSeln) : Parseout
+    max : Refusal? = nil
+
     productions.each do |production|
       π = parse(ctx, production, text)
 
       case π
       in Ok, Err then return π
       in Refusal
+        if max.nil? || max.text.byte_start <= π.text.byte_start
+          max = π
+        end
       end
     end
 
-    Refusal.new
+    max || Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)
   end
 
   def parse(ctx : Context, top : Term::Sym, text : Pf::StringSeln) : Parseout
     unless ref = ctx.grammar.refmap[top]?
-      return Refusal.new
+      return Refusal.new("internal parser error: top-level rule not found", text.before_begin)
     end
 
     parse(ctx, ref, text)

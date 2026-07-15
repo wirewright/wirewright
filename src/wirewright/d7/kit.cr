@@ -223,6 +223,10 @@ module Ww::D7
     patch
   end
 
+  def patches(objects : Enumerable(Node), *morphseq) : Patch
+    patches(objects) { |object| patch(object, *morphseq) }
+  end
+
   # Shorthand for `patches` when all objects are patches already.
   def patches(objects : Enumerable(Patch)) : Patch
     patches(objects, &.itself)

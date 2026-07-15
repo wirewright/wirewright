@@ -7344,4 +7344,138 @@
     (frame/tail
       (cell @input)
       (cell @output))
+    end)
+
+  ;; abort, expect, _ -> _ -> _ / _
+  (rack
+    (frame
+      (parser (@input -> top -> @output / @error)
+        (top "hello" (expect "expected `world`" "world"))
+        (top "foo" (expect "expected `bar`" "bar"))
+        (top (abort "expected `hello` or `foo`")))
+      (discard @output)
+      (discard @error)
+      (queue (@front @back)
+        ("qux" "hello" "helloworld" "foo" "foobar"))
+      (feed @front @input)
+      (cell @input)
+      (cell @output)
+      (cell @error))
+    (frame/tail
+      (cell @input "qux") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error (err "expected `hello` or `foo`")))
+    (frame/tail
+      (cell @input "hello") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error (err "expected `world`")))
+    (frame/tail
+      (cell @input "helloworld") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output ()) (cell @error))
+    (frame/tail
+      (cell @input "foo") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error (err "expected `bar`")))
+    (frame/tail
+      (cell @input "foobar") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output ()) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error))
+    end)
+
+  ;; refuse
+  (rack
+    (frame
+      (parser (@input -> top -> @output / @error)
+        (top "a") => 1
+        (top "b") => 2
+        (top (refuse "expected `a` or `b`")))
+      (discard @output)
+      (discard @error)
+      (queue (@front @back)
+        ("a" "b" "c"))
+      (feed @front @input)
+      (cell @input)
+      (cell @output)
+      (cell @error))
+    (frame/tail
+      (cell @input "a") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output 1) (cell @error))
+    (frame/tail
+      (cell @input "b") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output 2) (cell @error))
+    (frame/tail
+      (cell @input "c") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error (err "expected `a` or `b`")))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error))
+    end)
+
+  ;; abort
+  (rack
+    (frame
+      (parser (@input -> top -> @output / @error)
+        (top foo)
+        (top bar)
+        (foo "a") => 1
+        (foo "b") => 2
+        (foo (abort "expected `a` or `b`"))
+        (bar "c") => 3)
+      (discard @output)
+      (discard @error)
+      (queue (@front @back)
+        ("a" "b" "c"))
+      (feed @front @input)
+      (cell @input)
+      (cell @output)
+      (cell @error))
+    (frame/tail
+      (cell @input "a") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output 1) (cell @error))
+    (frame/tail
+      (cell @input "b") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output 2) (cell @error))
+    (frame/tail
+      (cell @input "c") (cell @output) (cell @error))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error (err "expected `a` or `b`")))
+    (frame/tail
+      (cell @input) (cell @output) (cell @error))
+    end)
+
+  ;; _ - _ - _ / _
+  (rack
+    (frame
+      (parser (@input - top - @output / @error)
+        (top "hello") => 1
+        (top "world") => 2
+        (top (refuse "invalid")))
+      ;; NOTE: I can't quite come up with an easier way to "manipulate"
+      ;; the circuit here, i.e., without encoding the entire set of tests
+      ;; ahead- of-time. This is basically a simple "controller" which
+      ;; waits for expected results and if those results are observed,
+      ;; "turns the knobs" to advance the state...
+      (backsys {@:input @:output @:error}
+        {¦ input_: "hello" output: 1 -error} <> {input: "world"}
+        {¦ input_: "world" output: 2 -error} <> {input: "qux"})
+      (cell @input "hello")
+      (cell @output)
+      (cell @error))
+    (frame/tail
+      (cell @input "hello") (cell @output 1) (cell @error))
+    (frame/tail
+      (cell @input "world") (cell @output 1) (cell @error))
+    (frame/tail
+      (cell @input "world") (cell @output 2) (cell @error))
+    (frame/tail
+      (cell @input "qux") (cell @output 2) (cell @error))
+    (frame/tail
+      (cell @input "qux") (cell @output) (cell @error (err "invalid")))
     end))
