@@ -7,7 +7,7 @@ module Ww::Rack::Parser
   # by step() in a thread-unsafe way.
   defcase State,
     epoch : Automaton::Epoch,
-    lock : Sync::Mutex,
+    lock : Sync::RWLock,
     table : Hash(Parse, ParseStatus),
     grammars : Hash(Term, ParseKit::GrammarF),
     seen_rulesets : Set(Term),
@@ -22,7 +22,7 @@ module Ww::Rack::Parser
 
   def state(epoch : Automaton::Epoch) : State
     State.new(epoch,
-      lock: Sync::Mutex.new,
+      lock: Sync::RWLock.new,
       table: {} of Parse => ParseStatus,
       grammars: {} of Term => ParseKit::GrammarF,
       seen_parses: Set(Parse).new,
@@ -42,7 +42,7 @@ module Ww::Rack::Parser
 
     # See which parses / rulesets were canceled and remove them from
     # the associated tables in *state*.
-    state.lock.synchronize do
+    state.lock.write do
       state.table.select! do |parse, _|
         parse.in?(state.seen_parses)
       end
@@ -115,25 +115,26 @@ module Ww::Rack::Parser
 
     parse = Parse.new(source[:value], variant.ruleset, variant.top)
 
-    status = state.lock.synchronize { state.table[parse]? }
+    status = state.lock.read { state.table[parse]? }
     if status.nil?
       # Parse not scheduled. Schedule it.
-      state.lock.synchronize do
+      state.lock.write do
         state.table[parse] = Pending.new
       end
 
       run(state.lock, state.table, state.grammars, parse, state.epoch)
 
       # Refresh status.
-      status = state.lock.synchronize { state.table[parse]? }
+      status = state.lock.read { state.table[parse]? }
     end
 
     case status
     in Nil
       # run() should either give us Completed (if parsed inline) or Pending
       # (if scheduled on a worker). Receiving Nil here is unexpected.
+      nil
     in Completed
-      state.lock.synchronize do
+      state.lock.write do
         state.table.delete(parse)
       end
 
@@ -184,17 +185,17 @@ module Ww::Rack::Parser
 
     parse = Parse.new(source[:value], variant.ruleset, variant.top)
 
-    status = state.lock.synchronize { state.table[parse]? }
+    status = state.lock.read { state.table[parse]? }
     if status.nil?
       # Parse not scheduled. Schedule it.
-      state.lock.synchronize do
+      state.lock.write do
         state.table[parse] = Pending.new
       end
 
       run(state.lock, state.table, state.grammars, parse, state.epoch)
 
       # Refresh status.
-      status = state.lock.synchronize { state.table[parse]? }
+      status = state.lock.read { state.table[parse]? }
     end
 
     case status
@@ -202,7 +203,7 @@ module Ww::Rack::Parser
       # run() should either give us Completed (if parsed inline) or Pending
       # (if scheduled on a worker). Receiving Nil here is unexpected.
     in Completed
-      state.lock.synchronize do
+      state.lock.write do
         state.table.delete(parse)
       end
 
@@ -257,12 +258,14 @@ module Ww::Rack::Parser
         parse(lock, table, grammars, parse) do |clock|
           next if clock.zero?
           next unless clock % 256 == 0
+          next unless lock.try_lock_read?
 
-          lock.synchronize do
+          begin
             next if table.has_key?(parse)
 
-            # Canceled
             raise Canceled.new
+          ensure
+            lock.unlock_read
           end
         end
       rescue Canceled
@@ -278,7 +281,7 @@ module Ww::Rack::Parser
 
     # Grammar construction can take a long time so we offload it to the worker
     # fiber as well.
-    grammar = lock.synchronize do
+    grammar = lock.write do
       grammars.put_if_absent(parse.ruleset) do
         ParseKit.flatten(ParseKit.grammar(parse.ruleset))
       end
@@ -287,7 +290,7 @@ module Ww::Rack::Parser
     ctx = ParseKit.context(grammar, checkpoint)
     π = ParseKit.resolve(ParseKit.parse(ctx, parse.top, view))
 
-    lock.synchronize do
+    lock.write do
       next unless table.has_key?(parse) # Canceled
 
       table[parse] = Completed.new(π)
@@ -296,7 +299,7 @@ module Ww::Rack::Parser
 
   # Returns `true` if parses are ongoing at the moment.
   def pending?(state : State) : Bool
-    state.lock.synchronize do
+    state.lock.read do
       # There is no way that anything can be added to the table anymore. No
       # parses are pending and we can quit.
       state.table.present?

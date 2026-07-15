@@ -1074,6 +1074,10 @@ module Ww::ParseKit
   end
 
   def parse(ctx : Context, parselet : Stringp, text : Pf::StringSeln) : Parseout
+    # We tick on terminals because that's the right granularity. Anything
+    # else is much less predictable.
+    ctx.tick
+
     unless row = ScanKit.match?(parselet.pattern, text)
       return Refusal.new
     end
@@ -1099,8 +1103,6 @@ module Ww::ParseKit
     if π = ctx.memo[key]?
       return π
     end
-
-    ctx.tick
 
     overloads = (ctx.grammar.productions + ref.begin).trim(ref.end - ref.begin)
 

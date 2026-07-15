@@ -7311,4 +7311,37 @@
          {"age": 27 "friends": ({"index": 0 "name": "Vinson Mclean" "relatives": ({"index": 0 "name": "Collins Lane"} {"index": 1 "name": "Ellison Pratt"})} {"index": 1 "name": "Ava Wiggins" "relatives": ()}) "index": 16 "isActive": true "name": "Conner Bishop"}
          {"age": 32 "friends": ({"index": 0 "name": "Bertie Morris" "relatives": ({"index": 0 "name": "Janna Yates"})} {"index": 1 "name": "Trujillo Reid" "relatives": ()} {"index": 2 "name": "Valarie Mendez" "relatives": ({"index": 0 "name": "Maldonado Waters"} {"index": 1 "name": "Tamara Hutchinson"} {"index": 2 "name": "Coleen Brady"} {"index": 3 "name": "Ruth Jefferson"} {"index": 4 "name": "Carmen Lindsay"})}) "index": 17 "isActive": false "name": "Gloria Strickland"}
          {"age": 24 "friends": () "index": 18 "isActive": false "name": "Tammi Hansen"}
-         {"age": 22 "friends": ({"index": 0 "name": "Keisha Blanchard" "relatives": ({"index": 0 "name": "Hull Donaldson"} {"index": 1 "name": "Helene Townsend"} {"index": 2 "name": "Osborne Powers"} {"index": 3 "name": "Delores Castillo"})} {"index": 1 "name": "Kate Chambers" "relatives": ({"index": 0 "name": "Shannon Griffith"} {"index": 1 "name": "Luella Riggs"} {"index": 2 "name": "Regina Bass"} {"index": 3 "name": "Mclean Knight"})}) "index": 19 "isActive": true "name": "Lawanda Duke"})))))
+         {"age": 22 "friends": ({"index": 0 "name": "Keisha Blanchard" "relatives": ({"index": 0 "name": "Hull Donaldson"} {"index": 1 "name": "Helene Townsend"} {"index": 2 "name": "Osborne Powers"} {"index": 3 "name": "Delores Castillo"})} {"index": 1 "name": "Kate Chambers" "relatives": ({"index": 0 "name": "Shannon Griffith"} {"index": 1 "name": "Luella Riggs"} {"index": 2 "name": "Regina Bass"} {"index": 3 "name": "Mclean Knight"})}) "index": 19 "isActive": true "name": "Lawanda Duke"}))))
+
+  ;; Cancellation
+  ;;
+  ;; NOTE: This is a weird little test because there are a lot of races when
+  ;; it comes to cancellation. Parsing is CPU-bound. The more "powerful" your CPU,
+  ;; the more is the chance that the parse actually *completes* between two frames,
+  ;; before we can cancel it, even if we cancel it right in the next frame. A lot of
+  ;; stuff goes into this: whether workers have started immediately, whether other cores
+  ;; were free, whether workers were moved there, how much other work is pending in the current
+  ;; frame, whether or not we have to compile stuff (this in particular caused a huge
+  ;; confusion for me, and I was hunting this as a bug; one that did not in fact exist).
+  ;; If we run this without warmup, there is a chance that we go off compiling Term.cases
+  ;; after the parse was scheduled. Term.cases in turn go off compiling M1. Once all
+  ;; that finishes the parse may as well be done. So during the next frame we
+  ;; simultaneously `discard` it and consume it and write the parse @output. In that case,
+  ;; since both `discard` and `parser` agree that `@input` is empty, D7 (correctly!) lets
+  ;; the patches through. In other words, what we're testing here is ultimately a race
+  ;; (in the good rather than the bad, "quirky" sense of the word). Cancellation is not a race
+  ;; if it really does take an obscenely long time to parse, maybe a few seconds.
+  ;; I'm not sure it's worth it inserting inputs so large here, though. We'd probably
+  ;; need megabytes of input or a complex grammar...
+  (rack
+    (frame
+      (parser (@input -> slow -> @output)
+        (slow slow "a")
+        (slow "a"))
+      (discard @input)
+      (cell @input "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+      (cell @output))
+    (frame/tail
+      (cell @input)
+      (cell @output))
+    end))
