@@ -64,11 +64,22 @@ module Ww::Rack::Parser
     output : D7::AbsEdge,
     ruleset : Term
 
-  private def step(state : State, hg : D7::Hypergraph) : Slice(D7::Patch)
+  defrecord View,
+    input : D7::AbsEdge,
+    top : Term::Sym,
+    output : D7::AbsEdge,
+    ruleset : Term
+
+  private def step(state : State, hg : D7::Hypergraph) : Indexable(D7::Patch)
     hg.propose(:parser) do |node|
       Term.case(node.term) do
         matchpiT %{[parser (@input_ -> top_symbol -> @output_) ruleset_*]} do
           variant = Transfer.new(node.resolve(input), top, node.resolve(output), ruleset)
+          step(state, hg, node, variant)
+        end
+
+        matchpiT %{[parser (@input_ - top_symbol - @output_) ruleset_*]} do
+          variant = View.new(node.resolve(input), top, node.resolve(output), ruleset)
           step(state, hg, node, variant)
         end
 
@@ -138,6 +149,72 @@ module Ww::Rack::Parser
           end
         end,
       )
+    in Pending
+      state.seen_rulesets << variant.ruleset
+      state.seen_parses << parse
+
+      nil # No change (yet)
+    end
+  end
+
+  private def step(state : State, hg : D7::Hypergraph, node : D7::Node, variant : View) : D7::Patch?
+    # Find nonempty input cell(s).
+    sources = Pf::Kit.stack_array({node: D7::Node, value: Term::Str}, 1)
+    hg.each_node_with_head(Term.of(:cell), memberof: {variant.input}) do |node|
+      # Since cell has only one edge, `memberof:` above already covers
+      # the edge check.
+      Term.matchpiT?(node.term, %{[cell @_ value_string]}) do
+        sources << {node: node, value: value}
+      end
+    end
+
+    # For human-predictable behavior, we only support a single value. If
+    # there are many values we'd be "confused".
+    return unless source = sources.single?
+
+    # Find empty target cell(s).
+    targets = Pf::Kit.stack_array(D7::Node, 1)
+    hg.each_node_with_head(Term.of(:cell), memberof: {variant.output}) do |node|
+      Term.matchpi?(node.term, %{[cell @_ _?]}) do
+        targets << node
+      end
+    end
+
+    return if targets.empty?
+
+    parse = Parse.new(source[:value], variant.ruleset, variant.top)
+
+    status = state.lock.synchronize { state.table[parse]? }
+    if status.nil?
+      # Parse not scheduled. Schedule it.
+      state.lock.synchronize do
+        state.table[parse] = Pending.new
+      end
+
+      run(state.lock, state.table, state.grammars, parse, state.epoch)
+
+      # Refresh status.
+      status = state.lock.synchronize { state.table[parse]? }
+    end
+
+    case status
+    in Nil
+      # run() should either give us Completed (if parsed inline) or Pending
+      # (if scheduled on a worker). Receiving Nil here is unexpected.
+    in Completed
+      state.lock.synchronize do
+        state.table.delete(parse)
+      end
+
+      # Clear source and set target(s).
+      D7.patches(targets) do |target|
+        case result = status.result
+        in Term
+          D7.patch(target, {2, result})
+        in ParseKit::Refusal, ParseKit::Err
+          D7.patch(target, {2, nil})
+        end
+      end
     in Pending
       state.seen_rulesets << variant.ruleset
       state.seen_parses << parse

@@ -567,6 +567,10 @@ module Ww::Rack
         D7.gnd(node, input, output)
       end
 
+      matchpi %{[parser (@input_ - _symbol - @output_) _*]} do
+        D7.gnd(node, input, output)
+      end
+
       matchpi %{[path (_string reading)]}, %{[path (_string reading) _]} do
         D7.gnd(node)
       end

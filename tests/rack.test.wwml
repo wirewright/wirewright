@@ -7216,4 +7216,22 @@
     (frame/tail (cell @input) (cell @output {"a": 1, "c": 2}))
     ;; End
     (frame/tail (cell @input) (cell @output))
-    end))
+    end)
+
+  ;; View variant, resource
+  (rack
+    (frame
+      (parser (@input - name-list - @output)
+        (name-list lst←(many "[%w]+" " ")) => ^lst)
+      (node (@input (resource _ (present input_string)))
+        (resource (uri "http://127.0.0.1:9812/names.txt")))
+      (cell @output))
+    ;; Fetches data
+    (frame/tail
+      (node (@input (resource _ (present input_string)))
+        (resource (uri "http://127.0.0.1:9812/names.txt")
+          (present "Samantha Daniel John Barbara")))
+      (cell @output))
+    ;; Parses
+    (frame/tail
+      (cell @output ("Samantha" "Daniel" "John" "Barbara")))))
