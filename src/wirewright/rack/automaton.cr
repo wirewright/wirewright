@@ -9,11 +9,14 @@
 # (feed @x @y @x)
 # WWML
 #
-# frames = Rack::Automaton.frames(seed)
-# frames.each do |frame|
+# automaton = Rack::Automaton.new
+# automaton.frames(seed).each do |frame|
 #   puts ML.display(frame)
 #   sleep 1.second
 # end
+#
+# # Teardown: show an empty circuit to the automaton.
+# automaton.next(Term.of)
 # ```
 #
 # Low-level usage:
@@ -39,6 +42,9 @@
 #     break
 #   end
 # end
+#
+# # Teardown: show an empty circuit to the automaton.
+# automaton.next(Term.of)
 # ```
 class Ww::Rack::Automaton
   # Actions returned by `next`.
@@ -132,11 +138,6 @@ class Ww::Rack::Automaton
   # See the other overload to learn about *kwargs*.
   def self.new(**kwargs) : Automaton
     new(D7::Parser.new(Rack.clf), **kwargs)
-  end
-
-  # A shorthand for `new.frames(seed)`.
-  def self.frames(seed : Term) : Iterator(Term)
-    new.frames(seed)
   end
 
   private def measure(&) : Nil

@@ -29,11 +29,16 @@ module Ww
     alias ResourceMap = PromiseMap(ResourceService::Query, ResourceService::Response)
 
     # :nodoc:
+    alias Notification = PathService::Notification | HTTPService::Notification
+
+    # :nodoc:
     def initialize(
       @readings : ReadingMap,
       @reports : ReportMap,
       @resources : ResourceMap,
+      @send : Notification ->,
     )
+      @relays = [] of ServiceBroadcast::QueueId
     end
 
     # Constructs an extrinsic map.
@@ -45,24 +50,13 @@ module Ww
       reports = PromiseMap(NormalPath, PathService::Report).new
       resources = PromiseMap(ResourceService::Query, ResourceService::Response).new
 
-      wg = WaitGroup.new(2)
       msgloop = Msgloop(Q, A).new(msgq, alarm, readings, reports, resources)
 
-      spawn(name: "ExtrinsicMap path invalidation relay") do
-        PathService.listen(wg) do |notification|
-          msgloop.receive(notification)
-        end
+      send = ->(notification : Notification) do
+        msgloop.receive(notification)
       end
 
-      spawn(name: "ExtrinsicMap HTTP invalidation relay") do
-        HTTPService.listen(wg) do |notification|
-          msgloop.receive(notification)
-        end
-      end
-
-      wg.wait
-
-      new(readings, reports, resources)
+      new(readings, reports, resources, send)
     end
 
     def self.new(alarm) : ExtrinsicMap
@@ -177,9 +171,46 @@ module Ww
       @resources.each_key { |query| yield ResourceRef.new(query) }
     end
 
+    private def attempt_boot : Nil
+      return if @relays.present?
+
+      qids = BlockingQueue(ServiceBroadcast::QueueId).new
+
+      spawn(name: "ExtrinsicMap path invalidation relay") do
+        PathService.listen(qids) do |notification|
+          @send.call(notification)
+        end
+      end
+
+      spawn(name: "ExtrinsicMap HTTP invalidation relay") do
+        HTTPService.listen(qids) do |notification|
+          @send.call(notification)
+        end
+      end
+
+      @relays << qids.shift
+      @relays << qids.shift
+    end
+
+    private def attempt_shutdown : Nil
+      return if @relays.empty?
+
+      wg = WaitGroup.new(@relays.size)
+      @relays.each do |relay|
+        PathService.broadcast(StopListening.new(relay, wg))
+        HTTPService.broadcast(StopListening.new(relay, wg))
+      end
+
+      wg.wait
+
+      @relays.clear
+    end
+
     # Adds *ref* to the map. After adding *ref*, you can start polling
     # it using the corresponding `[]?` method.
     def add(ref : ReadingRef) : Nil
+      attempt_boot
+
       PathMonitorService.add(ref.path.parent)
 
       @readings.add(ref.path) { PathService.read(ref.path) }
@@ -187,6 +218,8 @@ module Ww
 
     # :ditto:
     def add(ref : ReportRef) : Nil
+      attempt_boot
+
       PathMonitorService.add(ref.path)
 
       @reports.add(ref.path) { PathService.report(ref.path) }
@@ -194,6 +227,8 @@ module Ww
 
     # :ditto:
     def add(ref : ResourceRef) : Nil
+      attempt_boot
+
       @resources.add(ref.query) { ResourceService.get(ref.query) }
       @resources.touch(ref.query)
     end
@@ -203,6 +238,8 @@ module Ww
       PathMonitorService.delete(ref.path.parent)
 
       @readings.delete(ref.path)
+
+      attempt_shutdown
     end
 
     # :ditto:
@@ -210,11 +247,15 @@ module Ww
       PathMonitorService.delete(ref.path)
 
       @reports.delete(ref.path)
+
+      attempt_shutdown
     end
 
     # :ditto:
     def delete(ref : ResourceRef) : Nil
       @resources.delete(ref.query)
+
+      attempt_shutdown
     end
   end
 end

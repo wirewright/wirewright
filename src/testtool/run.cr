@@ -75,7 +75,8 @@ module Testtool
   defrecord RackTest, seed : Term, frames : Array(Term)
 
   def run(test : RackTest, assets, stat, complaints) : Nil
-    frames = Rack::Automaton.frames(test.seed)
+    automaton = Rack::Automaton.new
+    frames = automaton.frames(test.seed)
 
     # Skip through seed.
     before = test.seed
@@ -105,6 +106,9 @@ module Testtool
         end
       end
     end
+
+    # Teardown by passing empty circuit.
+    automaton.next(Term.of)
   end
 
   defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term
