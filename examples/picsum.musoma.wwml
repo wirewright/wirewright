@@ -3,7 +3,7 @@
   ;; using the `resource` node...
   (node @img
     (resource (uri "https://picsum.photos/100/100")))
-  (view (@img (resource _ (present _ blob_)) @img-view)
+  (view (@img (resource _ (present blob_)) @img-view)
     (img src: '^blob))
   (group style: "flow-none content"
     (node @img-view))
