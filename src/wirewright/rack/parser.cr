@@ -3,46 +3,57 @@ module Ww::Rack::Parser
 
   # :nodoc:
   defcase State,
-    epoch : Automaton::Epoch,
-    lock : Sync::RWLock,
-    running : Hash(ParseTask, ParseStatus),
-    grammars : Hash(Term, ParseKit::GrammarF)
+    grammars : SyncHash(Term, ParseKit::GrammarF),
+    tasks : D7::TaskSync(Automaton::Epoch, Task, Result)
 
-  defrecord ParseTask, source : Term::Str, ruleset : Term, top : Term::Sym
+  defrecord Task, source : Term::Str, ruleset : Term, top : Term::Sym
 
-  alias ParseStatus = Completed | Pending
-
-  defrecord Completed, result : Term | ParseKit::Err
-  defrecord Pending
+  alias Result = Term | ParseKit::Err
 
   def state(epoch : Automaton::Epoch) : State
-    State.new(epoch,
-      lock: Sync::RWLock.new,
-      running: {} of ParseTask => ParseStatus,
-      grammars: {} of Term => ParseKit::GrammarF,
-    )
+    grammars = SyncHash(Term, ParseKit::GrammarF).new
+
+    tasks = D7::TaskSync(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
+      execute(grammars, task, ping)
+    end
+
+    State.new(grammars, tasks)
   end
 
-  defrecord StepContext, tasks : Set(ParseTask), rulesets : Set(Term)
+  private def execute(grammars, task : Task, ping) : Result
+    view = task.source.to(StringView)
+
+    grammar = grammars.put_if_absent(task.ruleset) do
+      ParseKit.flatten(ParseKit.grammar(task.ruleset))
+    end
+
+    ctx = ParseKit.context(grammar, ping)
+    ParseKit.resolve(ParseKit.parse(ctx, task.top, view))
+  end
+
+  def pending?(state : State) : Bool
+    state.tasks.pending?
+  end
+
+  defrecord StepContext,
+    tasks : D7::TaskSync::Session(Automaton::Epoch, Task, Result),
+    rulesets : Set(Term)
 
   def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    seen_tasks = Set(ParseTask).new
     seen_rulesets = Set(Term).new
 
-    subframes = D7.step(parser, circuit) do |hg|
-      prepass.call(hg) do |hg|
-        ctx = StepContext.new(seen_tasks, seen_rulesets)
-        D7::Regime.merge(hg, proposals: step(state, ctx, hg))
+    subframes = state.tasks.step do |session|
+      D7.step(parser, circuit) do |hg|
+        prepass.call(hg) do |hg|
+          ctx = StepContext.new(session, seen_rulesets)
+          D7::Regime.merge(hg, proposals: step(state, ctx, hg))
+        end
       end
     end
 
-    # See which parses / rulesets were canceled and remove them from
-    # the associated tables in *state*.
-    state.lock.write do
-      state.running.select! do |task, _|
-        task.in?(seen_tasks)
-      end
-
+    # Tasks cannot garbage collect grammars so we have to do it ourselves. Only
+    # do it if there's a chance something changed, though (in terms of grammars).
+    unless seen_rulesets.size == state.grammars.size
       state.grammars.select! do |ruleset, _|
         ruleset.in?(seen_rulesets)
       end
@@ -79,29 +90,34 @@ module Ww::Rack::Parser
 
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph) : Indexable(D7::Patch)
     hg.propose(:parser) do |node|
+      variant = nil
+
       Term.case(node.term) do
         matchpiT %{[parser (@input_ -> top_symbol -> @output_) ruleset_*]} do
           variant = Transfer.new(node.resolve(input), top, node.resolve(output), ruleset)
-          step(state, ctx, hg, node, variant)
         end
 
         matchpiT %{[parser (@input_ -> top_symbol -> @output_ / @error_) ruleset_*]} do
           variant = TransferError.new(node.resolve(input), top, node.resolve(output), node.resolve(error), ruleset)
-          step(state, ctx, hg, node, variant)
         end
 
         matchpiT %{[parser (@input_ - top_symbol - @output_) ruleset_*]} do
           variant = View.new(node.resolve(input), top, node.resolve(output), ruleset)
-          step(state, ctx, hg, node, variant)
         end
 
         matchpiT %{[parser (@input_ - top_symbol - @output_ / @error_) ruleset_*]} do
           variant = ViewError.new(node.resolve(input), top, node.resolve(output), node.resolve(error), ruleset)
-          step(state, ctx, hg, node, variant)
         end
 
         otherwise { }
       end
+
+      next if variant.nil?
+
+      # Mark ruleset as seen so its grammar is kept alive (if present).
+      ctx.rulesets << variant.ruleset
+
+      step(state, ctx, hg, node, variant)
     end
   end
 
@@ -137,32 +153,19 @@ module Ww::Rack::Parser
 
     return if targets.empty?
 
-    task = ParseTask.new(source.value, variant.ruleset, variant.top)
-    status = checkout(state, task)
+    task = Task.new(source.value, variant.ruleset, variant.top)
+    return unless result = checkout?(ctx, task)
 
-    case status
-    in Completed
-      state.lock.write do
-        state.running.delete(task)
-      end
-
-      # Clear source and set target(s).
+    # Clear source and set target(s).
+    case result
+    in Term
       D7.patches(
         D7.patch(source.node, {2, nil}),
-        D7.patches(targets) do |target|
-          case result = status.result
-          in Term
-            D7.patch(target, {2, result})
-          in ParseKit::Err
-            D7::Patch.new
-          end
-        end,
+        D7.patches(targets, {2, result}),
       )
-    in Pending
-      ctx.tasks << task
-      ctx.rulesets << variant.ruleset
-
-      nil # No change (yet)
+    in ParseKit::Err
+      # Target cell(s) are already empty, we don't have to clear them.
+      D7.patch(source.node, {2, nil})
     end
   end
 
@@ -189,30 +192,23 @@ module Ww::Rack::Parser
 
     return if errors.empty?
 
-    task = ParseTask.new(source.value, variant.ruleset, variant.top)
-    status = checkout(state, task)
+    task = Task.new(source.value, variant.ruleset, variant.top)
+    return unless result = checkout?(ctx, task)
 
-    case status
-    in Completed
-      state.lock.write do
-        state.running.delete(task)
-      end
-
-      # Clear source and set target(s).
+    # Clear source and set target(s).
+    case result
+    in Term
       D7.patches(
         D7.patch(source.node, {2, nil}),
-        case result = status.result
-        in Term
-          D7.patches(targets) { |target| D7.patch(target, {2, result}) }
-        in ParseKit::Err
-          D7.patches(errors) { |error| D7.patch(error, {2, Term.of(:err, result.detail)}) }
-        end,
+        D7.patches(targets, {2, result}),
       )
-    in Pending
-      ctx.rulesets << variant.ruleset
-      ctx.tasks << task
+    in ParseKit::Err
+      error = Term.of(:err, result.detail)
 
-      nil # No change (yet)
+      D7.patches(
+        D7.patch(source.node, {2, nil}),
+        D7.patches(errors, {2, error}),
+      )
     end
   end
 
@@ -229,29 +225,15 @@ module Ww::Rack::Parser
 
     return if targets.empty?
 
-    task = ParseTask.new(source.value, variant.ruleset, variant.top)
-    status = checkout(state, task)
+    task = Task.new(source.value, variant.ruleset, variant.top)
+    return unless result = checkout?(ctx, task)
 
-    case status
-    in Completed
-      state.lock.write do
-        state.running.delete(task)
-      end
-
-      # Clear source and set target(s).
-      D7.patches(targets) do |target|
-        case result = status.result
-        in Term
-          D7.patch(target, {2, result})
-        in ParseKit::Err
-          D7.patch(target, {2, nil})
-        end
-      end
-    in Pending
-      ctx.tasks << task
-      ctx.rulesets << variant.ruleset
-
-      nil # No change (yet)
+    # Clear source and set target(s).
+    case result
+    in Term
+      D7.patches(targets, {2, result})
+    in ParseKit::Err
+      D7.patches(targets, {2, nil})
     end
   end
 
@@ -278,136 +260,32 @@ module Ww::Rack::Parser
 
     return if errors.empty?
 
-    task = ParseTask.new(source.value, variant.ruleset, variant.top)
-    status = checkout(state, task)
+    task = Task.new(source.value, variant.ruleset, variant.top)
+    return unless result = checkout?(ctx, task)
 
-    case status
-    in Completed
-      state.lock.write do
-        state.running.delete(task)
-      end
+    case result
+    in Term
+      D7.patches(
+        D7.patches(targets, {2, result}),
+        D7.patches(errors, {2, nil}),
+      )
+    in ParseKit::Err
+      error = Term.of(:err, result.detail)
 
-      case result = status.result
-      in Term
-        D7.patches(
-          D7.patches(targets, {2, result}),
-          D7.patches(errors, {2, nil}),
-        )
-      in ParseKit::Err
-        error = Term.of(:err, result.detail)
-
-        D7.patches(
-          D7.patches(targets, {2, nil}),
-          D7.patches(errors, {2, error}),
-        )
-      end
-    in Pending
-      ctx.tasks << task
-      ctx.rulesets << variant.ruleset
-
-      nil # No change (yet)
+      D7.patches(
+        D7.patches(targets, {2, nil}),
+        D7.patches(errors, {2, error}),
+      )
     end
   end
 
-  private def checkout(state : State, task : ParseTask) : ParseStatus
-    status = state.lock.read { state.running[task]? }
-    if status.nil?
-      # Task not scheduled. Schedule it.
-      state.lock.write do
-        state.running[task] = Pending.new
-      end
-
-      execute(state.lock, state.running, state.grammars, task, state.epoch)
-
-      # Refresh status.
-      #
-      # NOTE: execute() doesn't remove statuses. So it should either give us Completed
-      # (if parsed inline) or Pending (if scheduled on a worker).
-      status = state.lock.read { state.running[task] }
+  private def checkout?(ctx : StepContext, task : Task) : Result?
+    # Already computed.
+    if result = ctx.tasks.result?(task)
+      return result
     end
 
-    status
-  end
-
-  private class Canceled < Exception
-    @callstack = CallStack.empty
-  end
-
-  private def execute(lock, running, grammars, task : ParseTask, epoch)
-    begin
-      start = nil
-      deadline = 128.microseconds
-
-      parse(lock, running, grammars, task) do |clock|
-        next if clock.zero?
-
-        # For very small parses, we do not even do the initial Time.instant.
-        # For longer ones, we do.
-        if start.nil? && clock % 64 == 0
-          start ||= Time.instant
-          next
-        end
-
-        next unless clock % 256 == 0
-
-        now = Time.instant
-        duration = now - start.not_nil!
-        if duration >= deadline
-          raise Canceled.new
-        end
-      end
-    rescue Canceled
-      # If inline parsing is too slow we parse on a worker fiber. We only lose
-      # the amount of work done during *deadline*.
-      spawn(name: "Rack::Parser parse task") do
-        parse(lock, running, grammars, task) do |clock|
-          next if clock.zero?
-          next unless clock % 256 == 0
-          next unless lock.try_lock_read?
-
-          begin
-            next if running.has_key?(task)
-
-            raise Canceled.new
-          ensure
-            lock.unlock_read
-          end
-        end
-      rescue Canceled
-        # Nothing to do. The running table already lacks *task*.
-      ensure
-        epoch.call
-      end
-    end
-  end
-
-  private def parse(lock, running, grammars, task : ParseTask, &checkpoint : UInt64 ->)
-    view = task.source.to(StringView)
-
-    # Grammar construction can take a long time so we offload it to the worker
-    # fiber as well.
-    grammar = lock.write do
-      grammars.put_if_absent(task.ruleset) do
-        ParseKit.flatten(ParseKit.grammar(task.ruleset))
-      end
-    end
-
-    ctx = ParseKit.context(grammar, checkpoint)
-    π = ParseKit.resolve(ParseKit.parse(ctx, task.top, view))
-
-    lock.write do
-      next unless running.has_key?(task) # Canceled
-
-      running[task] = Completed.new(π)
-    end
-  end
-
-  # Returns `true` if parses are ongoing at the moment.
-  def pending?(state : State) : Bool
-    state.lock.read do
-      # There is no way that anything can be added to the running table
-      # anymore. No parses are pending and we can quit.
-      state.running.present?
-    end
+    # Try computing inline (returns Result) or schedule (returns Nil).
+    ctx.tasks.publish?(task, throttle: 64u64, deadline: 100.microseconds)
   end
 end

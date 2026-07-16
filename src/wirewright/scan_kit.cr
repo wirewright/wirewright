@@ -499,7 +499,7 @@ module Ww::ScanKit
     log.entries << LogEntry.new(name, capture)
   end
 
-  private def safepoint(log : CaptureLog) : Int32
+  private def checkpoint(log : CaptureLog) : Int32
     log.entries.size
   end
 
@@ -511,10 +511,10 @@ module Ww::ScanKit
     end
   end
 
-  private def rollback(log : CaptureLog, safepoint : Int32) : Nil
-    assert 0 <= log.entries.size >= safepoint
+  private def rollback(log : CaptureLog, checkpoint : Int32) : Nil
+    assert 0 <= log.entries.size >= checkpoint
 
-    (log.entries.size - safepoint).times do
+    (log.entries.size - checkpoint).times do
       _ = log.entries.pop
     end
   end
@@ -650,11 +650,11 @@ module Ww::ScanKit
   end
 
   def match?(scanner : Concat, log : CaptureLog, text : Pf::StringSeln) : Pf::StringSeln?
-    safepoint = safepoint(log)
+    checkpoint = checkpoint(log)
 
     scanner.members.each do |member|
       unless text = match?(member, log, text)
-        rollback(log, safepoint)
+        rollback(log, checkpoint)
         return
       end
     end
@@ -709,13 +709,13 @@ module Ww::ScanKit
     log = CaptureLog.new(log_entries)
 
     text.each_before_and_after do |_, after|
-      safepoint = safepoint(log)
+      checkpoint = checkpoint(log)
 
       if ahead = match?(pattern.scanner, log, after)
         # If the pattern is anchored to the right and there are things ahead,
         # then this isn't a match.
         if pattern.anchor_r && !ahead.empty?
-          rollback(log, safepoint)
+          rollback(log, checkpoint)
           next
         end
 

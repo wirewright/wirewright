@@ -1086,28 +1086,19 @@ module Ww::ParseKit
   end
 
   # :nodoc:
-  defcase Context,
-    grammar : GrammarF,
-    memo : Pf::Map(MemoKey, Parseout),
-    checkpoint : (UInt64 ->),
-    clock : UInt64
+  defcase Context, grammar : GrammarF, memo : Pf::Map(MemoKey, Parseout), ping : ->
 
   class Context
     setter memo
-
-    def tick : Nil
-      @checkpoint.call(@clock)
-      @clock += 1
-    end
   end
 
-  def context(grammar : GrammarF, checkpoint : UInt64 ->)
+  def context(grammar : GrammarF, ping : ->) : Context
     memo = Pf::Map(MemoKey, Parseout).new
-    Context.new(grammar, memo, checkpoint, clock: 0u64)
+    Context.new(grammar, memo, ping)
   end
 
-  def context(grammar : GrammarF)
-    context(grammar, ->(clock : UInt64) { })
+  def context(grammar : GrammarF) : Context
+    context(grammar, -> { })
   end
 
   alias Parseout = Ok | Err | Refusal
@@ -1194,9 +1185,9 @@ module Ww::ParseKit
   end
 
   def parse(ctx : Context, parselet : Stringp, text : Pf::StringSeln) : Parseout
-    # We tick on terminals because that's the right granularity. Anything
+    # We ping on terminals because that's the right granularity. Anything
     # else is much less predictable.
-    ctx.tick
+    ctx.ping.call
 
     unless row = ScanKit.match?(parselet.pattern, text)
       return Refusal.new(DEFAULT_REFUSAL_DETAIL, text.before_begin)

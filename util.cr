@@ -2450,6 +2450,14 @@ class SyncHash(K, V)
     end
   end
 
+  def select!(& : K, V -> Bool) : Nil
+    @lock.write do
+      @hash.select! do |key, value|
+        yield key, value
+      end
+    end
+  end
+
   def clear
     @lock.write { @hash.clear }
   end
