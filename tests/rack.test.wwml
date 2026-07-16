@@ -6947,7 +6947,8 @@
       (cell @output32)
       (cell @input62 "HELLOworld123")
       (cell @output62))
-    (frame/tail
+    (frame/tail fast-forward: true ;; Since we have many parsers the order is indeterminate (in theory),
+                                   ;; so we have to use fast-forward.
       (cell @input1)
       (cell @output1 5)
       (cell @input2)

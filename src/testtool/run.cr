@@ -45,6 +45,14 @@ module Testtool
         RackComparisonResult.new(actual.items.ends_with?(content.items))
       end
 
+      matchpi %{(frame/tail content_* ¦ () fast-forward)} do
+        if actual.items.ends_with?(content.items)
+          return RackComparisonResult::Match
+        end
+
+        RackComparisonResult::More
+      end
+
       matchpi %{(frame pattern_ ¦ () pattern)} do
         RackComparisonResult.new(M1.probe?(pattern, actual))
       end
