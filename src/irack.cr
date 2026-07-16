@@ -122,4 +122,5 @@ module InteractiveRack
   end
 end
 
-InteractiveRack.run
+ctx = Fiber::ExecutionContext::Isolated.new("Wirewright irack", spawn_context: Ww::MT) { InteractiveRack.run }
+ctx.wait
