@@ -595,6 +595,13 @@ module Ww::Rack
         D7.gnd(node)
       end
 
+      matchpi(
+        %{[db (@stmt_ -> _string -> @response_)]},
+        %{[db (@stmt_ -> _string -> @response_) _]},
+      ) do
+        D7.gnd(node, stmt, response)
+      end
+
       otherwise do
         D7.inert(node)
       end

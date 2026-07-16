@@ -84,8 +84,8 @@
     <> {msg: refresh, (response): ()})
 
 (comment "This is the SQLite connection we'll be using.")
-(db "sqlite3:/tmp/mubook.db"
-  (stmt @query)
-  (result @response))
+(cell @query)
+(cell @response)
+(db (@query -> "sqlite3:/tmp/mubook.db" -> @response))
 
 ((I modify: true structural: true multiline: true compose: true) ("" * "") 0)

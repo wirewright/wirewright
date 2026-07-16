@@ -74,60 +74,6 @@ module MuSoma
           D7.gnd(node)
         end
 
-        matchpi %{[db _string]} do
-          D7.gnd(node)
-        end
-
-        matchpi %{[db (_string _)]} do
-          D7.gnd(node)
-        end
-
-        matchpi %{[db uri_string (stmt @_ stmt_) (result @_)]} do
-          mix0 = Term.of(:db, {uri, stmt})
-
-          D7.mixture(node, mix0) do |mix1|
-            Term.case(mix1) do
-              # Database query was completed during this cycle.
-              matchpi %{(db _ result_)} do
-                Term.morph(node, {2, 2, nil}, {3, 2, result})
-              end
-
-              # No change
-              matchpi %{(db _)} do
-                node
-              end
-            end
-          end
-        end
-
-        matchpi %{[db uri_string (stmt @u_ _?) (result @v_ _?)]} do
-          mix0 = Term.of(:group,
-            {:db, uri},
-            {:cell, u, node[2, 2]?}, # stmt
-            {:cell, v, node[3, 2]?}, # result
-          )
-
-          D7.mixture(node, mix0) do |mix1|
-            stmt = result = nil
-
-            Term.case(mix1) do
-              matchpi %{(group _ (cell @_ stmt1_) _)} do
-                stmt = stmt1
-                continue
-              end
-
-              matchpi %{(group _ _ (cell @_ result1_))} do
-                result = result1
-                continue
-              end
-
-              otherwise { }
-            end
-
-            Term.morph(node, {2, 2, stmt}, {3, 2, result})
-          end
-        end
-
         matchpi %{[trunk]} do
           D7.gnd(node)
         end

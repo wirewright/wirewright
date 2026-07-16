@@ -760,6 +760,34 @@ class ::Hash
     hash
   end
 
+  defrecord DiffAdded(K), key : K
+  defrecord DiffRemoved(K, V), key : K, value : V
+
+  def diff(keys : Set(K), & : DiffAdded(K) | DiffRemoved(K, V) ->)
+    added = Pf::Kit.stack_array(DiffAdded(K), 8)
+    removed = Pf::Kit.stack_array(DiffRemoved(K, V), 8)
+
+    each do |key, value|
+      next if key.in?(keys)
+
+      removed << DiffRemoved(K, V).new(key, value)
+    end
+
+    keys.each do |key|
+      next if has_key?(key)
+
+      added << DiffAdded(K).new(key)
+    end
+
+    removed.each do |action|
+      yield action
+    end
+
+    added.each do |action|
+      yield action
+    end
+  end
+
   def to_readonly_slice(& : {K, V} -> T) : Slice(T) forall T
     ptr = Pointer(T).malloc(size)
     each_with_index do |(key, value), index|

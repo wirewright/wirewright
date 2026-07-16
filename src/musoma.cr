@@ -1,5 +1,3 @@
-require "db"
-require "sqlite3"
 require "./wirewright"
 
 # MuSoma is the newest, most advanced graphical front-end for Wirewright.
