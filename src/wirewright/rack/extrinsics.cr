@@ -4,23 +4,69 @@ module Ww::Rack::Extrinsics
   # :nodoc:
   defcase State,
     epoch : Automaton::Epoch,
+    tasks : D7::TaskBoard(Automaton::Epoch, Task, Result),
     extrinsics : ExtrinsicMap,
-    write_statuses : Hash(NormalPath, WriteStatus),
-    write_statuses_lock : Sync::Mutex,
     transcriptions : GenerationalCache(PathService::Reading | PathService::Report | ResourceService::Response, Term)
 
-  alias WriteStatus = WritePending | WriteCompleted
+  alias Task = WriteFile | RemoveFile
+  alias Result = WriteResult | RemoveResult
 
-  defrecord WritePending
+  defrecord WriteFile, path : NormalPath, content : Term::Str | Term::Blob
+  defrecord RemoveFile, path : NormalPath
+
+  alias WriteResult = WriteCompleted | WriteFailed
+
   defrecord WriteCompleted, content : Term::Str | Term::Blob
+  defrecord WriteFailed, detail : String
+
+  alias RemoveResult = RemoveCompleted | RemoveFailed
+
+  defrecord RemoveCompleted
+  defrecord RemoveFailed, detail : String
 
   def state(epoch : Automaton::Epoch) : State
     extrinsics = ExtrinsicMap.new(epoch)
-    write_statuses = {} of NormalPath => WriteStatus
-    write_statuses_lock = Sync::Mutex.new
+
+    tasks = D7::TaskBoard(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
+      execute(task, ping)
+    end
+
     transcriptions = GenerationalCache(PathService::Reading | PathService::Report | ResourceService::Response, Term).new
 
-    State.new(epoch, extrinsics, write_statuses, write_statuses_lock, transcriptions)
+    State.new(epoch, tasks, extrinsics, transcriptions)
+  end
+
+  private def execute(task : WriteFile, ping) : Result
+    ping.call
+    blob = Term[task.content.to_slice]
+    ping.call
+
+    result = PathService.write(task.path, blob).wait.unwrap
+
+    case result
+    in PathService::Present
+      # Use original content, not blob. Original content is what publishers
+      # are going to be searching for.
+      WriteCompleted.new(task.content)
+    in PathService::Absent
+      WriteFailed.new(result.detail)
+    end
+  end
+
+  private def execute(task : RemoveFile, ping) : Result
+    ping.call
+
+    begin
+      Log.debug { "removing file #{task.path}" }
+      File.delete(task.path.unwrap)
+      Log.debug { "removed file #{task.path}" }
+
+      RemoveCompleted.new
+    rescue e : File::Error
+      Log.debug(exception: e) { "file removal failed" }
+
+      RemoveFailed.new(e.message || "internal error")
+    end
   end
 
   # NOTE: As a curious curiosity (and an important fact!), if there's one or
@@ -28,7 +74,7 @@ module Ww::Rack::Extrinsics
   # cannot truly reach quiescence because the corresponding path can change
   # at any moment.
   def pending?(state : State) : Bool
-    state.extrinsics.size > 0 || state.write_statuses_lock.synchronize { state.write_statuses.size > 0 }
+    state.extrinsics.size > 0 || state.tasks.pending?
   end
 
   # :nodoc:
@@ -38,34 +84,37 @@ module Ww::Rack::Extrinsics
 
   # :nodoc:
   defrecord StepContext,
-    seen : Set(ExtrinsicMap::Ref),
-    write_progress : Hash(NormalPath, WriteStatus),
-    write_proposals : Hash(NormalPath, Set(Term::Str | Term::Blob))
+    refs : Set(ExtrinsicMap::Ref),
+    tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result),
+    proposals : Hash(NormalPath, Set(Task))
 
   def step(state : State, parser : D7::Parser, circuit circuit0 : Term, prepass) : Slice(Term)
-    seen = Set(ExtrinsicMap::Ref).new
-
-    # Prepare write progress. I'd expect the counts here to be single-digit,
-    # so let's stay dumb for now.
-    write_progress = {} of NormalPath => WriteStatus
-    state.write_statuses_lock.synchronize do
-      state.write_statuses.each do |path, status|
-        write_progress[path] = status
-      end
-    end
-
-    write_proposals = {} of NormalPath => Set(Term::Str | Term::Blob)
+    seen_refs = Set(ExtrinsicMap::Ref).new
 
     circuit1 = state.transcriptions.epoch do
-      tree = parser.parse(circuit0, reply: D7::ParseTree)
-      D7.perturb(tree, cue_disj: {SYM_PATH, SYM_RESOURCE}) do |node, _|
-        ctx = StepContext.new(seen, write_progress, write_proposals)
-        perturb(state, ctx, node)
+      state.tasks.rdv do |tasks_rdv|
+        proposals = {} of NormalPath => Set(Task)
+
+        tree = parser.parse(circuit0, reply: D7::ParseTree)
+        result = D7.perturb(tree, cue_disj: {SYM_PATH, SYM_RESOURCE}) do |node, _|
+          ctx = StepContext.new(seen_refs, tasks_rdv, proposals)
+          perturb(state, ctx, node)
+        end
+
+        # Sync tasks.
+        proposals.each do |path, bucket|
+          next unless bucket.size == 1
+
+          proposal = bucket.first
+          tasks_rdv.publish(proposal)
+        end
+
+        result
       end
     end
 
-    # Fast path if circuit did not change.
-    if circuit0 == circuit1 && state.extrinsics.size == seen.size && write_proposals.empty?
+    # Fast path if there was no change.
+    if circuit0 == circuit1 && state.extrinsics.size == seen_refs.size
       return Slice[circuit0]
     end
 
@@ -73,14 +122,14 @@ module Ww::Rack::Extrinsics
     added = Pf::Kit.stack_array(ExtrinsicMap::Ref, 8)
     removed = Pf::Kit.stack_array(ExtrinsicMap::Ref, 8)
 
-    seen.each do |ref|
+    seen_refs.each do |ref|
       next if ref.in?(state.extrinsics)
 
       added << ref
     end
 
     state.extrinsics.each_ref do |ref|
-      next if ref.in?(seen)
+      next if ref.in?(seen_refs)
 
       removed << ref
     end
@@ -97,64 +146,7 @@ module Ww::Rack::Extrinsics
       state.epoch.call
     end
 
-    # Sync writes.
-    wsync(state.epoch,
-      write_progress,
-      write_proposals,
-      state.write_statuses,
-      state.write_statuses_lock,
-    )
-
     Slice[circuit1]
-  end
-
-  private def wsync(epoch, progress, proposals, statuses, lock) : Nil
-    lock.synchronize do
-      # For WriteCompleted, assume the circuit saw them. We can "garbage collect"
-      # them from the write_statuses map.
-      #
-      # NOTE: We currently cannot cancel writes. They must complete before they
-      # are "GCd".
-      progress.each do |path, status|
-        next unless status.is_a?(WriteCompleted)
-
-        statuses.delete(path)
-      end
-
-      proposals.each do |path, proposals|
-        next if statuses.has_key?(path) # Already writing
-        next unless proposals.size == 1
-
-        proposal = proposals.first
-
-        statuses[path] = WritePending.new
-
-        spawn(name: "Rack file writing worker") do
-          write(epoch, statuses, lock, path, proposal)
-        end
-      end
-    end
-  end
-
-  private def write(epoch, statuses, lock, path : NormalPath, content : Term::Str) : Nil
-    # Converting Str to Blob is cheap except for digest generation,
-    # which is O(N).
-    blob = Term[content.to_slice]
-    PathService.write(path, blob).wait
-
-    lock.synchronize do
-      statuses[path] = WriteCompleted.new(content)
-    end
-    epoch.call
-  end
-
-  private def write(epoch, statuses, lock, path : NormalPath, content : Term::Blob) : Nil
-    PathService.write(path, content).wait
-
-    lock.synchronize do
-      statuses[path] = WriteCompleted.new(content)
-    end
-    epoch.call
   end
 
   private def perturb(state : State, ctx : StepContext, node : Term) : Term
@@ -165,7 +157,7 @@ module Ww::Rack::Extrinsics
         path: NormalPath,
       ) do
         ref = ExtrinsicMap::ReadingRef.new(path)
-        ctx.seen << ref
+        ctx.refs << ref
 
         unless reading = state.extrinsics[ref]?
           return Term.morph(node, {2, nil})
@@ -183,7 +175,7 @@ module Ww::Rack::Extrinsics
         path: NormalPath,
       ) do
         ref = ExtrinsicMap::ReportRef.new(path)
-        ctx.seen << ref
+        ctx.refs << ref
 
         unless report = state.extrinsics[ref]?
           return Term.morph(node, {2, nil})
@@ -195,45 +187,41 @@ module Ww::Rack::Extrinsics
         Term.morph(node, {2, transcription})
       end
 
-      matchpi %{[path (path_string sink) content_string]}, path: NormalPath, content: Term::Str do
-        case status = ctx.write_progress[path]?
-        in Nil
-          proposals = ctx.write_proposals.put_if_absent(path) { Set(Term::Str | Term::Blob).new }
-          proposals << content
+      matchpi %{[path (path_string sink) (present content_)]}, path: NormalPath do |content|
+        continue unless content = content.as_s? || content.as_blob?
 
-          node
-        in WritePending
-          # If it's our write then there's no point in proposing, we've already
-          # scheduled it. If it's someone else's write, then by proposing we'd
-          # simply cause a conflict. In that case, let's just wait until the
-          # write completes before scheduling our own instead.
+        task = WriteFile.new(path, content)
+        result = ctx.tasks.result?(task)
+        assert result.is_a?(Nil) || result.is_a?(WriteResult)
+
+        case result
+        in Nil # Not available, propose for publishing.
+          bucket = ctx.proposals.put_if_absent(path) { Set(Task).new }
+          bucket << task
+
           node
         in WriteCompleted
-          unless status.content == content
-            # Wait until next tick for the WriteCompleted to expire, then
-            # we'll propose.
-            return node
-          end
-
           Term.morph(node, {2, nil})
+        in WriteFailed
+          Term.morph(node, {2, {:err, result.detail}})
         end
       end
 
-      matchpi %{[path (path_string sink) content_blob]}, path: NormalPath, content: Term::Blob do
-        case status = ctx.write_progress[path]?
-        in Nil
-          proposals = ctx.write_proposals.put_if_absent(path) { Set(Term::Str | Term::Blob).new }
-          proposals << content
+      matchpi %{[path (path_string sink) absent]}, path: NormalPath do
+        task = RemoveFile.new(path)
+        result = ctx.tasks.result?(task)
+        assert result.is_a?(Nil) || result.is_a?(RemoveResult)
+
+        case result
+        in Nil # Not available, propose for publishing.
+          bucket = ctx.proposals.put_if_absent(path) { Set(Task).new }
+          bucket << task
 
           node
-        in WritePending
-          node
-        in WriteCompleted
-          unless status.content == content
-            return node
-          end
-
+        in RemoveCompleted
           Term.morph(node, {2, nil})
+        in RemoveFailed
+          Term.morph(node, {2, {:err, result.detail}})
         end
       end
 
@@ -241,7 +229,7 @@ module Ww::Rack::Extrinsics
         continue unless query = ResourceService.query?(queryQ)
 
         ref = ExtrinsicMap::ResourceRef.new(query)
-        ctx.seen << ref
+        ctx.refs << ref
 
         unless resource = state.extrinsics[ref]?
           return Term.morph(node, {2, nil})
