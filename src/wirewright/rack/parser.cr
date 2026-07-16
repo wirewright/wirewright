@@ -4,7 +4,7 @@ module Ww::Rack::Parser
   # :nodoc:
   defcase State,
     grammars : SyncHash(Term, ParseKit::GrammarF),
-    tasks : D7::TaskSync(Automaton::Epoch, Task, Result)
+    tasks : D7::TaskBoard(Automaton::Epoch, Task, Result)
 
   defrecord Task, source : Term::Str, ruleset : Term, top : Term::Sym
 
@@ -13,7 +13,7 @@ module Ww::Rack::Parser
   def state(epoch : Automaton::Epoch) : State
     grammars = SyncHash(Term, ParseKit::GrammarF).new
 
-    tasks = D7::TaskSync(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
+    tasks = D7::TaskBoard(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
       execute(grammars, task, ping)
     end
 
@@ -36,16 +36,16 @@ module Ww::Rack::Parser
   end
 
   defrecord StepContext,
-    tasks : D7::TaskSync::Session(Automaton::Epoch, Task, Result),
-    rulesets : Set(Term)
+    rulesets : Set(Term),
+    tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result)
 
   def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
     seen_rulesets = Set(Term).new
 
-    subframes = state.tasks.step do |session|
+    subframes = state.tasks.rdv do |tasks_rdv|
       D7.step(parser, circuit) do |hg|
         prepass.call(hg) do |hg|
-          ctx = StepContext.new(session, seen_rulesets)
+          ctx = StepContext.new(seen_rulesets, tasks_rdv)
           D7::Regime.merge(hg, proposals: step(state, ctx, hg))
         end
       end

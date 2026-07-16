@@ -1,7 +1,7 @@
 # An experimental way of managing asynchronous tasks for D7 clients.
 #
 # TODO: Write more meaningful docs!
-class D7::TaskSync(Alarm, Task, Result)
+class D7::TaskBoard(Alarm, Task, Result)
   def initialize(@alarm : Alarm, &@fn : Task, Ping -> Result)
     @clock = Atomic(UInt64).new(0)
     @generation = 0u64
@@ -58,7 +58,7 @@ class D7::TaskSync(Alarm, Task, Result)
       end
     end
 
-    spawn(name: "Ww::D7::TaskSync task") do
+    spawn(name: "Ww::D7::TaskBoard task") do
       result = @fn.call(task, ping)
 
       @lock.synchronize do
@@ -119,9 +119,9 @@ class D7::TaskSync(Alarm, Task, Result)
     end
   end
 
-  # See `TaskSync#step`.
-  struct Session(Alarm, Task, Result)
-    protected def initialize(@tsync : TaskSync(Alarm, Task, Result), @map : Pf::Map(Task, Result))
+  # Represents a rendezvous with a task board. See `TaskBoard#rdv`.
+  struct Rdv(Alarm, Task, Result)
+    protected def initialize(@board : TaskBoard(Alarm, Task, Result), @map : Pf::Map(Task, Result))
     end
 
     # Returns the harvested result of *task*, if available.
@@ -133,16 +133,16 @@ class D7::TaskSync(Alarm, Task, Result)
     #
     # - If *throttle* is nonzero, pings made by the function that's running
     #   the task are ignored except on every *throttle*th tick of a logical
-    #   clock internal to `TaskSync`.
+    #   clock internal to `TaskBoard`.
     def publish(task : Task, *, throttle : UInt64 = 0u64) : Nil
-      @tsync.publish(task, throttle)
+      @board.publish(task, throttle)
     end
 
     # Publishes or keeps alive the given *task*.
     #
     # - If *throttle* is nonzero, pings made by the function that's running
     #   the task are ignored except on every *throttle*th tick of a logical
-    #   clock internal to `TaskSync`.
+    #   clock internal to `TaskBoard`.
     # - *deadline*, triggers the execution of *task* immediately (inside the call
     #   to `publish`). If the call completes within *deadline*, its result is
     #   returned. Otherwise, the task is scheduled normally on a worker fiber.
@@ -151,19 +151,20 @@ class D7::TaskSync(Alarm, Task, Result)
     # depending on how often the task execution function pings and on *throttle*,
     # among other things.
     def publish?(task : Task, *, throttle : UInt64 = 0u64, deadline : Time::Span) : Result?
-      @tsync.publish?(task, throttle, deadline)
+      @board.publish?(task, throttle, deadline)
     end
   end
 
-  # Wraps a step of a reactive reconciliation loop (the block).
+  # Performs *rendezvous* of the block with this task board: wraps a step
+  # of a reactive reconciliation loop (the block).
   #
-  # Harvests the results of all completed tasks, and yields a `Session` object
+  # Harvests the results of all completed tasks, and yields a `Rdv` object
   # so that the block can read results of completed tasks, schedule tasks, or
   # keep pending tasks alive. After the block returns, collects canceled tasks
   # (i.e., tasks that the block did not at least "ping" to keep them alive).
-  def step(&)
+  def rdv(&)
     begin
-      yield Session.new(self, reap)
+      yield Rdv.new(self, reap)
     ensure
       collect
     end

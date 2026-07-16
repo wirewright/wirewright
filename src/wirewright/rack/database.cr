@@ -4,7 +4,7 @@ module Ww::Rack::Database
   # :nodoc:
   defcase State,
     connections : Hash(URI, Connection),
-    tasks : D7::TaskSync(Automaton::Epoch, Task, Term)
+    tasks : D7::TaskBoard(Automaton::Epoch, Task, Term)
 
   alias Connection = Up | Dn | Pending
 
@@ -17,7 +17,7 @@ module Ww::Rack::Database
   def state(epoch : Automaton::Epoch) : State
     connections = {} of URI => Connection
 
-    tasks = D7::TaskSync(Automaton::Epoch, Task, Term).new(epoch) do |task, ping|
+    tasks = D7::TaskBoard(Automaton::Epoch, Task, Term).new(epoch) do |task, ping|
       execute(task.db, task.stmt, ping)
     end
 
@@ -30,15 +30,15 @@ module Ww::Rack::Database
 
   defrecord StepContext,
     uris : Set(URI),
-    tasks : D7::TaskSync::Session(Automaton::Epoch, Task, Term)
+    tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Term)
 
   def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
     seen_uris = Set(URI).new
 
-    subframes = state.tasks.step do |task_session|
+    subframes = state.tasks.rdv do |tasks_rdv|
       D7.step(parser, circuit) do |hg|
         prepass.call(hg) do |hg|
-          ctx = StepContext.new(seen_uris, task_session)
+          ctx = StepContext.new(seen_uris, tasks_rdv)
           D7::Regime.merge(hg, proposals: step(state, ctx, hg))
         end
       end
