@@ -479,7 +479,7 @@ module Ww::D7
       return node # unchanged
     end
 
-    unless cue_disj.any? { |cue| dict.probably_includes?(cue) }
+    if cue_disj.present? && cue_disj.none? { |cue| dict.probably_includes?(cue) }
       return node # unchanged
     end
 
@@ -491,11 +491,11 @@ module Ww::D7
   end
 
   private def perturb(tree : ParentNode | UnaugmentedParentNode, cue_disj, addr, fn) : Term
-    node = tree.feature.node
+    dict = tree.feature.node
     range = tree.feature.range
 
-    unless cue_disj.any? { |cue| node.probably_includes?(cue) }
-      return Term.of(node) # unchanged
+    if cue_disj.present? && cue_disj.none? { |cue| dict.probably_includes?(cue) }
+      return Term.of(dict) # unchanged
     end
 
     repair = repair(tree) do |child, index|
