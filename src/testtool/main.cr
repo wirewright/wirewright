@@ -271,7 +271,7 @@ module Testtool
 
       # Let other fibers (esp. the logging fiber) finish before we exit. I'm
       # not sure if there's a better way to do this.
-      sleep 1.second
+      Fiber.yield
     end
 
     ctx.wait
