@@ -89,6 +89,17 @@ module Ww::Rack::Extrinsics
     proposals : Hash(NormalPath, Set(Task))
 
   def step(state : State, parser : D7::Parser, circuit circuit0 : Term, prepass) : Slice(Term)
+    # Despawn the fibers associated with ExtrinsicMap to avoid leaks. Showing an empty
+    # circuit to Automaton is the teardown pattern we use (and it also makes sense
+    # semantically for subsystems that do not really know what "shutdown" means).
+    #
+    # We don't do this on delete (anymore) because that's rather expensive, if e.g.
+    # a path report is continuously added and removed, we're hitting the worst
+    # case all the time (spawn + do work + despawn).
+    if circuit0 == Term.of
+      state.extrinsics.shutdown
+    end
+
     seen_refs = Set(ExtrinsicMap::Ref).new
 
     circuit1 = state.transcriptions.epoch do

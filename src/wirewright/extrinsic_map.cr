@@ -171,7 +171,7 @@ module Ww
       @resources.each_key { |query| yield ResourceRef.new(query) }
     end
 
-    private def attempt_boot : Nil
+    private def ensure_running! : Nil
       return if @relays.present?
 
       qids = BlockingQueue(ServiceBroadcast::QueueId).new
@@ -192,7 +192,10 @@ module Ww
       @relays << qids.shift
     end
 
-    private def attempt_shutdown : Nil
+    # Worker fibers are started automatically when needed. They keep running
+    # until you **explicitly** call `shutdown`. They will start automatically
+    # later, if necessary.
+    def shutdown : Nil
       return if @relays.empty?
 
       wg = WaitGroup.new(@relays.size)
@@ -209,7 +212,7 @@ module Ww
     # Adds *ref* to the map. After adding *ref*, you can start polling
     # it using the corresponding `[]?` method.
     def add(ref : ReadingRef) : Nil
-      attempt_boot
+      ensure_running!
 
       PathService.connect(ref.path.parent, ref.path, PathService::Reading)
       PathMonitorService.add(ref.path.parent).wait
@@ -219,7 +222,7 @@ module Ww
 
     # :ditto:
     def add(ref : ReportRef) : Nil
-      attempt_boot
+      ensure_running!
 
       PathMonitorService.add(ref.path).wait
 
@@ -228,7 +231,7 @@ module Ww
 
     # :ditto:
     def add(ref : ResourceRef) : Nil
-      attempt_boot
+      ensure_running!
 
       @resources.add(ref.query) { ResourceService.get(ref.query) }
       @resources.touch(ref.query)
@@ -240,8 +243,6 @@ module Ww
       PathMonitorService.delete(ref.path.parent)
 
       @readings.delete(ref.path)
-
-      attempt_shutdown
     end
 
     # :ditto:
@@ -249,15 +250,11 @@ module Ww
       PathMonitorService.delete(ref.path)
 
       @reports.delete(ref.path)
-
-      attempt_shutdown
     end
 
     # :ditto:
     def delete(ref : ResourceRef) : Nil
       @resources.delete(ref.query)
-
-      attempt_shutdown
     end
   end
 end
