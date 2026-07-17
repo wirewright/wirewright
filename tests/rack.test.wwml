@@ -7480,3 +7480,62 @@
     (frame/tail
       (cell @input "qux") (cell @output) (cell @error (err "invalid")))
     end))
+
+;; path...reading, path...report, path...sink
+(group
+  ;; Elementary
+  (rack
+    (frame
+      (backsys {@:current, @:stage0, @:stage1}
+        ;; Switching stages.
+        {¦ -current_ stage0_} <> {current: ^stage0, (stage0): ()}
+        {¦ -current_ -stage0 stage1_} <> {current: ^stage1, (stage1): ()}
+        ;; Wait for the current stage to complete.
+        {¦ current_: (_* (cell @done true))} <> {(current): ()})
+
+      ;; Remove them first.
+      (cell @stage0
+        ((path ("/tmp/wirewright-tests0-a" sink) absent)
+         (path ("/tmp/wirewright-tests0-b" sink) absent)
+         (path ("/tmp/wirewright-tests0-c" sink) absent)
+         (circuit @reports
+           (path ("/tmp/wirewright-tests0-a" report))
+           (path ("/tmp/wirewright-tests0-b" report))
+           (path ("/tmp/wirewright-tests0-c" report)))
+         ;; Report done when we observe them absent! There can be races (e.g. if
+         ;; they're created after immediately we've removed them), but there isn't
+         ;; anything we can do about it, I think.
+         (backsys {@:reports, @:done}
+           {¦ -done_ reports: ((path _ [absent _]) (path _ [absent _]) (path _ [absent _]))}
+             <> {done: true})
+         (cell @done)))
+
+      ;; Then do our test.
+      (cell @stage1
+        ((path ("/tmp/wirewright-tests0-a" sink) (present "123"))
+         (path ("/tmp/wirewright-tests0-b" sink) (present "456"))
+         (node (@a (path _ (present (%pipe ml ±a))))
+           (path ("/tmp/wirewright-tests0-a" reading)))
+         (node (@b (path _ (present (%pipe ml ±b))))
+           (path ("/tmp/wirewright-tests0-b" reading)))
+         (node (@c (path _ `c))
+           (path ("/tmp/wirewright-tests0-c" sink)))
+         (backsys {@:a @:b @:c}
+           {¦ ±a ±b -c_} <> {c: (present ^(ml/compact (+ a b)))})
+         (path ("/tmp/wirewright-tests0-c" report))
+         (node @reading
+           (path ("/tmp/wirewright-tests0-c" reading)))
+         ;; Report we're done when we see 579, which is 123 + 456!
+         (backsys {@:reading, @:done}
+           {¦ -done_ reading: (path _ [present "579"])}
+             <> {done: true})
+         (cell @done)))
+
+      (circuit @current))
+
+    (frame/tail fast-forward: true
+      (cell @stage0)
+      (cell @stage1)
+      (circuit @current))
+
+    end))
