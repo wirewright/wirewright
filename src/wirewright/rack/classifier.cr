@@ -47,7 +47,7 @@ module Ww::Rack
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
       end
 
-      matchpi %{[unit _*]} do
+      matchpi %{[device _*]} do
         D7.circuit(node.as_d, 1u32...node.uitemsize, D7.inert(node))
       end
 
