@@ -13,14 +13,18 @@ module Ww
     alias Msg = PathAdded | PathRemoved | Heartbeat | Inotify::Event
 
     # :nodoc:
-    defrecord PathAdded, path : NormalPath
+    defrecord PathAdded, path : NormalPath, wg : WaitGroup
     # :nodoc:
-    defrecord PathRemoved, path : NormalPath
+    defrecord PathRemoved, path : NormalPath, wg : WaitGroup
     # :nodoc:
     defrecord Heartbeat, wg : WaitGroup
 
     # Notifications sent by the service.
-    alias Notification = EntryCreated | EntryChanged | EntryRemoved | FileModified | FileCommitted
+    alias Notification = EntryCreated | EntryChanged | EntryRemoved | FileModified | FileCommitted | WatchPresent | WatchAbsent
+
+    defrecord WatchPresent, path : NormalPath
+
+    defrecord WatchAbsent, path : NormalPath
 
     # The file system entry at *path* was created.
     defrecord EntryCreated, path : NormalPath
@@ -101,7 +105,7 @@ module Ww
         # These correspond to random-ish samples of the atomic write pattern
         # as it progresses through writing the file. If we delay removal-checking,
         # however, we achieve the following (I guess with high probability; I wonder
-        # how many other ways there are of the OS / editors failing us):
+        # how many other ways there are of the OS / editors screwing us up):
         #
         #   (path ("/tmp/a" reading) (present "hello"))
         #   ;; Modify /tmp/a -> "world"
@@ -128,10 +132,16 @@ module Ww
 
       private def handle(msg : PathAdded) : Nil
         watch(msg.path)
+        PathMonitorService.broadcast(WatchPresent.new(msg.path))
+      ensure
+        msg.wg.done
       end
 
       private def handle(msg : PathRemoved) : Nil
         unwatch(msg.path)
+        PathMonitorService.broadcast(WatchAbsent.new(msg.path))
+      ensure
+        msg.wg.done
       end
 
       private def handle(msg : Heartbeat) : Nil
@@ -229,7 +239,23 @@ module Ww
       private def unwatch(path : NormalPath) : Nil
         if ref = @watching.delete(path)
           Log.trace { "stop watching #{path} #{ref}" }
-          Inotify.unwatch(@ctx, ref)
+
+          begin
+            Inotify.unwatch(@ctx, ref)
+          rescue e : Inotify::Error
+            if e.os_error == Errno::EINVAL
+              # "Invalid argument". The kernel already dropped this watch.
+              # This is likely a race between PathRemoved and file deletion
+              # on disk. PathRemoved arrived earlier than the notification
+              # that the file was removed on disk, but the kernel is already
+              # aware of the file's absence.
+              Log.trace(exception: e) { "watch already absent, likely a race" }
+              return
+            end
+
+            raise e
+          end
+
           return
         end
 
@@ -244,35 +270,46 @@ module Ww
 
     # Creates a watch for *path* if one does not exist. Increments its
     # reference count.
-    def add(path : NormalPath) : Nil
+    def add(path : NormalPath) : WaitGroup
       @@lock.synchronize do
         ensure_running!
 
-        unless refcount = @@watchtab[path]?
+        wg = WaitGroup.new(1)
+
+        if refcount = @@watchtab[path]?
+          @@watchtab[path] = refcount + 1
+          wg.done
+        else
           @@watchtab[path] = 1
-          @@msgs << PathAdded.new(path)
-          return
+          @@msgs << PathAdded.new(path, wg)
         end
 
-        @@watchtab[path] = refcount + 1
+        wg
       end
     end
 
     # Decrements the reference count for the watch associated with *path*. Removes
     # the watch when its reference count reaches zero.
-    def delete(path : NormalPath) : Nil
+    def delete(path : NormalPath) : WaitGroup
       @@lock.synchronize do
         ensure_running!
 
-        return unless refcount = @@watchtab[path]?
+        wg = WaitGroup.new(1)
+
+        unless refcount = @@watchtab[path]?
+          wg.done
+          return wg
+        end
 
         if refcount == 1
           @@watchtab.delete(path)
-          @@msgs << PathRemoved.new(path)
-          return
+          @@msgs << PathRemoved.new(path, wg)
+        else
+          @@watchtab[path] = refcount - 1
+          wg.done
         end
 
-        @@watchtab[path] = refcount - 1
+        wg
       end
     end
 

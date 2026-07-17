@@ -86,7 +86,7 @@ module Ww
       end
 
       private def handle(msg : PathService::ReadingInvalid) : Nil
-        return unless @resources.invalidate? || @readings.invalidate?(msg.path)
+        return unless {@resources.invalidate?, @readings.invalidate?(msg.path)}.any?
 
         reload_refs
       end
@@ -97,7 +97,7 @@ module Ww
         #
         # Invalidate the path itself for file observers, or directory observers
         # to refresh entries.
-        return unless @resources.invalidate? || @reports.invalidate?(msg.path.parent, msg.path)
+        return unless {@resources.invalidate?, @reports.invalidate?(msg.path.parent, msg.path)}.any?
 
         reload_refs
       end
@@ -211,7 +211,8 @@ module Ww
     def add(ref : ReadingRef) : Nil
       attempt_boot
 
-      PathMonitorService.add(ref.path.parent)
+      PathService.connect(ref.path.parent, ref.path, PathService::Reading)
+      PathMonitorService.add(ref.path.parent).wait
 
       @readings.add(ref.path) { PathService.read(ref.path) }
     end
@@ -220,7 +221,7 @@ module Ww
     def add(ref : ReportRef) : Nil
       attempt_boot
 
-      PathMonitorService.add(ref.path)
+      PathMonitorService.add(ref.path).wait
 
       @reports.add(ref.path) { PathService.report(ref.path) }
     end
@@ -235,6 +236,7 @@ module Ww
 
     # Removes *ref* from the map.
     def delete(ref : ReadingRef) : Nil
+      PathService.disconnect(ref.path.parent, ref.path, PathService::Reading)
       PathMonitorService.delete(ref.path.parent)
 
       @readings.delete(ref.path)

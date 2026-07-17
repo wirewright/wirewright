@@ -214,7 +214,11 @@ module Ww
         # For directory entry events.
         PathService.invalidate(msg.path.parent, Report)
 
-        if msg.is_a?(PathMonitorService::FileCommitted) || msg.is_a?(PathMonitorService::EntryRemoved)
+        case msg
+        when PathMonitorService::FileCommitted,
+             PathMonitorService::EntryRemoved,
+             PathMonitorService::WatchPresent,
+             PathMonitorService::WatchAbsent
           PathService.invalidate(msg.path, Reading)
         end
       end
@@ -346,6 +350,7 @@ module Ww
     @@read_lock = Sync::Mutex.new
     @@read_workspace = {} of NormalPath => Sync::Future(Reading)
     @@read_cache = ReadingCache.new
+    @@read_dependencies = {} of NormalPath => Slice(NormalPath)
 
     private class ReadingCache
       defcase ReadingRef, reading : Reading do
@@ -429,20 +434,35 @@ module Ww
 
     # :nodoc:
     def invalidate(path : NormalPath, cls : Report.class) : Nil
-      @@report_lock.synchronize do
+      removed = @@report_lock.synchronize do
         @@report_cache.delete(path)
       end
 
-      broadcast(ReportInvalid.new(path))
+      if removed
+        broadcast(ReportInvalid.new(path))
+      end
     end
 
     # :nodoc:
     def invalidate(path : NormalPath, cls : Reading.class) : Nil
+      invalidated = Pf::Kit.stack_array(NormalPath, 8)
+
       @@read_lock.synchronize do
-        @@read_cache.delete(path)
+        if @@read_cache.delete(path)
+          invalidated << path
+        end
+
+        deps = @@read_dependencies[path]? || Slice(NormalPath).empty
+        deps.each do |dep|
+          next unless @@read_cache.delete(dep)
+
+          invalidated << dep
+        end
       end
 
-      broadcast(ReadingInvalid.new(path))
+      invalidated.each do |dep|
+        broadcast(ReadingInvalid.new(dep))
+      end
     end
 
     # Returns the report for *path*. If not cached, produces the report on
@@ -575,6 +595,24 @@ module Ww
     def invalidate(path : NormalPath) : Nil
       invalidate(path, Report)
       invalidate(path, Reading)
+    end
+
+    # Makes it so that the invalidation of the reading at *path* triggers
+    # the invalidation of *dep*'s reading as well.
+    def connect(path : NormalPath, dep : NormalPath, cls : Reading.class) : Nil
+      @@read_lock.synchronize do
+        deps0 = @@read_dependencies[path]? || Slice(NormalPath).empty
+        deps1 = deps0.append(dep)
+        @@read_dependencies[path] = deps1
+      end
+    end
+
+    def disconnect(path : NormalPath, dep : NormalPath, cls : Reading.class) : Nil
+      @@read_lock.synchronize do
+        deps0 = @@read_dependencies[path]? || Slice(NormalPath).empty
+        deps1 = deps0.to_compact_readonly_slice { |candidate| candidate == dep ? nil : candidate }
+        @@read_dependencies[path] = deps1
+      end
     end
 
     include ServiceBroadcast(Notification)
