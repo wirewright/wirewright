@@ -190,6 +190,8 @@ module Ww::Rack::Database
   # :ditto:
   private def execute(db : DB::Database, stmt : Query, ping) : Term
     rows = Term::Dict.build do |commit|
+      commit << :ok
+
       db.query(stmt.sql, args: stmt.args) do |rs|
         rs.each do
           ping.call
