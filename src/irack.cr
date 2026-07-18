@@ -64,7 +64,7 @@ module InteractiveRack
       display_mask = Rack::Automaton::DisplayMask::Frame
     end
 
-    machine = Rack::Automaton.new(measure: detailed, display_mask: display_mask)
+    automaton = Rack::Automaton.new(measure: detailed, display_mask: display_mask)
 
     circuit = seed
     frame_count = 1u64
@@ -81,7 +81,7 @@ module InteractiveRack
     end
 
     loop do
-      circuit, action = machine.blocking_next(circuit)
+      circuit, action = automaton.blocking_next(circuit)
 
       case action
       in Rack::Automaton::DisplaySubframe
@@ -106,7 +106,7 @@ module InteractiveRack
         puts ML.display(action.content, maxwidth: 80)
 
         if detailed
-          puts "| frame_count=#{frame_count} rec_median(frametime, 32)=#{machine.median.humanize}"
+          puts "| frame_count=#{frame_count} rec_median(frametime, 32)=#{automaton.median.humanize}"
         end
 
         if single_step
