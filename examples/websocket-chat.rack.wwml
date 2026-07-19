@@ -21,3 +21,5 @@
   ;; this communication of clients through sensors and appearances
 
 (circuit @pool)
+
+((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
