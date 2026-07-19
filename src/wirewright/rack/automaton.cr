@@ -131,6 +131,7 @@ class Ww::Rack::Automaton
     @parser_state = Parser.state(@epoch)
     @database_state = Database.state(@epoch)
     @extrinsic_state = Extrinsics.state(@epoch)
+    @websocket_state = WebSocket.state(@epoch)
     @assembler_state = Assembler.state
   end
 
@@ -169,7 +170,7 @@ class Ww::Rack::Automaton
   # This often determines whether the circuit truly reached quiescence, or is
   # just "asynchronously busy".
   def pending? : Bool
-    Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) || Database.pending?(@database_state)
+    Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) || Database.pending?(@database_state) || WebSocket.pending?(@websocket_state)
   end
 
   private def step(subframes, frames, circuit : Term, prepass, library) : Nil
@@ -193,6 +194,9 @@ class Ww::Rack::Automaton
     frames << subframes.last
 
     subframes.concat(Database.step(@database_state, @parser, subframes.last, prepass))
+    frames << subframes.last
+
+    subframes.concat(WebSocket.step(@websocket_state, @parser, subframes.last, prepass))
     frames << subframes.last
 
     subframes.concat(Rack.step(@parser, subframes.last, prepass))

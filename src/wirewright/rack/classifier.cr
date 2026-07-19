@@ -602,6 +602,10 @@ module Ww::Rack
         D7.gnd(node, stmt, response)
       end
 
+      matchpi %{[ws (@pool_ _ server _?) _*]} do
+        D7.gnd(node, pool)
+      end
+
       otherwise do
         D7.inert(node)
       end

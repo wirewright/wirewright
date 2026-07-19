@@ -1,0 +1,23 @@
+(ws (@pool (local 5000) server)
+  (cell @in ())
+  (cell @out ())
+  (part (@in @message) (message_string _*))
+  (comment "Show message to the termspace.")
+  (appearance chat @message)
+  (comment
+    "Read messages from the termspace. In an ideal world messages would be ordered \
+     by something (e.g. timestamp). Another con here is that plain `sensor`s get \
+     confused when there are many matching messages in the same tick.")
+  ((sensor cell) (chat seen_string @seen))
+  (backsys {@:out, @:seen}
+    {¦ out: (_* `>msg) seen_string}
+      <> {>msg: ^seen, (seen): ()}))
+  ;; You can similarly imagine adding appearances that signal the presence
+  ;; of a client C. We then create sensors for them; each client detects
+  ;; the transition of C from present -> absent and vice versa, and sends
+  ;; to the client an appropriate message. Importantly, this means the runtime
+  ;; is allowed to do what it knows how to do best: optimize, optimize,
+  ;; optimize. Termspaces are allowed to do whatever they want to optimize
+  ;; this communication of clients through sensors and appearances
+
+(circuit @pool)

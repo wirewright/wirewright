@@ -1,0 +1,8 @@
+(ws (@pool (local 5000) server)
+  (cell @in ())
+  (cell @out ())
+  (backsys {@:id, @:in, @:out}
+    {¦ in: (M_string _*) out: (_* `>M)}
+      <> {(M): (), >M: ^M}
+    {¦ in: (M←"bye\n" _*) id_}
+      <> {(M): (), (id): ()}))
