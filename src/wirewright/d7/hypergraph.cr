@@ -50,8 +50,6 @@ module Ww::D7
   # as a society of nodes, where each node can participate in zero or more groups,
   # each group consisting of other nodes in the community.
   class Hypergraph
-    alias EdgeId = UInt32
-
     # :nodoc:
     def initialize
       @head_index = {} of Term => Pf::USet32
