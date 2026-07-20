@@ -5,9 +5,6 @@
    Reference: https://json.org/")
 
 (figure
-  (comment
-    "This little contraption connects @front to @input while @gate is nonempty. \
-     Simultaneously, it makes sure @gate is nonempty for just one tick.")
   (cell @msg)
   (backsys {@:msg @:front @:input @:output}
     ;; Fallback (catches e.g. clear something that's empty).
