@@ -111,7 +111,9 @@ module Ww::Rack::WebSocket
 
     # If there's no associated pool, then the server's "machine" is incomplete,
     # so it cannot handle requests -- nor does it *exist*, really.
-    return unless pool = pools.single?
+    unless pool = pools.single?
+      return D7.patch(variant.node, {1, 3, {:dn, "missing pool"}})
+    end
 
     ctx.bindings << variant.binding
 
