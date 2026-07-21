@@ -1497,7 +1497,7 @@ struct Bag(T)
   include Enumerable(T)
 
   def initialize
-    @storage = {} of T => UInt16
+    @storage = {} of T => UInt32
   end
 
   protected def initialize(@storage)
@@ -1517,16 +1517,16 @@ struct Bag(T)
     @storage.count { |_, tally| tally > 1 }.to_u32
   end
 
-  def tally?(object : T) : UInt16?
+  def tally?(object : T) : UInt32?
     @storage[object]?
   end
 
-  def tally(object : T) : UInt16
+  def tally(object : T) : UInt32
     @storage[object]
   end
 
   def add(object : T) : self
-    @storage[object] = (@storage[object]? || 0u16) + 1
+    @storage[object] = (@storage[object]? || 0u32) + 1
 
     self
   end
@@ -1535,8 +1535,16 @@ struct Bag(T)
     add(object)
   end
 
+  def concat(other : Bag(T)) : self
+    other.each_with_tally do |key, tally|
+      @storage[key] = (@storage[key]? || 0u32) + tally
+    end
+
+    self
+  end
+
   def add?(object : T) : Bool
-    @storage[object] = tally = (@storage[object]? || 0u16) + 1
+    @storage[object] = tally = (@storage[object]? || 0u32) + 1
 
     tally == 1
   end
@@ -1586,7 +1594,7 @@ struct Bag(T)
   end
 
   def &(other : Bag(T)) : Bag(T)
-    intersection = {} of T => UInt16
+    intersection = {} of T => UInt32
 
     # An element appears in the intersection of two bags the minimum of
     # the number of times it appears in either.
@@ -1609,13 +1617,13 @@ struct Bag(T)
   end
 
   def -(other : Bag(T)) : Bag(T)
-    difference = {} of T => UInt16
+    difference = {} of T => UInt32
 
     # An element appears in the intersection of two bags the minimum of
     # the number of times it appears in either.
 
     @storage.each do |object, tally0|
-      tally1 = other.@storage[object]? || 0u16
+      tally1 = other.@storage[object]? || 0u32
       next if tally0 <= tally1
 
       difference[object] = tally0 - tally1
