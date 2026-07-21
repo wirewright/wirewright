@@ -634,6 +634,52 @@ class IO::BufferedWriteDigest < IO
   end
 end
 
+class IO::Digest128 < IO
+  def initialize(@buffer : Bytes)
+    @digest = LibXXH128.create_state
+    assert @digest, "could not create XXH128 digest state"
+    assert LibXXH128.reset(@digest, seed: 144115188075855811u64).ok? # just a random prime for no reason
+
+    @size = 0
+  end
+
+  def finalize
+    LibXXH128.free_state(@digest)
+  end
+
+  def read(slice : Bytes) : Int32
+    0
+  end
+
+  def flush : Nil
+    assert LibXXH128.update(@digest, @buffer, @size).ok?
+    @size = 0
+  end
+
+  def write(slice : Bytes) : Nil
+    if @size + slice.size > @buffer.size
+      flush
+    end
+
+    # If slice is larger than buffer size, update the digest immediately
+    # without buffering.
+    if @size + slice.size > @buffer.size
+      assert @size.zero?
+      assert LibXXH128.update(@digest, slice, slice.size).ok?
+      return
+    end
+
+    # Otherwise, buffer.
+    slice.copy_to(@buffer + @size)
+    @size += slice.size
+  end
+
+  def digest : UInt128
+    digest = LibXXH128.digest(@digest)
+    (digest.high64.to_u128 << 64) | digest.low64
+  end
+end
+
 module TextWrap
   extend self
 
