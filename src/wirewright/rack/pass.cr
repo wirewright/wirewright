@@ -491,4 +491,43 @@ module Ww::Rack
       end
     end
   end
+
+  def backref_step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+    D7.step(parser, circuit) do |hg|
+      prepass.call(hg) do |hg|
+        D7::Regime.merge(hg, proposals: backref_step(hg))
+      end
+    end
+  end
+
+  def backref_step(hg : D7::Hypergraph) : Indexable(D7::Patch)
+    hg.propose(:backref) do |node|
+      Term.case(node.term) do
+        matchpi %{[backref header←(input←(%'edge name_) _*) payload_]} do
+          patterns = header.items.move(1)
+          backref_step(hg, node, node.resolve(input), name, patterns, payload)
+        end
+
+        otherwise { }
+      end
+    end
+  end
+
+  def backref_step(hg : D7::Hypergraph, node : D7::Node, input : D7::AbsEdge, name : Term, patterns : Indexable(Term), payload : Term) : D7::Patch?
+    return unless source = Rack.cell?(hg, input)
+
+    if value = source.value?
+      backspec = Term.of(Term[].with(name, value))
+    else
+      backspec = Term.of(Term[].with({name}, Term[]))
+    end
+
+    result = patterns.leftmost? do |pattern|
+      M1.backmap?(pattern, backspec, payload)
+    end
+
+    return unless result
+
+    D7.patch(node, {2, result})
+  end
 end

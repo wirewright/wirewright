@@ -99,6 +99,14 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      # Backrefs are like `node`s with a pattern, except there can be zero or more
+      # alternative patterns, and also backrefs aren't cells. The value at edge
+      # is backmapped into payload during evaluation of backrefs.
+      matchpi %{[backref (@edge_ _*) _]} do
+        leaf = D7.gnd(node, edge)
+        D7.circuit(node.as_d, 2u32...3u32, leaf)
+      end
+
       matchpi %{[circuit @edge_ children0_*]} do
         if children0.empty?
           mix0 = Term.of(:cell, edge)
@@ -351,70 +359,49 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
-      # Chan sensor
-      matchpi %{[sensor (_ _ @u_) _]} do
-        D7.gnd(node, u)
+      matchpi %{[sensor (_ _)]} do
+        D7.gnd(node)
       end
 
-      # View sensor
-      matchpi %{[sensor* (_ _ @u_) _]} do
-        D7.gnd(node, u)
-      end
-
-      # Fused chan sensor-cell
-      matchpi %{[(sensor cell) (tspace_ pattern_ @edge_) _?]} do
-        value0 = node[2]?
-
-        mix0 = Term.of(:group,
-          {:cell, edge, value0},
-          {:sensor, {tspace, pattern, edge}, {:^, edge[1]}},
-        )
-
+      matchpi %{[surface storage←[cell @_] [sensor (_ _) _]]} do
+        mix0 = storage
         D7.mixture(node, mix0) do |mix1|
-          Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.morph(node, {2, nil}) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
-          end
+          Term.morph(node, {1, mix1})
         end
       end
 
-      # Fused view sensor-cell
-      matchpi %{[(sensor* cell) (tspace_ pattern_ @edge_) _?]} do
-        value0 = node[2]?
+      matchpi %{[sensor (many _ _)]} do
+        D7.gnd(node)
+      end
 
-        mix0 = Term.of(:group,
-          {:cell, edge, value0},
-          {:"sensor*", {tspace, pattern, edge}, {:^, edge[1]}},
-        )
-
+      matchpi %{[surface storage←[cell @_] [sensor (many _ _) _]]} do
+        mix0 = storage
         D7.mixture(node, mix0) do |mix1|
-          Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.morph(node, {2, nil}) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
-          end
+          Term.morph(node, {1, mix1})
         end
       end
 
-      # Appearance
-      matchpi %{[appearance _ @u_]} do
-        D7.gnd(node, u)
+      matchpi %{[sensor (view _ _) _*]} do
+        D7.gnd(node)
       end
 
-      # Fused appearance-cell
-      matchpi %{[(appearance cell) (tspace_ @edge_) _?]} do
-        value0 = node[2]?
-
-        mix0 = Term.of(:group,
-          {:cell, edge, value0},
-          {:appearance, tspace, edge},
-        )
-
+      matchpi %{[surface storage←[cell @_] [sensor (view _ _) _]]} do
+        mix0 = storage
         D7.mixture(node, mix0) do |mix1|
-          Term.of_case(mix1) do
-            matchpi %{⟨(cell @_)⟩} { Term.morph(node, {2, nil}) }
-            matchpi %{⟨(cell @_ value1_)⟩} { Term.morph(node, {2, value1}) }
-          end
+          Term.morph(node, {1, mix1})
         end
+      end
+
+      matchpi %{[sensor (journal _ _) _*]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[appearance _ _]} do
+        D7.gnd(node)
+      end
+
+      matchpi %{[surface [cell @_ _] _]} do
+        D7.parent(node.as_d, 1u32...2u32)
       end
 
       matchpi %{[rewriter (@input_ -> @spec_ -> @output_) _*]} do

@@ -1836,6 +1836,10 @@ module Ww::Nitrene
         Term.of(wrap(arg, maxwidth))
       end
 
+      matchpi %{(chomp arg_string)}, arg: String do
+        Term.of(arg.chomp)
+      end
+
       matchpi %{(codepoints arg_string)}, arg: String do
         codepoints = Term::Dict.build do |commit|
           arg.each_char do |chr|

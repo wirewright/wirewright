@@ -1,24 +1,30 @@
 (ws (@pool (local 5000) server)
   (cell @in ())
   (cell @out ())
-  (part (@in @message) (message_string _*))
-  (comment "Show message to the termspace.")
-  (appearance chat @message)
-  (comment
-    "Read messages from the termspace. In an ideal world messages would be ordered \
-     by something (e.g. timestamp). Another con here is that plain `sensor`s get \
-     confused when there are many matching messages in the same tick.")
-  ((sensor cell) (chat seen_string @seen))
-  (backsys {@:out, @:seen}
-    {¦ out: (_* `>msg) seen_string}
-      <> {>msg: ^seen, (seen): ()}))
-  ;; You can similarly imagine adding appearances that signal the presence
-  ;; of a client C. We then create sensors for them; each client detects
-  ;; the transition of C from present -> absent and vice versa, and sends
-  ;; to the client an appropriate message. Importantly, this means the runtime
-  ;; is allowed to do what it knows how to do best: optimize, optimize,
-  ;; optimize. Termspaces are allowed to do whatever they want to optimize
-  ;; this communication of clients through sensors and appearances
+  (frag @rx (sensor (many chat _string)))
+  (frag @tx (appearance chat))
+  (frag @user)
+  (frag @peers (sensor (journal users _string)))
+  (backsys {@:in, @:out, @:tx, @:rx, @:user, @:peers}
+    ;; Ask for nick.
+    {¦ -user_ out: (_* `>msg)}
+      <> {user: pending, >msg: "Please enter your nickname."}
+    ;; Accept nick.
+    {¦ in: (nick_string _*) user_: pending}
+      <> {(nick): (), user: (appearance users ^(chomp nick))}
+    ;; Relay peer joins.
+    {¦ peers: (sensor _ event←(appeared nick_string) _*) out: (_* `>msg)}
+      <> {(event): (), >msg: ^"[⸢nick⸣ joined the chat]"}
+    ;; Relay peer leaves.
+    {¦ peers: (sensor _ event←(disappeared nick_string) _*) out: (_* `>msg)}
+      <> {(event): (), >msg: ^"[⸢nick⸣ left the chat]"}
+    ;; Show message to peers.
+    {¦ in: (msg_string _*) user: (_ _ nick_string) tx: (appearance _ `>msg)}
+      <> {(msg): (), >msg: ^"⸢nick⸣: ⸢msg⸣"}
+    ;; Relay messages within the same tick from peers.
+    ;; NOTE: In a real chat you'd want to sort messages by e.g. timestamp.
+    {¦ out: (_* `>msgs) user: (_ _ _string) rx: (sensor _ msgs_string+)}
+      <> {(>msgs): ^msgs, (msgs): ()}))
 
 (circuit @pool)
 

@@ -1,0 +1,1212 @@
+;; Elementary sensor-appearance pairing
+(rack
+  (frame
+    (sensor (Ta _))
+    (sensor (Tb _))
+    (appearance Ta 100) ;; appearance present
+    (appearance Tb) ;; appearance absent
+    (appearance Tc)) ;; appearance mismatch
+  (frame
+    (sensor (Ta _) 100)
+    (sensor (Tb _))
+    (appearance Ta)
+    (appearance Tb)
+    (appearance Tc))
+  end)
+
+;; Single sensor confused by many matching appearances
+(rack
+  (frame
+    (sensor (T _))
+    (appearance T 100)
+    (appearance T 200)
+    (appearance T 300))
+  end)
+
+;; Many sensors, no overlap
+(rack
+  (frame
+    (sensor (T _string))
+    (sensor (T _number))
+    (appearance T "john")
+    (appearance T 100))
+  (frame
+    (sensor (T _string) "john")
+    (sensor (T _number) 100)
+    (appearance T)
+    (appearance T))
+  end)
+
+;; Many sensors, overlap
+(rack
+  (frame
+    (sensor (T _string))
+    (sensor (T _number))
+    (sensor (T _number))
+    (appearance T "john")
+    (appearance T 100))
+  (frame
+    (sensor (T _string) "john")
+    (sensor (T _number) 100)
+    (sensor (T _number) 100)
+    (appearance T)
+    (appearance T))
+  end)
+
+;; Many sensors, many appearances, overlap, some sensors are confused
+(rack
+  (frame
+    (sensor (T _string))
+    (sensor (T _number))
+    (sensor (T _number))
+    (appearance T "john")
+    (appearance T 100)
+    (appearance T 200))
+  (frame
+    (sensor (T _string) "john")
+    (sensor (T _number))
+    (sensor (T _number))
+    (appearance T)
+    (appearance T 100)
+    (appearance T 200))
+  end)
+
+;; Simple nesting (legacy: sensor-appearance chan 1:1)
+(rack
+  (frame
+    (module {} (sensor (T _)))
+    (module {} (appearance T 100)))
+  (frame
+    (module {} (sensor (T _) 100))
+    (module {} (appearance T)))
+  end)
+
+;; Deeper nesting
+(rack
+  (frame
+    (group
+      (group
+        (module {}
+          (sensor (Ta _)))
+        (sensor (Tb _)))
+      (appearance Ta 100))
+    (group
+      (group
+        (module {}
+          (appearance Tb 200))
+        (sensor (Tb _)))
+      (appearance Ta)))
+  (frame
+    (group
+      (group
+        (module {}
+          (sensor (Ta _) 100))
+        (sensor (Tb _) 200))
+      (appearance Ta))
+    (group
+      (group
+        (module {}
+          (appearance Tb))
+        (sensor (Tb _) 200))
+      (appearance Ta)))
+  end)
+
+;; Many sensor is not confused by many appearances, transfers them all
+(group
+  (rack
+    (frame
+      (sensor (many Ta _))
+      (appearance Ta 100)
+      (appearance Ta 200)
+      (appearance Ta 300)
+      (appearance Tb)
+      (appearance Tb 400))
+    (frame
+      (sensor (many Ta _) 100 200 300)
+      (appearance Ta)
+      (appearance Ta)
+      (appearance Ta)
+      (appearance Tb)
+      (appearance Tb 400))
+    end)
+
+  (rack
+    (frame
+      (sensor (many Ta _))
+      (sensor (many Tb _))
+      (sensor (many Tc _))
+      (sensor (many Td _))
+      (appearance Ta 100)
+      (appearance Ta 200)
+      (appearance Ta 300)
+      (appearance Tb)
+      (appearance Tb 400)
+      (appearance Tc))
+    (frame
+      (sensor (many Ta _) 100 200 300)
+      (sensor (many Tb _) 400)
+      (sensor (many Tc _))
+      (sensor (many Td _))
+      (appearance Ta)
+      (appearance Ta)
+      (appearance Ta)
+      (appearance Tb)
+      (appearance Tb)
+      (appearance Tc))
+    end))
+
+;; Elementary view sensor.
+(rack
+  (frame
+    (sensor (view Ta _))
+    (sensor (view Tb _))
+    (sensor (view Tc _))
+    (appearance Tb 100)
+    (appearance Tc 200)
+    (appearance Tc 300)
+    (appearance Tc 400))
+  (frame
+    (sensor (view Ta _))
+    (sensor (view Tb _) 100)
+    (sensor (view Tc _) 200 300 400)
+    (appearance Tb 100)
+    (appearance Tc 200)
+    (appearance Tc 300)
+    (appearance Tc 400))
+  end)
+
+;; All sensors combined on the same termspace, same appearance (single confused).
+(rack
+  (frame
+    (sensor (T _))
+    (sensor (many T _))
+    (sensor (view T _))
+    (appearance T 100)
+    (appearance T 200)
+    (appearance T 300))
+  (frame
+    (sensor (T _))
+    (sensor (many T _) 100 200 300)
+    (sensor (view T _) 100 200 300)
+    (appearance T)
+    (appearance T)
+    (appearance T))
+  (frame
+    (sensor (T _))
+    (sensor (many T _) 100 200 300)
+    (sensor (view T _))
+    (appearance T)
+    (appearance T)
+    (appearance T))
+  end)
+
+;; All sensors combined on the same termspace, same appearance (single consensus).
+(rack
+  (frame
+    (sensor (T _))
+    (sensor (many T _))
+    (sensor (view T _))
+    (appearance T 100)
+    (appearance T 100)
+    (appearance T 100))
+  (frame
+    (sensor (T _) 100)
+    (sensor (many T _) 100 100 100)
+    (sensor (view T _) 100 100 100)
+    (appearance T)
+    (appearance T)
+    (appearance T))
+  (frame
+    (sensor (T _) 100)
+    (sensor (many T _) 100 100 100)
+    (sensor (view T _))
+    (appearance T)
+    (appearance T)
+    (appearance T))
+  end)
+
+;; All sensors combined on the same termspace, same appearance (single 1).
+(rack
+  (frame
+    (sensor (T _))
+    (sensor (many T _))
+    (sensor (view T _))
+    (appearance T 100))
+  (frame
+    (sensor (T _) 100)
+    (sensor (many T _) 100)
+    (sensor (view T _) 100)
+    (appearance T))
+  (frame
+    (sensor (T _) 100)
+    (sensor (many T _) 100)
+    (sensor (view T _))
+    (appearance T))
+  end)
+
+;; No captures makes the matchee the toplevel term in single, many, view sensors
+(rack
+  (frame
+    (sensor (Ta _))
+    (sensor (many Tb _))
+    (sensor (view Tc _))
+    (appearance Ta 100)
+    (group
+      (appearance Tb 200)
+      (appearance Tb 300)
+      (appearance Tb 400))
+    (group
+      (appearance Tc 500)
+      (appearance Tc 600)
+      (appearance Tc 700)))
+  (frame
+    (sensor (Ta _) 100)
+    (sensor (many Tb _) 200 300 400)
+    (sensor (view Tc _) 500 600 700)
+    (appearance Ta)
+    (group
+      (appearance Tb)
+      (appearance Tb)
+      (appearance Tb))
+    (group
+      (appearance Tc 500)
+      (appearance Tc 600)
+      (appearance Tc 700)))
+  end)
+
+;; One capture makes its value the toplevel term in single, many, view sensors
+(rack
+  (frame
+    (sensor (Ta (n value_)))
+    (sensor (many Tb (n value_)))
+    (sensor (view Tc (n value_)))
+    (appearance Ta (n 100))
+    (group
+      (appearance Tb (n 200))
+      (appearance Tb (n 300))
+      (appearance Tb (n 400)))
+    (group
+      (appearance Tc (n 500))
+      (appearance Tc (n 600))
+      (appearance Tc (n 700))))
+  (frame
+    (sensor (Ta (n value_)) 100)
+    (sensor (many Tb (n value_)) 200 300 400)
+    (sensor (view Tc (n value_)) 500 600 700)
+    (appearance Ta)
+    (group
+      (appearance Tb)
+      (appearance Tb)
+      (appearance Tb))
+    (group
+      (appearance Tc (n 500))
+      (appearance Tc (n 600))
+      (appearance Tc (n 700))))
+  end)
+
+;; Many captures make the match env the toplevel term in single, many, view sensors
+(rack
+  (frame
+    (sensor (Ta (n a_ b_)))
+    (sensor (many Tb (n a_ b_)))
+    (sensor (view Tc (n a_ b_)))
+    (appearance Ta (n 100 200))
+    (group
+      (appearance Tb (n 300 400))
+      (appearance Tb (n 500 600))
+      (appearance Tb (n 700 800)))
+    (group
+      (appearance Tc (n 900 10))
+      (appearance Tc (n 20 30))
+      (appearance Tc (n 40 50))))
+  (frame
+    (sensor (Ta (n a_ b_)) {a: 100, b: 200})
+    (sensor (many Tb (n a_ b_))
+      {a: 300, b: 400}
+      {a: 500, b: 600}
+      {a: 700, b: 800})
+    (sensor (view Tc (n a_ b_))
+      {a: 20, b: 30}
+      {a: 40, b: 50}
+      {a: 900, b: 10})
+    (appearance Ta)
+    (group
+      (appearance Tb)
+      (appearance Tb)
+      (appearance Tb))
+    (group
+      (appearance Tc (n 900 10))
+      (appearance Tc (n 20 30))
+      (appearance Tc (n 40 50))))
+  end)
+
+;; Legacy: sensor-appearance chan M:1
+(rack
+  (frame
+    (module {} (sensor (T _)))
+    (module {} (sensor (T _)))
+    (module {} (appearance T 100)))
+  (frame
+    (module {} (sensor (T _) 100))
+    (module {} (sensor (T _) 100))
+    (module {} (appearance T)))
+  end)
+
+;; Legacy: sensor-appearance chan mismatch
+(rack
+  (frame
+    (module {} (sensor (T _number)))
+    (module {} (appearance T foo))
+    (module {} (appearance T "Alice"))
+    (module {} (appearance T "Bob")))
+  end)
+
+;; Legacy: sensor-appearance some mismatch
+(group
+  (rack
+    (frame
+      (module {} (sensor (T _number)))
+      (module {} (appearance T 100))
+      (module {} (appearance T "Alice")))
+    (frame
+      (module {} (sensor (T _number) 100))
+      (module {} (appearance T))
+      (module {} (appearance T "Alice")))
+    end)
+
+  (rack
+    (frame
+      (module {} (sensor (T _number)))
+      (module {} (appearance T "Alice"))
+      (module {} (appearance T 100)))
+    (frame
+      (module {} (sensor (T _number) 100))
+      (module {} (appearance T "Alice"))
+      (module {} (appearance T)))
+    end))
+
+;; Elementary surface single sensor
+(rack
+  (frame
+    (surface (cell @value)
+      (sensor (local (±a ±b)) ^(+ a b)))
+    (appearance local (100 200))
+    (feed @value @dst)
+    (cell @dst))
+  (frame
+    (surface (cell @value 300)
+      (sensor (local (±a ±b)) ^(+ a b)))
+    (appearance local)
+    (feed @value @dst)
+    (cell @dst))
+  (frame
+    (surface (cell @value)
+      (sensor (local (±a ±b)) ^(+ a b)))
+    (appearance local)
+    (feed @value @dst)
+    (cell @dst 300))
+  end)
+
+;; Surface single sensor (legacy: sensor-appearance chan parallel match)
+(rack
+  (frame
+    (module {}
+      (surface (cell @value)
+        (sensor (T ±n) ^(+ n 1))))
+    (module {}
+      (surface (cell @value)
+        (sensor (T name_string)
+          ^"Hi, ⸢name⸣!")))
+    (module {} (appearance T "Alice"))
+    (module {} (appearance T 100)))
+  (frame
+    (module {}
+      (surface (cell @value 101)
+        (sensor (T ±n) ^(+ n 1))))
+    (module {}
+      (surface (cell @value "Hi, Alice!")
+        (sensor (T name_string)
+          ^"Hi, ⸢name⸣!")))
+    (module {} (appearance T))
+    (module {} (appearance T)))
+  end)
+
+;; Counter view
+(rack
+  (frame
+    (module {}
+      (node (@count (appearance _ ±count))
+        (appearance T 0))
+      (backsys @count ±n <> {n: ^(+ 1)}))
+    (module {} (sensor (view T _number))))
+  (frame
+    (module {}
+      (node (@count (appearance _ ±count))
+        (appearance T 0))
+      (backsys @count ±n <> {n: ^(+ 1)}))
+    (module {} (sensor (view T _number) 0)))
+  (frame
+    (module {}
+      (node (@count (appearance _ ±count))
+        (appearance T 1))
+      (backsys @count ±n <> {n: ^(+ 1)}))
+    (module {} (sensor (view T _number) 0)))
+  (frame
+    (module {}
+      (node (@count (appearance _ ±count))
+        (appearance T 1))
+      (backsys @count ±n <> {n: ^(+ 1)}))
+    (module {} (sensor (view T _number) 1))))
+  ;; ...
+
+;; View sensor updates (1)
+(rack
+  (frame
+    (sensor (view T _))
+    (delay 1
+      (node @appearance
+        (appearance T 100)))
+    (delay 3
+      (discard @appearance)))
+  (frame
+    (sensor (view T _))
+    (node @appearance
+      (appearance T 100))
+    (delay 2
+      (discard @appearance)))
+  (frame
+    (sensor (view T _) 100)
+    (node @appearance
+      (appearance T 100))
+    (delay 2
+      (discard @appearance)))
+  (frame
+    (sensor (view T _) 100)
+    (node @appearance
+      (appearance T 100))
+    (delay 1
+      (discard @appearance)))
+  (frame
+    (sensor (view T _) 100)
+    (node @appearance
+      (appearance T 100))
+    (discard @appearance))
+  (frame
+    (sensor (view T _) 100)
+    (node @appearance)
+    (discard @appearance))
+  (frame
+    (sensor (view T _))
+    (node @appearance)
+    (discard @appearance))
+  end)
+
+;; Legacy: sensor-appearance queue flow
+(rack
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _)))
+    (feed @percept @back)
+    (queue (@front @back) (1 2 3))
+    (node (@value (appearance _ `value))
+      (appearance T))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _)))
+    (feed @percept @back)
+    (queue (@front @back) (2 3))
+    (node (@value (appearance _ `value))
+      (appearance T 1))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _) 1))
+    (feed @percept @back)
+    (queue (@front @back) (2 3))
+    (node (@value (appearance _ `value))
+      (appearance T))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _)))
+    (feed @percept @back)
+    (queue (@front @back) (3 1))
+    (node (@value (appearance _ `value))
+      (appearance T 2))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _) 2))
+    (feed @percept @back)
+    (queue (@front @back) (3 1))
+    (node (@value (appearance _ `value))
+      (appearance T))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _)))
+    (feed @percept @back)
+    (queue (@front @back) (1 2))
+    (node (@value (appearance _ `value))
+      (appearance T 3))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _) 3))
+    (feed @percept @back)
+    (queue (@front @back) (1 2))
+    (node (@value (appearance _ `value))
+      (appearance T))
+    (feed @front @value))
+  (frame
+    (node (@percept (sensor _ percept_))
+      (sensor (T _)))
+    (feed @percept @back)
+    (queue (@front @back) (2 3))
+    (node (@value (appearance _ `value))
+      (appearance T 1))
+    (feed @front @value)))
+  ;; ...
+
+;; Chain reaction
+(rack
+  (frame
+    ;; Adder
+    (module {}
+      (node (@l (sensor _ l_))
+        (sensor (T (l ±n))))
+      (node (@r (sensor _ r_))
+        (sensor (T (r ±n))))
+      (node (@sum (appearance _ `sum))
+        (appearance T))
+      (backsys {@:l, @:r, @:sum}
+        {¦ ±l ±r -sum_} <> {(l): (), (r): (), sum: (sum ^(+ l r))}))
+
+    ;; Double sum
+    (module {}
+      (node (@n (sensor _ n_))
+        (sensor (T (sum ±n))))
+      (node (@doubled (appearance _ `doubled))
+        (appearance T))
+      (backsys {@:n, @:doubled}
+        {¦ ±n -doubled_} <> {(n): (), doubled: (double ^(+ n n))}))
+
+    ;; Square sum
+    (module {}
+      (node (@n (sensor _ n_))
+        (sensor (T (sum ±n))))
+      (node (@squared (appearance _ `squared))
+        (appearance T))
+      (backsys {@:n, @:squared}
+        {¦ ±n -squared_} <> {(n): (), squared: (square ^(* n n))}))
+
+    (appearance T (l 3))
+    (appearance T (r 4))
+    (sensor (view T _)))
+  (frame/tail
+    (appearance T)
+    (appearance T)
+    (sensor (view T _) (l 3) (r 4)))
+  (frame/tail ;; computing sum...
+    (sensor (view T _) (l 3) (r 4)))
+  (frame/tail ;; ready
+    (sensor (view T _) (sum 7)))
+  (frame/tail ;; computing double, square
+    (sensor (view T _) (sum 7)))
+  (frame/tail ;; ready
+    (sensor (view T _) (double 14) (square 49)))
+  end)
+
+;; Create sensor in response to sensor
+(rack
+  (frame
+    (node (@s (sensor _ s_))
+      (sensor (T (sensor _))))
+    (feed @s @frag)
+    (frag @frag)
+    (appearance T (sensor (T _number)))
+    (appearance T 100))
+  (frame
+    (node (@s (sensor _ s_))
+      (sensor (T (sensor _)) (sensor (T _number))))
+    (feed @s @frag)
+    (frag @frag)
+    (appearance T)
+    (appearance T 100))
+  (frame
+    (node (@s (sensor _ s_))
+      (sensor (T (sensor _))))
+    (feed @s @frag)
+    (frag @frag (sensor (T _number)))
+    (appearance T)
+    (appearance T 100))
+  (frame
+    (node (@s (sensor _ s_))
+      (sensor (T (sensor _))))
+    (feed @s @frag)
+    (frag @frag (sensor (T _number) 100))
+    (appearance T)
+    (appearance T))
+  end)
+
+;; Create appearance in response to sensor
+(rack
+  (frame
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))))
+      (feed @value @frag)
+      (frag @frag))
+
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))))
+      (feed @value @frag)
+      (frag @frag))
+
+    (sensor (many T _number))
+    (appearance T (appearance T 100)))
+
+  (frame
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))
+          (appearance T 100)))
+      (feed @value @frag)
+      (frag @frag))
+
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))
+          (appearance T 100)))
+      (feed @value @frag)
+      (frag @frag))
+
+    (sensor (many T _number))
+    (appearance T))
+
+  (frame
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))))
+      (feed @value @frag)
+      (frag @frag (appearance T 100)))
+
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))))
+      (feed @value @frag)
+      (frag @frag (appearance T 100)))
+
+    (sensor (many T _number))
+    (appearance T))
+
+  (frame
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))))
+      (feed @value @frag)
+      (frag @frag (appearance T)))
+
+    (module {}
+      (node (@value (sensor _ value_))
+        (sensor (T (appearance _ _))))
+      (feed @value @frag)
+      (frag @frag (appearance T)))
+
+    (sensor (many T _number) 100 100)
+    (appearance T))
+
+  end)
+
+;; Surface view
+(rack
+  (frame
+    (surface
+      (cell @value)
+      (sensor (view local ±n)
+        ^(+ n 1)))
+    (appearance local 100)
+    (appearance local 200))
+  (frame
+    (surface
+      (cell @value (101 201))
+      (sensor (view local ±n)
+        ^(+ n 1)))
+    (appearance local 100)
+    (appearance local 200))
+  end)
+
+;; Devices etc.
+(rack
+  (frame
+    (device
+      (sensor (many chat _string))
+      (appearance chat)
+      (appearance users "a"))
+    (device
+      (sensor (many chat _string))
+      (appearance chat "b: z\n")
+      (appearance users "b")))
+  (frame
+    (device
+      (sensor (many chat _string) "b: z\n")
+      (appearance chat)
+      (appearance users "a"))
+    (device
+      (sensor (many chat _string) "b: z\n")
+      (appearance chat)
+      (appearance users "b")))
+  end)
+
+;; Basic journal sensor
+(rack
+  (frame
+    (sensor (local ±n))
+    (sensor (view local ±n))
+    (sensor (journal local ±n))
+    (appearance local 100)
+    (node @x (appearance local 200))
+    (cell @y)
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n))
+    (sensor (view local ±n) 100 200)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200))
+    (appearance local 100)
+    (node @x (appearance local 200))
+    (cell @y)
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n))
+    (sensor (view local ±n) 100 200)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200))
+    (appearance local 100)
+    (node @x)
+    (cell @y (appearance local 200))
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100) ;; now that there's no confusion this sensor can consume
+    (sensor (view local ±n) 100)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200))
+    (appearance local)
+    (node @x)
+    (cell @y (appearance local 200))
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100)
+    (sensor (view local ±n) 100)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200))
+    (appearance local)
+    (node @x (appearance local 200))
+    (cell @y)
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100)
+    (sensor (view local ±n) 200)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200)
+      (appeared 200)
+      (disappeared 100))
+    (appearance local)
+    (node @x (appearance local 200))
+    (cell @y)
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100)
+    (sensor (view local ±n) 200)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200)
+      (appeared 200)
+      (disappeared 100))
+    (appearance local)
+    (node @x)
+    (cell @y (appearance local 200))
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100)
+    (sensor (view local ±n))
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200)
+      (appeared 200)
+      (disappeared 100)
+      (disappeared 200))
+    (appearance local)
+    (node @x)
+    (cell @y (appearance local 200))
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100)
+    (sensor (view local ±n))
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200)
+      (appeared 200)
+      (disappeared 100)
+      (disappeared 200))
+    (appearance local)
+    (node @x (appearance local 200))
+    (cell @y)
+    (feed @x @y @x))
+  (frame
+    (sensor (local ±n) 100)
+    (sensor (view local ±n) 200)
+    (sensor (journal local ±n)
+      (appeared 100)
+      (appeared 200)
+      (disappeared 200)
+      (appeared 200)
+      (disappeared 100)
+      (disappeared 200)
+      (appeared 200))
+    (appearance local)
+    (node @x (appearance local 200))
+    (cell @y)
+    (feed @x @y @x)))
+  ;; ...
+
+;; A greater number of journal sensors.
+(rack
+  (frame
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (sensor (journal local (user name_string)))
+    (appearance local (user "alice"))
+    (appearance local (user "bob"))
+    (circuit @john
+      (appearance local (user "john")))
+    (delay 1 (discard @john)))
+  (frame
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (appearance local (user "alice"))
+    (appearance local (user "bob"))
+    (circuit @john
+      (appearance local (user "john")))
+    (delay 1 (discard @john)))
+  (frame
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (appearance local (user "alice"))
+    (appearance local (user "bob"))
+    (circuit @john
+      (appearance local (user "john")))
+    (discard @john))
+  (frame
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john"))
+    (appearance local (user "alice"))
+    (appearance local (user "bob"))
+    (circuit @john)
+    (discard @john))
+  (frame
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (sensor (journal local (user name_string))
+      (appeared "alice")
+      (appeared "bob")
+      (appeared "john")
+      (disappeared "john"))
+    (appearance local (user "alice"))
+    (appearance local (user "bob"))
+    (circuit @john)
+    (discard @john))
+  end)
+
+;; Counters and sensors
+(rack
+  (frame
+    (backsys @a ±n <> {n: ^(+ n 1)})
+    (backsys @b ±n <> {n: ^(+ n 1)})
+    (backsys @c ±n <> {n: ^(+ n 1)})
+    (sensor (view local (%pipe (mod 2) 0)))
+    (sensor (view local (%pipe (mod 2) 1)))
+    (node (@a (appearance _ a_))
+      (appearance local 100))
+    (node (@b (appearance _ b_))
+      (appearance local 201))
+    (node (@c (appearance _ c_))
+      (appearance local 300)))
+  (frame/tail
+    (sensor (view local (%pipe (mod 2) 0)) 100 300)
+    (sensor (view local (%pipe (mod 2) 1)) 201)
+    (node (@a (appearance _ a_))
+      (appearance local 100))
+    (node (@b (appearance _ b_))
+      (appearance local 201))
+    (node (@c (appearance _ c_))
+      (appearance local 300)))
+  (frame/tail
+    (sensor (view local (%pipe (mod 2) 0)) 100 300)
+    (sensor (view local (%pipe (mod 2) 1)) 201)
+    (node (@a (appearance _ a_))
+      (appearance local 101))
+    (node (@b (appearance _ b_))
+      (appearance local 202))
+    (node (@c (appearance _ c_))
+      (appearance local 301)))
+  (frame/tail
+    (sensor (view local (%pipe (mod 2) 0)) 202)
+    (sensor (view local (%pipe (mod 2) 1)) 101 301)
+    (node (@a (appearance _ a_))
+      (appearance local 101))
+    (node (@b (appearance _ b_))
+      (appearance local 202))
+    (node (@c (appearance _ c_))
+      (appearance local 301)))
+  (frame/tail
+    (sensor (view local (%pipe (mod 2) 0)) 202)
+    (sensor (view local (%pipe (mod 2) 1)) 101 301)
+    (node (@a (appearance _ a_))
+      (appearance local 102))
+    (node (@b (appearance _ b_))
+      (appearance local 203))
+    (node (@c (appearance _ c_))
+      (appearance local 302)))
+  (frame/tail
+    (sensor (view local (%pipe (mod 2) 0)) 102 302)
+    (sensor (view local (%pipe (mod 2) 1)) 203)
+    (node (@a (appearance _ a_))
+      (appearance local 102))
+    (node (@b (appearance _ b_))
+      (appearance local 203))
+    (node (@c (appearance _ c_))
+      (appearance local 302))))
+  ;; ...
+
+;; Many counters
+(rack
+  (frame
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (a ±in))))
+      (node (@out (appearance _ `out))
+        (appearance local (a 100)))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (b ±in))))
+      (node (@out (appearance _ `out))
+        (appearance local (b 200)))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (c ±in))))
+      (node (@out (appearance _ `out))
+        (appearance local (c 300)))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))})))
+  (frame
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (a ±in)) 100))
+      (node (@out (appearance _ `out))
+        (appearance local))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (b ±in)) 200))
+      (node (@out (appearance _ `out))
+        (appearance local))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (c ±in)) 300))
+      (node (@out (appearance _ `out))
+        (appearance local))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))})))
+  (frame
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (a ±in))))
+      (node (@out (appearance _ `out))
+        (appearance local (a 101)))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (b ±in))))
+      (node (@out (appearance _ `out))
+        (appearance local (b 201)))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (c ±in))))
+      (node (@out (appearance _ `out))
+        (appearance local (c 301)))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))})))
+  (frame
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (a ±in)) 101))
+      (node (@out (appearance _ `out))
+        (appearance local))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (b ±in)) 201))
+      (node (@out (appearance _ `out))
+        (appearance local))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
+    (module {}
+      (node (@in (sensor _ ±in))
+        (sensor (local (c ±in)) 301))
+      (node (@out (appearance _ `out))
+        (appearance local))
+      (backsys {@:in, @:out}
+        {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))}))))

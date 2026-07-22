@@ -128,6 +128,7 @@ class Ww::Rack::Automaton
     @first = false
 
     # Subsystem state.
+    @tspace_state = Tspace.state
     @parser_state = Parser.state(@epoch)
     @database_state = Database.state(@epoch)
     @extrinsic_state = Extrinsics.state(@epoch)
@@ -173,34 +174,82 @@ class Ww::Rack::Automaton
     Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) || Database.pending?(@database_state) || WebSocket.pending?(@websocket_state)
   end
 
+  # FIXME: this method is a mess
   private def step(subframes, frames, circuit : Term, prepass, library) : Nil
-    subframes << circuit
+    # HACK: This is a "shadow step" to make sure backrefs execute in the same tick
+    # invisibly from the main Rack pass. From the latter's point of view, backrefs
+    # are immediate.
+    #
+    # NOTE: this here is supposed to be executed only before the very first step of a circuit.
+    # However, with Automaton, there is in fact no such thing as a "very first step". You show
+    # it one circuit this tick, and another one the next tick. Or it could be the same, but
+    # evolved circuit. The point being, there's no distinction. So we have to "fix" the circuit
+    # at the beginning always. Hopefully this will be optimized later, there are ways to do that.
+    subframes << Rack.backref_step(@parser, circuit, prepass).last
 
-    subframes.concat(Assembler.step(@assembler_state, @parser, library, subframes.last))
-    frames << subframes.last
+    pass do
+      input = subframes.last
+      subframes.concat(Assembler.step(@assembler_state, @parser, library, input))
+      output = subframes.last
+      unless input == output
+        frames << output
+      end
+    end
 
-    subframes.concat(Tspace.step(@parser, subframes.last, prepass))
-    frames << subframes.last
+    pass do
+      input = subframes.last
+      subframes.concat(Tspace.step(@tspace_state, @parser, subframes.last, prepass))
+      output = subframes.last
+      unless input == output
+        frames << output
+      end
+    end
 
-    # TODO: the following step()s must eventually contribute to the same hypergraph
+    # FIXME: the following step()s must eventually contribute to the same hypergraph
     # instead of being staged like they are here. The subsystem nodes such as `parser`
     # or `rewriter` are conceptually members of the Rack step; not distinct steps
-    # such as `Tspace` or `Assembler`.
+    # like `Tspace` or `Assembler`.
 
-    subframes.concat(Parser.step(@parser_state, @parser, subframes.last, prepass))
-    frames << subframes.last
+    pass do
+      input = subframes.last
+      subframes.concat(Parser.step(@parser_state, @parser, subframes.last, prepass))
+      output = subframes.last
+      unless input == output
+        frames << output
+      end
+    end
 
-    subframes.concat(Extrinsics.step(@extrinsic_state, @parser, subframes.last, prepass))
-    frames << subframes.last
+    pass do
+      input = subframes.last
+      subframes.concat(Extrinsics.step(@extrinsic_state, @parser, subframes.last, prepass))
+      output = subframes.last
+      unless input == output
+        frames << output
+      end
+    end
 
-    subframes.concat(Database.step(@database_state, @parser, subframes.last, prepass))
-    frames << subframes.last
+    pass do
+      input = subframes.last
+      subframes.concat(Database.step(@database_state, @parser, subframes.last, prepass))
+      output = subframes.last
+      unless input == output
+        frames << output
+      end
+    end
 
-    subframes.concat(WebSocket.step(@websocket_state, @parser, subframes.last, prepass))
-    frames << subframes.last
+    pass do
+      input = subframes.last
+      subframes.concat(WebSocket.step(@websocket_state, @parser, subframes.last, prepass))
+      output = subframes.last
+      unless input == output
+        frames << output
+      end
+    end
 
     subframes.concat(Rack.step(@parser, subframes.last, prepass))
-    frames << subframes.last
+
+    # Execute backref step again to fix inconsistencies.
+    frames << Rack.backref_step(@parser, subframes.last, prepass).last
   end
 
   # Advances the automaton by one abstract step by evolving *circuit*. Returns

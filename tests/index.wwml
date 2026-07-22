@@ -43,6 +43,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 magenta)
   tags: (nitrene))
 
+(test "rack/tspace.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack))
+
 (test "rack.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack))
