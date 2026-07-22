@@ -58,7 +58,11 @@ module Ww::Rack::WebSocket
     end
   end
 
-  defrecord Server, node : D7::Node, pool : D7::AbsEdge, binding : String, template : Term::Dict
+  defrecord Server,
+    node : D7::Node,
+    pool : D7::AbsEdge,
+    binding : String,
+    template : Term::Dict
 
   private def binding?(binding : Term) : String?
     Term.case(binding) do
@@ -99,19 +103,9 @@ module Ww::Rack::WebSocket
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, variant : Server) : D7::Patch?
     # Find the associated pool cell.
     pools = Pf::Kit.stack_array(Pool, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.pool}) do |node|
-      Term.case(node.term) do
-        # `(circuit @pool)` appears as `(cell @pool)` initially, while it
-        # holds no clients. This is an expected case.
-        matchpi %{[cell @_]} do
-          pools << Pool.new(node, contents: Term[])
-        end
-
-        matchpiT %{[cell @_ contents_dict]} do
-          pools << Pool.new(node, contents)
-        end
-
-        otherwise { }
+    hg.each_node_with_head(Term.of(:pool), memberof: {variant.pool}) do |node|
+      Term.matchpiT?(node.term, %{[pool @_ contents_dict]}) do
+        pools << Pool.new(node, contents)
       end
     end
 
@@ -197,15 +191,16 @@ module Ww::Rack::WebSocket
     end
   end
 
+  defrecord ClientQueue, key : Int32, queue : Term::Dict, copying: true
+
   alias Client = ConnectedClient | DisconnectedClient
 
   defrecord ConnectedClient,
     id : UUID,
-    inbound : Term::Dict,
-    outbound : Term::Dict,
-    inbound_at : Int32,
-    outbound_at : Int32,
-    copying: true
+    inbound : ClientQueue?,
+    outbound : ClientQueue?,
+    copying: true,
+    smart: true
 
   defrecord DisconnectedClient
 
@@ -221,72 +216,77 @@ module Ww::Rack::WebSocket
 
   private def client?(candidate : Term) : Client?
     Term.matchpi?(candidate, %{[device _*]}) do
-      id_row : {UUID, Int32}? = nil
-      in_row : {Term::Dict, Int32}? = nil
-      out_row : {Term::Dict, Int32}? = nil
+      id : UUID? = nil
+      inbound : ClientQueue? = nil
+      outbound : ClientQueue? = nil
 
       children = candidate.items.move(1)
       children.each_with_index(offset: 1) do |child, key|
         Term.case(child) do
           # Recognize the id cell.
-          matchpi %{[cell @id id_string]}, id: String do
-            return if id_row # Duplicate `id`
-            return unless uuid = UUID.parse?(id)
+          matchpi %{[cell @id idQ_string]}, idQ: String do
+            return if id # Duplicate `id`
+            return unless uuid = UUID.parse?(idQ)
 
-            id_row = {uuid, key}
+            id = uuid
           end
 
           # Recognize the inbox cell.
-          matchpi %{[cell @in msgs_dict]} do
-            return if in_row # Duplicate `in`
+          matchpi %{[cell @in msgs←(_string*)]} do
+            next if inbound # Duplicate `in`
 
-            in_row = {msgs.as_d, key}
+            inbound = ClientQueue.new(key, msgs.as_d)
           end
 
           # Recognize the outbox cell.
-          matchpi %{[cell @out msgs_dict]} do
-            return if out_row # Duplicate `out`
+          matchpi %{[cell @out msgs←(_string*)]} do
+            next if outbound # Duplicate `out`
 
-            out_row = {msgs.as_d, key}
+            outbound = ClientQueue.new(key, msgs.as_d)
           end
 
           otherwise { }
         end
       end
 
-      if id_row && in_row && out_row
-        return ConnectedClient.new(
-          id: id_row[0],
-          inbound: in_row[0],
-          outbound: out_row[0],
-          inbound_at: in_row[1],
-          outbound_at: out_row[1],
-        )
-      end
-
-      if in_row && out_row
+      unless id
         return DisconnectedClient.new
       end
+
+      ConnectedClient.new(id, inbound, outbound)
     end
   end
 
   private def patch(original : Term, client : Client) : Term
-    Term.morph(original,
-      {client.inbound_at, 2, client.inbound},
-      {client.outbound_at, 2, client.outbound},
-    )
+    result = original
+
+    if inbound = client.inbound?
+      result = Term.morph(result, {inbound.key, 2, inbound.queue})
+    end
+
+    if outbound = client.outbound?
+      result = Term.morph(result, {outbound.key, 2, outbound.queue})
+    end
+
+    result
   end
 
   private def send(client : ConnectedClient, message : String) : Client
-    client.copy_with(inbound: client.inbound.append(message))
+    return client unless inbound = client.inbound?
+
+    client.copy_with(inbound: inbound.copy_with(queue: inbound.queue.append(message)))
   end
 
   private def drain(client : ConnectedClient) : Client
-    client.copy_with(outbound: Term[])
+    return client unless outbound = client.outbound?
+
+    client.copy_with(outbound: outbound.copy_with(queue: Term[]))
   end
 
   private def each_outbound_message(client : Client, & : String ->) : Nil
-    client.outbound.items.each do |item|
+    return unless outbound = client.outbound?
+
+    outbound.queue.items.each do |item|
       if str = item.as_s?
         yield str.to(String)
         next

@@ -26,6 +26,6 @@
     {¦ out: (_* `>msgs) user: (_ _ _string) rx: (sensor _ msgs_string+)}
       <> {(>msgs): ^msgs, (msgs): ()}))
 
-(circuit @pool)
+(circuit (pool @pool))
 
 ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)

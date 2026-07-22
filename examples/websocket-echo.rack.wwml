@@ -7,6 +7,6 @@
     {¦ in: (M←"bye\n" _*) id_}
       <> {(M): (), (id): ()}))
 
-(circuit @pool)
+(circuit (pool @pool))
 
 ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)

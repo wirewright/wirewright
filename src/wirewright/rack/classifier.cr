@@ -129,6 +129,22 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      matchpi %{[circuit (pool @edge_) children0_*]} do
+        mix0 = Term.of(:pool, edge, children0)
+
+        leaf = D7.mixture(node, mix0) do |mix1|
+          Term.matchpi(mix1, %{(pool @_ children1←[_*])}) do
+            Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
+          end
+        end
+
+        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
+      end
+
+      matchpi %{[pool @edge_ _]} do
+        D7.gnd(node, edge)
+      end
+
       matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do
         leaf = pass do
           next D7.inert(node) unless M1.probably_matches?(pattern, children0)

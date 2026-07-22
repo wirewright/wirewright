@@ -196,7 +196,17 @@ module MuSoma
   end
 
   private def incomplete?(clf, feature : D7::Gnd, strict : Bool) : Bool
-    editing?(feature.node)
+    Term.case(feature.node) do
+      # A pool cell is passable. Prevent MuSoma from disabling it while it
+      # is edited.
+      matchpi %{[pool @_ _]} do
+        false
+      end
+
+      otherwise do
+        editing?(feature.node)
+      end
+    end
   end
 
   private def incomplete?(clf, feature : D7::Parent, strict : Bool) : Bool
