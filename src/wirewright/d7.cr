@@ -163,7 +163,11 @@ module Ww::D7
   #   end
   # end
   # ```
-  macro case(parser, circuit, *, decorator = nil, &block)
+  #
+  # DEPRECATED: `D7.case` is deprecated in favor of manually traversing `D7::Hypergraph`s.
+  # It turns out (very "surprisingly"!) that there is in fact no need for a DSL. We can do
+  # everything the DSL does manually, and, most importantly, in a compiler-tractable way.
+  macro case(hg, proposals, &block)
     {%
       unless block
         raise "expected a block containing one or more `rule`s"
@@ -208,36 +212,24 @@ module Ww::D7
       {{@type}}::Regime.new(Slice.new(%queries, {{branches.size}}, read_only: true))
     end
 
-    {{@type}}.step({{parser}}, {{circuit}}) do |%hg|
-      {% if decorator %}
-      {{decorator}}.call(%hg) do |%hg|
-      {% end %}
-        %regime.solve(%hg) do |%match_table, %index|
-          case %index
-          {% for branch, index in branches %}
-          when {{index}}
-            %imports{index} = {
-              {% for name in branch[:imports] %}
-                {% if name.ends_with?("_tree") %}
-                  {{@type}}.tree(%match_table, Term.of({{name[...-5].symbolize}})),
-                {% else %}
-                  {{@type}}.group(%match_table, Term.of({{name.symbolize}})),
-                {% end %}
-              {% end %}
-            }
-
-            %result{index} = pass(*%imports{index}) do |{{branch[:imports].splat}}|
-              {{branch[:body]}}
-            end
-
-            %result{index}
+    %regime.solve({{hg}}, {{proposals}}) do |%match_table, %index|
+      case %index
+      {% for branch, index in branches %}
+      when {{index}}
+        %imports{index} = {
+          {% for name in branch[:imports] %}
+            {{@type}}.group(%match_table, Term.of({{name.symbolize}})),
           {% end %}
-          else
-            raise ArgumentError.new
-          end
-        {% if decorator %}
+        }
+
+        %result{index} = pass(*%imports{index}) do |{{branch[:imports].splat}}|
+          {{branch[:body]}}
         end
-        {% end %}
+
+        %result{index}
+      {% end %}
+      else
+        raise ArgumentError.new
       end
     end
   end

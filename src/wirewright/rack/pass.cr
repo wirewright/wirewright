@@ -22,8 +22,8 @@ module Ww::Rack
   # Array(Node), where Node is a pre-parsed node. We won't need pattern matching
   # here, without it, everything should be pretty very fast, assuming we cache Term -> Node.
   # The Array(Node) can have some indexing attached as well.
-  def step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    D7.case(parser, circuit, decorator: prepass) do
+  def propose(hg : D7::Hypergraph, proposals) : Nil
+    D7.case(hg, proposals) do
       rule(<<-WWML) do |tgt|
       [discard @u_] dev
         -> (one u) [cell @u_ _] {name: tgt, max: ∞}

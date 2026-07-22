@@ -39,16 +39,12 @@ module Ww::Rack::Parser
     rulesets : Set(Term),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result)
 
-  def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+  def step(state : State, & : Proposer -> T) : T forall T
     seen_rulesets = Set(Term).new
 
-    subframes = state.tasks.rdv do |tasks_rdv|
-      D7.step(parser, circuit) do |hg|
-        prepass.call(hg) do |hg|
-          ctx = StepContext.new(seen_rulesets, tasks_rdv)
-          D7::Regime.merge(hg, proposals: step(state, ctx, hg))
-        end
-      end
+    result = state.tasks.rdv do |tasks_rdv|
+      ctx = StepContext.new(seen_rulesets, tasks_rdv)
+      yield Proposer.new(state, ctx)
     end
 
     # Tasks cannot garbage collect grammars so we have to do it ourselves. Only
@@ -59,7 +55,16 @@ module Ww::Rack::Parser
       end
     end
 
-    subframes
+    result
+  end
+
+  struct Proposer
+    def initialize(@state : State, @ctx : StepContext)
+    end
+
+    def propose(hg : D7::Hypergraph, proposals) : Nil
+      Parser.propose(@state, @ctx, hg, proposals)
+    end
   end
 
   defrecord Transfer,
@@ -88,8 +93,9 @@ module Ww::Rack::Parser
     error : D7::AbsEdge,
     ruleset : Term
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph) : Indexable(D7::Patch)
-    hg.propose(:parser) do |node|
+  # :nodoc:
+  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+    hg.propose(proposals, :parser) do |node|
       variant = nil
 
       Term.case(node.term) do

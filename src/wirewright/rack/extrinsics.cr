@@ -86,47 +86,27 @@ module Ww::Rack::Extrinsics
   defrecord StepContext,
     refs : Set(ExtrinsicMap::Ref),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result),
-    proposals : Hash(NormalPath, Set(Task))
+    writes : Hash(NormalPath, Set(Task))
 
-  def step(state : State, parser : D7::Parser, circuit circuit0 : Term, prepass) : Slice(Term)
-    # Despawn the fibers associated with ExtrinsicMap to avoid leaks. Showing an empty
-    # circuit to Automaton is the teardown pattern we use (and it also makes sense
-    # semantically for subsystems that do not really know what "shutdown" means).
-    #
-    # We don't do this on delete (anymore) because that's rather expensive, if e.g.
-    # a path report is continuously added and removed, we're hitting the worst
-    # case all the time (spawn + do work + despawn).
-    if circuit0 == Term.of
-      state.extrinsics.shutdown
-    end
-
+  def step(state : State, & : Proposer -> T) : T forall T
+    result = uninitialized T
     seen_refs = Set(ExtrinsicMap::Ref).new
 
-    circuit1 = state.transcriptions.epoch do
+    state.transcriptions.epoch do
       state.tasks.rdv do |tasks_rdv|
-        proposals = {} of NormalPath => Set(Task)
+        writes = {} of NormalPath => Set(Task)
 
-        tree = parser.parse(circuit0, reply: D7::ParseTree)
-        result = D7.perturb(tree, cue_disj: {SYM_PATH, SYM_RESOURCE}) do |node, _|
-          ctx = StepContext.new(seen_refs, tasks_rdv, proposals)
-          perturb(state, ctx, node)
-        end
+        ctx = StepContext.new(seen_refs, tasks_rdv, writes)
+        result = yield Proposer.new(state, ctx)
 
         # Sync tasks.
-        proposals.each do |path, bucket|
+        writes.each do |path, bucket|
           next unless bucket.size == 1
 
-          proposal = bucket.first
-          tasks_rdv.publish(proposal)
+          write = bucket.first
+          tasks_rdv.publish(write)
         end
-
-        result
       end
-    end
-
-    # Fast path if there was no change.
-    if circuit0 == circuit1 && state.extrinsics.size == seen_refs.size
-      return Slice[circuit0]
     end
 
     # Let's have `added` for symmetry, I know we don't really need it...
@@ -157,103 +137,155 @@ module Ww::Rack::Extrinsics
       state.epoch.call
     end
 
-    Slice[circuit1]
+    result
   end
 
-  private def perturb(state : State, ctx : StepContext, node : Term) : Term
-    Term.case(node) do
-      matchpi(
-        %{[path (path_string reading)]},
-        %{[path (path_string reading) _]},
-        path: NormalPath,
-      ) do
-        ref = ExtrinsicMap::ReadingRef.new(path)
-        ctx.refs << ref
-
-        unless reading = state.extrinsics[ref]?
-          return Term.morph(node, {2, nil})
-        end
-
-        transcription = state.transcriptions.put_if_absent(reading) do
-          transcribe(reading)
-        end
-        Term.morph(node, {2, transcription})
-      end
-
-      matchpi(
-        %{[path (path_string report)]},
-        %{[path (path_string report) _]},
-        path: NormalPath,
-      ) do
-        ref = ExtrinsicMap::ReportRef.new(path)
-        ctx.refs << ref
-
-        unless report = state.extrinsics[ref]?
-          return Term.morph(node, {2, nil})
-        end
-
-        transcription = state.transcriptions.put_if_absent(report) do
-          transcribe(report)
-        end
-        Term.morph(node, {2, transcription})
-      end
-
-      matchpi %{[path (path_string sink) (present content_)]}, path: NormalPath do |content|
-        continue unless content = content.as_s? || content.as_blob?
-
-        task = WriteFile.new(path, content)
-        result = ctx.tasks.result?(task)
-        assert result.is_a?(Nil) || result.is_a?(WriteResult)
-
-        case result
-        in Nil # Not available, propose for publishing.
-          bucket = ctx.proposals.put_if_absent(path) { Set(Task).new }
-          bucket << task
-
-          node
-        in WriteCompleted
-          Term.morph(node, {2, nil})
-        in WriteFailed
-          Term.morph(node, {2, {:err, result.detail}})
-        end
-      end
-
-      matchpi %{[path (path_string sink) absent]}, path: NormalPath do
-        task = RemoveFile.new(path)
-        result = ctx.tasks.result?(task)
-        assert result.is_a?(Nil) || result.is_a?(RemoveResult)
-
-        case result
-        in Nil # Not available, propose for publishing.
-          bucket = ctx.proposals.put_if_absent(path) { Set(Task).new }
-          bucket << task
-
-          node
-        in RemoveCompleted
-          Term.morph(node, {2, nil})
-        in RemoveFailed
-          Term.morph(node, {2, {:err, result.detail}})
-        end
-      end
-
-      matchpi %{[resource queryQ_]}, %{[resource queryQ_ _]} do
-        continue unless query = ResourceService.query?(queryQ)
-
-        ref = ExtrinsicMap::ResourceRef.new(query)
-        ctx.refs << ref
-
-        unless resource = state.extrinsics[ref]?
-          return Term.morph(node, {2, nil})
-        end
-
-        transcription = state.transcriptions.put_if_absent(resource) do
-          transcribe(resource)
-        end
-        Term.morph(node, {2, transcription})
-      end
-
-      otherwise { node }
+  struct Proposer
+    def initialize(@state : State, @ctx : StepContext)
     end
+
+    def propose(hg : D7::Hypergraph, proposals) : Nil
+      # Despawn the fibers associated with ExtrinsicMap to avoid leaks. Showing an empty
+      # circuit to Automaton is the teardown pattern we use (and it also makes sense
+      # semantically for subsystems that do not really know what "shutdown" means).
+      #
+      # We don't do this on delete (anymore) because that's rather expensive, if e.g.
+      # a path report is continuously added and removed, we're hitting the worst
+      # case all the time (spawn + do work + despawn).
+      if hg.empty?
+        @state.extrinsics.shutdown
+      end
+
+      Extrinsics.propose(@state, @ctx, hg, proposals)
+    end
+  end
+
+  defrecord PathReading, node : D7::Node, path : NormalPath
+  defrecord PathReport, node : D7::Node, path : NormalPath
+  defrecord PathPresent, node : D7::Node, path : NormalPath, content : Term::Blob | Term::Str
+  defrecord PathAbsent, node : D7::Node, path : NormalPath
+  defrecord Resource, node : D7::Node, query : ResourceService::Query
+
+  # :nodoc:
+  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+    hg.propose(proposals, :path, :resource) do |node|
+      variant = nil
+
+      Term.case(node.term) do
+        matchpi(
+          %{[path (path_string reading)]},
+          %{[path (path_string reading) _ ]},
+          path: NormalPath,
+        ) do
+          variant = PathReading.new(node, path)
+        end
+
+        matchpi(
+          %{[path (path_string report)]},
+          %{[path (path_string report) _ ]},
+          path: NormalPath,
+        ) do
+          variant = PathReport.new(node, path)
+        end
+
+        matchpi %{[path (path_string sink) (present content_)]}, path: NormalPath do |content|
+          continue unless content = content.as_s? || content.as_blob?
+
+          variant = PathPresent.new(node, path, content)
+        end
+
+        matchpi %{[path (path_string sink) absent]}, path: NormalPath do
+          variant = PathAbsent.new(node, path)
+        end
+
+        matchpi %{[resource queryQ_]}, %{[resource queryQ_ _]} do
+          continue unless query = ResourceService.query?(queryQ)
+
+          variant = Resource.new(node, query)
+        end
+
+        otherwise { }
+      end
+
+      next if variant.nil?
+
+      step(state, ctx, variant)
+    end
+  end
+
+  private def step(state : State, ctx : StepContext, variant : PathReading) : D7::Patch?
+    ref = ExtrinsicMap::ReadingRef.new(variant.path)
+    ctx.refs << ref
+
+    # If reading is not yet available, keep the old one (if any).
+    return unless reading = state.extrinsics[ref]?
+
+    transcription = state.transcriptions.put_if_absent(reading) do
+      transcribe(reading)
+    end
+    D7.patch(variant.node, {2, transcription})
+  end
+
+  private def step(state : State, ctx : StepContext, variant : PathReport) : D7::Patch?
+    ref = ExtrinsicMap::ReportRef.new(variant.path)
+    ctx.refs << ref
+
+    # If report is not yet available, keep the old one (if any).
+    return unless report = state.extrinsics[ref]?
+
+    transcription = state.transcriptions.put_if_absent(report) do
+      transcribe(report)
+    end
+    D7.patch(variant.node, {2, transcription})
+  end
+
+  private def step(state : State, ctx : StepContext, variant : PathPresent) : D7::Patch?
+    task = WriteFile.new(variant.path, variant.content)
+    result = ctx.tasks.result?(task)
+    assert result.is_a?(Nil) || result.is_a?(WriteResult)
+
+    case result
+    in Nil # Not available, propose for publishing.
+      bucket = ctx.writes.put_if_absent(variant.path) { Set(Task).new }
+      bucket << task
+
+      nil # no change yet
+    in WriteCompleted
+      D7.patch(variant.node, {2, nil})
+    in WriteFailed
+      D7.patch(variant.node, {2, {:err, result.detail}})
+    end
+  end
+
+  private def step(state : State, ctx : StepContext, variant : PathAbsent) : D7::Patch?
+    task = RemoveFile.new(variant.path)
+    result = ctx.tasks.result?(task)
+    assert result.is_a?(Nil) || result.is_a?(RemoveResult)
+
+    case result
+    in Nil # Not available, propose for publishing.
+      bucket = ctx.writes.put_if_absent(variant.path) { Set(Task).new }
+      bucket << task
+
+      nil # no change yet
+    in RemoveCompleted
+      D7.patch(variant.node, {2, nil})
+    in RemoveFailed
+      D7.patch(variant.node, {2, {:err, result.detail}})
+    end
+  end
+
+  private def step(state : State, ctx : StepContext, variant : Resource) : D7::Patch?
+    ref = ExtrinsicMap::ResourceRef.new(variant.query)
+    ctx.refs << ref
+
+    # If resource is not yet available, keep the old one (if any).
+    return unless resource = state.extrinsics[ref]?
+
+    transcription = state.transcriptions.put_if_absent(resource) do
+      transcribe(resource)
+    end
+    D7.patch(variant.node, {2, transcription})
   end
 
   private def transcribe(object report : PathService::DirListing) : Term

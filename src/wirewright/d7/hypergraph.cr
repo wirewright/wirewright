@@ -152,6 +152,10 @@ module Ww::D7
       @head_index.has_key?(head)
     end
 
+    def empty? : Bool
+      @nodes.empty?
+    end
+
     # Yields nodes and their heads.
     def each_node_with_head(& : Node, Term ->) : Nil
       @head_index.each do |head, bucket|
@@ -216,12 +220,18 @@ module Ww::D7
       end
     end
 
-    def propose(*heads : Symbol, & : Node -> Patch?) : Array(Patch)
+    def propose(*heads : Symbol, & : Node -> Patch?) : Indexable(D7::Patch)
+      proposals = [] of D7::Patch
+      propose(proposals, *heads) do |node|
+        yield node
+      end
+      proposals
+    end
+
+    def propose(proposals, *heads : Symbol, & : Node -> Patch?) : Nil
       # FIXME: stack_array miscompiles for some reason... We *really* need
       # to rewrite Pf::Map, its representation is too hard for Crystal
       # to compile...
-      proposals = [] of Patch
-
       heads.each do |head|
         each_node_with_head(Term.of(head)) do |node|
           proposal = yield node
@@ -230,8 +240,6 @@ module Ww::D7
           proposals << proposal
         end
       end
-
-      proposals
     end
   end
 end

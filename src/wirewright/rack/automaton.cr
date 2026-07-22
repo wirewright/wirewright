@@ -171,7 +171,8 @@ class Ww::Rack::Automaton
   # This often determines whether the circuit truly reached quiescence, or is
   # just "asynchronously busy".
   def pending? : Bool
-    Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) || Database.pending?(@database_state) || WebSocket.pending?(@websocket_state)
+    Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) ||
+      Database.pending?(@database_state) || WebSocket.pending?(@websocket_state)
   end
 
   # FIXME: this method is a mess
@@ -205,48 +206,27 @@ class Ww::Rack::Automaton
       end
     end
 
-    # FIXME: the following step()s must eventually contribute to the same hypergraph
-    # instead of being staged like they are here. The subsystem nodes such as `parser`
-    # or `rewriter` are conceptually members of the Rack step; not distinct steps
-    # like `Tspace` or `Assembler`.
+    subframes.concat(Extrinsics.step(@extrinsic_state) do |extrinsics|
+      Database.step(@database_state) do |database|
+        Parser.step(@parser_state) do |parser|
+          WebSocket.step(@websocket_state) do |web_socket|
+            D7.step(@parser, subframes.last) do |hg|
+              prepass.call(hg) do |hg|
+                proposals = [] of D7::Patch
 
-    pass do
-      input = subframes.last
-      subframes.concat(Parser.step(@parser_state, @parser, subframes.last, prepass))
-      output = subframes.last
-      unless input == output
-        frames << output
+                extrinsics.propose(hg, proposals)
+                parser.propose(hg, proposals)
+                database.propose(hg, proposals)
+                web_socket.propose(hg, proposals)
+                Rack.propose(hg, proposals)
+
+                D7::Regime.merge(hg, proposals)
+              end
+            end
+          end
+        end
       end
-    end
-
-    pass do
-      input = subframes.last
-      subframes.concat(Extrinsics.step(@extrinsic_state, @parser, subframes.last, prepass))
-      output = subframes.last
-      unless input == output
-        frames << output
-      end
-    end
-
-    pass do
-      input = subframes.last
-      subframes.concat(Database.step(@database_state, @parser, subframes.last, prepass))
-      output = subframes.last
-      unless input == output
-        frames << output
-      end
-    end
-
-    pass do
-      input = subframes.last
-      subframes.concat(WebSocket.step(@websocket_state, @parser, subframes.last, prepass))
-      output = subframes.last
-      unless input == output
-        frames << output
-      end
-    end
-
-    subframes.concat(Rack.step(@parser, subframes.last, prepass))
+    end)
 
     # Execute backref step again to fix inconsistencies.
     frames << Rack.backref_step(@parser, subframes.last, prepass).last

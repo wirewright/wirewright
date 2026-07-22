@@ -17,15 +17,11 @@ module Ww::Rack::WebSocket
 
   defrecord StepContext, bindings : Set(String)
 
-  def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+  def step(state : State, & : Proposer -> T) : T forall T
     seen_bindings = Set(String).new
 
-    subframes = D7.step(parser, circuit) do |hg|
-      prepass.call(hg) do |hg|
-        ctx = StepContext.new(seen_bindings)
-        D7::Regime.merge(hg, proposals: step(state, ctx, hg))
-      end
-    end
+    ctx = StepContext.new(seen_bindings)
+    result = yield Proposer.new(state, ctx)
 
     if state.running.empty? && !seen_bindings.empty?
       state.subscription = WebSocketService.subscribe(state.epoch)
@@ -50,7 +46,16 @@ module Ww::Rack::WebSocket
 
     state.running = seen_bindings
 
-    subframes
+    result
+  end
+
+  struct Proposer
+    def initialize(@state : State, @ctx : StepContext)
+    end
+
+    def propose(hg : D7::Hypergraph, proposals) : Nil
+      WebSocket.propose(@state, @ctx, hg, proposals)
+    end
   end
 
   defrecord Server, node : D7::Node, pool : D7::AbsEdge, binding : String, template : Term::Dict
@@ -73,8 +78,9 @@ module Ww::Rack::WebSocket
     end
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph) : Indexable(D7::Patch)
-    hg.propose(:ws) do |node|
+  # :nodoc:
+  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+    hg.propose(proposals, :ws) do |node|
       Term.case(node.term) do
         matchpi %{[ws (@pool_ bindingQ_ server _?) template_*]} do
           continue unless binding = binding?(bindingQ)

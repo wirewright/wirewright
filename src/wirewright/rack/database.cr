@@ -3,6 +3,7 @@ module Ww::Rack::Database
 
   # :nodoc:
   defcase State,
+    epoch : Automaton::Epoch,
     connections : Hash(URI, Connection),
     tasks : D7::TaskBoard(Automaton::Epoch, Task, Term)
 
@@ -21,9 +22,11 @@ module Ww::Rack::Database
       execute(task.db, task.stmt, ping)
     end
 
-    State.new(connections, tasks)
+    State.new(epoch, connections, tasks)
   end
 
+  # NOTE: `state.connections` never has pending connections in this implementation
+  # because we handle them before returning from `step(State, &)`.
   def pending?(state : State) : Bool
     state.tasks.pending?
   end
@@ -32,16 +35,12 @@ module Ww::Rack::Database
     uris : Set(URI),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Term)
 
-  def step(state : State, parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+  def step(state : State, & : Proposer -> T) : T forall T
     seen_uris = Set(URI).new
 
-    subframes = state.tasks.rdv do |tasks_rdv|
-      D7.step(parser, circuit) do |hg|
-        prepass.call(hg) do |hg|
-          ctx = StepContext.new(seen_uris, tasks_rdv)
-          D7::Regime.merge(hg, proposals: step(state, ctx, hg))
-        end
-      end
+    result = state.tasks.rdv do |tasks_rdv|
+      ctx = StepContext.new(seen_uris, tasks_rdv)
+      yield Proposer.new(state, ctx)
     end
 
     state.connections.diff(seen_uris) do |action|
@@ -57,6 +56,7 @@ module Ww::Rack::Database
         end
 
         state.connections[uri] = connection
+        state.epoch.call
       in Hash::DiffRemoved
         connection = action.value
 
@@ -67,10 +67,20 @@ module Ww::Rack::Database
         end
 
         state.connections.delete(uri)
+        state.epoch.call
       end
     end
 
-    subframes
+    result
+  end
+
+  struct Proposer
+    def initialize(@state : State, @ctx : StepContext)
+    end
+
+    def propose(hg : D7::Hypergraph, proposals) : Nil
+      Database.propose(@state, @ctx, hg, proposals)
+    end
   end
 
   alias Variant = Transfer
@@ -81,8 +91,9 @@ module Ww::Rack::Database
     uri : URI,
     response : D7::AbsEdge
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph) : Indexable(D7::Patch)
-    hg.propose(:db) do |node|
+  # :nodoc:
+  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+    hg.propose(proposals, :db) do |node|
       Term.case(node.term) do
         matchpi %{[db (@stmt_ -> uri_string -> @response_) _?]}, uri: String do
           variant = Transfer.new(node, node.resolve(stmt), URI.parse(uri), node.resolve(response))

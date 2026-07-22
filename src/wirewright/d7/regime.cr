@@ -410,7 +410,7 @@ module Ww::D7
       Term.of(result)
     end
 
-    def solve(hg : Hypergraph, &fn : MatchTable, Int32 -> Patch?) : Patch
+    def solve(hg : Hypergraph, proposals, &fn : MatchTable, Int32 -> Patch?) : Nil
       solns = Pf::Kit.stack_array(Soln)
 
       hg.each_node_with_head do |node, head|
@@ -429,9 +429,7 @@ module Ww::D7
         end
       end
 
-      if solns.empty?
-        return Patch.new
-      end
+      return if solns.empty?
 
       # Workaround: We'd actually want to sort proposals below but unfortunately
       # that causes a SEGFAULT which seems related to some sort of codegen/ABI bug.
@@ -441,8 +439,6 @@ module Ww::D7
       # something along those lines. This would move them onto another fiber,
       # and we'll be able to process more solutions concurrently in the meantime.
       # This is where the "scheduler" should go.
-      proposals = [] of Patch
-
       solns.each do |soln|
         next unless proposal = fn.call(soln.match_table, soln.query_index)
 
@@ -452,8 +448,6 @@ module Ww::D7
 
         proposals << proposal
       end
-
-      Regime.merge(hg, proposals)
     end
 
     def self.merge(hg : Hypergraph, proposals : Indexable(Patch)) : Patch
