@@ -187,6 +187,12 @@ module MuSoma
             D7.gnd(node)
           end
 
+          # It's unconditionally a parent node for MuSoma. For Rack, on the other
+          # hand, it's a ground node.
+          matchpi %{[ws _ _*]} do
+            D7.parent(node.as_d, 2u32...node.itemsize.to_u32)
+          end
+
           otherwise do
             feature
           end
