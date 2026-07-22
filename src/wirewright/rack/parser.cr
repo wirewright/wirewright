@@ -124,23 +124,16 @@ module Ww::Rack::Parser
   defrecord Source, node : D7::Node, value : Term::Str
 
   private def source?(hg : D7::Hypergraph, input : D7::AbsEdge) : Source?
-    # Find nonempty input cell(s).
-    sources = Pf::Kit.stack_array(Source, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
-      # Since cell has only one edge, `memberof:` above already covers
-      # the edge check.
-      Term.matchpiT?(node.term, %{[cell @_ value_string]}) do
-        sources << Source.new(node, value)
-      end
-    end
+    return unless cell = Rack.cell?(hg, input)
+    return unless value = cell.value?.as_s?
 
-    # For human-comprehensible  behavior, we only support a single source. If
-    # there are many sources we're "confused". We could handle many sources
-    # but the behavior would likely be unintuitive.
-    sources.single?
+    Source.new(cell.node, value)
   end
 
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : Transfer) : D7::Patch?
+    # For human-comprehensible  behavior, we only support a single source. If
+    # there are many candidates we're "confused". We could handle many candidates
+    # but the behavior would likely be unintuitive.
     return unless source = source?(hg, variant.input)
 
     # Find empty target cell(s).

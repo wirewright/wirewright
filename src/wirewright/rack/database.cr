@@ -97,22 +97,11 @@ module Ww::Rack::Database
   defrecord Source, node : D7::Node, stmt : Stmt
 
   private def source?(hg : D7::Hypergraph, input : D7::AbsEdge) : Source?
-    # Find nonempty input cell(s).
-    sources = Pf::Kit.stack_array(Source, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
-      # Since cell has only one edge, `memberof:` above already covers
-      # the edge check.
-      Term.matchpiT?(node.term, %{[cell @_ stmtQ_]}) do
-        next unless stmt = stmt?(stmtQ)
+    return unless cell = Rack.cell?(hg, input)
+    return unless stmtQ = cell.value?
+    return unless stmt = stmt?(stmtQ)
 
-        sources << Source.new(node, stmt)
-      end
-    end
-
-    # For human-comprehensible  behavior, we only support a single source. If
-    # there are many sources we're "confused". We could handle many sources
-    # but the behavior would likely be unintuitive.
-    sources.single?
+    Source.new(cell.node, stmt)
   end
 
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, variant : Transfer) : D7::Patch?
