@@ -55,7 +55,7 @@ module MuSoma
     private def sync(ws : Workspace, reading : PathService::ContentReading) : Nil
       return if @seen == reading.blob.digest
 
-      ws.console.send(InfoLog.new("Reload editR"))
+      ws.console.send(Console::InfoLog.new("Reload editR"))
 
       @seen = reading.blob.digest
 
@@ -63,14 +63,14 @@ module MuSoma
         document = ML.document(reading.blob.to_string)
       rescue e : ML::SyntaxError
         # TODO: show what the error is!!
-        ws.console.send(ErrLog.new("editR on disk is invalid, running from memory..."))
+        ws.console.send(Console::ErrLog.new("editR on disk is invalid, running from memory..."))
       else
         @editR = Rho.rewriter(document)
       end
     end
 
     private def sync(ws : Workspace, reading : PathService::DigestReading | PathService::Absent) : Nil
-      ws.console.send(ErrLog.new("editR on disk is absent, running from memory..."))
+      ws.console.send(Console::ErrLog.new("editR on disk is absent, running from memory..."))
     end
 
     def step(ws : Workspace) : Nil
@@ -614,7 +614,7 @@ module MuSoma
         MediaService.publish(Term.of(:app), spec)
       else
         # FIXME: ?! We must recover somehow!
-        ws.console.send(CriticalLog.new("Invalid spec"))
+        ws.console.send(Console::CriticalLog.new("Invalid spec"))
         MediaService.withdraw(Term.of(:app), MediaService::WindowSpec).wait
       end
     end
@@ -651,14 +651,14 @@ module MuSoma
     private def sync_seed(ws : Workspace, reading : PathService::ContentReading)
       return if @seen_seed == reading.blob.digest
 
-      ws.console.send(InfoLog.new("Reload seed"))
+      ws.console.send(Console::InfoLog.new("Reload seed"))
 
       @seen_seed = reading.blob.digest
 
       begin
         document = ML.document(reading.blob.to_string)
       rescue e : ML::SyntaxError
-        ws.console.send(ErrLog.new("Seed source on disk is invalid, running from memory..."))
+        ws.console.send(Console::ErrLog.new("Seed source on disk is invalid, running from memory..."))
       else
         ws.state.update do |state|
           Term.morph(state, {:"seed'", document})
@@ -667,27 +667,27 @@ module MuSoma
     end
 
     private def sync_seed(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
-      ws.console.send(ErrLog.new("Seed source on disk is absent, running from memory..."))
+      ws.console.send(Console::ErrLog.new("Seed source on disk is absent, running from memory..."))
     end
 
     private def sync_library(ws : Workspace, reading : PathService::ContentReading)
       return if @seen_library == reading.blob.digest
 
-      ws.console.send(InfoLog.new("Reload library"))
+      ws.console.send(Console::InfoLog.new("Reload library"))
 
       @seen_library = reading.blob.digest
 
       begin
         document = ML.document(reading.blob.to_string)
       rescue e : ML::SyntaxError
-        ws.console.send(ErrLog.new("Library source on disk is invalid, running from memory..."))
+        ws.console.send(Console::ErrLog.new("Library source on disk is invalid, running from memory..."))
       else
         ws.library.set(Rack::Assembler.library(document))
       end
     end
 
     private def sync_library(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
-      ws.console.send(ErrLog.new("Library source on disk is absent, running from memory..."))
+      ws.console.send(Console::ErrLog.new("Library source on disk is absent, running from memory..."))
     end
 
     def receive(ws, plan, msg : MediaService::WindowDescriptionChanged)
@@ -1115,14 +1115,14 @@ module MuSoma
 
       @seen = reading.blob.digest
 
-      ws.console.send(InfoLog.new("Reload MuSoma codex"))
+      ws.console.send(Console::InfoLog.new("Reload MuSoma codex"))
 
       source = reading.blob.to_string
 
       begin
         document = ML.document(source)
       rescue e : ML::SyntaxError
-        ws.console.send(ErrLog.new("MuSoma codex on disk is invalid, running from memory..."))
+        ws.console.send(Console::ErrLog.new("MuSoma codex on disk is invalid, running from memory..."))
         return
       end
 
@@ -1138,7 +1138,7 @@ module MuSoma
     end
 
     private def sync(ws : Workspace, reading : PathService::DigestReading | PathService::Absent)
-      ws.console.send(ErrLog.new("MuSoma codex on disk is absent, running from memory..."))
+      ws.console.send(Console::ErrLog.new("MuSoma codex on disk is absent, running from memory..."))
     end
   end
 end

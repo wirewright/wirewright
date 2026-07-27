@@ -1,63 +1,6 @@
 module MuSoma
-  alias ConsoleWidget = MuBanner | InfoLog | NoteLog | ErrLog | CriticalLog
-
-  defrecord MuBanner
-  defrecord NoteLog, message : String
-  defrecord InfoLog, message : String
-  defrecord ErrLog, message : String
-  defrecord CriticalLog, message : String
-
-  def display(io : IO, widget : MuBanner)
-    io << <<-'BANNER'
-
-        ############
-       ##############
-       ##############
-       #####     ####
-       #####     ####    Wirewright µsoma
-        #############    https://github.com/wirewright/wirewright [iota]
-         ###########
-       #   ######   #
-       ###        ###
-       ###############
-        ###############
-
-
-    BANNER
-  end
-
-  def display(io : IO, widget : InfoLog)
-    timestamp = Time.local.to_s("%F %T")
-
-    Colorize.with.dark_gray.surround(io) do
-      io << " LOG  " << timestamp << "  " << widget.message
-      io.puts
-    end
-  end
-
-  def display(io : IO, widget : NoteLog)
-    timestamp = Time.local.to_s("%F %T")
-
-    io << " NOTE  ".colorize.green.bold << timestamp << "  " << widget.message
-    io.puts
-  end
-
-  def display(io : IO, widget : ErrLog)
-    timestamp = Time.local.to_s("%F %T")
-
-    io << " ERR  ".colorize.yellow.bold << timestamp << "  " << widget.message
-    io.puts
-  end
-
-  def display(io : IO, widget : CriticalLog)
-    timestamp = Time.local.to_s("%F %T")
-
-    io << " CRITICAL  ".colorize.red.bold << timestamp << "  " << widget.message
-    io.puts
-  end
-
   defcase Workspace,
-    console : Channel(ConsoleWidget),
+    console : Channel(Console::Widget),
     extrinsics : ExtrinsicMap,
     codex : Var(Codex),
     state : Var(Term::Dict),
@@ -71,7 +14,7 @@ module MuSoma
 
   # Constructs a workspace.
   def workspace(
-    console : Channel(ConsoleWidget),
+    console : Channel(Console::Widget),
     input_ref : ExtrinsicMap::ReadingRef,
     codex_ref : ExtrinsicMap::ReadingRef,
     microfold_ref : ExtrinsicMap::ReadingRef,
@@ -277,32 +220,32 @@ module MuSoma
 
   def run(args : Array(String) = ARGV) : Nil
     # Initialize console.
-    console = Channel(ConsoleWidget).new
+    console = Channel(Console::Widget).new
 
     # Owns STDOUT. In the future we'd want to pipe Crystal's Log here, somehow, or
     # make our own, so that the style is consistent.
     spawn(name: "MuSoma console") do
       while widget = console.receive?
-        display(STDOUT, widget)
+        Console.display(STDOUT, widget)
       end
     end
 
-    console.send(MuBanner.new)
+    console.send(Console::MuBanner.new)
 
     # Parse arguments.
     unless input_arg = args.first?
-      console.send(CriticalLog.new("Expected a file argument (try `examples/calculator.musoma.wwml` your MuSoma download has an `examples` directory)"))
+      console.send(Console::CriticalLog.new("Expected a file argument (try `examples/calculator.musoma.wwml` your MuSoma download has an `examples` directory)"))
       Fiber.yield
       return
     end
 
     unless runtime = Ww.roots.runtime
-      console.send(CriticalLog.new("Could not find Wirewright runtime (you likely need to set WW_RUNTIME)"))
+      console.send(Console::CriticalLog.new("Could not find Wirewright runtime (you likely need to set WW_RUNTIME)"))
       Fiber.yield
       return
     end
 
-    console.send(InfoLog.new("Initializing refs"))
+    console.send(Console::InfoLog.new("Initializing refs"))
 
     input_ref = ExtrinsicMap::ReadingRef.new(NormalPath[input_arg])
     # TODO: Use ResourceRef instead of manually resolving runtime!
@@ -311,7 +254,7 @@ module MuSoma
     editR_ref = ExtrinsicMap::ReadingRef.new(NormalPath[runtime / "codices/editR.codex.wwml"])
     microfold_ref = ExtrinsicMap::ReadingRef.new(NormalPath[runtime / "codices/ufold.codex.wwml"])
 
-    console.send(InfoLog.new("Initializing workspace"))
+    console.send(Console::InfoLog.new("Initializing workspace"))
 
     ws = MuSoma.workspace(console, input_ref, codex_ref, microfold_ref)
 
@@ -329,7 +272,7 @@ module MuSoma
 
     wg.wait
 
-    console.send(InfoLog.new("Initializing and booting agents"))
+    console.send(Console::InfoLog.new("Initializing and booting agents"))
 
     agents = AgentPopulation.new(
       app: AppAgent.new,
@@ -345,7 +288,7 @@ module MuSoma
 
     agents.boot(ws)
 
-    console.send(InfoLog.new("Running"))
+    console.send(Console::InfoLog.new("Running"))
 
     epoch = 0u64
 

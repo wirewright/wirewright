@@ -42,6 +42,8 @@ require "./wirewright/nitrene"
 require "./wirewright/scenery"
 require "./wirewright/microfold"
 
+require "./wirewright/console"
+
 require "./wirewright/dwuir"
 require "./wirewright/soma"
 
