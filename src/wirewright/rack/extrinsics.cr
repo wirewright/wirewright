@@ -317,8 +317,66 @@ module Ww::Rack::Extrinsics
     Term.of(:file, report.path.basename)
   end
 
+  # |@ rack.path.reading
+  #
+  # |@summary
+  # The result of attempting to read a file or a file system entry.
+
+  # |@ rack.path.reading
+  #
+  # |@pattern
+  # (absent detail_string)
+  #
+  # |@key detail
+  # Tells the reason why reading failed.
+  #
+  # |@block
+  # Appears if the file does not exist or any other OS error occurs while
+  # reading it. *detail* should tell the reason.
+
+  # |@ rack.path.reading
+  #
+  # |@pattern
+  # (present content_string)
+  #
+  # |@key content
+  # The content of the file as a string.
+  #
+  # |@block
+  # Appears if the file exists, is readable, and its *content* is valid UTF-8.
+
+  # |@ rack.path.reading
+  #
+  # |@pattern
+  # (present content_blob)
+  #
+  # |@key content
+  # The content of the file as a blob.
+  #
+  # |@block
+  # Appears if the file exists, is readable, but its content does not appear
+  # to be UTF-8. That is, the file *content* is treated as an opaque blob.
+
   private def transcribe(object report : PathService::ContentReading) : Term
     Term.of(:present, transcribe(report.blob))
+  end
+
+  # |@ rack.path.reading
+  #
+  # |@pattern
+  # (digest hash_string ⍊ size_)
+  #
+  # |@key hash
+  # The SHA-256 digest of the file content.
+  #
+  # |@key size rack.path.size
+  # The size of the file.
+  #
+  # |@block
+  # Appears if the file exists, is readable, but is too large to safely load
+  # into memory. The cutoff is currently 64 MiB.
+  private def transcribe(object report : PathService::DigestReading) : Term
+    Term.of(:digest, report.digest.hexstring, size: transcribe(Bytesize.new(report.bytesize)))
   end
 
   # FIXME: This isn't a good idea. We must let the user choose to interpret
@@ -331,12 +389,21 @@ module Ww::Rack::Extrinsics
     Term.of(blob)
   end
 
-  private def transcribe(object report : PathService::DigestReading) : Term
-    Term.of(:digest, report.digest.hexstring, size: transcribe(Bytesize.new(report.bytesize)))
-  end
-
   defrecord Bytesize, value : Int64
 
+  # |@ rack.path.size
+  #
+  # |@pattern
+  # {¦ ±bytes human_string}
+  #
+  # |@key bytes
+  # The size in bytes.
+  #
+  # |@key human
+  # The size as a human-readable string, for example, `"32 MiB"`.
+  #
+  # |@summary
+  # Represents the size of a file or a file system entry.
   private def transcribe(object bytesize : Bytesize) : Term
     Term.of(bytes: bytesize.value, human: bytesize.value.humanize_bytes)
   end

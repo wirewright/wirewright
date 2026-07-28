@@ -9,7 +9,7 @@
 <ol class="search-by-ref-list">
   <% by_ref.each do |ref| %>
   <li>
-    <a href="<%= ref.parts.join('/') %>"><%= ref.parts.join('.') %></a>
+    <a href="<%= ref.parts.join('/') %>/"><%= ref.parts.join('.') %></a>
   </li>
   <% end %>
 </ol>
@@ -22,7 +22,7 @@
   <% # Most specific (highest specificity) to least specific %>
   <% by_example.reverse_each do |ref, env, composition| %>
   <li>
-    <a href="<%= ref.parts.join('/') %>"><%= ref.parts.join('.') %></a>
+    <a href="<%= ref.parts.join('/') %>/"><%= ref.parts.join('.') %></a>
 
     <% if list = composition.single?(PatternList) %>
       <pre><code><%= list.source %></code></pre>

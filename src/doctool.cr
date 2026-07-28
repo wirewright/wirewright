@@ -17,13 +17,13 @@ module Doctool
         return output(node.text)
       end
 
-      unless node.text =~ /^[\w-]+(?:\.[\w-]+)+$/
+      unless node.text =~ /^[\w°-]+(?:\.[\w°-]+)+$/
         return output(node.text)
       end
 
       href = $0.gsub('.', '/')
 
-      literal(%(<a href="/#{href}">#{node.text}</a>))
+      literal(%(<a href="/#{href}/">#{node.text}</a>))
     end
 
     private def in_link?(node)
@@ -35,7 +35,7 @@ module Doctool
   end
 
   def md2html(md : String) : String
-    options = Markd::Options.new(smart: true, safe: true, autolink: true)
+    options = Markd::Options.new(smart: true, safe: true, autolink: true, gfm: true)
     document = Markd::Parser.parse(md, options)
     renderer = Renderer.new(options)
     renderer.render(document, formatter: nil)
@@ -179,7 +179,7 @@ module Doctool::Page
       end
 
       query(compositions, query)
-    when /\/([\w\/<=>+*-]+)/
+    when /\/([\w\/<=>+*°-]+)/
       query = $1.split('/', remove_empty: true)
       overview(compositions, query, $1)
     else
@@ -195,9 +195,10 @@ module Doctool::Page
       next unless root = ref.parts.first?
 
       summaries = roots0.put_if_absent(root) { [] of Summary }
-      if summary = composition.single?(Summary)
-        summaries << summary
-      end
+      next unless ref.parts.size == 1
+      next unless summary = composition.single?(Summary)
+
+      summaries << summary
     end
 
     roots1 = {} of String => Summary
@@ -269,7 +270,11 @@ module Doctool::Page
         next
       end
 
-      successors[successor] = composition.single?(Summary)
+      next unless ref.parts.size == query.size + 1
+
+      successors.put_if_absent(successor) do
+        composition.single?(Summary)
+      end
     end
 
     Overview.new(query.join('.'), url, successors, overloads)

@@ -139,7 +139,7 @@ module Ww::Rack::Feed
   # <variant>
   #   [feed <src> <dst>]
   #
-  # <srC>
+  # <src>
   #   <src edge>
   #   <src edge list>
   #

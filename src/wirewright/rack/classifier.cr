@@ -3,11 +3,229 @@ module Ww::Rack
   def classify!(node : Term) : D7::Feature
     M1::PatternSet.case(node) do
       # |@ rack.cell
-      matchpi %{[cell @u_ _?]} do
-        D7.gnd(node, u)
+      #
+      # |@summary
+      # Designates a place in the circuit where a term can be stored.
+
+      # |@ rack.cell
+      #
+      # |@pattern
+      # [cell @edge_]
+      # [cell @edge_ value_]
+      #
+      # |@key edge rack.edge
+      # The hyperedge ("group") the cell should be a member of.
+      #
+      # |@key value term
+      # The term stored in the cell. If absent, the cell is *empty* and does not
+      # participate in *edge*.
+      #
+      # |@block
+      # Cells are one of the most fundamental nodes in Rack. They "fence off"
+      # a part of a circuit and use it to store a term. The term does not
+      # participate in rewriting; it is treated as a pure literal.
+      #
+      # |@example
+      # Cells by themselves are inert:
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y)
+      # ```
+      #
+      # The `rack.feed` node can be used to move values between cells:
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y)
+      # (feed @x @y)
+      # ```
+      #
+      # This evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y 100)
+      # (feed @x @y)
+      # ```
+      matchpi %{[cell @edge_ _?]} do
+        D7.gnd(node, edge)
+      end
+
+      # |@ rack.cell
+      #
+      # |@pattern
+      # [cell (@edge_ pattern_) whole_]
+      #
+      # |@key edge rack.edge
+      # The hyperedge ("group") the cell should be a member of. The name of this
+      # edge (e.g. `foo` in `@foo`) is also used to retrieve the value of the cell
+      # from the match env of *pattern* applied to *whole*.
+      #
+      # |@key pattern m1.operator
+      # The pattern to match the value of *whole*. It should make a capture with
+      # the same name as *edge* (e.g. `foo` in `@foo`).
+      #
+      # |@key whole term
+      # The term stored in the cell and subject to scrutiny by the *pattern*.
+      #
+      # |@block
+      # A variant of the cell node which exposes a part of *whole* at *edge*,
+      # according to *pattern*.
+      #
+      # |@example
+      # Consider the following example:
+      #
+      # ```wwml
+      # (cell (@age {¦ ±age})
+      #   {name: "John", age: 35})
+      #
+      # (backsys @age
+      #   ±n <> {n: ^(+ n 1)})
+      # ```
+      #
+      # In this example, the backsystem increments `age` -- a part of the value
+      # stored in the `cell` -- forever:
+      #
+      # ```wwml
+      # (cell (@age {¦ ±age})
+      #   {name: "John", age: 36}) ;; 37, 38, ... in successive evolutions
+      #
+      # (backsys @age
+      #   ±n <> {n: ^(+ n 1)})
+      # ```
+      matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do
+        next D7.inert(node) unless M1.probably_matches?(pattern, whole0)
+        next D7.inert(node) unless env = M1.match?(pattern, whole0)
+        next D7.inert(node) unless part0 = env[capture]?
+
+        D7.mixture(node, Term.of(:cell, edge, part0)) do |mix1|
+          backspec = Term[]
+
+          Term.case(mix1) do
+            matchpi %{(cell @_)} do
+              backspec = Term.entries({ { {capture}, Term[] } })
+            end
+
+            matchpi %{(cell @_ part1_)} do
+              backspec = Term.entries({ {capture, Term.of(:"^verbatim", part1)} })
+            end
+          end
+
+          whole1 = M1.backmap(pattern, Term.of(backspec), whole0)
+
+          Term.morph(node, {2, whole1})
+        end
       end
 
       # |@ rack.feed
+      #
+      # |@summary
+      # Moves terms between places.
+
+      # |@ rack.feed
+      #
+      # |@pattern
+      # [feed source_ destination_]
+      # [feed (not inhibitors_*) source_ destination_]
+      #
+      # |@key source rack.feed.source
+      # One or more sources of terms.
+      #
+      # |@key destination rack.feed.destination
+      # One or more corresponding destinations.
+      #
+      # |@key inhibitors rack.edge
+      # One or more inhibitor edges.
+      #
+      # |@block
+      # Feeds allow you to move terms from one place (usually designated by
+      # `rack.cell`) to another. There are several variants of the feed node:
+      #
+      # - *Transfer*: move a term from one place to another (1:1).
+      # - *Aggregate*: move terms from many places to one (M:1).
+      # - *Broadcast*: move terms from one place to many (1:M).
+      # - *Parallel transfer*: move terms from many places to many places (M:M)
+      #
+      # Feeds can have *inhibitors*. The presence of a nonempty cell at one of
+      # inhibitor edges deactivates the feed.
+      #
+      # |@example
+      #
+      # ### Transfer
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y)
+      # (feed @x @y)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y 100)
+      # (feed @x @y)
+      # ```
+      #
+      # ### Aggregate
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y 200)
+      # (feed (@x @y) @z)
+      # (cell @z)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y)
+      # (feed (@x @y) @z)
+      # (cell @z (100 200))
+      # ```
+      #
+      # ### Broadcast
+      #
+      # ```wwml
+      # (cell @x (100 200))
+      # (feed @x (@y @z))
+      # (cell @y)
+      # (cell @z)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (feed @x (@y @z))
+      # (cell @y 100)
+      # (cell @z 200)
+      # ```
+      #
+      # ### Parallel transfer
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y 200)
+      # (feed (@x @y) (@b @a)) ;; NOTICE how we flip the order: @b @a
+      #
+      # (cell @a)
+      # (cell @b)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y)
+      # (feed (@x @y) (@b @a))
+      #
+      # ;; We've flipped the order above:
+      # (cell @a 200)
+      # (cell @b 100)
+      # ```
       matchpi %{[feed _*]} do
         continue unless spec = Feed.spec?(node)
 
@@ -27,13 +245,97 @@ module Ww::Rack
       end
 
       # |@ rack.discard
-      matchpi %{[discard @u_]} do
-        D7.gnd(node, u)
+      #
+      # |@summary
+      # Clears (empties) cell(s).
+
+      # |@ rack.discard
+      #
+      # |@pattern
+      # [discard @edge_]
+      #
+      # |@key edge rack.edge
+      # The edge where the node should search for cells to clear.
+      #
+      # |@block
+      # Empties zero or more cells at *edge*.
+      #
+      # |@example
+      #
+      # ### Basic
+      #
+      # ```wwml
+      # (cell @a 100)
+      # (discard @a)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @a)
+      # (discard @a)
+      # ```
+      #
+      # ### Timing
+      #
+      # ```wwml
+      # (cell @a 100)
+      # (discard @a)
+      # (feed (copy @a) @b)
+      # (cell @b)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @a)
+      # (discard @a)
+      # (feed (copy @a) @b)
+      # (cell @b 100)
+      # ```
+      #
+      # The observed behavior is the combination of `discard` and `feed`:
+      # - `discard` empties the cell `@a` on the next tick.
+      # - `feed...copy` does not touch `@a`, but copies its value into `@b` on
+      #   the next tick.
+      matchpi %{[discard @edge_]} do
+        D7.gnd(node, edge)
       end
 
       # |@ rack.discard
-      matchpi %{[discard @u_ _]} do
-        D7.gnd(node, u)
+      #
+      # |@pattern
+      # [discard @edge_ pattern_]
+      #
+      # |@key edge rack.edge
+      # The edge where the node should search for cells to clear.
+      #
+      # |@key pattern m1.operator
+      # Only cells containing values matching the pattern are emptied.
+      #
+      # |@block
+      # Empties zero or more cells at *edge*, but only if their value matches
+      # the given *pattern*.
+      #
+      # |@example
+      #
+      # ```wwml
+      # (cell @info "John Doe")
+      # (cell @info 25)
+      # (discard @info _number)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @info "John Doe")
+      # (cell @info)
+      # (discard @info _number)
+      # ```
+      #
+      # Notice how the number disappeared while the string remains in place.
+      matchpi %{[discard @edge_ _]} do
+        D7.gnd(node, edge)
       end
 
       # |@ rack.part
@@ -42,11 +344,112 @@ module Ww::Rack
       end
 
       # |@ rack.group
+      #
+      # |@pattern
+      # [group children_*]
+      #
+      # |@key children rack
+      # Zero or more child nodes.
+      #
+      # |@summary
+      # Groups zero or more nodes without creating a scope.
+      #
+      # |@block
+      # The group node can be used to group zero or more nodes together. Note that
+      # `group` **does not** introduce any kind of scoping to edges or anything else
+      # in the group.
+      #
+      # |@example
+      # ```wwml
+      # (group
+      #   (cell @x 100)
+      #   (cell @y)
+      #   (feed @x @y))
+      # ```
       matchpi %{[group _*]} do
         D7.parent(node.as_d, 1u32...node.uitemsize)
       end
 
       # |@ rack.module
+      #
+      # |@pattern
+      # [module bindings_dict children_*]
+      #
+      # |@key bindings
+      # A dictionary mapping edges in the *interior* of the module to edges in
+      # its *exterior*. For example, if the bindings dict is `{@a: @foo, @b: @bar}`,
+      # this means that `@a` inside the module will stand for `@foo` outside it,
+      # and `@b` will stand for `@bar`. In a sense, `@foo` is "imported" from the
+      # outside under the name `@a`. Often, the interior and exterior name is
+      # the same, that is, e.g., `{@a: @a}`. In such cases ML offers the shorthand
+      # `:@edge`. So `{@a: @a}` can be written as `{:@a}`. Similarly, if there
+      # are multiple such bindings, as in `{@a: @a, @b: @b}`, you can write them
+      # as `{:@a, :@b}`.
+      #
+      # |@key children rack
+      # Zero or more child nodes.
+      #
+      # |@summary
+      # Groups zero or more nodes and introduces a new scope, including edges
+      # from the outside if needed.
+      #
+      # |@block
+      # The module node introduces an scope into which edges can be imported
+      # through the use of *bindings*.
+      #
+      # |@example
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y)
+      # (feed @x @y)
+      #
+      # (module {}
+      #   (cell @x 200)
+      #   (cell @y)
+      #   (feed @x @y))
+      # ```
+      #
+      # The above evolves into:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y 100)
+      # (feed @x @y)
+      #
+      # (module {}
+      #   (cell @x)
+      #   (cell @y 200)
+      #   (feed @x @y))
+      # ```
+      #
+      # Since the contents of the module are "sealed" from the outside due
+      # to the empty bindings dict, there is no confusion between `feed`s.
+      #
+      # Edges can be "imported":
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y)
+      #
+      # (module {:@x}
+      #   (cell @y)
+      #   (feed @x @y))
+      # ```
+      #
+      # The above evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y)
+      #
+      # (module {:@x}
+      #   (cell @y 100)
+      #   (feed @x @y))
+      # ```
+      #
+      # The `feed` refers to `@y` in the module because `@y` does not escape;
+      # whereas `@x` does escape, so the cell outside the module participates
+      # in the rewrite.
       matchpi %{[module bindings_dict _*]} do
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), bindings: bindings.as_d)
       end
@@ -233,33 +636,8 @@ module Ww::Rack
         end
       end
 
-      # |@ rack.cell
-      matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do
-        next D7.inert(node) unless M1.probably_matches?(pattern, whole0)
-        next D7.inert(node) unless env = M1.match?(pattern, whole0)
-        next D7.inert(node) unless part0 = env[capture]?
-
-        D7.mixture(node, Term.of(:cell, edge, part0)) do |mix1|
-          backspec = Term[]
-
-          Term.case(mix1) do
-            matchpi %{(cell @_)} do
-              backspec = Term.entries({ { {capture}, Term[] } })
-            end
-
-            matchpi %{(cell @_ part1_)} do
-              backspec = Term.entries({ {capture, Term.of(:"^verbatim", part1)} })
-            end
-          end
-
-          whole1 = M1.backmap(pattern, Term.of(backspec), whole0)
-
-          Term.morph(node, {2, whole1})
-        end
-      end
-
       # |@ rack.frag
-      matchpi %{[frag @edge_]}, %{[cell (@edge_ _)]} do
+      matchpi %{[frag @edge_]} do
         D7.mixture(node, Term.of(:cell, edge)) do |view|
           Term.of_case(view) do
             matchpi %{(cell @_)} { node }
@@ -269,6 +647,56 @@ module Ww::Rack
       end
 
       # |@ rack.delay
+      #
+      # |@pattern
+      # [delay countdown←(%number +i32) node_]
+      #
+      # |@key countdown
+      # A number counting down to zero (inclusive) with each rewrite tick.
+      #
+      # |@key node rack
+      # The delay node is replaced by this node when the countdown reaches zero.
+      #
+      # |@summary
+      # Delays the evolution of a child node by a number of rewrite ticks.
+      #
+      # |@block
+      # Counts down to zero before allowing the evolution of a child node.
+      #
+      # |@example
+      # Consider the following sequence of frames:
+      #
+      # ```wwml
+      # ;; Frame 0
+      # (delay 3 (cell @x 0))
+      # (feed @x @y)
+      # (cell @y)
+      #
+      # ;; Frame 1
+      # (delay 2 (cell @x 0))
+      # (feed @x @y)
+      # (cell @y)
+      #
+      # ;; Frame 2
+      # (delay 1 (cell @x 0))
+      # (feed @x @y)
+      # (cell @y)
+      #
+      # ;; Frame 3
+      # (delay 0 (cell @x 0))
+      # (feed @x @y)
+      # (cell @y)
+      #
+      # ;; Frame 4
+      # (cell @x 0)
+      # (feed @x @y)
+      # (cell @y)
+      #
+      # ;; Frame 5
+      # (cell @x)
+      # (feed @x @y)
+      # (cell @y 0)
+      # ```
       matchpi %{[delay (%number +i32!)]}, %{[delay (%number +i32) _]} do
         D7.gnd(node)
       end
@@ -641,16 +1069,232 @@ module Ww::Rack
       end
 
       # |@ rack.path
+      #
+      # |@summary
+      # Lets you read, write, and observe file system entries, live.
+
+      # |@ rack.path
+      #
+      # |@pattern
+      # [path (path_string reading)]
+      # [path (path_string reading) reading_]
+      #
+      # |@key path
+      # Specifies the path to a file, for example, `/tmp/test.txt`.
+      #
+      # |@key reading path.reading
+      # The *reading* of the file, if available.
+      #
+      # |@block
+      # A symbolic file viewer. Maintains a live reading of the file at the given
+      # *path*. The reading will change as the file changes.
+      #
+      # |@example
+      # Let's say you write `Hello` to `/tmp/test.txt`. Then:
+      #
+      # ```wwml
+      # (path ("/tmp/test.txt" reading))
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (path ("/tmp/test.txt" reading)
+      #   (present "Hello"))
+      # ```
+      #
+      # If you then change the content of `/tmp/test.txt` to `Bye`:
+      #
+      # ```wwml
+      # (path ("/tmp/test.txt" reading)
+      #   (present "Bye"))
+      # ```
+      #
+      # If you then remove the file:
+      #
+      # ```wwml
+      # (path ("/tmp/test.txt" reading)
+      #   (absent "file does not exist")) ;; or something like that
+      # ```
+      #
+      # If you want to operate on the content of the file, you're supposed
+      # to observe the node's evolution:
+      #
+      # ```wwml
+      # (node (@content (path _ (present content_string)))
+      #   (path ("/tmp/test.txt" reading)))
+      #
+      # (parser (@content - top - @result)
+      #   (top ws x←expr ws) => ^x
+      #   (expr a←expr "+" b←nat) => ^(+ a b)
+      #   (expr a←expr "-" b←nat) => ^(- a b)
+      #   (expr nat)
+      #   (nat (form "[0-9]+" nat))
+      #   ;; Zero or more vertical or horizontal space characters.
+      #   (ws "[%s]*"))
+      #
+      # (cell @result)
+      # ```
+      #
+      # This program will watch the content of `/tmp/test.txt`, parse it,
+      # and display the result, live, in `@result`. The cell will be cleared
+      # if there is a parse error or if the file does not exist. For example,
+      # if you write `2+2` to the file, the result cell will contain `4`. If
+      # you change the expression, the result will be recalculated automatically.
       matchpi %{[path (_string reading)]}, %{[path (_string reading) _]} do
         D7.gnd(node)
       end
 
       # |@ rack.path
+      #
+      # |@pattern
+      # [path (path_string report)]
+      # [path (path_string report) report_]
+      #
+      # |@key path
+      # Specifies the path to a file system entry, for example, `/tmp/test.txt`
+      # or `/tmp/dir`.
+      #
+      # |@key report path.report
+      # The *report* about the file system entry, if available.
+      #
+      # |@block
+      # A symbolic directory / file system explorer. Maintains a live report
+      # about the file system entry at the given *path*. The report will
+      # change as the entry changes (e.g., for a dictionary, as entries get
+      # added or removed).
+      #
+      # |@example
+      # I'm going to show the evolution of `path...report` as I create and
+      # populate `/tmp/dir`.
+      #
+      # ```wwml
+      # ;; Frame 0
+      # (path ("/tmp/dir" report))
+      #
+      # ;; Frame 1
+      # (path ("/tmp/dir" report)
+      #   (absent "path does not exist"))
+      #
+      # ;; $ mkdir /tmp/dir
+      #
+      # ;; Frame 2
+      # (path ("/tmp/dir" report)
+      #   (dir timestamp: "2026-07-28 18:01:43 UTC")) ;; Your timestamp will differ, of course!
+      #
+      # ;; $ mkdir /tmp/dir/a
+      #
+      # ;; Frame 3
+      # (path ("/tmp/dir" report)
+      #   (dir timestamp: "2026-07-28 18:01:48 UTC" ;; timestamp changed!
+      #     (dir "a")))
+      #
+      # ;; $ touch /tmp/dir/b.txt
+      #
+      # ;; Frame 4
+      # (path ("/tmp/dir" report)
+      #   (dir timestamp: "2026-07-28 18:01:51 UTC" ;; timestamp changed!
+      #     (dir "a")
+      #     (file "b.txt")))
+      #
+      # ;; $ touch /tmp/dir/c.txt
+      #
+      # ;; Frame 4
+      # (path ("/tmp/dir" report)
+      #   (dir timestamp: "2026-07-28 18:01:62 UTC" ;; timestamp changed!
+      #     (dir "a")
+      #     (file "b.txt")
+      #     (file "c.txt")))
+      # ```
+      #
+      # ### Recursive watching
+      # Currently, it is possible to watch things recursively, but perhaps in
+      # a somewhat baroque way. This way also illustrates the philosophy behind
+      # Wirewright. Basically, below, we create a *rewrite environment*, a kind
+      # of "bubble" with the following "laws of physics":
+      #
+      # - Absent path reports disapper.
+      # - Present path reports mark themselves as handled and spawn child
+      #   reports. The "laws" are then applied to the child reports, and so on,
+      #   which achieves the "recursion".
+      #
+      # ```wwml
+      # (circuit @reports
+      #   (path ("/tmp/dir" report) root: true))
+      #
+      # (rewriter ((scanR (rulesetR)) <-> @reports)
+      #   ;; Remove reports that are absent, except the root report.
+      #   R←(path (_ report) [absent _] ⍊ -root)
+      #     <> {(R): ()}
+      #   ;; Spawn child reports.
+      #   R←(path (path_string report) [dir children_*] ⍊ -handled_)
+      #     <> {(R):
+      #           (^(up R) ;; < report with handled: true
+      #            (^each (children as [_ member_string])
+      #              (path (^"⸢path⸣/⸢member⸣" report)))),
+      #         handled: true})
+      # ```
+      #
+      # You are supposed to then observe the evolution of `reports`, find reports
+      # for paths you're interested in, etc. Alternatively, it is possible to spawn
+      # not reports but modules containing internal logic, perhaps using `rack.sensor`s
+      # and `rack.appearance`s to communicate in a distributed manner. The `rack.map`
+      # node is useful for such cases. For example, the program below will show paths
+      # that appear and disappear:
+      #
+      # ```wwml
+      # ;; TODO: Write example once rack.map is available!
+      # ```
       matchpi %{[path (_string report)]}, %{[path (_string report) _]} do
         D7.gnd(node)
       end
 
       # |@ rack.path
+      #
+      # |@pattern
+      # [path (path_string sink) goal←(present content_string)]
+      # [path (path_string sink) goal←(present content_blob)]
+      # [path (path_string sink) goal←absent]
+      # [path (path_string sink) [err detail_string]]
+      #
+      # |@key path
+      # Specifies the path to a file, for example, `/tmp/test.txt`.
+      #
+      # |@key goal
+      # The desired goal state of the file, either `present` or `absent`.
+      #
+      # |@key content
+      # For `present` goals, specifies the desired content of the file.
+      # It can be either a string (writes UTF-8) or a blob (writes an opaque
+      # stream of bytes).
+      #
+      # |@key detail
+      # In case of an error (for example, file does not exist during removal
+      # or write was denied), the goal is replaced by `[err detail_string]`,
+      # where *detail* should tell the reason for failure.
+      #
+      # |@block
+      # The `path...sink` node allows you to (over)write files and remove files.
+      #
+      # |@example
+      # Assuming `/tmp/test.txt` does not exist, we can create it by:
+      #
+      # ```wwml
+      # (path ("/tmp/test.txt" sink) (present "Kaixo mundua"))
+      # ```
+      #
+      # The above evolves into:
+      #
+      # ```wwml
+      # (path ("/tmp/test.txt" sink))
+      # ```
+      #
+      # That the `path` "consumed" the goal means it completed successfully:
+      #
+      # ```text
+      # $ cat /tmp/test.txt
+      # Kaixo mundua
+      # ```
       matchpi %{[path (_string sink) _]} do
         D7.gnd(node)
       end

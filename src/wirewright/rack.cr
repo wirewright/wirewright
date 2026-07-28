@@ -12,7 +12,8 @@
 # A symbolic world in Rack is called a *circuit*. A *circuit* consists of nodes.
 # Nodes can be *leaves* (such as `rack.cell`), parents (e.g. `rack.group`),
 # or both (`rack.circuit`). The reason the name *circuit* is used is purely
-# historical.
+# historical. I am actually considering renaming it to *world*. But that's quite
+# a huge rename.
 #
 # Instead of evaluating circuits, Rack & D7 *simulate* their *evolution*, like
 # you can simulate the evolution of a cellular automaton such as [Conway's
@@ -26,7 +27,7 @@
 # the subcircuit to run, the order of evolution is naturally top-down.
 #
 # For a start, consider looking at simpler, less "philosophically heavy" nodes such
-# as: `rack.cell`, `rack.feed`, `rack.parser`, `rack.ws`.
+# as: `rack.cell`, `rack.feed`, `rack.parser`, `rack.path`.
 #
 # |@example
 # The following is the "Hello World" of Rack -- an oscillator.

@@ -1,6 +1,21 @@
 <% if successors.present? %>
+  <a href="#successors">Go to successors</a>
+<% end %>
+
+<% if overloads.present? %>
+  <div class="overview">
+    <h1 id="overview">Overview</h1>
+    <div class="overload-list">
+      <% overloads.each do |overload| %>
+        <%= overload %>
+      <% end %>
+    </div>
+  </div>
+<% end %>
+
+<% if successors.present? %>
   <div>
-    <h1>Successors</h1>
+    <h1 id="successors">Successors</h1>
     <table class="root-list">
       <colgroup>
         <col class="root-col-link" />
@@ -29,16 +44,5 @@
       <% end %>
       </tbody>
     </table>
-  </div>
-<% end %>
-
-<% if overloads.present? %>
-  <div class="overview">
-    <h1>Overview</h1>
-    <div class="overload-list">
-      <% overloads.each do |overload| %>
-        <%= overload %>
-      <% end %>
-    </div>
   </div>
 <% end %>

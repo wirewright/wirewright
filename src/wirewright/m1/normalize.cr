@@ -1136,22 +1136,26 @@ module Ww::M1
       # | `_dict`         | -     | +     | `_dict*`                                               | `_dict+`                                               |
       # | `_blob`         | -     | +     | `_blob*`                                               | `_blob+`                                               |
       # | `author_`       | +     | -     | `author_*` (but usually you'd use plural: `authors_*`) | `author_+` (but usually you'd use plural: `authors_+`) |
-      # | `author_string` | +     | +     | `author_string*` (ditto, `authors_string*`)            | `author_string+` (ditto, `author_string+`)             |
+      # | `author_string` | +     | +     | `author_string*` (ditto, `authors_string*`)            | `author_string+` (ditto, `authors_string+`)            |
       #
       # Singular blanks are generally shorthands for `%let`. For example, `x_number` is
       # a shorthand for `(%let x _number)` which is in turn a shorthand for `(%let x (%number _))`.
       # Similarly, `name_string` is a shorthand for `(%let name _string)`.
       #
-      # ```
-      # (lamp on)      ;; => (ok "Turned the lamp on")
-      # (lamp off)     ;; => (ok "Turned the lamp off")
-      # (lamp _symbol) ;; => (err "Humph?")
+      # ```wwml
+      # (lamp on) => (ok "Turned the lamp on")
+      # (lamp off) => (ok "Turned the lamp off")
+      # (lamp _symbol) => (err "Humph?")
+      #
+      # (lamp on)  ;; => (ok "Turned the lamp on")
+      # (lamp off) ;; => (ok "Turned the lamp off")
+      # (lamp qux) ;; => (err "Humph?")
       # ```
       #
       # The `_` blank is also called *pass* when used as an operator. A pretty common
       # use-case for `_` is to represent "everything else" in rules:
       #
-      # ```
+      # ```wwml
       # (square a_number) => (ok (* a a))
       # (square _) => (err "Oops. Cannot square it")
       #
@@ -2143,7 +2147,7 @@ module Ww::M1
       #
       # |@block
       # An auxiliary operator that wraps a *successor* operator. `%nonself` lets
-      # you associated metadata with *successor*, and also prevent *some* patterns
+      # you associate metadata with *successor*, and also prevent *some* patterns
       # from being confused by *successor* if it looks like what they're trying
       # to match.
       #
@@ -2169,7 +2173,7 @@ module Ww::M1
       # ```
       #
       # In the example above, the presence of `%nonself` and annotations such as
-      # `kind: _` does not affect the meaning of the pattern.`
+      # `kind: _` does not affect the meaning of the pattern.
       #
       # The original reason for `%nonself`'s existence were cases where rule definitions
       # and application of those rules coincide. Some rules may be confused by their own
