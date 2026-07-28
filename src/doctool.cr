@@ -17,7 +17,7 @@ module Doctool
         return output(node.text)
       end
 
-      unless node.text =~ /^[\w°-]+(?:\.[\w°-]+)+$/
+      unless node.text =~ /^[\w°\-]+(?:\.[\w°\-]+)+$/
         return output(node.text)
       end
 
@@ -170,7 +170,7 @@ module Doctool::Page
   def of(compositions, context : HTTP::Server::Context) : Any
     uri = context.request.uri
 
-    case uri.path
+    case URI.decode(uri.path)
     when "/"
       root(compositions)
     when "/search"
@@ -179,7 +179,7 @@ module Doctool::Page
       end
 
       query(compositions, query)
-    when /\/([\w\/<=>+*°-]+)/
+    when /^\/([\w\/<=>+*°\-]+)$/
       query = $1.split('/', remove_empty: true)
       overview(compositions, query, $1)
     else
