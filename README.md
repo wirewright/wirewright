@@ -252,7 +252,9 @@ and MuSoma will live-reload. Any running state will be lost on reload, however.
 > the window, like many other things in Wirewright, is too a symbolic object, which the program
 > can observe.
 
-## [State of the] Docs
+## Docs
+
+### MuSoma
 
 Hover over things to learn more about them in the MuSoma app (or, well, at least about things I've
 bothered implementing tooltips for...)
@@ -271,15 +273,13 @@ the notation, but from the outside, it probably looks like a bizarre mix of APL 
 Hit `?` in MuSoma in Normal mode to open the help pane. Right now it's pretty much empty, but
 in the future, I hope to make it into a help center with access to the *doctool*.
 
-The *doctool* is a "mythical" thing that some comments in the source code refer to. Right now,
-it basically doesn't exist. However, I do write docs that the doctool will eventually be able
-to find. The best way to find them right now is to be the doctool yourself; you can search for
-`# |@ ` (for Crystal files) or `;; |@ ` (for WwML files) to learn more.
+### Wirewright
 
-You probably won't be able to program much using MuSoma for now, so again, you can look at
-the examples. I will try to write tutorials but I'm pretty bad at writing, and I'm not a native
-speaker, so I'm not sure how that'll go. Note that the videos on the YouTube channel are highly
-outdated at this point, and are only of project-historical relevance.
+Use the doctool binary that is shipped with the latest release. It serves docs which are baked
+into the binary. It serves them at `127.0.0.1:9811`. Just run the doctool using something like
+`./doctool`. The doctool is a static binary which doesn't depend on anything else.
+
+### Misc
 
 Note also that you check out the tests in `tests/` to get a feel of what the system is capable of
 at the moment, and the approximate scope of the project. The names may all sound a little bit weird,
@@ -491,7 +491,7 @@ Wirewright uses a custom dev tool to manage the various subprojects inside the r
 the dev tool with:
 
 ```console
-crystal build src/dev.cr --progress --release -Dpreview_mt -Dexecution_context 
+crystal build src/dev.cr --progress -Dpreview_mt -Dexecution_context
 ```
 
 ### Using the dev tool
@@ -522,6 +522,18 @@ And build with:
 
 You should then have the `testtool` executable, which will run tests in the `tests/` directory.
 Or `musoma`, which is, well, MuSoma.
+
+To build the doctool, first, generate the articles.txt file:
+
+```console
+./dev g docdump && ./dev r
+```
+
+Then build the doctool:
+
+```console
+./dev g doctool && ./dev b
+```
 
 ## Want to learn more?
 

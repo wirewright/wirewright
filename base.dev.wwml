@@ -5,6 +5,10 @@ presets:
 {"dev":
   {flags: {"execution_context": true, "preview_mt": true},
    source: "src/dev.cr"},
+ "docdump": {source: "src/doctool/dump.cr"},
+ "doctool":
+  {flags: {"execution_context": true, "preview_mt": true},
+   source: "src/doctool.cr"},
  "irack":
   {flags: {"execution_context": true, "preview_mt": true},
    source: "src/irack.cr"},

@@ -309,8 +309,8 @@ module Doctool
       Doctool.handle(compositions, context)
     end
 
-    Console.display(STDOUT, Console::NoteLog.new("Serving HTTP on 127.0.0.1:5000... Hit Ctrl-C to exit."))
-    server.bind("tcp://127.0.0.1:5000")
+    Console.display(STDOUT, Console::NoteLog.new("Serving HTTP on 127.0.0.1:9811... Hit Ctrl-C to exit."))
+    server.bind("tcp://127.0.0.1:9811")
     server.listen
   end
 end
