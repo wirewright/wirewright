@@ -1,6 +1,18 @@
 module Ww
+  # |@ rho
+  #
+  # |@summary
+  # A set of composable rewriters.
+  #
+  # |@block
   # Wirewright Rho is a set of composable rewriters. Think parser combinators,
   # but for term rewriting.
+  #
+  # ```wwml
+  # (chainR
+  #   (adjR (rulesetR phase: move))
+  #   (adjR (rulesetR phase: look exh: true)))
+  # ```
   module Rho
     extend self
 

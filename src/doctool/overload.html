@@ -1,0 +1,82 @@
+<article class="doc">
+  <% if ref = composition.single?(Ref) %>
+    <div class="doc-ref">
+      <p class="doc-ref-path"><%= ref.parts.join('.') %></p>
+      <p class="doc-ref-hint">Overload</p>
+    </div>
+  <% end %>
+
+  <% if pattern_list = composition.single?(PatternList) %>
+    <section>
+      <h2>Pattern</h2>
+      <pre><code><%= pattern_list.source %></code></pre>
+    </section>
+  <% end %>
+
+  <% if composition.any?(Key) %>
+    <section>
+      <h2>Keys</h2>
+      <table>
+        <colgroup>
+          <col class="capture-col-name" />
+          <col class="capture-col-desc" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Reference</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+        <% composition.each do |component| %>
+          <% next unless component.is_a?(Key) %>
+          <tr>
+            <td>
+              <code><%= component.capture %></code>
+            </td>
+            <td>
+              <% if ref = component.ref %>
+                <a href="/<%= ref.parts.join('/') %>"><%= ref.parts.join('.') %></a>
+              <% else %>
+                <p class="absence-text">None</p>
+              <% end %>
+            </td>
+            <td>
+              <% if component.body.blank? %>
+                <p class="absence-text">None</p>
+              <% else %>
+                <%= Doctool.md2html(component.body) %>
+              <% end %>
+            </td>
+          </tr>
+        <% end %>
+        </tbody>
+      </table>
+    </section>
+  <% end %>
+
+  <% if summary = composition.single?(Summary) %>
+    <section>
+      <h2>Summary</h2>
+      <%= Doctool.md2html(summary.body) %>
+    </section>
+  <% end %>
+
+  <% if block = composition.single?(Block) %>
+    <section>
+      <h2>Description</h2>
+      <%= Doctool.md2html(block.body) %>
+    </section>
+  <% end %>
+
+  <% if composition.any?(Example) %>
+    <section>
+      <h2>Examples</h2>
+      <% composition.each do |component| %>
+        <% next unless component.is_a?(Example) %>
+        <%= Doctool.md2html(component.body) %>
+      <% end %>
+    </section>
+  <% end %>
+</article>

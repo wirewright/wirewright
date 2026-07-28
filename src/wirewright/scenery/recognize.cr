@@ -248,6 +248,7 @@ module Ww::Scenery
           #
           # |@pattern
           # (text ⍊
+          #   caption: _string
           #   font: (list prefs_*)
           #   weight_: (%optional 400 (%number +i32))
           #   italic⋮ false)
@@ -289,6 +290,7 @@ module Ww::Scenery
           #
           # |@pattern
           # (text ⍊
+          #   caption: _string
           #   font⋮ "IBM Plex Sans"
           #   weight_: (%optional 400 (%number +i32))
           #   italic⋮ false)
@@ -318,7 +320,7 @@ module Ww::Scenery
           # |@ scenery.text.font
           #
           # |@pattern
-          # (text ⍊ font: query_)
+          # (text ⍊ caption: _string font: query_)
           #
           # |@key query resource
           # The query that should be used to fetch the font.

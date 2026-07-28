@@ -1,3 +1,9 @@
+# |@ pigment
+#
+# |@summary
+# A language for expressing colors.
+#
+# |@block
 # Pigment is a small language for expressing colors. It is used by various
 # parts of Wirewright's visual stack.
 #

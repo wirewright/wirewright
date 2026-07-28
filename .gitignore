@@ -24,6 +24,7 @@ _*
 /docs/
 /lib/
 /bin/
+/src/doctool/articles.txt
 /.shards/
 *.dwarf
 cachegrind.out.*

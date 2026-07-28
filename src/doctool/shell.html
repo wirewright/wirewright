@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title><%= title %> — Wirewright doctool</title>
+    <style>
+      html {
+        /* [Rose Pine](https://rosepinetheme.com) */
+        --color-base: #191724;
+        --color-surface: #1f1d2e;
+        --color-overlay: #26233a;
+        --color-muted: #6e6a86;
+        --color-subtle: #908caa;
+        --color-text: #e0def4;
+        --color-link: #c4a7e7;
+        --color-note: #9ccfd8;
+        --color-med: #908caa;
+        --color-focus: #31748f;
+      }
+
+      body {
+        margin: 0;
+        background: var(--color-base);
+        color: var(--color-text);
+        font-family: "IBM Plex Sans", sans-serif;
+      }
+
+      p, h1, h2, h3, h4, h5, h6 {
+        margin: 0;
+      }
+
+      main {
+        display: flex;
+        flex-flow: column;
+        gap: 1rem;
+        margin: 3rem auto;
+        max-width: 80ch;
+        line-height: 1.5;
+      }
+
+      .page-header {
+        display: flex;
+        position: sticky;
+        top: 0;
+        align-items: center;
+        padding: .5rem 1rem;
+        flex-flow: row;
+        background: var(--color-overlay);
+        line-height: 1;
+      }
+
+      .page-header-m {
+        flex-grow: 1;
+        display: flex;
+        justify-content: center;
+      }
+
+      .page-header-m input:focus {
+        outline-color: var(--color-focus);
+      }
+
+      .page-header form {
+        max-width: 60ch;
+        width: 100%;
+      }
+
+      .page-header-m input {
+        width: 100%;
+        padding: .3rem .5rem;
+        outline: 1px solid var(--color-muted);
+        background: var(--color-overlay);
+        border: none;
+        font-family: "IBM Plex Sans", sans-serif;
+        font-size: medium;
+        border-radius: .3rem;
+        color: var(--color-text);
+      }
+
+      a {
+        color: var(--color-link);
+      }
+
+      .note {
+        color: var(--color-base);
+        background: var(--color-note);
+        border-radius: .2rem;
+        padding: 0 .2rem;
+        margin-right: .2rem;
+        font-weight: 500;
+        font-size: smaller;
+      }
+
+      .attention-med {
+        color: var(--color-med);
+      }
+
+      .absence-text {
+        color: var(--color-med);
+        font-style: italic;
+      }
+
+      .hero {
+        display: flex;
+        flex-flow: column;
+        gap: 1rem;
+        padding: 2rem;
+        background: var(--color-surface);
+        border-radius: 1rem;
+        margin-top: 3rem;
+        margin-bottom: 3rem;
+      }
+
+      table {
+        border-collapse: collapse;
+      }
+
+      table th, td {
+        border: 1px solid var(--color-overlay);
+        padding: .2rem .5rem;
+      }
+
+      table th {
+        text-align: left;
+      }
+
+      .root-col-link {
+        min-width: 16ch;
+      }
+
+      .overload-list {
+        display: flex;
+        flex-flow: column;
+        gap: 3rem;
+      } 
+
+      .overview h1 {
+        margin: 1rem 0;
+      }
+
+      .doc section h2 {
+        font-size: large;
+        margin: .5rem 0;
+      }
+
+      .doc section p:not(:first-child) {
+        margin-top: 1rem;
+      }
+
+      .doc section p:not(:last-child) {
+        margin-bottom: 1rem;
+      }
+
+      .doc-ref {
+        display: flex;
+        flex-flow: row;
+        background: var(--color-overlay);
+        border: 2px solid var(--color-focus);
+        border-radius: .33rem;
+        padding: .33rem;
+        font-size: larger;
+        align-items: center;
+      }
+
+      .doc-ref p {
+        margin: 0;
+        line-height: 1;
+      }
+
+      .doc-ref-path {
+        flex-grow: 1;
+      }
+
+      .doc-ref-hint {
+        color: var(--color-subtle);
+        font-size: small;
+      }
+
+      code {
+        font-family: "IBM Plex Mono", monospace;
+      }
+
+      code:not(pre > code) {
+        background: var(--color-surface);
+        padding: 0 .33rem;
+        border-radius: .33rem;
+      }
+
+      pre:has(code) {
+        margin: 0;
+        background: var(--color-surface);
+        padding: .5rem 1rem;
+        overflow: scroll;
+        border-radius: .33rem;
+      }
+
+      .doc section {
+        padding: 0 1rem;
+      }
+
+      .search-by-example-list {
+        display: flex;
+        flex-flow: column;
+        gap: 1rem;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .search-by-example-list li {
+        display: flex;
+        flex-flow: column;
+        gap: .5rem;
+        border: 2px solid var(--color-overlay);
+        border-radius: 1rem;
+        padding: 1rem;
+      }
+
+      .search-query {
+        font-size: 1.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="page-header">
+      <div class="page-header-l">
+        <a href="/">Root</a>
+      </div>
+      <div class="page-header-m">
+        <form action="/search" method="get">
+          <input placeholder="Search query (term, text, or path)" name="query" />
+        </form>
+      </div>
+      <div class="page-header-r">
+        <a href="https://github.com/wirewright/wirewright">Wirewright [iota]</a>
+      </div>
+    </header>
+    <main>
+      <%= body %>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,44 @@
+<% if successors.present? %>
+  <div>
+    <h1>Successors</h1>
+    <table class="root-list">
+      <colgroup>
+        <col class="root-col-link" />
+        <col class="root-col-summary" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Link</th>
+          <th>Summary</th>
+        </tr>
+      </thead>
+      <tbody>
+      <% successors.each do |successor, summary| %>
+        <tr>
+          <td>
+            <a href="<%= successor %>/"><%= successor %></a>
+          </td>
+          <td>
+            <% if summary.nil? %>
+              <p class="absence-text">No summary</p>
+              <% next %>
+            <% end %>
+            <%= Doctool.md2html(summary.body) %>
+          </td>
+        </tr>
+      <% end %>
+      </tbody>
+    </table>
+  </div>
+<% end %>
+
+<% if overloads.present? %>
+  <div class="overview">
+    <h1>Overview</h1>
+    <div class="overload-list">
+      <% overloads.each do |overload| %>
+        <%= overload %>
+      <% end %>
+    </div>
+  </div>
+<% end %>

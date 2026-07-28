@@ -243,9 +243,9 @@ module Enumerable(T)
     end
   end
 
-  def leftmost?(cls : T.class) : T?
+  def leftmost?(cls : U.class) : U? forall U
     each do |object|
-      return object if object.is_a?(T)
+      return object if object.is_a?(U)
     end
   end
 

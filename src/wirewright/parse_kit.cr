@@ -1,5 +1,11 @@
-# A tiny string parsing language. Used mainly by `Rack::Parser`, which
-# implements the `rack.parser` node.
+# |@ parsekit
+#
+# |@summary
+# A string parsing language, mainly accessed through `rack.parser`.
+#
+# |@block
+# ParseKit is a small string parsing language. It's mainly accessed through
+# the `rack.parser` node.
 #
 # This is an implementation of what I can loosely identify as a Packrat
 # parser, but with some extensions. Mainly, it is extended with support
@@ -12,6 +18,21 @@
 #
 # References:
 # - ["Packrat parsers can support left recursion" (Warth et al.)](https://doi.org/10.1145/1328408.1328424).
+#
+# ```wwml
+# (nat (form "[0-9]+" nat))
+# (ws "[%s]*")
+# (atom "(" ws a←expr ws ")") => ^a
+# (atom nat)
+# (factor a←atom ws "*" ws b←factor) => (* ^a ^b)
+# (factor a←atom ws "/" ws b←factor) => (/ ^a ^b)
+# (factor atom)
+# (sum a←sum ws "+" ws b←factor) => (+ ^a ^b)
+# (sum a←sum ws "-" ws b←factor) => (- ^a ^b)
+# (sum factor)
+# (expr sum)
+# (top ws a←expr ws) => ^a
+# ```
 module Ww::ParseKit
   extend self
 

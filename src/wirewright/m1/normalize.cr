@@ -140,6 +140,15 @@ module Ww::M1
       )
     end
 
+    # |@ m1.quoted
+    #
+    # |@block
+    # The quoted sublanguage of M1 (see: `m1.operator.quote`).
+    #
+    # ```wwml
+    # (x_ (%quote (+ a_ b_ (%unquote x_))))
+    # ```
+
     # Rewrites `%quote` operators like the one in:
     #
     # ```wwml
@@ -209,6 +218,15 @@ module Ww::M1
       end
     end
   end
+
+  # |@ m1.operator
+  #
+  # |@block
+  # M1 consists of a collection of pattern matching *operators*.
+  #
+  # Most but not all M1 operators start with `%`. ML, too, associates `%`
+  # with M1. This is seen in shorthands such as `%'` (expands to `%literal`,
+  # i.e., `m1.operator.literal`).
 
   # :nodoc:
   def normalize(prod : Π::Item) : Term
@@ -1170,7 +1188,7 @@ module Ww::M1
       # |@ m1.operator.literal
       #
       # |@pattern
-      # _symbol
+      # (%symbol nonblank)
       # _number
       # _string
       # _boolean
@@ -2918,7 +2936,7 @@ module Ww::M1
       # |@ m1.operator.mime
       #
       # |@pattern
-      # (%'%mime type_string params_)
+      # (%'%mime type_ params_)
       #
       # |@key type m1.operator
       # MIME type operator.
@@ -2946,7 +2964,7 @@ module Ww::M1
           Normalize.sealed(Π.pattern(params)))
       end
 
-      # TODO: (%mime type_string subtype_string params_)
+      # TODO: (%mime type_ subtype_ params_)
       # E.g. (%mime "text" _ {charset: "utf-8"})
 
       # NOTE: Insert new matchpis here, especially if they are infrequent. Below we

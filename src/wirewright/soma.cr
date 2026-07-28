@@ -1,3 +1,8 @@
+# |@ soma
+#
+# |@summary
+# Contains uiR and DwUIR (DEPRECATED).
+
 # Wirewright µsoma is like a web browser, but for Wirewright.
 #
 # If you want a more precise definition, here it is; the idea with µsoma is that

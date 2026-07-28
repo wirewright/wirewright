@@ -2,6 +2,11 @@ require "csv"
 require "benchmark"
 require "./wirewright"
 
+# |@ testtool
+#
+# |@summary
+# An internal testing framework.
+
 module Testtool
   include Ww
 

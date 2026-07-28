@@ -1,6 +1,12 @@
 {% skip_file unless flag?(:sdl3) %}
 
 module Ww
+  # |@ media
+  #
+  # |@summary
+  # A media subsystem.
+  #
+  # |@block
   # The MediaService currently only handles window management / display using SDL3.
   # We plan to handle video, audio and other forms of media here as well, using SDL3
   # (among, perhaps, other things); hence the more general name.
@@ -129,7 +135,7 @@ module Ww
     #
     # If no `Cursor` corresponds to *term*, returns the given *fallback* cursor.
     def cursor(term : Term, fallback : Cursor = :arrow) : Cursor
-      # |@ window-service.cursor
+      # |@ media.cursor
       #
       # |@block
       # The following cursors are available:
@@ -194,9 +200,9 @@ module Ww
 
     # Tries to parse *term* as a `WindowSpec`. Returns `nil` if impossible.
     #
-    # See `window-service.window`.
+    # See `media.window`.
     def window_spec?(term : Term) : WindowSpec?
-      # |@ window-service.window
+      # |@ media.window
       #
       # |@pattern
       # (window content_* ⍊
@@ -221,7 +227,7 @@ module Ww
       # Whether the user should be able to resize the window away from its desired
       # *width* and *height* (including by maximizing it).
       #
-      # |@key cursor window-service.cursor
+      # |@key cursor media.cursor
       # The currently active cursor. This is the attribute that is eventually set
       # by something like Microfold when you e.g. do `hover:cursor-pointer` on
       # a button.

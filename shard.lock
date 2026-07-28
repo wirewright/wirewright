@@ -4,6 +4,10 @@ shards:
     git: https://github.com/crystal-lang/crystal-db.git
     version: 0.14.0
 
+  markd:
+    git: https://github.com/icyleaf/markd.git
+    version: 0.6.0
+
   permafrost:
     git: https://github.com/homonoidian/permafrost.git
     version: 0.13.2

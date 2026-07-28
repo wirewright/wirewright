@@ -1,0 +1,39 @@
+<section class="hero">
+  <h1>Welcome to the doctool!</h1>
+  <p class="attention-med">
+    Wirewright doctool is a way to view Wirewright docs. I embed docs directly
+    in the source code of Wirewright, and the doctool finds them and parses them
+    and serves them as navigable HTML.
+  </p>
+  <p>
+    <span class="note">NOTE</span> You're probably interested in Rack.
+  </p>
+  <p>
+    <span class="note">NOTE</span> Some documentation is still being written. Sorry for the inconvenience.
+  </p>
+</section>
+
+<table class="root-list">
+  <colgroup>
+    <col class="root-col-link" />
+    <col class="root-col-summary" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>Link</th>
+      <th>Summary</th>
+    </tr>
+  </thead>
+  <tbody>
+  <% roots.each do |root, summary| %>
+    <tr>
+      <td>
+        <a href="<%= root %>/"><%= root %></a>
+      </td>
+      <td>
+        <%= Doctool.md2html(summary.body) %>
+      </td>
+    </tr>
+  <% end %>
+  </tbody>
+</table>

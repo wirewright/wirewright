@@ -1,11 +1,25 @@
+# |@ scenery
+#
+# |@summary
+# A layout and vector graphics subsystem.
+#
+# |@block
 # Scenery handles interactive graphics for Wirewright.
 #
-# Scenery is the successor to UIR and DwUIR. Imagine Scenery as a combination of
+# Scenery is the successor of UIR and DwUIR. Imagine Scenery as a combination of
 # a layout engine and a vector graphics engine.
 #
 # Among the most major dependencies of Scenery are PlutoVG and PlutoSVG;
 # they do the majority of vector graphics work. Additionally, Scenery uses
 # Raqm for text shaping, and Unibreak for finding line breaks.
+#
+# ```wwml
+# (x-stack gap: 10
+#   (text caption: "Kaixo")
+#   (text caption: "mundua!" color: green))
+# ```
+
+# See `scenery` in the doctool.
 #
 # NOTE: Scenery is **not** thread-safe, nor do we assume its dependencies are
 # thread-safe. None of the objects under `Scenery` are thread-safe either

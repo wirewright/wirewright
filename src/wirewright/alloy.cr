@@ -1,3 +1,36 @@
+# |@ alloy
+#
+# |@summary
+# A structural templating language.
+#
+# |@block
+# Alloy is a structural templating language for Wirewright.
+#
+# *Structural templating* is like Lisp's `quote`, `unquote`, `quasiquote`, etc.
+# Alloy can also be compared with something like Handlebars, except Alloy operates
+# on terms rather than strings. Another comparison one could make is to JSX. Basically,
+# Alloy lets you "plug" things into a prepared literal term.
+#
+# The easiest way to access Alloy directly is through Rack, using nodes such
+# as `rack.transfer`, `rack.view`, `rack.extension`.
+#
+# |@example
+# Consider the following *template*:
+#
+# ```wwml
+# (^let names: ("Alice" "Bob" "Dave" "Jane")
+#   (^each (names as name_)
+#     (Person ^name)))
+# ```
+#
+# It *expands* into multiple things at once:
+#
+# ```wwml
+# (Person "Alice")
+# (Person "Bob")
+# (Person "Dave")
+# (Person "Jane")
+# ```
 module Ww::Alloy
   extend self
 

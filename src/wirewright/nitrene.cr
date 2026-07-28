@@ -1,4 +1,34 @@
+# |@ nitrene
+#
+# |@summary
+# An expression language.
+#
+# |@block
 # Nitrene is an expression language for Wirewright.
+#
+# Nitrene is mostly meant to be embedded in Alloy; but you can embed Alloy in Nitrene,
+# too, or use Nitrene separately.
+#
+# An *expression language* in the sense I am employing here can be likened to
+# Excel formulas, in terms of its scope and the kinds of computations it allows
+# you to do; that is, raw computation at the "leaves" (e.g. `(+ 2 2)`, `(max 1 2 3)`).
+#
+# |@example
+# The following Nitrene program is a baroque way to "stitch" digits
+# together into a number.
+#
+# ```wwml
+# (let digits: (1 2 3 4)
+#   (-> (iota (size digits)) ;; (0 1 2 3)
+#     (attn _) ;; (⏏0 1 2 3⏏)
+#     (map _ (fn ±p (** 10 p))) ;; (⏏1 10 100 1000⏏)
+#     (reverse _) ;; (⏏1000 100 10 1⏏)
+#     (zip _ digits) ;; (⏏(1000 1) (100 2) (10 3) (1 4)⏏)
+#     (map _ (fn (±a ±b) (* a b))) ;; (⏏1000 200 30 4⏏)
+#     (sum _))) ;; 1234
+# ```
+#
+# Notice the use of the threading operator, `->` (see `nitrene.thread`).
 module Ww::Nitrene
   extend self
 
@@ -556,17 +586,19 @@ module Ww::Nitrene
       # pairing each accepted item with the running accumulator value.
       # The accumulator starts with *initial*.
       #
-      # ```wwml
-      # ;; Sum even numbers (iterative, i.e., without using attentions).
+      # See also: `nitrene.reduce*`.
       #
+      # |@example
+      # The following program sums even numbers (iteratively, i.e., without
+      # using attentions).
+      #
+      # ```wwml
       # (let xs: (1 2 3 4 5 6)
       #   (reduce (0 xs)
       #     (fn (±n m←(%pipe (mod 2) 0))
       #       (+ n m))))
       # ;; => 12
       # ```
-      #
-      # See also: `nitrene.reduce*`.
       matchpiT %{(reduce (initialQ_ argQ_) (fn pattern_ bodyQ_))} do
         acc = eval(it, vars, initialQ)
         arg = eval(it, vars, argQ)
@@ -659,10 +691,15 @@ module Ww::Nitrene
       # |@pattern
       # (+ args_*)
       #
+      # |@summary
+      # Returns the sum of *args*.
+      #
       # |@block
       # Returns the sum of arithmetic units in *args* (see `nitrene.arith`).
       #
       # If *args* contains no arithmetic units, the sum is zero.
+      #
+      # |@example
       #
       # ```wwml
       # (+ 1 2)  ;; => 3
@@ -1049,7 +1086,7 @@ module Ww::Nitrene
       # |@block
       # Returns the sum of arithmetic units in *args* (see `nitrene.arith`).
       #
-      # ```wwml`
+      # ```wwml
       # (sum (1 2 3 4 5)) ;; => 15
       # (sum (1 2 ∞ 4 5)) ;; => ∞
       # ```

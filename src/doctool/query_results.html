@@ -1,0 +1,74 @@
+<h1>Searched for</h1>
+
+<pre class="search-query"><code><%= query %></code></pre>
+
+<p class="attention-med">
+  Found <%= by_ref.size %> result(s) by ref. Listing them below.
+</p>
+
+<ol class="search-by-ref-list">
+  <% by_ref.each do |ref| %>
+  <li>
+    <a href="<%= ref.parts.join('/') %>"><%= ref.parts.join('.') %></a>
+  </li>
+  <% end %>
+</ol>
+
+<p class="attention-med">
+  Found <%= by_example.size %> result(s) by example. Listing them below.
+</p>
+
+<ol class="search-by-example-list">
+  <% # Most specific (highest specificity) to least specific %>
+  <% by_example.reverse_each do |ref, env, composition| %>
+  <li>
+    <a href="<%= ref.parts.join('/') %>"><%= ref.parts.join('.') %></a>
+
+    <% if list = composition.single?(PatternList) %>
+      <pre><code><%= list.source %></code></pre>
+    <% end %>
+
+    <% if composition.any?(Key) %>
+      <table>
+        <colgroup>
+          <col class="capture-col-name" />
+          <col class="capture-col-match" />
+          <col class="capture-col-desc" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Key</th>
+            <th>Match in example</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+        <% composition.each do |component| %>
+          <% next unless component.is_a?(Key) %>
+          <% next unless value = env[component.capture]? %>
+          <tr>
+            <td>
+              <code><%= component.capture %></code>
+            </td>
+            <td>
+              <code><%= value %></code>
+            </td>
+            <td>
+              <%= Doctool.md2html(component.body) %>
+            </td>
+          </tr>
+        <% end %>
+        </tbody>
+      </table>
+    <% end %>
+
+    <% if summary = composition.single?(Summary) %>
+      <p><%= Doctool.md2html(summary.body) %></p>
+    <% end %>
+
+    <% if example = composition.leftmost?(Example) %>
+      <%= Doctool.md2html(example.body) %>
+    <% end %>
+  </li>
+  <% end %>
+</ol>

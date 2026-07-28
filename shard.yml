@@ -19,6 +19,8 @@ dependencies:
     commit: 5a22270
   sqlite3:
     github: crystal-lang/crystal-sqlite3
+  markd:
+    github: icyleaf/markd
 
 # dependencies:
 #   pg:

@@ -2,16 +2,19 @@ module Ww::Rack
   # :nodoc:
   def classify!(node : Term) : D7::Feature
     M1::PatternSet.case(node) do
+      # |@ rack.cell
       matchpi %{[cell @u_ _?]} do
         D7.gnd(node, u)
       end
 
+      # |@ rack.feed
       matchpi %{[feed _*]} do
         continue unless spec = Feed.spec?(node)
 
         D7.gnd(node, Feed.edges(spec), defn: Feed.render(spec))
       end
 
+      # |@ rack.feed
       matchpi %{[feed (%group edges_ (%past @_ min: 3))]} do
         defn = Term::Dict.build do |commit|
           commit << :group
@@ -23,34 +26,42 @@ module Ww::Rack
         D7.mixture(node, defn) { node }
       end
 
+      # |@ rack.discard
       matchpi %{[discard @u_]} do
         D7.gnd(node, u)
       end
 
+      # |@ rack.discard
       matchpi %{[discard @u_ _]} do
         D7.gnd(node, u)
       end
 
+      # |@ rack.part
       matchpi %{[part (@src_ @dst_) _]} do
         D7.gnd(node, src, dst)
       end
 
+      # |@ rack.group
       matchpi %{[group _*]} do
         D7.parent(node.as_d, 1u32...node.uitemsize)
       end
 
+      # |@ rack.module
       matchpi %{[module bindings_dict _*]} do
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), bindings: bindings.as_d)
       end
 
+      # |@ rack.locals
       matchpi %{[locals locals←((%past @_ min: 0)) _*]} do
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
       end
 
+      # |@ rack.device
       matchpi %{[device _*]} do
         D7.circuit(node.as_d, 1u32...node.uitemsize, D7.inert(node))
       end
 
+      # |@ rack.node
       matchpi %{[node @edge_ _?]} do
         if child = node[2]?
           mix0 = Term.of(:cell, edge, child)
@@ -68,6 +79,7 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      # |@ rack.node
       matchpi %{[node (edge←(%'edge capture_) pattern_) child0_]} do
         leaf = pass do
           next D7.inert(node) unless env = M1.match?(pattern, child0)
@@ -99,7 +111,10 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
-      # Backrefs are like `node`s with a pattern, except there can be zero or more
+      # |@ rack.backref
+      #
+      # |@block
+      # Backrefs are like `rack.node`s with a pattern, except there can be zero or more
       # alternative patterns, and also backrefs aren't cells. The value at edge
       # is backmapped into payload during evaluation of backrefs.
       matchpi %{[backref (@edge_ _*) _]} do
@@ -107,6 +122,7 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...3u32, leaf)
       end
 
+      # |@ rack.circuit
       matchpi %{[circuit @edge_ children0_*]} do
         if children0.empty?
           mix0 = Term.of(:cell, edge)
@@ -129,6 +145,7 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      # |@ rack.circuit
       matchpi %{[circuit (pool @edge_) children0_*]} do
         mix0 = Term.of(:pool, edge, children0)
 
@@ -141,10 +158,12 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      # |@ rack.pool
       matchpi %{[pool @edge_ _]} do
         D7.gnd(node, edge)
       end
 
+      # |@ rack.circuit
       matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do
         leaf = pass do
           next D7.inert(node) unless M1.probably_matches?(pattern, children0)
@@ -178,6 +197,9 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
+      # |@ rack.frag
+      #
+      # |@block
       # NOTE: I am unsure about the difference between frag and `node`/`circuit` now
       # that we define frag as both readable and writable. The only difference I can
       # see is that when I write to the frag's cell, the execution of that is carried over
@@ -211,6 +233,7 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.cell
       matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do
         next D7.inert(node) unless M1.probably_matches?(pattern, whole0)
         next D7.inert(node) unless env = M1.match?(pattern, whole0)
@@ -235,6 +258,7 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.frag
       matchpi %{[frag @edge_]}, %{[cell (@edge_ _)]} do
         D7.mixture(node, Term.of(:cell, edge)) do |view|
           Term.of_case(view) do
@@ -244,18 +268,22 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.delay
       matchpi %{[delay (%number +i32!)]}, %{[delay (%number +i32) _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.transfer
       matchpi %{[transfer (@src_ pattern_ @dst_) template_]} do
         D7.mixture(node, Term.of(:transfer, { {:not}, {src}, {pattern}, dst }, template)) { node }
       end
 
+      # |@ rack.transfer
       matchpi %{[transfer (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
         D7.mixture(node, Term.of(:transfer, { {:not}, srcs, pattern, dst }, template)) { node }
       end
 
+      # |@ rack.transfer
       matchpi %{[transfer ((not (%group inhibitors_ (%past @_))) srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
         edges = [] of Term
         edges.concat(inhibitors.items)
@@ -265,6 +293,7 @@ module Ww::Rack
         D7.gnd(node, edges, defn: Term.of(:transfer, inhibitors, srcs, pattern, dst, template))
       end
 
+      # |@ rack.backsys
       matchpi %{[backsys @src_ backmaps_*]} do
         offspring = Term::Dict.build do |commit|
           commit << :backsys << {src}
@@ -279,6 +308,7 @@ module Ww::Rack
         D7.mixture(node, offspring) { node }
       end
 
+      # |@ rack.backsys
       matchpi %{[backsys ((%group srcs_ (%past @_ min: 0)) ¦ res_) backmaps_*]} do
         edges = [] of Term
         edges.concat(srcs.items)
@@ -300,6 +330,7 @@ module Ww::Rack
         D7.gnd(node, edges, defn: Term.of(:backsys, srcs, res_edges, restab, backmaps))
       end
 
+      # |@ rack.queue
       matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) buffer0_dict]}, min: Int32 do
         defn = Term::Dict.build do |commit|
           commit << :group
@@ -344,10 +375,12 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.view
       matchpi %{[view (@src_ src-pattern_ @dst_) template_]} do
         D7.gnd(node, src, dst, defn: Term.of(:view, { {src}, {src_pattern}, dst }, template))
       end
 
+      # |@ rack.view
       matchpi %{[view (srcs←((%past @_ min: 1)) _ @dst_) _]} do
         edges = [] of Term
         edges.concat(srcs.items)
@@ -356,14 +389,17 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
+      # |@ rack.extension
       matchpi %{[extension (@src_ src-pattern_ @dst_) template_]} do
         D7.gnd(node, src, dst, defn: Term.of(:extension, { {src}, {src_pattern}, dst }, template))
       end
 
+      # |@ rack.extension
       matchpi %{[extension (@src_ src-pattern_ @dst_ dst-pattern_) template_]} do
         D7.gnd(node, src, dst, defn: Term.of(:extension, { {src}, {src_pattern}, dst, dst_pattern }, template))
       end
 
+      # |@ rack.extension
       matchpi(
         %{[extension (srcs←((%past @_ min: 1)) _ @dst_ _) _]},
         %{[extension (srcs←((%past @_ min: 1)) _ @dst_) _]},
@@ -375,10 +411,12 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
+      # |@ rack.sensor
       matchpi %{[sensor (_ _)]} do
         D7.gnd(node)
       end
 
+      # |@ rack.surface
       matchpi %{[surface storage←[cell @_] [sensor (_ _) _]]} do
         mix0 = storage
         D7.mixture(node, mix0) do |mix1|
@@ -386,10 +424,12 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.sensor
       matchpi %{[sensor (many _ _)]} do
         D7.gnd(node)
       end
 
+      # |@ rack.surface
       matchpi %{[surface storage←[cell @_] [sensor (many _ _) _]]} do
         mix0 = storage
         D7.mixture(node, mix0) do |mix1|
@@ -397,10 +437,12 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.sensor
       matchpi %{[sensor (view _ _) _*]} do
         D7.gnd(node)
       end
 
+      # |@ rack.surface
       matchpi %{[surface storage←[cell @_] [sensor (view _ _) _]]} do
         mix0 = storage
         D7.mixture(node, mix0) do |mix1|
@@ -408,26 +450,32 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.sensor
       matchpi %{[sensor (journal _ _) _*]} do
         D7.gnd(node)
       end
 
+      # |@ rack.appearance
       matchpi %{[appearance _ _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.surface
       matchpi %{[surface [cell @_ _] _]} do
         D7.parent(node.as_d, 1u32...2u32)
       end
 
+      # |@ rack.rewriter
       matchpi %{[rewriter (@input_ -> @spec_ -> @output_) _*]} do
         D7.gnd(node, input, spec, output)
       end
 
+      # |@ rack.rewriter
       matchpi %{[rewriter (@input_ - @spec_ - @output_) _*]} do
         D7.gnd(node, input, spec, output)
       end
 
+      # |@ rack.rewriter
       matchpi(
         %{[rewriter (@input_ -> spec_ -> @output_) _*]},
         %{[rewriter (@input_ - spec_ - @output_) _*]},
@@ -445,11 +493,13 @@ module Ww::Rack
         D7.mixture(node, defn) { node }
       end
 
+      # |@ rack.rewriter
       matchpi %{[rewriter (spec_ <-> @edge_) body_*]} do
         edges = [edge]
         D7.gnd(node, edges, defn: Term.of(:rewriter, spec, edge, body))
       end
 
+      # |@ rack.rewriter
       matchpi %{[rewriter (@spec_ <-> ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) body_*]} do
         edges = [spec]
         edges.concat(itemsrcs.items)
@@ -472,6 +522,7 @@ module Ww::Rack
         D7.gnd(node, edges, defn: Term.of(:rewriter, spec, itemsrcs, res_edges, restab, body))
       end
 
+      # |@ rack.rewriter
       matchpi %{[rewriter (spec_ <-> srcs_dict) _*]} do
         # For example, the following rewriter:
         #
@@ -517,14 +568,17 @@ module Ww::Rack
         D7.mixture(node, defn) { node }
       end
 
+      # |@ rack.slot
       matchpi %{[slot _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.slot
       matchpi %{[slot _ _]} do
         D7.parent(node.as_d, 2u32...3u32)
       end
 
+      # |@ rack.log
       matchpi %{[log (@all_ @last_ ⍊ limit_: (%optional 10 (%number +i32)) edges⋮ false) log0_dict]}, limit: Int32, log0: Term::Dict do
         tail = log0.items.tail(limit)
         tip0 = tail.last?
@@ -566,38 +620,47 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.parser
       matchpi %{[parser (@input_ -> _symbol -> @output_) _*]} do
         D7.gnd(node, input, output)
       end
 
+      # |@ rack.parser
       matchpi %{[parser (@input_ -> _symbol -> @output_ / @error_) _*]} do
         D7.gnd(node, input, output, error)
       end
 
+      # |@ rack.parser
       matchpi %{[parser (@input_ - _symbol - @output_) _*]} do
         D7.gnd(node, input, output)
       end
 
+      # |@ rack.parser
       matchpi %{[parser (@input_ - _symbol - @output_ / @error_) _*]} do
         D7.gnd(node, input, output, error)
       end
 
+      # |@ rack.path
       matchpi %{[path (_string reading)]}, %{[path (_string reading) _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.path
       matchpi %{[path (_string report)]}, %{[path (_string report) _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.path
       matchpi %{[path (_string sink) _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.resource
       matchpi %{[resource _]}, %{[resource _ _]} do
         D7.gnd(node)
       end
 
+      # |@ rack.db
       matchpi(
         %{[db (@stmt_ -> _string -> @response_)]},
         %{[db (@stmt_ -> _string -> @response_) _]},
@@ -605,6 +668,7 @@ module Ww::Rack
         D7.gnd(node, stmt, response)
       end
 
+      # |@ rack.ws
       matchpi %{[ws (@pool_ _ server _?) _*]} do
         D7.gnd(node, pool)
       end

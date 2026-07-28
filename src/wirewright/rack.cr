@@ -1,3 +1,41 @@
+# |@ rack
+#
+# |@summary
+# A rewrite regime.
+#
+# |@block
+# Wirewright Rack is a particular instance of symbolic physics. In other words,
+# it is a *rewrite regime*, implemented using Wirewright D7. The latter is a kind
+# of symbolic physics construction toolkit; a "lego" for constructing rewrite regimes.
+# Rack is one such regime.
+#
+# A symbolic world in Rack is called a *circuit*. A *circuit* consists of nodes.
+# Nodes can be *leaves* (such as `rack.cell`), parents (e.g. `rack.group`),
+# or both (`rack.circuit`). The reason the name *circuit* is used is purely
+# historical.
+#
+# Instead of evaluating circuits, Rack & D7 *simulate* their *evolution*, like
+# you can simulate the evolution of a cellular automaton such as [Conway's
+# Game of Life](https://en.wikipedia.org/wiki/Conway's_Game_of_Life).
+#
+# Rack circuits can contain *subcircuits* (`rack.circuit`, `rack.node`, `rack.device`, etc.)
+# Evolution (time) always runs *top-down*: host circuits are always *time-stepped*
+# (evolved into the future by one step) **before** subcircuits. The reasoning for
+# this is the same as in simulation. We consider subcircuits to be *embedded* in, and
+# *simulated* by, the host circuit. As the host circuit must run in order for
+# the subcircuit to run, the order of evolution is naturally top-down.
+#
+# For a start, consider looking at simpler, less "philosophically heavy" nodes such
+# as: `rack.cell`, `rack.feed`, `rack.parser`, `rack.ws`.
+#
+# |@example
+# The following is the "Hello World" of Rack -- an oscillator.
+#
+# ```wwml
+# (cell @x 0)
+# (cell @y)
+# (feed @x @y @x)
+# ```
 module Ww::Rack
   extend self
 

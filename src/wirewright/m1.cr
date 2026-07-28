@@ -1,5 +1,10 @@
-# M1 is a subsystem of Wirewright. It is a pattern matching and backmapping engine,
-# and a suite of related tools.
+# |@ m1
+#
+# |@summary
+# A pattern matching and backmapping engine.
+#
+# |@block
+# M1 is a pattern matching and backmapping engine, and a suite of related tools.
 #
 # Metaphorically speaking, M1 is the sensory organ of Wirewright. All data Wirewright
 # knows (and cares) about is represented with `Term`s, which we consider "matter".
