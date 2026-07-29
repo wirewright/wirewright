@@ -240,10 +240,10 @@ module Ww::WebSocketService
     @@lock.synchronize do
       case status = @@statuses[binding]?
       in Nil, Pending, Dn
-        status
+        status.as(Status?)
       in Up
         @@statuses = @@statuses.assoc(binding, Up.new(Journal.empty, status.clients))
-        status
+        status.as(Status?)
       end
     end
   end
