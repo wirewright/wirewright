@@ -87,7 +87,7 @@ module Ww::ParseKit
       # By default, the pattern is attached to both ends of the string, meaning it must
       # describe the entire string. By modifying the anchoring you allow parts of the string
       # before the match (or after, or both) to be skipped. For example:
-      # `…date←(day←%|dd|/month←%|dd|/year←%|dddd|)…` will match `"Deadline is 30/05/1999, firm"`
+      # `…(date)←((day)←%|dd|/(month)←%|dd|/(year)←%|dddd|)…` will match `"Deadline is 30/05/1999, firm"`
       # successfully.
       #
       # ## Categories
@@ -118,8 +118,8 @@ module Ww::ParseKit
       #
       # ## Category sequences
       #
-      # Instead of writing e.g. `%d%d%d%d` you can use the category sequence
-      # notation: `%|dddd|`. Characters that are not associated with a category
+      # Instead of writing e.g. `%d%d%d%d` you can use the category sequence notation:
+      # `%|dddd|`. Characters that are not associated with a category
       # are matched literally. So you can write, for example: `%|dd-dd-dddd|`.
       # This matches strings such as `25-01-2026`. `-` is matched literally
       # because it does not correspond to any category.
@@ -177,20 +177,20 @@ module Ww::ParseKit
       # > sets accept quantifiers; so put the `%d` in a character set like so: `[%d]`;
       # > and then attach the qualifier: `[%d]*`. To reiterate, something like `%d*%l*`
       # > matches digit-asterisk-letter-asterisk, whereas `[%d]*[%l]*` matches zero
-      # > or more digits followed by zero or more asterisks. And something like `%d*%d`
+      # > or more digits followed by zero or more letters. And something like `%d*%d`
       # > matches digit-asterisk-digit.
       #
       # ## Captures
       #
       # You can make named captures using `←`. If the capture is named using exactly
       # one letter, it can be written simply as `x←...`. For example: `x←%l`. For
-      # captures with one or more letters in the name, the name must be wrapped
+      # captures with one or more letter in the name, the name must be wrapped
       # in `()`. For example, `(letter)←%l`.
       #
       # Captures bind to the next *atom*. An *atom* is a category (e.g., `x←%l`),
       # a category sequence (e.g., `(year)←%|dddd|`), or a character set
       # (e.g., `(name)←[a-zA-Z]`). In order to bind to a *sequence* of atoms,
-      # use `()`. For example, `Deadline is date←(day←%|dd|/month←%|dd|/year←%|dddd|), firm`.
+      # use `()`. For example, `Deadline is (date)←((day)←%|dd|/(month)←%|dd|/(year)←%|dddd|), firm`.
       #
       # ## Literal matching
       #
@@ -507,7 +507,7 @@ module Ww::ParseKit
       # (top (refuse "expected `a` or `b`"))
       #
       # ;; Parse "a": ok, 1
-      # ;; Parse "b": ok, 1
+      # ;; Parse "b": ok, 2
       # ;; Parse "c": refusal, "expected `a` or `b`"
       # ```
       matchpi %{[refuse detail_string]}, detail: String do
@@ -540,7 +540,7 @@ module Ww::ParseKit
       # (bar "c") => 3
       #
       # ;; Parse "a": ok, 1
-      # ;; Parse "b": ok, 1
+      # ;; Parse "b": ok, 2
       # ;; Parse "c": error, "expected `a` or `b`"
       # ;;
       # ;; IMPORTANT: Notice how `"c"` does not reach `bar`. This is because
