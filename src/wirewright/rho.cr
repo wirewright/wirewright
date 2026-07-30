@@ -198,6 +198,37 @@ module Ww
       output
     end
 
+    # *Scan rewriter*. See `rho.scanR`.
+    def scanR(successor : Rewriter, part : Part, leafp : LeafPredicate) : Rewriter
+      finite do |attachments, input|
+        scanR(successor, part, leafp, attachments, input)
+      end
+    end
+
+    private def scanR(successor, part, leafp, attachments, input : Term)
+      if rep = attachments.cache.get?({attachments.id, input})
+        return rep
+      end
+
+      if leaf?(leafp.passable, leafp.impassable, input)
+        return successor.call(input, attachments.cache)
+      end
+
+      assert dict0 = input.as_d?
+
+      dict1 = flatten(dict0, part, leafp.guide) do |value|
+        successor.call(value, attachments.cache)
+      end
+
+      rep = Term.rep_of(dict1)
+
+      if Term.changes?(input, after: rep)
+        attachments.cache.put({attachments.id, input}, rep)
+      end
+
+      rep
+    end
+
     # *Ascending rewriter*. See `rho.ascR`.
     def ascR(successor : Rewriter, part : Part, leafp : LeafPredicate) : Rewriter
       finite do |attachments, input|
@@ -627,6 +658,25 @@ module Ww
           end
 
           exhR(rewriter(successor, data), limit: limit || UInt32::MAX)
+        end
+
+        # |@ rho.scanR
+        #
+        # |@pattern
+        # (scanR successor_ ⍊ pairs_)
+        #
+        # |@key successor rho
+        #
+        # |@key pairs
+        # See `rho.ascR` to learn more about the pairs accepted by this rewriter.
+        #
+        # |@block
+        # *Scan rewriter*: rewrites the input dictionary's items, pairs, or both
+        # (depending on `part: _` in *pairs*).
+        matchpi %{[scanR successor_]} do
+          dirR(spec, data) do |successorR, part, leafp|
+            scanR(successorR, part, leafp)
+          end
         end
 
         # |@ rho.ascR
