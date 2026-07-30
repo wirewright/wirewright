@@ -1238,12 +1238,33 @@ module Ww::Rack
       # You are supposed to then observe the evolution of `reports`, find reports
       # for paths you're interested in, etc. Alternatively, it is possible to spawn
       # not reports but modules containing internal logic, perhaps using `rack.sensor`s
-      # and `rack.appearance`s to communicate in a distributed manner. The `rack.map`
+      # and `rack.appearance`s to communicate in a distributed manner. The `rack.ensemble`
       # node is useful for such cases. For example, the program below will show paths
       # that appear and disappear:
       #
       # ```wwml
-      # ;; TODO: Write example once rack.map is available!
+      # (circuit @reports
+      #   (path ("/tmp/dir" report) root: true))
+      #
+      # (rewriter ((scanR (rulesetR)) <-> @reports)
+      #   ;; Remove reports that are absent, except the root report.
+      #   R←(path (_ report) [absent _] ⍊ -root)
+      #     <> {(R): ()}
+      #   ;; Spawn child reports.
+      #   R←[path (path_string report) (dir children_* ⍊ -handled_)]
+      #     <> {(R):
+      #           (^(up R) ;; < report with handled: true
+      #            (^each (children as [_ member_string])
+      #              (path (^"⸢path⸣/⸢member⸣" report)))),
+      #         handled: true})
+      #
+      # (ensemble (@reports @report [path (path_string report) _] - @pool)
+      #   (backref (@key (appearance paths `key) (appearance paths key_))
+      #     (appearance paths)))
+      #
+      # (circuit (pool @pool))
+      #
+      # (sensor (journal paths _string))
       # ```
       matchpi %{[path (_string report)]}, %{[path (_string report) _]} do
         D7.gnd(node)
@@ -1315,6 +1336,101 @@ module Ww::Rack
       # |@ rack.ws
       matchpi %{[ws (@pool_ _ server _?) _*]} do
         D7.gnd(node, pool)
+      end
+
+      # |@ rack.ensemble
+      #
+      # |@pattern
+      # [ensemble (@values_ @value_ pattern_ - @pool_) children_*]
+      #
+      # |@key values rack.edge
+      # The edge where the node should search for a list of values.
+      #
+      # |@key value rack.edge
+      # Each member module of the ensemble contains a cell with this edge. The cell's
+      # value is the module's item. For example, if `(1 2 3)` is at the *values* edge
+      # `@xs`, and *value* is at `@x`, the *pool* will contain the following modules:
+      #
+      # ```wwml
+      # (module {}
+      #   (cell @x 1)
+      #   ...)
+      # (module {}
+      #   (cell @x 2)
+      #   ...)
+      # (module {}
+      #   (cell @x 3)
+      #   ...)
+      # ```
+      #
+      # In the above, `...` contains all of *children*.
+      #
+      # |@key pattern m1.operator
+      # The pattern used to extract the *key* from each item in the *values* list.
+      # The value associated with the first capture is used. Its name is irrelevant.
+      # The set of keys determines the population of the pool. For each unique key,
+      # a member module is created; when a key disappears, the corresponding module
+      # is removed. For tracking purposes each `module` contains an additional
+      # `(cell @key _?)`. Keys must uniquely identify items. Otherwise, the item(s)
+      # and key(s) are ignored -- the ensemble node is "confused".
+      #
+      # |@key pool rack.edge
+      # The edge of the pool where active member modules are stored.
+      #
+      # |@key children rack
+      # Supplies nodes for member module. It must not contain cells with the edge
+      # `@key` and *value*; otherwise you risk a name clash.
+      #
+      # |@summary
+      # Maps items of a list to modules.
+      #
+      # |@block
+      # Maintains a population of *member modules* for each keyed item in
+      # the list referred to by *values*. "Recruits" a module for each new
+      # key and its corresponding item and places it in the *pool*. When
+      # the key is removed, the corresponding module is removed from the *pool*.
+      # The key of an item can be a stable part of it. In that case the module's
+      # state is preserved while the key is stable. Importantly, modules currently
+      # have *read-only* access to items in the *values* list: they cannot write
+      # back. As the item changes, the *value* cell in the corresponding module
+      # will be updated. *Write* access to allow bidirectionality is a TODO. It
+      # is difficult to implement because it is very conflict-prone.
+      #
+      # |@example
+      # The following circuit:
+      #
+      # ```wwml
+      # (cell @xs ((a 1) (b 2) (c 3)))
+      # (ensemble (@xs @x (k_ _) - @pool)
+      #   (p "Hello World"))
+      # (circuit (pool @pool))
+      # ```
+      #
+      # Populates the pool as follows:
+      #
+      # ```wwml
+      # (cell @xs ((a 1) (b 2) (c 3)))
+      # (ensemble (@xs @x (k_ _) - @pool))
+      # (circuit (pool @pool)
+      #   (module {}
+      #     (cell @key a)
+      #     (cell @x (a 1))
+      #     (p "Hello World"))
+      #   (module {}
+      #     (cell @key b)
+      #     (cell @x (b 2))
+      #     (p "Hello World"))
+      #   (module {}
+      #     (cell @key c)
+      #     (cell @x (c 3))
+      #     (p "Hello World")))
+      # ```
+      #
+      # Notice how the `@key` cell was created automatically.
+      matchpi %{[ensemble (@values_ @_ _ - @pool_) _*]} do
+        # NOTE: the other edge, @values_ ⏏@value_⏏, is an interior edge, it
+        # is not exposed to the outside world.
+        D7.gnd(node, values, pool)
       end
 
       otherwise do

@@ -210,17 +210,20 @@ class Ww::Rack::Automaton
       Database.step(@database_state) do |database|
         Parser.step(@parser_state) do |parser|
           WebSocket.step(@websocket_state) do |web_socket|
-            D7.step(@parser, subframes.last) do |hg|
-              prepass.call(hg) do |hg|
-                proposals = [] of D7::Patch
+            Ensemble.step do |ensemble|
+              D7.step(@parser, subframes.last) do |hg|
+                prepass.call(hg) do |hg|
+                  proposals = [] of D7::Patch
 
-                extrinsics.propose(hg, proposals)
-                parser.propose(hg, proposals)
-                database.propose(hg, proposals)
-                web_socket.propose(hg, proposals)
-                Rack.propose(hg, proposals)
+                  extrinsics.propose(hg, proposals)
+                  parser.propose(hg, proposals)
+                  database.propose(hg, proposals)
+                  web_socket.propose(hg, proposals)
+                  ensemble.propose(hg, proposals)
+                  Rack.propose(hg, proposals)
 
-                D7::Regime.merge(hg, proposals)
+                  D7::Regime.merge(hg, proposals)
+                end
               end
             end
           end
