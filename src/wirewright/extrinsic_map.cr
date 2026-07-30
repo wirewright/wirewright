@@ -190,6 +190,8 @@ module Ww
 
       @relays << qids.shift
       @relays << qids.shift
+
+      Log.trace { "ExtrinsicMap fibers are running" }
     end
 
     # Worker fibers are started automatically when needed. They keep running
@@ -205,6 +207,8 @@ module Ww
       end
 
       wg.wait
+
+      Log.trace { "ExtrinsicMap fibers are stopped" }
 
       @relays.clear
     end

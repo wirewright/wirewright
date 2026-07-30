@@ -109,6 +109,11 @@ module Ww::Rack::Extrinsics
       end
     end
 
+    # Despawn the fibers associated with ExtrinsicMap to avoid leaks.
+    if seen_refs.empty?
+      state.extrinsics.shutdown
+    end
+
     # Let's have `added` for symmetry, I know we don't really need it...
     added = Pf::Kit.stack_array(ExtrinsicMap::Ref, 8)
     removed = Pf::Kit.stack_array(ExtrinsicMap::Ref, 8)
@@ -145,17 +150,6 @@ module Ww::Rack::Extrinsics
     end
 
     def propose(hg : D7::Hypergraph, proposals) : Nil
-      # Despawn the fibers associated with ExtrinsicMap to avoid leaks. Showing an empty
-      # circuit to Automaton is the teardown pattern we use (and it also makes sense
-      # semantically for subsystems that do not really know what "shutdown" means).
-      #
-      # We don't do this on delete (anymore) because that's rather expensive, if e.g.
-      # a path report is continuously added and removed, we're hitting the worst
-      # case all the time (spawn + do work + despawn).
-      if hg.empty?
-        @state.extrinsics.shutdown
-      end
-
       Extrinsics.propose(@state, @ctx, hg, proposals)
     end
   end
@@ -223,6 +217,11 @@ module Ww::Rack::Extrinsics
     transcription = state.transcriptions.put_if_absent(reading) do
       transcribe(reading)
     end
+
+    if prev = variant.node.term[2]?
+      return if Term.extension?(prev, of: transcription)
+    end
+
     D7.patch(variant.node, {2, transcription})
   end
 
@@ -236,6 +235,11 @@ module Ww::Rack::Extrinsics
     transcription = state.transcriptions.put_if_absent(report) do
       transcribe(report)
     end
+
+    if prev = variant.node.term[2]?
+      return if Term.extension?(prev, of: transcription)
+    end
+
     D7.patch(variant.node, {2, transcription})
   end
 
