@@ -165,10 +165,48 @@ module Ww::Rack::Database
   # Attempts to recognize a database statement in *term*.
   private def stmt?(term : Term) : Stmt?
     Term.case(term) do
+      # |@ rack.db.stmt
+      #
+      # |@pattern
+      # (exec sql_string args_*)
+      #
+      # |@key sql
+      # The SQL string to execute.
+      #
+      # |@key args
+      # Values for each "blank" in the SQL string.
+      #
+      # |@block
+      # Executes an SQL statement.
+      #
+      # |@example
+      # ```wwml
+      # ;; SQLite
+      # (exec "insert into people values (?, ?)" "Jane Doe" 36)
+      # ```
       matchpi %{(exec sql_string rest_*)}, sql: String do
         Exec.new(sql, transcribe(rest.items))
       end
 
+      # |@ rack.db.query
+      #
+      # |@pattern
+      # (query sql_string args_*)
+      #
+      # |@key sql
+      # The SQL string to execute.
+      #
+      # |@key args
+      # Values for each "blank" in the SQL string.
+      #
+      # |@block
+      # Executes an SQL query.
+      #
+      # |@example
+      # ```wwml
+      # ;; SQLite
+      # (query "select name, age from people whee age > ?" 36)
+      # ```
       matchpi %{(query sql_string rest_*)}, sql: String do
         Query.new(sql, transcribe(rest.items))
       end

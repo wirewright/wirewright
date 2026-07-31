@@ -66,14 +66,36 @@ module Ww::Rack::WebSocket
 
   private def binding?(binding : Term) : String?
     Term.case(binding) do
+      # |@ rack.ws.binding
+      #
+      # |@pattern
+      # (local port←(%number u16))
+      #
+      # |@block
+      # Binds to a local *port* (127.0.0.1).
       matchpi %{(local port←(%number u16))} do
         "tcp://127.0.0.1:#{port}"
       end
 
+      # |@ rack.ws.binding
+      #
+      # |@pattern
+      # (public port←(%number u16))
+      #
+      # |@block
+      # Binds to a public *port* (0.0.0.0).
       matchpi %{(public port←(%number u16))} do
         "tcp://0.0.0.0:#{port}"
       end
 
+      # |@ rack.ws.binding
+      #
+      # |@pattern
+      # _string
+      #
+      # |@block
+      # Passes a raw binding URI down to the networking machinery. Refer to Crystal
+      # [`HTTP::Server` docs](https://crystal-lang.org/api/1.21.0/HTTP/Server.html#bind%28uri%3AString%29%3ASocket%3A%3AAddress-instance-method).
       matchpi %{_string} do
         binding.to(String)
       end
