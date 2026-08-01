@@ -343,21 +343,21 @@ class Ww::Rack::Automaton
     circuit
   end
 
-  def next_frames(circuit circuit0 : Term, **kwargs) : Slice(Term)
-    frames = Slice[circuit0]
+  def next_subframes(circuit circuit0 : Term, **kwargs) : Slice(Term)
+    subframes = Slice[circuit0]
 
     circuit1 = self.next(circuit0, **kwargs) do |action|
       case action
       in Again
       in DisplayFrame
-        frames = frames.append(action.content)
       in DisplaySubframe
+        subframes = subframes.append(action.content)
       in End
       in Wait
       end
     end
 
-    frames.append(circuit1)
+    subframes.append(circuit1)
   end
 
   private class FrameIterator

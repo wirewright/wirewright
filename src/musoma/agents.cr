@@ -640,7 +640,10 @@ module MuSoma
       ws.extrinsics.add(@seed_ref)
       ws.state.update(&.with(:"seed-path", @seed_ref.path))
 
-      @automaton = Rack::Automaton.new(ws.parser, alarm: ws.alarm)
+      @automaton = Rack::Automaton.new(ws.parser,
+        alarm: ws.alarm,
+        display_mask: Rack::Automaton::DisplayMask::Subframe,
+      )
     end
 
     def sync(ws : Workspace)
@@ -765,7 +768,7 @@ module MuSoma
         Term.case(state) do
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
             prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
-            drafts1 = automaton.next_frames(draft, prepass: prepass, library: ws.library.get)
+            drafts1 = automaton.next_subframes(draft, prepass: prepass, library: ws.library.get)
             draft1 = drafts1.last
 
             status1 = status
