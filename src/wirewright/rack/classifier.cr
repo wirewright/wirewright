@@ -1634,18 +1634,18 @@ module Ww::Rack
       # The edge where the node should search for a list of values.
       #
       # |@key value rack.edge
-      # Each member module of the ensemble contains a cell with this edge. The cell's
-      # value is the module's item. For example, if `(1 2 3)` is at the *values* edge
-      # `@xs`, and *value* is at `@x`, the *pool* will contain the following modules:
+      # Each member device of the ensemble contains a cell with this edge. The cell's
+      # value is the device's item. For example, if `(1 2 3)` is at the *values* edge
+      # `@xs`, and *value* is at `@x`, the *pool* will contain the following devices:
       #
       # ```wwml
-      # (module {}
+      # (device {}
       #   (cell @x 1)
       #   ...)
-      # (module {}
+      # (device {}
       #   (cell @x 2)
       #   ...)
-      # (module {}
+      # (device {}
       #   (cell @x 3)
       #   ...)
       # ```
@@ -1656,30 +1656,30 @@ module Ww::Rack
       # The pattern used to extract the *key* from each item in the *values* list.
       # The value associated with the first capture is used. Its name is irrelevant.
       # The set of keys determines the population of the pool. For each unique key,
-      # a member module is created; when a key disappears, the corresponding module
-      # is removed. For tracking purposes each `module` contains an additional
+      # a member device is created; when a key disappears, the corresponding device
+      # is removed. For tracking purposes each `device` contains an additional
       # `(cell @key _?)`. Keys must uniquely identify items. Otherwise, the item(s)
       # and key(s) are ignored -- the ensemble node is "confused".
       #
       # |@key pool rack.edge
-      # The edge of the pool where active member modules are stored.
+      # The edge of the pool where active member devices are stored.
       #
       # |@key children rack
-      # Supplies nodes for member module. It must not contain cells with the edge
+      # Supplies nodes for member device. It must not contain cells with the edge
       # `@key` and *value*; otherwise you risk a name clash.
       #
       # |@summary
-      # Maps items of a list to modules.
+      # Maps items of a list to devices.
       #
       # |@block
-      # Maintains a population of *member modules* for each keyed item in
-      # the list referred to by *values*. "Recruits" a module for each new
+      # Maintains a population of *member devices* for each keyed item in
+      # the list referred to by *values*. "Recruits" a device for each new
       # key and its corresponding item and places it in the *pool*. When
-      # the key is removed, the corresponding module is removed from the *pool*.
-      # The key of an item can be a stable part of it. In that case the module's
-      # state is preserved while the key is stable. Importantly, modules currently
+      # the key is removed, the corresponding device is removed from the *pool*.
+      # The key of an item can be a stable part of it. In that case the device's
+      # state is preserved while the key is stable. Importantly, devices currently
       # have *read-only* access to items in the *values* list: they cannot write
-      # back. As the item changes, the *value* cell in the corresponding module
+      # back. As the item changes, the *value* cell in the corresponding device
       # will be updated. *Write* access to allow bidirectionality is a TODO. It
       # is difficult to implement because it is very conflict-prone.
       #
@@ -1699,15 +1699,15 @@ module Ww::Rack
       # (cell @xs ((a 1) (b 2) (c 3)))
       # (ensemble (@xs @x (k_ _) - @pool))
       # (circuit (pool @pool)
-      #   (module {}
+      #   (device
       #     (cell @key a)
       #     (cell @x (a 1))
       #     (p "Hello World"))
-      #   (module {}
+      #   (device
       #     (cell @key b)
       #     (cell @x (b 2))
       #     (p "Hello World"))
-      #   (module {}
+      #   (device
       #     (cell @key c)
       #     (cell @x (c 3))
       #     (p "Hello World")))

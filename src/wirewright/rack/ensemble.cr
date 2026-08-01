@@ -82,7 +82,7 @@ module Ww::Rack::Ensemble
     contents1 = Term::Dict.build do |contents_commit|
       pool.contents.items.each do |content|
         Term.case(content) do
-          matchpi %{[module _dict _*]} do
+          matchpi %{[device _*]} do
             next unless member = member?(variant, content)
             # Do not add if this key was removed.
             next unless assignment = assignments[member.key]?
@@ -102,7 +102,7 @@ module Ww::Rack::Ensemble
         next if pool_buckets.has_key?(key)
 
         instance = Term::Dict.build do |instance_commit|
-          instance_commit << :module << Term[]
+          instance_commit << :device
           instance_commit << {:cell, {:edge, :key}, key}
           instance_commit << {:cell, variant.value, assignment}
           instance_commit.concat(variant.template.items)
@@ -115,18 +115,18 @@ module Ww::Rack::Ensemble
     D7.patch(pool.node, {2, contents1})
   end
 
-  defrecord MemberModule,
+  defrecord MemberDevice,
     key : Term,
     value : Term,
     key_index : Int32,
     value_index : Int32
 
-  def member?(variant : Standard, content : Term) : MemberModule?
-    Term.matchpi?(content, %{[module _dict _*]}) do
+  def member?(variant : Standard, content : Term) : MemberDevice?
+    Term.matchpi?(content, %{[device _*]}) do
       key = value = nil
 
-      children = content.items.move(2)
-      children.each_with_index(offset: 2) do |child, child_key|
+      children = content.items.move(1)
+      children.each_with_index(offset: 1) do |child, child_key|
         Term.case(child) do
           matchpi %{[cell @key term_]} do
             key = {term: term, index: child_key}
@@ -144,7 +144,7 @@ module Ww::Rack::Ensemble
 
       next unless key && value
 
-      MemberModule.new(key[:term], value[:term], key[:index], value[:index])
+      MemberDevice.new(key[:term], value[:term], key[:index], value[:index])
     end
   end
 end
