@@ -82,6 +82,17 @@ https://github.com/user-attachments/assets/3213e84f-2696-49a0-a286-5908f77ecbcd
 
 Reference: `examples/msort.rack.wwml`.
 
+### WebSocket server
+
+In this example, I time-travel through a small "conversation". You can see how each connection is given
+its own `device`, and devices interact with each other using `sensor`s and `appearance`s. There is no
+centralized "chat" state inside the program; *the symbolic world itself* plays the role of centralized
+state, so to speak. 
+
+https://github.com/user-attachments/assets/a3141c05-4242-4b40-8a05-f2c632a659f3
+
+Reference: `examples/websocket-chat.rack.wwml`.
+
 ## Tutorials
 
 I'm going to try writing tutorials for Wirewright. Please visit one of:
