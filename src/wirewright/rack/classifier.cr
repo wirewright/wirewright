@@ -1621,8 +1621,12 @@ module Ww::Rack
       #
       # |@key binding rack.ws.binding
       # Specifies where to bind the server.
-      matchpi %{[ws (@pool_ _ server _?) _*]} do
+      matchpi %{[ws [@pool_ _ server _?] _*]} do
         D7.gnd(node, pool)
+      end
+
+      matchpi %{[ws (@messages_ -> _ -> @replies_) _?]} do
+        D7.gnd(node, messages, replies)
       end
 
       # |@ rack.ensemble

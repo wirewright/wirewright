@@ -2,49 +2,80 @@ module Ww::Rack::WebSocket
   extend self
 
   defcase State,
-    epoch : Automaton::Epoch,
-    running : Set(String),
-    subscription : WebSocketService::Subscription?,
+    serving : Set(String),
+    connected_to : Set(WebSocketClientService::Conn),
+    subscription : ->,
     mutation: true
 
   def state(epoch : Automaton::Epoch) : State
-    State.new(epoch, running: Set(String).new, subscription: nil)
+    serving = Set(String).new
+    connected_to = Set(WebSocketClientService::Conn).new
+    subscription = -> { epoch.call }
+    State.new(serving, connected_to, subscription)
   end
 
   def pending?(state : State) : Bool
-    state.running.present?
+    state.serving.present? || state.connected_to.present?
   end
 
-  defrecord StepContext, bindings : Set(String)
+  defrecord StepContext,
+    bindings : Set(String),
+    conns : Set(WebSocketClientService::Conn)
 
   def step(state : State, & : Proposer -> T) : T forall T
     seen_bindings = Set(String).new
+    seen_conns = Set(WebSocketClientService::Conn).new
 
-    ctx = StepContext.new(seen_bindings)
+    ctx = StepContext.new(seen_bindings, seen_conns)
     result = yield Proposer.new(state, ctx)
 
-    if state.running.empty? && !seen_bindings.empty?
-      state.subscription = WebSocketService.subscribe(state.epoch)
-    elsif !state.running.empty? && seen_bindings.empty?
-      assert subscription = state.subscription
-      WebSocketService.unsubscribe(subscription)
+    if state.serving.empty? && !seen_bindings.empty?
+      WebSocketServerService.subscribe(state.subscription)
+    elsif !state.serving.empty? && seen_bindings.empty?
+      WebSocketServerService.unsubscribe(state.subscription)
+    end
+
+    if state.connected_to.empty? && !seen_conns.empty?
+      WebSocketClientService.subscribe(state.subscription)
+    elsif !state.connected_to.empty? && seen_conns.empty?
+      WebSocketClientService.unsubscribe(state.subscription)
     end
 
     # Handle servers started.
     seen_bindings.each do |binding|
-      next if binding.in?(state.running)
+      next if binding.in?(state.serving)
 
-      WebSocketService.start(binding)
+      WebSocketServerService.start(binding)
     end
 
     # Handle servers stopped.
-    state.running.each do |binding|
+    state.serving.each do |binding|
       next if binding.in?(seen_bindings)
 
-      WebSocketService.stop(binding)
+      WebSocketServerService.stop(binding)
     end
 
-    state.running = seen_bindings
+    # Handle each client added.
+    seen_conns.each do |conn|
+      if conn.in?(state.connected_to)
+        # To maintain synchronicity, we only do reads in `step` for `Client`.
+        # If there are many `ws` nodes, all of them get the same message; which
+        # we then dequeue here, once per connection.
+        WebSocketClientService.dequeue(conn)
+      end
+
+      WebSocketClientService.connect(conn)
+    end
+
+    # Handle each client removed.
+    state.connected_to.each do |conn|
+      next if conn.in?(seen_conns)
+
+      WebSocketClientService.disconnect(conn)
+    end
+
+    state.connected_to = seen_conns
+    state.serving = seen_bindings
 
     result
   end
@@ -62,7 +93,15 @@ module Ww::Rack::WebSocket
     node : D7::Node,
     pool : D7::AbsEdge,
     binding : String,
+    in_edge : Term,
+    out_edge : Term,
     template : Term::Dict
+
+  defrecord Client,
+    node : D7::Node,
+    message : D7::AbsEdge,
+    conn : WebSocketClientService::Conn,
+    reply : D7::AbsEdge
 
   private def binding?(binding : Term) : String?
     Term.case(binding) do
@@ -108,10 +147,17 @@ module Ww::Rack::WebSocket
   def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :ws) do |node|
       Term.case(node.term) do
-        matchpi %{[ws (@pool_ bindingQ_ server _?) template_*]} do
+        matchpi %{[ws (@pool_ bindingQ_ server _? ⍊ in: (%optional @in @input_) out: (%optional @out @output_)) template_*]} do
           continue unless binding = binding?(bindingQ)
 
-          variant = Server.new(node, node.resolve(pool), binding, template.as_d)
+          variant = Server.new(node, node.resolve(pool), binding, input, output, template.as_d)
+          step(state, ctx, hg, variant)
+        end
+
+        matchpi %{[ws (@message_ -> connQ_ -> @reply_) _?]} do
+          continue unless conn = WebSocketClientService.conn?(connQ)
+
+          variant = Client.new(node, node.resolve(message), conn, node.resolve(reply))
           step(state, ctx, hg, variant)
         end
 
@@ -139,14 +185,14 @@ module Ww::Rack::WebSocket
 
     ctx.bindings << variant.binding
 
-    case status = WebSocketService.checkout?(variant.binding)
-    in Nil, WebSocketService::Pending
+    case status = WebSocketServerService.checkout?(variant.binding)
+    in Nil, WebSocketServerService::Pending
       # (ws (_ _ server ⏏) _*)
       D7.patch(variant.node, {1, 3, :pending})
-    in WebSocketService::Dn # Error
+    in WebSocketServerService::Dn # Error
       # (ws (_ _ server ⏏) _*)
       D7.patch(variant.node, {1, 3, {:dn, status.detail}})
-    in WebSocketService::Up
+    in WebSocketServerService::Up
       journal = status.journal
 
       contents0 = pool.contents
@@ -155,9 +201,9 @@ module Ww::Rack::WebSocket
       # Process events from the journal.
       journal.each do |event|
         case event
-        in WebSocketService::ClientConnected
-          contents1 = contents1.append(client(event.id, variant.template))
-        in WebSocketService::ClientDisconnected
+        in WebSocketServerService::ClientConnected
+          contents1 = contents1.append(client_repr(event.id, variant))
+        in WebSocketServerService::ClientDisconnected
           contents1 = fmap(contents1) do |client|
             case client
             in ConnectedClient
@@ -165,7 +211,7 @@ module Ww::Rack::WebSocket
             in DisconnectedClient
             end
           end
-        in WebSocketService::ClientReceived
+        in WebSocketServerService::ClientReceived
           contents1 = fmap(contents1) do |client|
             case client
             in ConnectedClient
@@ -188,7 +234,7 @@ module Ww::Rack::WebSocket
         in ConnectedClient
           seen << client.id
           each_outbound_message(client) do |message|
-            WebSocketService.send(variant.binding, client.id, message)
+            WebSocketServerService.send(variant.binding, client.id, message)
           end
 
           drain(client)
@@ -201,7 +247,7 @@ module Ww::Rack::WebSocket
       status.clients.each do |client_id|
         next if client_id.in?(seen)
 
-        WebSocketService.drop(variant.binding, client_id)
+        WebSocketServerService.drop(variant.binding, client_id)
       end
 
       # (ws (_ _ server ⏏) _*)
@@ -213,9 +259,48 @@ module Ww::Rack::WebSocket
     end
   end
 
+  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, variant : Client) : D7::Patch?
+    ctx.conns << variant.conn
+
+    case event = WebSocketClientService.checkout?(variant.conn)
+    in Nil # Disconnected
+      status_patch = D7.patch(variant.node, {2, nil})
+    in WebSocketClientService::Up
+      status_patch = D7.patch(variant.node, {2, :up})
+    in WebSocketClientService::Dn
+      status_patch = D7.patch(variant.node, {2, {:dn, event.detail}})
+    in WebSocketClientService::Pending
+      status_patch = D7.patch(variant.node, {2, :pending})
+    end
+
+    source_patch = pass do
+      next unless source = Rack.cell?(hg, variant.message)
+      next unless message = source.value?
+
+      message = stringify(message)
+      next unless WebSocketClientService.send?(variant.conn, message)
+
+      D7.patch(source.node, {2, nil})
+    end
+
+    target_patch = pass do
+      next unless target = Rack.cell?(hg, variant.reply)
+      next unless target.value?.nil?
+      next unless reply = WebSocketClientService.head?(variant.conn)
+
+      D7.patch(target.node, {2, reply})
+    end
+
+    D7.patches(
+      status_patch,
+      source_patch || D7::Patch.new,
+      target_patch || D7::Patch.new,
+    )
+  end
+
   defrecord ClientQueue, key : Int32, queue : Term::Dict, copying: true
 
-  alias Client = ConnectedClient | DisconnectedClient
+  alias ClientRepr = ConnectedClient | DisconnectedClient
 
   defrecord ConnectedClient,
     id : UUID,
@@ -226,17 +311,19 @@ module Ww::Rack::WebSocket
 
   defrecord DisconnectedClient
 
-  private def client(id : UUID, template : Term::Dict) : Term
+  private def client_repr(id : UUID, variant : Server) : Term
     device = Term::Dict.build do |commit|
       commit << :device
       commit << {:cell, {:edge, :id}, id.to_s}
-      commit.concat(template.items)
+      commit << {:cell, variant.in_edge, Term[]}
+      commit << {:cell, variant.out_edge, Term[]}
+      commit.concat(variant.template.items)
     end
 
     Term.of(device)
   end
 
-  private def client?(candidate : Term) : Client?
+  private def client?(candidate : Term) : ClientRepr?
     Term.matchpi?(candidate, %{[device _*]}) do
       id : UUID? = nil
       inbound : ClientQueue? = nil
@@ -279,7 +366,7 @@ module Ww::Rack::WebSocket
     end
   end
 
-  private def patch(original : Term, client : Client) : Term
+  private def patch(original : Term, client : ClientRepr) : Term
     result = original
 
     if inbound = client.inbound?
@@ -293,32 +380,27 @@ module Ww::Rack::WebSocket
     result
   end
 
-  private def send(client : ConnectedClient, message : String) : Client
+  private def send(client : ConnectedClient, message : String) : ClientRepr
     return client unless inbound = client.inbound?
 
     client.copy_with(inbound: inbound.copy_with(queue: inbound.queue.append(message)))
   end
 
-  private def drain(client : ConnectedClient) : Client
+  private def drain(client : ConnectedClient) : ClientRepr
     return client unless outbound = client.outbound?
 
     client.copy_with(outbound: outbound.copy_with(queue: Term[]))
   end
 
-  private def each_outbound_message(client : Client, & : String ->) : Nil
+  private def each_outbound_message(client : ClientRepr, & : String ->) : Nil
     return unless outbound = client.outbound?
 
     outbound.queue.items.each do |item|
-      if str = item.as_s?
-        yield str.to(String)
-        next
-      end
-
-      yield ML.compact(item)
+      yield stringify(item)
     end
   end
 
-  private def fmap(contents : Term::Dict, & : Client -> Client?) : Term::Dict
+  private def fmap(contents : Term::Dict, & : ClientRepr -> ClientRepr?) : Term::Dict
     Term.flatten(contents) do |_, item|
       unless client0 = client?(item)
         next Term.rep(item)
@@ -332,5 +414,13 @@ module Ww::Rack::WebSocket
 
       rep
     end
+  end
+
+  private def stringify(term : Term) : String
+    if str = term.as_s?
+      return str.to(String)
+    end
+
+    ML.compact(term)
   end
 end

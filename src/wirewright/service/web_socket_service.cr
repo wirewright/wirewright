@@ -1,5 +1,8 @@
-# The WebSocket service centralizes web socket handling in Wirewright.
-module Ww::WebSocketService
+# The WebSocket server service centralizes web socket server handling
+# in Wirewright.
+#
+# There is also this service's counterpart, the `WebSocketClientService`.
+module Ww::WebSocketServerService
   extend self
 
   alias Status = Up | Dn | Pending
@@ -26,34 +29,25 @@ module Ww::WebSocketService
 
   defrecord OutboundInterrupt
 
-  # :nodoc:
-  alias Subscription = ->
-
   @@lock = Sync::Mutex.new
   @@servers = {} of String => Server
   @@statuses = Pf::Map(String, Status).new
-  @@subscriptions = Set(Subscription).new
+  @@subscriptions = Set(->).new
 
   # Adds a subscription to changes to statuses. When any status changes,
-  # *callable* will be called, so it must respond to `#call`. Returns
-  # the subscription so that you can unsubscribe.
+  # *callable* will be called.
   #
   # WARNING: *callable*s must not do heavy work. The expected use-case is to
   # pass `BlockingSignal` or a wrapper around it (such as e.g. `Automaton::Epoch`).
-  def subscribe(callable) : Subscription
-    subscription = -> { callable.call }
-
+  def subscribe(callable : ->) : Nil
     @@lock.synchronize do
-      @@subscriptions << subscription
+      @@subscriptions << callable
     end
-
-    subscription
   end
 
-  # Removes a *subscription* created using `subscribe`.
-  def unsubscribe(subscription : Subscription) : Nil
+  def unsubscribe(callable : ->) : Nil
     @@lock.synchronize do
-      @@subscriptions.delete(subscription)
+      @@subscriptions.delete(callable)
     end
   end
 
@@ -113,11 +107,20 @@ module Ww::WebSocketService
 
           case item
           in String
-            ws.send(item)
+            begin
+              ws.send(item)
+            rescue e : Socket::Error | IO::Error | OpenSSL::SSL::Error
+              unless ws.closed?
+                ws.close(:abnormal_closure)
+              end
+              break
+            end
           in OutboundInterrupt
             break
           end
         end
+
+        Log.trace { "client(#{client_id}): message relay stopped" }
       end
     end
 
@@ -270,5 +273,241 @@ module Ww::WebSocketService
       # Rely on the `on_close` callback to do cleanup.
       ws.close
     end
+  end
+end
+
+# The WebSocket client service centralizes web socket client handling
+# in Wirewright.
+#
+# There is also this service's counterpart, the `WebSocketServerService`.
+module Ww::WebSocketClientService
+  extend self
+
+  Log = ::Log.for(self)
+
+  defrecord Conn,
+    host : String,
+    port : UInt16,
+    path : String,
+    index : UInt32,
+    secure : Bool,
+    max_retries : UInt32
+
+  DEFAULT_MAX_RETRIES = 10u32
+
+  def conn?(term : Term) : Conn?
+    return unless uriQ = term.as_s?
+    return unless uri = URI.parse(uriQ.to(String))
+    return unless host = uri.host
+    return unless port = uri.port
+    return unless UInt16::MIN <= port <= UInt16::MAX
+
+    case uri.scheme
+    when "ws"  then secure = false
+    when "wss" then secure = true
+    else
+      return
+    end
+
+    index = uri.query_params["index"]?.try(&.to_u32?) || 0u32
+    max_retries = uri.query_params["max-retries"]?.try(&.to_u32?) || DEFAULT_MAX_RETRIES
+
+    Conn.new(host, port.to_u16, uri.path, index, secure, max_retries)
+  end
+
+  alias Command = Send | Disconnect
+
+  defrecord Send, message : String
+  defrecord Disconnect
+
+  alias Journal = Slice(String)
+
+  defrecord Up
+  defrecord Dn, detail : String
+  defrecord Pending
+
+  @@lock = Sync::Mutex.new
+  @@journals = {} of Conn => Journal
+  @@controls = {} of Conn => BlockingQueue(Command)
+  @@connections = {} of Conn => Up | Dn | Pending
+  @@subscriptions = Set(->).new
+
+  # WARNING: *callable*s must not do heavy work. The expected use-case is to
+  # pass `BlockingSignal` or a wrapper around it (such as e.g. `Automaton::Epoch`).
+  def subscribe(callable : ->) : Nil
+    @@lock.synchronize do
+      @@subscriptions << callable
+    end
+  end
+
+  def unsubscribe(callable : ->) : Nil
+    @@lock.synchronize do
+      @@subscriptions.delete(callable)
+    end
+  end
+
+  def connect(conn : Conn) : Nil
+    @@lock.synchronize do
+      return if @@connections.has_key?(conn)
+
+      @@connections[conn] = Pending.new
+      @@subscriptions.each(&.call)
+
+      spawn(name: "WebSocketClientService client fiber") do
+        runloop(conn)
+      end
+    end
+  end
+
+  def disconnect(conn : Conn) : Nil
+    @@lock.synchronize do
+      @@journals.delete(conn)
+      @@connections.delete(conn)
+      if control = @@controls.delete(conn)
+        control << Disconnect.new
+      end
+    end
+  end
+
+  private def runloop(conn : Conn) : Nil
+    min_retry_delay = 500.milliseconds
+    max_retry_delay = 30.seconds
+    retry_budget = conn.max_retries
+
+    rng = Random::PCG32.new
+
+    loop do
+      Log.trace { "#{conn}: connection attempt with retry_budget=#{retry_budget}" }
+
+      begin
+        ws = HTTP::WebSocket.new(conn.host, conn.path, conn.port, tls: conn.secure ? true : nil)
+
+        Log.trace { "#{conn}: connection established" }
+        retry_budget = conn.max_retries
+
+        handle(conn, ws)
+      rescue e : Socket::ConnectError | IO::Error
+        if retry_budget.zero? # Expended
+          Log.trace { "#{conn}: max retries exceeded" }
+          @@lock.synchronize do
+            @@connections[conn] = Dn.new("max retries exceeded")
+            @@subscriptions.each(&.call)
+          end
+          return
+        end
+
+        @@lock.synchronize do
+          @@connections[conn] = Pending.new
+          @@subscriptions.each(&.call)
+        end
+
+        attempt = conn.max_retries - retry_budget
+        exp = Math.min(min_retry_delay * 2**attempt, max_retry_delay)
+        delay = exp * (0.5..1.0).sample(rng) # With jitter
+
+        Log.trace { "#{conn}: retry attempt with delay=#{delay}" }
+        sleep delay
+
+        retry_budget -= 1
+      rescue e : Socket::Error | IO::Error | OpenSSL::SSL::Error
+        Log.trace(exception: e) { "#{conn}: fail without retry attempts" }
+        @@lock.synchronize do
+          @@connections[conn] = Dn.new("connection failure: #{e.message}")
+          @@subscriptions.each(&.call)
+        end
+      end
+    end
+  end
+
+  private def handle(conn : Conn, ws : HTTP::WebSocket) : Nil
+    control = BlockingQueue(Command).new
+
+    @@lock.synchronize do
+      return unless @@connections.has_key?(conn) # Closed before we can even do anything.
+
+      @@journals[conn] = Journal.empty
+      @@controls[conn] = control
+      @@connections[conn] = Up.new
+      @@subscriptions.each(&.call)
+    end
+
+    spawn(name: "WebSocketClientService control") do
+      Log.trace { "#{conn}: control msgloop running" }
+
+      loop do
+        command = control.shift
+
+        Log.trace { "#{conn}: #{command}" }
+
+        case command
+        in Send
+          ws.send(command.message)
+        in Disconnect
+          unless ws.closed?
+            ws.close(:normal_closure)
+          end
+          break
+        end
+      end
+
+      Log.trace { "#{conn}: control msgloop stopped" }
+    end
+
+    ws.on_message do |message|
+      @@lock.synchronize do
+        next unless journal = @@journals[conn]?
+
+        @@journals[conn] = journal.append(message)
+        @@subscriptions.each(&.call)
+      end
+    end
+
+    ws.on_close do |code, _|
+      Log.trace { "#{conn}: closed with code=#{code}" }
+
+      control << Disconnect.new
+
+      @@lock.synchronize do
+        @@journals.delete(conn)
+        @@controls.delete(conn)
+        @@connections.delete(conn)
+        @@subscriptions.each(&.call)
+      end
+    end
+
+    # If the socket was closed in the meantime, that will be caught by
+    # `WebSocket#run`.
+
+    Log.trace { "#{conn}: run" }
+    ws.run
+  end
+
+  def checkout?(conn : Conn) : Up | Dn | Pending | Nil
+    @@lock.synchronize do
+      @@connections[conn]?
+    end
+  end
+
+  def dequeue(conn : Conn) : Nil
+    @@lock.synchronize do
+      return unless journal = @@journals[conn]?
+      return unless journal.present?
+
+      @@journals[conn] = journal + 1
+    end
+  end
+
+  def head?(conn : Conn) : String?
+    return unless journal = @@lock.synchronize { @@journals[conn]? }
+
+    journal.first?
+  end
+
+  def send?(conn : Conn, message : String) : Bool
+    return false unless control = @@lock.synchronize { @@controls[conn]? }
+
+    control << Send.new(message)
+
+    true
   end
 end

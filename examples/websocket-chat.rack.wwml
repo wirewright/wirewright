@@ -1,6 +1,4 @@
 (ws (@pool (local 5000) server)
-  (cell @in ())
-  (cell @out ())
   (frag @rx (sensor (many chat _string)))
   (frag @tx (appearance chat))
   (frag @user)
