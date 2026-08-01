@@ -380,7 +380,7 @@ module Ww::WebSocketClientService
       Log.trace { "#{conn}: connection attempt with retry_budget=#{retry_budget}" }
 
       begin
-        ws = HTTP::WebSocket.new(conn.host, conn.path, conn.port, tls: conn.secure ? true : nil)
+        ws = HTTP::WebSocket.new(conn.host, conn.path, conn.port.to_i, tls: conn.secure ? true : nil)
 
         Log.trace { "#{conn}: connection established" }
         retry_budget = conn.max_retries

@@ -112,7 +112,7 @@ module Ww::Microfold
 
       case body
       in CuedAtom
-        CueCond.new(Pf::Set[requirement], body)
+        CueCond.new(Pf::Set[requirement.as(UpCue | DnCue)], body)
       in CueCond
         CueCond.new(body.requirements.add(requirement), body.body)
       end

@@ -491,7 +491,7 @@ Wirewright uses a custom dev tool to manage the various subprojects inside the r
 the dev tool with:
 
 ```console
-crystal build src/dev.cr --progress -Dpreview_mt -Dexecution_context
+crystal build src/dev.cr --progress
 ```
 
 ### Using the dev tool

@@ -352,8 +352,10 @@ module Ww::M1
       # an array of Rigids and FlexRegions.
       state = state.map do |unit|
         case unit
-        in Rigid               then unit
-        in Distrib, NonDistrib then FlexRegion.new([unit])
+        in Rigid
+          unit
+        in Distrib, NonDistrib
+          FlexRegion.new([unit] of Distrib | NonDistrib)
         end
       end
 

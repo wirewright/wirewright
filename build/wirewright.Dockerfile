@@ -1,4 +1,4 @@
-FROM crystallang/crystal:1.20.2
+FROM crystallang/crystal:1.21.0
 
 # Install dependencies
 RUN apt-get update \
