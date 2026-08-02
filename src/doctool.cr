@@ -85,12 +85,12 @@ module Doctool
     end
 
     # Find all `|@key`s with ref and turn them into `key` components.
-    article.scan(/^\h*\|@key\h+(\S+)\h+(\S+)(?:\h*\R((?:(?!\|@)[\s\S])*?))?(?=\h*\|@|\z)/m) do |(_, capture, ref, body)|
+    article.scan(/^\h*\|@key\h+(\S+)\h+(\S+)(?:\h*\v((?:(?!\|@)[\s\S])*?))(?=\h*\|@|\z)/m) do |(_, capture, ref, body)|
       components << Key.new(Term.of(Term::Sym.new(capture)), Ref.new(ref.split('.')), body)
     end
 
     # Find all `|@key`s without ref and turn them into `key` components.
-    article.scan(/^\h*\|@key\h+(\S+)(?:\h*\v((?:(?!\|@)[\s\S])*?))?(?=\h*\|@|\z)/m) do |(_, capture, body)|
+    article.scan(/^\h*\|@key\h+(\S+)(?:\h*\v((?:(?!\|@)[\s\S])*?))(?=\h*\|@|\z)/m) do |(_, capture, body)|
       components << Key.new(Term.of(Term::Sym.new(capture)), nil, body)
     end
 
