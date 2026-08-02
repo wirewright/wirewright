@@ -166,20 +166,10 @@ module Ww::Rack::WebSocket
     end
   end
 
-  defrecord Pool, node : D7::Node, contents : Term::Dict
-
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, variant : Server) : D7::Patch?
-    # Find the associated pool cell.
-    pools = Pf::Kit.stack_array(Pool, 1)
-    hg.each_node_with_head(Term.of(:pool), memberof: {variant.pool}) do |node|
-      Term.matchpiT?(node.term, %{[pool @_ contents_dict]}) do
-        pools << Pool.new(node, contents)
-      end
-    end
-
     # If there's no associated pool, then the server's "machine" is incomplete,
     # so it cannot handle requests -- nor does it *exist*, really.
-    unless pool = pools.single?
+    unless pool = Rack.pool?(hg, variant.pool)
       return D7.patch(variant.node, {1, 3, {:dn, "missing pool"}})
     end
 

@@ -60,6 +60,19 @@ module Ww::Rack
 
     candidates.single?
   end
+
+  defrecord Pool, node : D7::Node, contents : Term::Dict
+
+  def pool?(hg : D7::Hypergraph, edge : D7::AbsEdge) : Pool?
+    pools = Pf::Kit.stack_array(Pool, 1)
+    hg.each_node_with_head(Term.of(:pool), memberof: {edge}) do |node|
+      Term.matchpiT?(node.term, %{[pool @_ contents_dict]}) do
+        pools << Pool.new(node, contents)
+      end
+    end
+
+    pools.single?
+  end
 end
 
 require "./rack/classifier"

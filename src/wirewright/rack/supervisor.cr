@@ -28,22 +28,10 @@ module Ww::Rack::Supervisor
     end
   end
 
-  defrecord Pool, node : D7::Node, contents : Term::Dict
-
   private def step(hg : D7::Hypergraph, node : D7::Node, variant : Standard) : D7::Patch?
-    # Find the associated values cell.
     return unless values_cell = Rack.cell?(hg, variant.values)
     return unless values = values_cell.value?.as_d?
-
-    # Find the associated pool cell.
-    pools = Pf::Kit.stack_array(Pool, 1)
-    hg.each_node_with_head(Term.of(:pool), memberof: {variant.pool}) do |node|
-      Term.matchpiT?(node.term, %{[pool @_ contents_dict]}) do
-        pools << Pool.new(node, contents)
-      end
-    end
-
-    return unless pool = pools.single?
+    return unless pool = Rack.pool?(hg, variant.pool)
 
     item_buckets = {} of Term => Set(Term)
 
