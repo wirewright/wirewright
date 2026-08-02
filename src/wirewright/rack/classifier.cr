@@ -1485,7 +1485,7 @@ module Ww::Rack
       # You are supposed to then observe the evolution of `reports`, find reports
       # for paths you're interested in, etc. Alternatively, it is possible to spawn
       # not reports but modules containing internal logic, perhaps using `rack.sensor`s
-      # and `rack.appearance`s to communicate in a distributed manner. The `rack.ensemble`
+      # and `rack.appearance`s to communicate in a distributed manner. The `rack.supervisor`
       # node is useful for such cases. For example, the program below will show paths
       # that appear and disappear:
       #
@@ -1505,7 +1505,7 @@ module Ww::Rack
       #              (path (^"⸢path⸣/⸢member⸣" report)))),
       #         handled: true})
       #
-      # (ensemble (@reports @report [path (path_string report) _] - @pool)
+      # (supervisor (@reports @report [path (path_string report) _] - @pool)
       #   (rig (@report [path (path_string report) _]
       #               -> (appearance paths `path)
       #                  (appearance paths path_))
@@ -1631,18 +1631,19 @@ module Ww::Rack
         D7.gnd(node, messages, replies)
       end
 
-      # |@ rack.ensemble
+      # |@ rack.supervisor
       #
       # |@pattern
-      # [ensemble (@values_ @value_ pattern_ - @pool_) children_*]
+      # [supervisor (@values_ @value_ pattern_ - @pool_) children_*]
       #
       # |@key values rack.edge
-      # The edge where the node should search for a list of values.
+      # The edge where the node should search for the cell with a list of values.
       #
       # |@key value rack.edge
-      # Each member device of the ensemble contains a cell with this edge. The cell's
-      # value is the device's item. For example, if `(1 2 3)` is at the *values* edge
-      # `@xs`, and *value* is at `@x`, the *pool* will contain the following devices:
+      # The edge of the cell containing the item assigned by the supervisor. Each
+      # member device is instantiated with such a cell. For example, if the list
+      # `(1 2 3)` is at the *values* edge, and *value* is `@x`, the *pool* will
+      # contain the following devices:
       #
       # ```wwml
       # (device {}
@@ -1659,42 +1660,51 @@ module Ww::Rack
       # In the above, `...` contains all of *children*.
       #
       # |@key pattern m1.operator
-      # The pattern used to extract the *key* from each item in the *values* list.
-      # The value associated with the first capture is used. Its name is irrelevant.
+      # The pattern used to extract the *key* for each item in the *values* list.
+      # Items not matching this pattern are skipped. The value associated with
+      # the first capture is used as the key; its name is irrelevant.
+      #
       # The set of keys determines the population of the pool. For each unique key,
-      # a member device is created; when a key disappears, the corresponding device
-      # is removed. For tracking purposes each `device` contains an additional
-      # `(cell @key _?)`. Keys must uniquely identify items. Otherwise, the item(s)
-      # and key(s) are ignored -- the ensemble node is "confused".
+      # a member device is created; when the key disappears, the corresponding device
+      # is removed. Keys must uniquely identify items. Otherwise, the item(s) and
+      # device(s) are ignored -- the supervisor node is "confused" by them.
       #
       # |@key pool rack.edge
-      # The edge of the pool where active member devices are stored.
+      # The edge of the pool where member devices are maintained.
       #
       # |@key children rack
       # Supplies nodes for member device. It must not contain cells with the edge
       # `@key` and *value*; otherwise you risk a name clash.
       #
       # |@summary
-      # Maps items of a list to devices.
+      # Maintains a dynamic population of devices based on a list at a cell.
       #
       # |@block
       # Maintains a population of *member devices* for each keyed item in
-      # the list referred to by *values*. "Recruits" a device for each new
-      # key and its corresponding item and places it in the *pool*. When
-      # the key is removed, the corresponding device is removed from the *pool*.
-      # The key of an item can be a stable part of it. In that case the device's
-      # state is preserved while the key is stable. Importantly, devices currently
-      # have *read-only* access to items in the *values* list: they cannot write
-      # back. As the item changes, the *value* cell in the corresponding device
-      # will be updated. *Write* access to allow bidirectionality is a TODO. It
-      # is difficult to implement because it is very conflict-prone.
+      # the list at *values*.
+      #
+      # "Recruits" a device for each new key and its corresponding item, and
+      # places it in the *pool*.
+      #
+      # When a key is removed, the corresponding device is removed from the *pool*.
+      #
+      # The key of an item should be a stable part of it. A device's state
+      # (i.e., the device itself) is preserved while its key is stable. If
+      # keys are unstable, you'll see a lot of "device churn". If keys collide
+      # within the same generation, the corresponding device(s) are removed
+      # and the keys ignored. If keys collide across generations, the device
+      # from the previous generation is reused (along with its state).
+      #
+      # Devices have *read-only* access to items in the *values* list: they
+      # cannot write back. As the item changes, the *value* cell in
+      # the corresponding device will be updated.
       #
       # |@example
       # The following circuit:
       #
       # ```wwml
       # (cell @xs ((a 1) (b 2) (c 3)))
-      # (ensemble (@xs @x (k_ _) - @pool)
+      # (supervisor (@xs @x (k_ _) - @pool)
       #   (p "Hello World"))
       # (circuit (pool @pool))
       # ```
@@ -1703,7 +1713,7 @@ module Ww::Rack
       #
       # ```wwml
       # (cell @xs ((a 1) (b 2) (c 3)))
-      # (ensemble (@xs @x (k_ _) - @pool))
+      # (supervisor (@xs @x (k_ _) - @pool))
       # (circuit (pool @pool)
       #   (device
       #     (cell @key a)
@@ -1720,7 +1730,7 @@ module Ww::Rack
       # ```
       #
       # Notice how the `@key` cell was created automatically.
-      matchpi %{[ensemble (@values_ @_ _ - @pool_) _*]} do
+      matchpi %{[supervisor (@values_ @_ _ - @pool_) _*]} do
         # NOTE: the other edge, @values_ ⏏@value_⏏, is an interior edge, it
         # is not exposed to the outside world.
         D7.gnd(node, values, pool)

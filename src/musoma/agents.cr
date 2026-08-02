@@ -194,7 +194,7 @@ module MuSoma
           end
 
           # :ditto:
-          matchpi %{[ensemble (@_ @_ _ - @_) _*]} do
+          matchpi %{[supervisor (@_ @_ _ - @_) _*]} do
             D7.parent(node.as_d, 2u32...node.itemsize.to_u32)
           end
 

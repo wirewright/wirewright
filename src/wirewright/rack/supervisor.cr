@@ -1,6 +1,5 @@
-# Implements the `ensemble` node.
-# TODO: Write access (each member must have bidi access to item!!)
-module Ww::Rack::Ensemble
+# Implements the `supervisor` node.
+module Ww::Rack::Supervisor
   extend self
 
   def step(& : Proposer -> T) : T forall T
@@ -9,7 +8,7 @@ module Ww::Rack::Ensemble
 
   struct Proposer
     def propose(hg : D7::Hypergraph, proposals) : Nil
-      Ensemble.propose(hg, proposals)
+      Supervisor.propose(hg, proposals)
     end
   end
 
@@ -21,8 +20,8 @@ module Ww::Rack::Ensemble
     template : Term
 
   def propose(hg : D7::Hypergraph, proposals)
-    hg.propose(proposals, :ensemble) do |node|
-      Term.matchpi?(node.term, %{[ensemble (@values_ @value_ pattern_ - @pool_) template_*]}) do
+    hg.propose(proposals, :supervisor) do |node|
+      Term.matchpi?(node.term, %{[supervisor (@values_ @value_ pattern_ - @pool_) template_*]}) do
         variant = Standard.new(node.resolve(values), value, pattern, node.resolve(pool), template)
         step(hg, node, variant)
       end
@@ -49,10 +48,8 @@ module Ww::Rack::Ensemble
     item_buckets = {} of Term => Set(Term)
 
     values.items.each_with_index do |value, index|
-      next unless env = M1.match?(variant.pattern, value)
-      next unless env.size == 1
+      next unless key = key?(variant.pattern, value)
 
-      _, key = env.ee.first
       item_bucket = item_buckets.put_if_absent(key) { Set(Term).new }
       item_bucket << value
     end
@@ -67,16 +64,12 @@ module Ww::Rack::Ensemble
     end
 
     pool_buckets = {} of Term => Set(Term)
-    pool_indices = {} of Term => Array(Int32)
 
     pool.contents.items.each do |content|
       next unless member = member?(variant, content)
 
       pool_bucket = pool_buckets.put_if_absent(member.key) { Set(Term).new }
       pool_bucket << member.value
-
-      index_bucket = pool_indices.put_if_absent(member.key) { [] of Int32 }
-      index_bucket << member.key_index
     end
 
     contents1 = Term::Dict.build do |contents_commit|
@@ -103,7 +96,6 @@ module Ww::Rack::Ensemble
 
         instance = Term::Dict.build do |instance_commit|
           instance_commit << :device
-          instance_commit << {:cell, {:edge, :key}, key}
           instance_commit << {:cell, variant.value, assignment}
           instance_commit.concat(variant.template.items)
         end
@@ -115,36 +107,27 @@ module Ww::Rack::Ensemble
     D7.patch(pool.node, {2, contents1})
   end
 
-  defrecord MemberDevice,
-    key : Term,
-    value : Term,
-    key_index : Int32,
-    value_index : Int32
+  defrecord MemberDevice, key : Term, value : Term, value_index : Int32
 
   def member?(variant : Standard, content : Term) : MemberDevice?
     Term.matchpi?(content, %{[device _*]}) do
-      key = value = nil
-
       children = content.items.move(1)
-      children.each_with_index(offset: 1) do |child, child_key|
-        Term.case(child) do
-          matchpi %{[cell @key term_]} do
-            key = {term: term, index: child_key}
-          end
+      children.each_with_index(offset: 1) do |child, index|
+        Term.matchpi?(child, %{[cell @edge_ proposal_]}) do
+          next unless edge == variant.value
+          next unless key = key?(variant.pattern, proposal)
 
-          matchpi %{[cell @edge_ proposal_]} do
-            next unless edge == variant.value
-
-            value = {term: proposal, index: child_key}
-          end
-
-          otherwise { }
+          return MemberDevice.new(key, proposal, index)
         end
       end
-
-      next unless key && value
-
-      MemberDevice.new(key[:term], value[:term], key[:index], value[:index])
     end
+  end
+
+  private def key?(pattern : Term, value : Term) : Term?
+    return unless env = M1.match?(pattern, value)
+    return unless env.size == 1
+
+    _, key = env.ee.first
+    key
   end
 end
