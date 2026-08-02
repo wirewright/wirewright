@@ -575,68 +575,68 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
-      # |@ rack.backref
+      # |@ rack.rig
       #
       # |@pattern
-      # [backref (@edge_ patterns_*) child_]
+      # [rig (@edge_ selector_ -> patterns_*) child_]
       #
       # |@key edge rack.edge
-      # The edge which which the backreference should watch.
+      # The edge where the rig should search for a source cell.
+      #
+      # |@key selector m1.operator
+      # The pattern to use to extract part(s) of the value at *edge*.
       #
       # |@key patterns m1.operator
-      # A list of alternative patterns. The first pattern that matches *child* is
-      # used in a backmap. The backmap plugs the value of *edge* where the same-
-      # named capture tells it to.
+      # A list of alternative patterns to find part(s) of *child* with. The first
+      # matching pattern is used. The rig node assigns the captures made by *selector*
+      # to the same-named places identified by the matching pattern.
+      #
+      # |@summary
+      # Rewrites parts of a child node based on a cell.
       #
       # |@block
-      # Backrefs are like `rack.node`s with a pattern, except there can be zero or more
-      # alternative *patterns*, and also backrefs aren't cells. The value at *edge* is
-      # backmapped into *child* during evaluation.
+      # Binds parts of the value at *edge* (determined by *selector*) to part(s)
+      # of a *child* node (determined by the first matching *pattern*) unidirectionally
+      # (*edge* controls *child* but not the other way).
       #
       # |@example
       # ```wwml
+      # ;; Step 0
       # (cell @xs (1 2 3))
       #
       # ;; Increment the middle number in @xs.
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
       #
-      # ;; Bind the value of @x to {count: _} in @ys using the backref node.
-      # (part (@xs @mid) (_ mid_ _))
-      # (backref (@mid (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # ;; Bind the value of the middle number to {count: _} in @ys using
+      # ;; the rig node.
+      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys))
-      # ```
       #
-      # The circuit above evolves as follows:
-      #
-      # ```wwml
       # ;; Step 1
       # (cell @xs (1 3 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (part (@xs @mid) (_ mid_ _))
-      # (backref (@mid (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys {count: 3}))
       #
       # ;; Step 2
       # (cell @xs (1 4 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (part (@xs @mid) (_ mid_ _))
-      # (backref (@mid (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys {count: 4}))
       #
       # ;; Step 3
       # (cell @xs (1 5 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (part (@xs @mid) (_ mid_ _))
-      # (backref (@mid (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys {count: 5}))
       #
       # ;; ...etc.
       # ```
-      matchpi %{[backref (@edge_ _*) _]} do
+      matchpi %{[rig (@edge_ _ -> _*) _]} do
         leaf = D7.gnd(node, edge)
         D7.circuit(node.as_d, 2u32...3u32, leaf)
       end
@@ -1506,7 +1506,9 @@ module Ww::Rack
       #         handled: true})
       #
       # (ensemble (@reports @report [path (path_string report) _] - @pool)
-      #   (backref (@key (appearance paths `key) (appearance paths key_))
+      #   (rig (@report [path (path_string report) _]
+      #               -> (appearance paths `path)
+      #                  (appearance paths path_))
       #     (appearance paths)))
       #
       # (circuit (pool @pool))

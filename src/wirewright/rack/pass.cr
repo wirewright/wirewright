@@ -492,20 +492,20 @@ module Ww::Rack
     end
   end
 
-  def backref_step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+  def rig_step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
     D7.step(parser, circuit) do |hg|
       prepass.call(hg) do |hg|
-        D7::Regime.merge(hg, proposals: backref_step(hg))
+        D7::Regime.merge(hg, proposals: rig_step(hg))
       end
     end
   end
 
-  def backref_step(hg : D7::Hypergraph) : Indexable(D7::Patch)
-    hg.propose(:backref) do |node|
+  def rig_step(hg : D7::Hypergraph) : Indexable(D7::Patch)
+    hg.propose(:rig) do |node|
       Term.case(node.term) do
-        matchpi %{[backref header←(input←(%'edge name_) _*) payload_]} do
-          patterns = header.items.move(1)
-          backref_step(hg, node, node.resolve(input), name, patterns, payload)
+        matchpi %{[rig header←(@input_ selector_ -> _*) payload_]} do
+          patterns = header.items.move(2)
+          rig_step(hg, node, node.resolve(input), selector, patterns, payload)
         end
 
         otherwise { }
@@ -513,21 +513,51 @@ module Ww::Rack
     end
   end
 
-  def backref_step(hg : D7::Hypergraph, node : D7::Node, input : D7::AbsEdge, name : Term, patterns : Indexable(Term), payload : Term) : D7::Patch?
+  def rig_step(hg : D7::Hypergraph, node : D7::Node, input : D7::AbsEdge, selector : Term, patterns : Indexable(Term), payload : Term) : D7::Patch?
     return unless source = Rack.cell?(hg, input)
 
-    if value = source.value?
-      backspec = Term.of(Term[].with(name, value))
-    else
-      backspec = Term.of(Term[].with({name}, Term[]))
+    # If value is present and matches, synthesize a backspec that plugs stuff in.
+    backspec = pass do
+      next unless value = source.value?
+      next unless env = M1.match?(selector, value)
+
+      Term::Dict.build do |commit|
+        env.each_entry do |key, value|
+          commit.with(key, {:"^verbatim", value})
+        end
+      end
     end
 
-    result = patterns.leftmost? do |pattern|
-      M1.backmap?(pattern, backspec, payload)
+    if backspec
+      result = patterns.leftmost? do |pattern|
+        M1.backmap?(pattern, Term.of(backspec), payload)
+      end
+
+      return unless result
+      return D7.patch(node, {2, result})
     end
 
-    return unless result
+    # If value is absent or doesn't match, we have to clear stuff. But we
+    # don't know the names of things because *selector* doesn't match. So
+    # instead we match each *pattern* in turn to figure out the captures
+    # to clear.
+    env_log_list = patterns.leftmost? do |pattern|
+      matches = M1.matches_and_logs(Term[], M1.operator(pattern), payload)
+      matches.present? ? matches : nil
+    end
 
+    return unless env_log_list
+
+    backspec = Term::Dict.build do |commit|
+      env_log_list.each do |env, _|
+        env.each_entry do |capture, _|
+          commit.with({capture}, Term[])
+        end
+      end
+    end
+
+    rep = M1.backmapR(Slice[{env_log_list, backspec}], payload)
+    result = Term.collapse(rep)
     D7.patch(node, {2, result})
   end
 end

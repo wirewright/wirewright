@@ -177,8 +177,8 @@ class Ww::Rack::Automaton
 
   # FIXME: this method is a mess
   private def step(subframes, frames, circuit : Term, prepass, library) : Nil
-    # HACK: This is a "shadow step" to make sure backrefs execute in the same tick
-    # invisibly from the main Rack pass. From the latter's point of view, backrefs
+    # HACK: This is a "shadow step" to make sure rigs execute in the same tick
+    # invisibly from the main Rack pass. From the latter's point of view, rigs
     # are immediate.
     #
     # NOTE: this here is supposed to be executed only before the very first step of a circuit.
@@ -186,7 +186,7 @@ class Ww::Rack::Automaton
     # it one circuit this tick, and another one the next tick. Or it could be the same, but
     # evolved circuit. The point being, there's no distinction. So we have to "fix" the circuit
     # at the beginning always. Hopefully this will be optimized later, there are ways to do that.
-    subframes << Rack.backref_step(@parser, circuit, prepass).last
+    subframes << Rack.rig_step(@parser, circuit, prepass).last
 
     pass do
       input = subframes.last
@@ -231,8 +231,8 @@ class Ww::Rack::Automaton
       end
     end)
 
-    # Execute backref step again to fix inconsistencies.
-    frames << Rack.backref_step(@parser, subframes.last, prepass).last
+    # Execute rig step again to fix inconsistencies.
+    frames << Rack.rig_step(@parser, subframes.last, prepass).last
   end
 
   # Advances the automaton by one abstract step by evolving *circuit*. Returns
