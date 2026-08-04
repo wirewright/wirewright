@@ -18,15 +18,15 @@ module Ww::D7
     # Resolves *edge* with respect to this node.
     #
     # This is necessary in cases where you read an edge from a node (e.g.
-    # using pattern matching) inside a regime. You can't use the edge as-is
-    # because the actual cell (or node) it refers to can be different due
+    # using pattern matching). You can't use the edge as-is because the actual
+    # cell (or node) it refers to can be different due
     # to modules in-between. You must first pass the edge through `resolve`
     # so that it finds the correct edge with respect to the node that you've
     # read it from.
     #
     # See also: `AbsEdge`.
     def resolve(edge : Term) : AbsEdge
-      AbsEdge.new(*@scope[edge])
+      @scope.resolve(edge)
     end
   end
 
@@ -49,192 +49,463 @@ module Ww::D7
   # is a subset of the set of nodes in the graph. It's easier to think of a hypergraph
   # as a society of nodes, where each node can participate in zero or more groups,
   # each group consisting of other nodes in the community.
-  class Hypergraph
+
+  struct Hypergraph
+    # Returns the target level of this hypergraph.
+    getter level : UInt32
+
     # :nodoc:
-    def initialize
-      @head_index = {} of Term => Pf::USet32
-      @nodes = [] of Node
-
-      # TODO: I think we can actually try storing this in the good old
-      # array of arrays or something along these lines (aka edge array;
-      # for graphs it's a set of pairs and for hypergraphs it's a set
-      # of sets; the representation for either is a matter of artistry,
-      # so to speak). Probabilistic indexing can help us search without
-      # the overhead of hashing and so on, and ALSO without the overhead
-      # of linear scans. We'd also have high density/linear access pattern.
-      # Representing hypergraphs extremely efficiently is actually a very
-      # interesting problem, you see, and that's exactly NOT what we're
-      # doing here right now.
-      @node_edges = {} of NodeId => Array(AbsEdge)
-      @edge_nodes = {} of AbsEdge => Pf::USet32
+    def initialize(@tree : ParseTree, @level : UInt32)
     end
 
-    # Mutates this hypergraph to add a node with the given *addr*, *scope*,
-    # and *term*. Returns the resulting `NodeId`.
-    def add!(addr : NodeAddr, scope : NodeScope, term : Term) : NodeId
-      unless head = term[0]?
-        # Abort
-        raise ArgumentError.new("could not determine node head")
+    # :nodoc:
+    alias Guide = GroupNode -> Bool
+
+    # :nodoc:
+    defrecord WalkContext,
+      root : ParseTree,
+      guide : Guide,
+      ids : Range(NodeId, NodeId),
+      sink : NodeId, NodeAddr, NodeScope, Gnd -> WalkFlow
+
+    # :nodoc:
+    enum WalkFlow
+      Continue
+      Break
+    end
+
+    # :nodoc:
+    def self.walk(root : ParseTree, level : UInt32, guide : Guide, fn : Node, Set(Term) -> WalkFlow, ids : Range(NodeId, NodeId) = NodeId::MIN...NodeId::MAX) : Nil
+      assert ids.exclusive?
+      assert ids.begin <= ids.end
+
+      sink = ->(id : NodeId, addr : NodeAddr, scope : NodeScope, feature : Gnd) do
+        assert id.in?(ids)
+
+        # Use Gnd#defn (the node's definition) rather than #node here.
+        # The hypergraph should only ever see the defn.
+        node = Node.new(id, addr, scope, feature.head, feature.defn)
+        fn.call(node, feature.edges)
       end
 
-      # Commit
-      id = @nodes.size.to_u32
-      @head_index[head] = (@head_index[head]? || Pf::USet32[]).add(id)
-      @nodes << Node.new(id, addr, scope, head, term)
-
-      id
+      ctx = WalkContext.new(root, guide, ids, sink)
+      walk(ctx, NodeAddr.empty, NodeScope.empty, root, level, 0u32)
     end
 
-    # Mutates this hypergraph to replace the term associated with *node id*.
-    # The node's scope and edges are left intact.
-    def replace!(node_id : NodeId, term : Term) : Nil
-      unless head1 = term[0]?
-        # Abort
-        raise ArgumentError.new("could not determine node head")
+    private def self.walk(ctx, addr, scope, tree : InertLeaf, level, id_zero) : WalkFlow
+      WalkFlow::Continue
+    end
+
+    private def self.walk(ctx, addr, scope, tree : GndLeaf, level, id_zero) : WalkFlow
+      unless level.zero?
+        return WalkFlow::Continue
       end
 
-      # Commit
-      node0 = @nodes[node_id]
-      head0 = node0.head
+      ctx.sink.call(id_zero, addr, scope, tree.feature)
+    end
 
-      unless head0 == head1
-        @head_index[head0] = @head_index[head0].delete(node_id)
-        @head_index[head1] = (@head_index[head1]? || Pf::USet32[]).add(node_id)
+    private def self.walk(ctx, addr, scope, tree : ScopeNode, level, id_zero) : WalkFlow
+      walk(ctx, addr, scope.append(addr, tree.feature.scope), tree.child, level, id_zero)
+    end
+
+    private def self.walk(ctx, addr, scope, tree : MixtureNode, level, id_zero) : WalkFlow
+      walk(ctx, addr, scope, tree.child, level, id_zero)
+    end
+
+    private def self.walk(ctx, addr, scope, tree : CircuitNode, level, id_zero) : WalkFlow
+      if level.zero?
+        return walk(ctx, addr, scope, tree.leaf, level, id_zero)
       end
 
-      node1 = Node.new(node0.id, node0.addr, node0.scope, head1, term)
-      @nodes[node_id] = node1
-    end
-
-    # Mutates this hypergraph to subscribe a node with the given *node id*
-    # to *edge*.
-    def join!(node_id : NodeId, edge : AbsEdge) : Nil
-      edges = @node_edges.put_if_absent(node_id) { [] of AbsEdge }
-      edges << edge
-
-      @edge_nodes[edge] = (@edge_nodes[edge]? || Pf::USet32.new).add(node_id)
-    end
-
-    # Mutates this hypergraph to unsubscribe a node with the given *node id*
-    # from *edge*.
-    def leave!(node_id : NodeId, edge : AbsEdge) : Nil
-      pass do
-        next unless edges = @node_edges[node_id]?
-
-        edges.delete(edge)
-        next unless edges.empty?
-
-        @node_edges.delete(node_id)
+      # This branch cannot possibly contain circuits at the target level.
+      if D7.maxlevel(tree) < level
+        return WalkFlow::Continue
       end
 
-      pass do
-        next unless members = @edge_nodes[edge]?
+      # NOTE: Circuits must surround themselves with scopes to seal themselves off
+      # from the outside world completely. Otherwise, two circuits with the same
+      # level would be able to communicate, and that would go against our semantics.
+      #
+      #   ;; Must NOT work!
+      #   (circuit @0 (cell @x 100))
+      #   (circuit @1 (cell @y))
+      #   (circuit @2 (feed @x @y))
+      #
+      subscope = scope.append(addr, NodeScope::ClosedExcept.new(Term[]))
+      treatment = GroupNode.new(D7.parent(tree.feature.node, tree.feature.range), tree.children)
+      walk(ctx, addr, subscope, treatment, level - 1, id_zero)
+    end
 
-        @edge_nodes[edge] = members = members.delete(node_id)
-        next unless members.empty?
-
-        @edge_nodes.delete(edge)
+    private def self.walk(ctx, addr, scope, tree : GroupNode, level, id_zero) : WalkFlow
+      # This branch cannot possibly contain circuits at the target level.
+      if D7.maxlevel(tree) < level
+        return WalkFlow::Continue
       end
-    end
 
-    # Returns the node with the given *node id*.
-    def [](node_id : NodeId) : Node
-      @nodes[node_id]
-    end
+      # The guide must only apply to the level we're searching for, because
+      # all important metrics are level-local and will likely block our descent
+      # down to *level* incorrectly.
+      if level.zero? && !ctx.guide.call(tree)
+        return WalkFlow::Continue
+      end
 
-    # Yields nodes of this hypergraph.
-    def each_node(& : Node ->) : Nil
-      @nodes.each { |node| yield node }
-    end
+      assert ctx.ids.exclusive?
 
-    # Returns `true` if this hypergraph has a node with the given *head*.
-    def has_head?(head : Term) : Bool
-      @head_index.has_key?(head)
-    end
+      tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
+        id_width = D7.population(child)
+        break if ctx.ids.end <= id_zero
 
-    def empty? : Bool
-      @nodes.empty?
-    end
-
-    # Yields nodes and their heads.
-    def each_node_with_head(& : Node, Term ->) : Nil
-      @head_index.each do |head, bucket|
-        bucket.each do |node_id|
-          yield @nodes[node_id], head
+        if ctx.ids.begin < id_zero + id_width
+          case walk(ctx, addr.append(key), scope, child, level, id_zero)
+          in .continue?
+          in .break?
+            return WalkFlow::Break
+          end
         end
+
+        id_zero += id_width
+      end
+
+      WalkFlow::Continue
+    end
+
+    # :nodoc:
+    def self.descend?(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree, NodeScope}?
+      id_zero = NodeId.new(0)
+      prefix = NodeAddr.empty
+      scope = NodeScope.empty
+
+      addr.each do |index|
+        loop do
+          case tree
+          in InertLeaf, GndLeaf
+            return
+          in MixtureNode
+            tree = tree.child
+            next
+          in ScopeNode
+            scope = scope.append(prefix, tree.feature.scope)
+            tree = tree.child
+            next
+          in GroupNode, CircuitNode
+            offset = tree.feature.range.begin
+            assert index >= offset
+
+            # Do not forget to shift the id of the child by all prior ids.
+            prior = tree.children.trim(index - offset)
+            prior.each do |child|
+              id_zero += D7.population(child)
+            end
+
+            tree = tree.children[index - offset]
+          end
+
+          break
+        end
+
+        prefix = prefix.append(index)
+      end
+
+      {id_zero, tree, scope}
+    end
+
+    # :nodoc:
+    defrecord ResolveContext,
+      root : ParseTree,
+      guide : Guide,
+      sink : NodeId, NodeAddr, NodeScope, Gnd ->
+
+    # :nodoc:
+    def self.resolve(root : ParseTree, addr : NodeAddr, scope : NodeScope, guide : Guide, membership : Slice(Term), id_zero, fn : Node ->) : Nil
+      sink = ->(id : NodeId, addr : NodeAddr, scope : NodeScope, feature : Gnd) do
+        # Use Gnd#defn (the node's definition) rather than #node here.
+        # The hypergraph should only ever see the defn.
+        node = Node.new(id, addr, scope, feature.head, feature.defn)
+        fn.call(node)
+      end
+
+      ctx = ResolveContext.new(root, guide, sink)
+      resolve_root(ctx, addr, scope, root, membership, id_zero)
+    end
+
+    private def self.resolve_root(ctx, addr, scope, tree : InertLeaf, membership, id_zero) : Nil
+    end
+
+    private def self.resolve_root(ctx, addr, scope, tree : GndLeaf, membership, id_zero) : Nil
+      resolve_inner(ctx, addr, scope, tree, membership, id_zero)
+    end
+
+    private def self.resolve_root(ctx, addr, scope, tree : ScopeNode, membership, id_zero) : Nil
+      scope_step = tree.feature.scope
+      resolve_inner(ctx, addr, scope.append(addr, scope_step), tree.child, membership, id_zero)
+    end
+
+    private def self.resolve_root(ctx, addr, scope, tree : MixtureNode, membership, id_zero) : Nil
+      resolve_root(ctx, addr, scope, tree.child, membership, id_zero)
+    end
+
+    private def self.resolve_root(ctx, addr, scope, tree : CircuitNode, membership, id_zero) : Nil
+      stat = tree.levels[-2]? || LevelSummary.new
+      return unless membership.all?(&.in?(stat.edges))
+
+      subscope = scope.append(addr, NodeScope::ClosedExcept.new(Term[]))
+
+      tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
+        resolve_inner(ctx, addr.append(key), subscope, child, membership, id_zero)
+        id_zero += D7.population(child)
       end
     end
 
-    # Yields only nodes with the given *head* (if any).
-    def each_node_with_head(head : Term, & : Node ->) : Nil
-      return unless bucket = @head_index[head]?
+    private def self.resolve_root(ctx, addr, scope, tree : GroupNode, membership, id_zero) : Nil
+      resolve_inner(ctx, addr, scope, tree, membership, id_zero)
+    end
 
-      bucket.each do |node_id|
-        yield @nodes[node_id]
+    private def self.resolve_inner(ctx, addr, scope, tree : InertLeaf, membership, id_zero) : Nil
+    end
+
+    private def self.resolve_inner(ctx, addr, scope, tree : GndLeaf, membership, id_zero) : Nil
+      return if membership.empty?
+      return unless membership.all?(&.in?(tree.feature.edges))
+
+      ctx.sink.call(id_zero, addr, scope, tree.feature)
+    end
+
+    private def self.resolve_inner(ctx, addr, scope, tree : ScopeNode, membership, id_zero) : Nil
+      return if membership.empty?
+
+      scope_step = tree.feature.scope
+
+      case scope_step
+      in NodeScope::OpenExcept
+        # If `locals` blocks any one edge from *membership*, prune. Only if
+        # `locals` lets all edges from *membership* pass through, do we descend.
+        return unless membership.all? { |edge| !edge.in?(scope_step.edges) }
+
+        resolve_inner(ctx, addr, scope.append(addr, scope_step), tree.child, membership, id_zero)
+      in NodeScope::ClosedExcept
+        translated = Pf::Kit.stack_array(Term, 8)
+
+        membership.each do |member|
+          scope_step.bindings.each_entry do |interior, exterior|
+            next unless exterior == member
+            translated << interior
+          end
+        end
+
+        translated_slice = translated.to_unsafe_readonly_buffer_or_spill_slice!
+        resolve_inner(ctx, addr, scope.append(addr, scope_step), tree.child, translated_slice, id_zero)
       end
     end
 
-    # A more restricted query which works with both *head* and *memberof*.
-    def each_node_with_head(head : Term, *, memberof edges : Enumerable(AbsEdge), & : Node ->) : Nil
-      return unless bucket = @head_index[head]?
+    private def self.resolve_inner(ctx, addr, scope, tree : MixtureNode, membership, id_zero) : Nil
+      return if membership.empty?
 
-      edges.each do |edge|
-        return if bucket.empty?
-        return unless members = @edge_nodes[edge]?
+      resolve_inner(ctx, addr, scope, tree.child, membership, id_zero)
+    end
 
-        # The `&` below will most likely call `UInt64#&`, which is basically
-        # as fast as we can get.
-        bucket &= members
-      end
+    private def self.resolve_inner(ctx, addr, scope, tree : CircuitNode, membership, id_zero) : Nil
+      return if membership.empty?
 
-      bucket.each do |node_id|
-        yield @nodes[node_id]
+      resolve_inner(ctx, addr, scope, tree.leaf, membership, id_zero)
+    end
+
+    private def self.resolve_inner(ctx, addr, scope, tree : GroupNode, membership, id_zero) : Nil
+      return if membership.empty?
+
+      stat = tree.levels.last? || LevelSummary.new
+      return unless membership.all?(&.in?(stat.edges))
+      return unless ctx.guide.call(tree)
+
+      tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
+        resolve_inner(ctx, addr.append(key), scope, child, membership, id_zero)
+        id_zero += D7.population(child)
       end
     end
 
-    # Yields absolute edges associated with the node with the given *id*.
+    # Returns `true` if *head* is present in the hypergraph at *any* level.
+    def has_head_anywhere?(head : Term) : Bool
+      levels = D7.levels(@tree)
+      levels.any?(&.heads.includes?(head))
+    end
+
+    # Returns `true` if there are no nodes at the current level and below
+    # the current level.
+    def bottom? : Bool
+      maxlevel = D7.maxlevel(@tree)
+
+      if @level < maxlevel
+        return false
+      end
+
+      if @level > maxlevel
+        return true
+      end
+
+      # When exactly at maxlevel, we have to actually iterate to see if
+      # there's anything.
+
+      guide = Guide.new { true }
+
+      empty = true
+      sink = ->(node : Node, edges : Set(Term)) do
+        empty = false
+        WalkFlow::Break
+      end
+
+      Hypergraph.walk(@tree, @level, guide, sink)
+
+      empty
+    end
+
+    # Traverses nodes in the hypergraph at the target level.
+    def each_node(&fn : Node ->) : Nil
+      guide = Guide.new { true }
+
+      sink = ->(node : Node, edges : Set(Term)) do
+        fn.call(node)
+        WalkFlow::Continue
+      end
+
+      Hypergraph.walk(@tree, @level, guide, sink)
+    end
+
+    def gnd_map(replacements : Hash(NodeAddr, Gnd)) : Hypergraph
+      Hypergraph.new(D7.gnd_map(@tree, replacements), @level)
+    end
+
+    # Traverses only nodes with the given *head* in the hypergraph at the target
+    # level. Node ids are compatible with `each_node`.
+    #
+    # This is generally faster than a linear scan with `each_node` because
+    # the underlying structure indexes heads, and this method makes sure to
+    # skip as much work as possible if the head is definitely absent in
+    # a subtree.
+    def each_node_with_head(head : Term, &fn : Node ->) : Nil
+      guide = Guide.new { |group| D7.head?(group, head) }
+
+      # Guide can give false positives! We need to catch them here.
+      sink = ->(node : Node, edges : Set(Term)) do
+        if node.head == head
+          fn.call(node)
+        end
+
+        WalkFlow::Continue
+      end
+
+      Hypergraph.walk(@tree, @level, guide, sink)
+    end
+
+    def each_node_with_head(head : Term, *, memberof : Tuple(AbsEdge), &fn : Node ->) : Nil
+      # TODO: The general algorithm (for Indexable(AbsEdge)) would probably look like this:
+      #
+      # roots = membership.map do |edge|
+      #   descend?(edge.module).not_nil!
+      # end
+      #
+      # guide = Guide.new { ... head? ... }
+      #
+      # nodes = stack_array
+      #
+      # roots.each do |root|
+      #   resolve(root, guide, membership) do |node|
+      #     nodes << node
+      #   end
+      # end
+
+      edge = memberof[0]
+
+      # The first step is to descend down to the module which the caller claims to
+      # be the origin of the edge.
+      return unless row = Hypergraph.descend?(@tree, edge.module)
+
+      addr = edge.module
+      id_zero, origin, scope = row
+
+      guide = Guide.new { |group| D7.head?(group, head) }
+
+      # Guide can give false positives! We need to catch them here.
+      sink = ->(node : Node) do
+        return unless node.head == head
+
+        fn.call(node)
+      end
+
+      needle = edge.term
+      Hypergraph.resolve(origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, sink)
+    end
+
+    private def single(node_id : NodeId) : {Node, Set(Term)}
+      guide = Guide.new { true }
+
+      buffer = Pf::Kit.stack_array({Node, Set(Term)}, 1)
+      sink = ->(node : Node, edges : Set(Term)) do
+        buffer << {node, edges}
+        WalkFlow::Break
+      end
+
+      Hypergraph.walk(@tree, @level, guide, sink, ids: node_id...node_id + 1)
+
+      buffer.single
+    end
+
     def each_edge(node_id : NodeId, & : AbsEdge ->) : Nil
-      return unless edges = @node_edges[node_id]?
-
-      edges.each { |edge| yield edge }
+      node, edges = single(node_id)
+      edges.each { |edge| yield node.resolve(edge) }
     end
 
-    # Yields nodes that are members of the given *edge*.
-    def each_member(edge : AbsEdge, & : Node ->) : Nil
-      return unless member_ids = @edge_nodes[edge]?
+    def each_member(edge : AbsEdge, &fn : Node ->) : Nil
+      # The first step is to descend down to the module which the caller claims to
+      # be the origin of the edge.
+      return unless row = Hypergraph.descend?(@tree, edge.module)
 
-      member_ids.each do |member_id|
-        yield @nodes[member_id]
-      end
+      addr = edge.module
+      id_zero, origin, scope = row
+
+      guide = Guide.new { true }
+      needle = edge.term
+      Hypergraph.resolve(origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, fn)
     end
 
-    # Yields neighbors of *node id* on the given *edge*, if any.
-    def each_neighbor(*, of node_id : NodeId, on edge : AbsEdge, & : Node ->) : Nil
+    def each_neighbor(of node_id : NodeId, on edge : AbsEdge, &fn : Node ->) : Nil
       each_edge(node_id) do |candidate_edge|
         next unless edge == candidate_edge
 
         each_member(candidate_edge) do |neighbor|
           next if neighbor.id == node_id # Skip self
-          yield neighbor
+
+          fn.call(neighbor)
         end
       end
     end
 
-    def propose(*heads : Symbol, & : Node -> Patch?) : Indexable(D7::Patch)
-      proposals = [] of D7::Patch
-      propose(proposals, *heads) do |node|
-        yield node
+    def each_neighbor(node_id : NodeId, &fn : Node ->) : Nil
+      each_edge(node_id) do |candidate_edge|
+        each_member(candidate_edge) do |neighbor|
+          next if neighbor.id == node_id # Skip self
+
+          fn.call(neighbor)
+        end
       end
-      proposals
     end
 
-    def propose(proposals, *heads : Symbol, & : Node -> Patch?) : Nil
+    def [](node_id : NodeId) : Node
+      node, _ = single(node_id)
+      node
+    end
+
+    def propose(*heads : Symbol, &fn : Node -> Patch?) : Indexable(D7::Patch)
       # FIXME: stack_array miscompiles for some reason... We *really* need
       # to rewrite Pf::Map, its representation is too hard for Crystal
       # to compile...
+      proposals = [] of D7::Patch
+      propose(proposals, *heads, &fn)
+      proposals
+    end
+
+    def propose(proposals, *heads : Symbol, &fn : Node -> Patch?) : Nil
       heads.each do |head|
         each_node_with_head(Term.of(head)) do |node|
-          proposal = yield node
+          proposal = fn.call(node)
           next if proposal.nil?
 
           proposals << proposal

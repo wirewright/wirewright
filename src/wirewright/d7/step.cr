@@ -56,7 +56,7 @@ module Ww::D7
       new(Slice({NodeAddr, Any}).empty)
     end
 
-    def [](edge : Term) : {NodeAddr, Term}
+    def resolve(edge : Term) : AbsEdge
       trace = @trace
 
       while entry = trace.last?
@@ -68,7 +68,7 @@ module Ww::D7
             # In Rack:
             #  (local (⏏@dst⏏) ;; <<- WE ARE HERE, @dst found, so it's a local!
             #    (feed @src ⏏@dst⏏)
-            return addr, edge
+            return AbsEdge.new(addr, edge)
           end
           # Continue climbing. This edge falls into "open", thus outer-scoped,
           # not "except" and thus inner-scoped.
@@ -81,7 +81,7 @@ module Ww::D7
             # In Rack:
             #  (module {@x: @y} ;; <<- WE ARE HERE, no @a, so it's a local!
             #    (feed ⏏@a⏏ @x)
-            return addr, edge
+            return AbsEdge.new(addr, edge)
           end
 
           # In Rack:
@@ -93,7 +93,7 @@ module Ww::D7
         trace = trace[...-1]
       end
 
-      {NodeAddr.empty, edge}
+      AbsEdge.new(NodeAddr.empty, edge)
     end
 
     def append(addr : NodeAddr, scope : Any) : NodeScope
@@ -102,42 +102,47 @@ module Ww::D7
   end
 
   # :nodoc:
-  def update(parser : Parser, circuit : Term, level : Int, &fn : NodeAddr, NodeScope, Flat -> Term) : Term
+  def update(parser : Parser, circuit : Term, level : Int, &fn : NodeAddr, Flat -> Term) : Term
+    feature_tree = parser.parse(circuit, reply: ParseTree)
+    update(feature_tree, level, &fn)
+  end
+
+  # :nodoc:
+  def update(tree : ParseTree, level : Int, &fn : NodeAddr, Flat -> Term) : Term
     assert level >= 0
 
-    feature_tree = parser.parse(circuit, reply: ParseTree)
-    repair_tree = update(NodeAddr.empty, NodeScope.empty, feature_tree, level, fn)
+    repair_tree = update(NodeAddr.empty, tree, level, fn)
     collapse(repair_tree)
   end
 
-  private def update(addr, scope, tree : InertLeaf | GndLeaf, level, fn) : RepairTree
+  private def update(addr, tree : InertLeaf | GndLeaf, level, fn) : RepairTree
     if level.zero?
-      return fn.call(addr, scope, tree.feature)
+      return fn.call(addr, tree.feature)
     end
 
     tree.feature.node
   end
 
-  private def update(addr, scope, tree : ScopeNode, level, fn) : RepairTree
+  private def update(addr, tree : ScopeNode, level, fn) : RepairTree
     repair(tree) do |child|
-      update(addr, scope.append(addr, tree.feature.scope), child, level, fn)
+      update(addr, child, level, fn)
     end
   end
 
-  private def update(addr, scope, tree : MixtureNode, level, fn) : RepairTree
+  private def update(addr, tree : MixtureNode, level, fn) : RepairTree
     repair(tree) do |child|
-      update(addr, scope, child, level, fn)
+      update(addr, child, level, fn)
     end
   end
 
-  private def update(addr, scope, tree : CircuitNode, level, fn) : RepairTree
+  private def update(addr, tree : CircuitNode, level, fn) : RepairTree
     if level.zero?
-      return update(addr, scope, tree.leaf, level, fn)
+      return update(addr, tree.leaf, level, fn)
     end
 
     assert level > 0
 
-    if tree.maxlevel < level
+    if maxlevel(tree) < level
       # This branch cannot possibly contain circuits at the target level.
       return Term.of(tree.feature.node)
     end
@@ -151,20 +156,19 @@ module Ww::D7
     #   (circuit @1 (cell @y))
     #   (circuit @2 (feed @x @y))
     #
-    subscope = scope.append(addr, NodeScope::ClosedExcept.new(Term[]))
     treatment = GroupNode.new(parent(tree.feature.node, tree.feature.range), tree.children)
-    update(addr, subscope, treatment, level - 1, fn)
+    update(addr, treatment, level - 1, fn)
   end
 
-  private def update(addr, scope, tree : GroupNode, level, fn) : RepairTree
-    if tree.maxlevel < level
+  private def update(addr, tree : GroupNode, level, fn) : RepairTree
+    if maxlevel(tree) < level
       # This branch cannot possibly contain circuits at the target level.
       return Term.of(tree.feature.node)
     end
 
     repair(tree) do |child, index|
       key = tree.feature.range.begin + index
-      update(addr.append(key), scope, child, level, fn)
+      update(addr.append(key), child, level, fn)
     end
   end
 
@@ -179,7 +183,7 @@ module Ww::D7
   # 512 is huge and should be enough for anything anyway. With this limit, circuits
   # below depth 511 (0...512) are going to be "passive" (never evaluated; only seen
   # as `cell`s, in Rack terms).
-  MAX_SUBSTEPS = 512
+  MAX_SUBSTEPS = 512u32
 
   # Executes one time-step on *circuit* (the *previous frame*). Returns
   # the resulting sequence of substeps, the last of which is the *next frame* --
@@ -204,39 +208,22 @@ module Ww::D7
     MAX_SUBSTEPS.times do |level|
       substeps << circuit
 
-      hg = Hypergraph.new
-      running = false
-
-      # This update() can still modify the circuit -- even though *we* do not
-      # do it, *parser* might.
-      circuit = update(parser, circuit, level) do |addr, scope, flat|
-        running = true
-
-        case flat
-        in Inert
-        in Gnd
-          # Use Gnd#defn (the node's definition) rather than #node here.
-          # The hypergraph should only ever see the defn.
-          node_id = hg.add!(addr, scope, flat.defn)
-          flat.edges.each do |edge|
-            hg.join!(node_id, AbsEdge.new(*scope[edge]))
-          end
-        end
-
-        flat.node # Leave unchanged
-      end
+      tree = parser.parse(circuit, reply: D7::ParseTree)
+      hg = Hypergraph.new(tree, level)
 
       # No nodes in hypergraph => No nodes found at *level* => We're done.
-      break unless running
+      break if hg.bottom?
 
       patch = yield hg
       next if patch.empty?
 
+      # TODO: Remove this when it'd be possible to get rid of nodeids. We can
+      # just use nodeaddrs. There's no need for nodeids.
       addr_patch = patch.to_h do |node_id, replacement|
         {hg[node_id].addr, replacement}
       end
 
-      circuit = update(parser, circuit, level) do |addr, scope, flat|
+      circuit = update(parser, circuit, level) do |addr, flat|
         case flat
         in Inert then flat.node
         in Gnd   then addr_patch[addr]? || flat.node

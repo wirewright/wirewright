@@ -112,22 +112,23 @@ module MuSoma
     end
 
     def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+      replacements = {} of D7::NodeAddr => D7::Gnd
+
       figure_node_ids = Pf::USet32.transaction do |txn|
         hg.each_node_with_head(Term.of(:reflection)) do |node|
-          observation = @vantages.get?(node.addr)
-
           Term.matchpi?(node.term, %{[reflection @edge_]}) do
-            hg.replace!(node.id, Term.of(:cell, edge, observation))
+            observation = @vantages.get?(node.addr)
+            replacements[node.addr] = D7.gnd(Term.of(:cell, edge, observation), edge)
             txn << node.id
           end
         end
       end
 
-      patch = @successor.call(hg, &fn)
-
-      if figure_node_ids.empty?
-        return patch
+      if replacements.empty?
+        return @successor.call(hg, &fn)
       end
+
+      patch = @successor.call(hg.gnd_map(replacements), &fn)
 
       # Discard all patches to reflection nodes ,which we've replaced. Such patches make
       # no sense. This covers circuits like:

@@ -133,7 +133,7 @@ module Ww::Rack::Part
   SYM_PART = Term.of(:part)
 
   def probably_exists_in?(hg : D7::Hypergraph) : Bool
-    hg.has_head?(SYM_CELL) && hg.has_head?(SYM_PART)
+    hg.has_head_anywhere?(SYM_CELL) && hg.has_head_anywhere?(SYM_PART)
   end
 
   def each_root_cell(hg : D7::Hypergraph, & : D7::Node, D7::AbsEdge, Term ->) : Nil
@@ -378,6 +378,8 @@ module Ww::Rack::Part
     # with the value on their output edge, known as "endpoints".
     forest = Part.forest(hg)
 
+    replacements = {} of D7::NodeAddr => D7::Gnd
+
     # Replace endpoint [part (@from @to) ...] with (cell @to <endpoint value>).
     forest.endpoints.each do |endpoint|
       leaf = endpoint.leaf_part
@@ -398,13 +400,14 @@ module Ww::Rack::Part
       #
       #     ;; Backsys only looks at @count and then resolves it.
       #     (backsys @count ±n <> {n: ^(+ n 1)}))
-      #
-      hg.replace!(leaf.node.id, Term.of(:cell, leaf.to_rel, endpoint.value))
-      hg.leave!(leaf.node.id, leaf.from)
-      hg.join!(leaf.node.id, leaf.to_abs)
+      cell = D7.gnd(Term.of(:cell, leaf.to_rel, endpoint.value), leaf.to_rel)
+
+      # FIXME: What stuff exactly causes multiple inserts here for the same addr?
+      # Disallowing them breaks some tests...
+      replacements[leaf.node.addr] = cell
     end
 
-    patch = fn.call(hg)
+    patch = fn.call(hg.gnd_map(replacements))
 
     pipe(patch, Part.absorb(forest), Part.merge(forest))
   end

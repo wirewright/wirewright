@@ -48,13 +48,21 @@ module Ww::D7
   #
   # Second, `Gnd`'s *defn* is not treated any futher; whereas `Mixture`'s defn
   # receives recursive treatment.
-  defrecord Gnd, node : Term, defn : Term, edges : Slice(Term)
+  defrecord Gnd,
+    node : Term,
+    defn : Term,
+    head : Term,
+    edges : Set(Term)
 
   # Constructs a grounded node from an enumerable of edges *ee*.
   #
   # See `Gnd`.
   def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node) : Gnd
-    Gnd.new(node, defn, edges.to_readonly_slice(&.itself))
+    unless head = node.as_d?.try(&.items.first?)
+      raise ArgumentError.new("could not determine the head of node")
+    end
+
+    Gnd.new(node, defn, head, edges.to_set)
   end
 
   # Constructs a grounded node with the given *edges*.
@@ -145,57 +153,230 @@ module Ww::D7
     Circuit.new(node, range, leaf)
   end
 
-  # A tree of `Feature`s.
   alias ParseTree = InertLeaf | GndLeaf | MixtureNode | ScopeNode | ParentNode
 
-  defrecord InertLeaf, feature : Inert
-  defrecord GndLeaf, feature : Gnd
-  defcase MixtureNode, feature : Mixture, child : ParseTree, maxlevel : Int32
-  defcase ScopeNode, feature : Scope, child : ParseTree
+  defcase InertLeaf, feature : Inert
+
+  defcase GndLeaf, feature : Gnd do
+    @levels : Atomic(LevelSummary*) = Atomic.new(Pointer(LevelSummary).null)
+
+    def levels : Slice(LevelSummary)
+      if levelsptr = @levels.get(:acquire) # not null
+        return Slice(LevelSummary).new(levelsptr, 1, read_only: true)
+      end
+
+      levels = Slice[LevelSummary.new(1u32, Set{feature.head}, feature.edges)]
+      @levels.set(levels.to_unsafe, :release)
+
+      levels
+    end
+  end
+
+  defcase MixtureNode,
+    feature : Mixture,
+    child : ParseTree
+
+  defcase ScopeNode,
+    feature : Scope,
+    child : ParseTree
 
   alias ParentNode = GroupNode | CircuitNode
 
-  defrecord GroupNode, feature : Parent, children : Slice(ParseTree), maxlevel : Int32
-  defcase CircuitNode, feature : Circuit, children : Slice(ParseTree), leaf : ParseTree, maxlevel : Int32
+  defcase GroupNode,
+    feature : Parent,
+    children : Slice(ParseTree),
+    levels : Slice(LevelSummary)
 
-  # :nodoc:
-  def maxlevel(tree : InertLeaf | GndLeaf) : Int32
-    0
-  end
-
-  # :nodoc:
-  def maxlevel(tree : ScopeNode) : Int32
-    maxlevel(tree.child)
-  end
-
-  # :nodoc:
-  def maxlevel(tree : MixtureNode | GroupNode) : Int32
-    tree.maxlevel
-  end
-
-  # :nodoc:
-  def maxlevel(tree : CircuitNode) : Int32
-    tree.maxlevel + 1
-  end
-
-  # Smart constructor for `MixtureNode`.
-  def MixtureNode.new(feature : Mixture, child : ParseTree) : MixtureNode
-    MixtureNode.new(feature, child, D7.maxlevel(child))
-  end
+  defcase CircuitNode,
+    feature : Circuit,
+    children : Slice(ParseTree),
+    leaf : ParseTree,
+    levels : Slice(LevelSummary)
 
   # Smart constructor for `GroupNode`.
-  def GroupNode.new(feature, children : Slice(ParseTree)) : GroupNode
-    maxlevel = children.max_of? { |child| D7.maxlevel(child) } || 0
+  def GroupNode.new(feature : Parent, children : Slice(ParseTree)) : GroupNode
+    # An empty group, for example `(group)`.
+    if children.empty?
+      return GroupNode.new(feature, children, INERT_LEVELS)
+    end
 
-    GroupNode.new(feature, children, maxlevel)
+    if child = children.single?
+      return GroupNode.new(feature, children, D7.levels(child))
+    end
+
+    maxlevel = children.max_of { |child| D7.maxlevel(child) }
+
+    levels = (0...maxlevel).to_readonly_slice do |depth|
+      children.reduce(LevelSummary.new) do |memo, child|
+        level_index = -(maxlevel - depth)
+        level = D7.levels(child)[level_index]?
+        level ||= LevelSummary.new
+        LevelSummary.union(memo, level)
+      end
+    end
+
+    GroupNode.new(feature, children, levels)
   end
 
   # Smart constructor for `CircuitNode`.
-  def CircuitNode.new(feature, children : Slice(ParseTree), leaf) : CircuitNode
-    maxlevel = children.max_of? { |child| D7.maxlevel(child) } || 0
-    maxlevel += 1
+  def CircuitNode.new(feature : Circuit, children : Slice(ParseTree), leaf) : CircuitNode
+    leaf_levels = D7.levels(leaf)
 
-    CircuitNode.new(feature, children, leaf, maxlevel)
+    # FIXME: In theory we'd actually want to merge leaf_levels#prior into
+    # children levels and then append leaf_levels#last to  the result. In
+    # practice, however, `Circuit#leaf`s never contain subcircuits and they
+    # wouldn't work either way; so I doubt it's worth spending the effort here.
+    leaf_level = leaf_levels.last
+
+    if children.empty?
+      levels = Slice[LevelSummary.new, leaf_level]
+      return CircuitNode.new(feature, children, leaf, levels)
+    end
+
+    if child = children.single?
+      levels = D7.levels(child).append(leaf_level)
+      return CircuitNode.new(feature, children, leaf, levels)
+    end
+
+    maxlevel = children.max_of { |child| D7.maxlevel(child) }
+
+    levels = (0...maxlevel + 1).to_readonly_slice do |depth|
+      # Append leaf_level.
+      if depth == maxlevel
+        next leaf_level
+      end
+
+      children.reduce(LevelSummary.new) do |memo, child|
+        level_index = -(maxlevel - depth)
+        level = D7.levels(child)[level_index]?
+        level ||= LevelSummary.new
+        LevelSummary.union(memo, level)
+      end
+    end
+
+    assert levels.size >= 2
+
+    CircuitNode.new(feature, children, leaf, levels)
+  end
+
+  # TODO: For heads we can use a large-ish Bloom filter. Things like
+  # set of Term are already 64B+ of pure control overhead, we can safely use memory
+  # sizes of that kind of magnitude for the bitmap (512-1024 bits).
+  defrecord LevelSummary,
+    population : UInt32,
+    heads : Set(Term),
+    edges : Set(Term)
+
+  # :nodoc:
+  LevelSummary::EMPTY = LevelSummary.new(0u32, Set(Term).new, Set(Term).new)
+
+  # Constructs an empty level summary.
+  def LevelSummary.new : LevelSummary
+    EMPTY
+  end
+
+  # Returns the union of two level summaries.
+  def LevelSummary.union(a : LevelSummary, b : LevelSummary) : LevelSummary
+    LevelSummary.new(
+      a.population + b.population,
+      a.heads | b.heads,
+      a.edges | b.edges,
+    )
+  end
+
+  # :nodoc:
+  INERT_LEVELS = Slice[LevelSummary.new]
+
+  # :nodoc:
+  def levels(tree : InertLeaf) : Slice(LevelSummary)
+    INERT_LEVELS
+  end
+
+  # :nodoc:
+  def levels(tree : ScopeNode) : Slice(LevelSummary)
+    child_levels = levels(tree.child)
+    child_level = child_levels.last
+
+    edges = Set(Term).new
+
+    case scope = tree.feature.scope
+    in NodeScope::OpenExcept
+      child_level.edges.each do |edge|
+        # If edge is absent in edges, it's local, so it does not propagate outwards.
+        next if edge.in?(scope.edges)
+
+        edges << edge
+      end
+    in NodeScope::ClosedExcept
+      child_level.edges.each do |edge|
+        # If no exterior is defined, the edge is local to the scope, and
+        # does not propagate outwards.
+        next unless exterior = scope.bindings[edge]?
+
+        edges << exterior
+      end
+    end
+
+    child_level = LevelSummary.new(child_level.population, child_level.heads, edges)
+    child_levels.prior.append(child_level)
+  end
+
+  # :nodoc:
+  def levels(tree : MixtureNode) : Slice(LevelSummary)
+    levels(tree.child)
+  end
+
+  # :nodoc:
+  def levels(tree : GndLeaf | GroupNode | CircuitNode) : Slice(LevelSummary)
+    tree.levels
+  end
+
+  {% if flag?(:docs) %}
+    # Returns level summaries for levels of *tree*.
+    #
+    # NOTE: The **last** summary is root-most.
+    def levels(tree : ParseTree) : Slice(LevelSummary)
+    end
+  {% end %}
+
+  # Returns the circuit depth of *tree*. It is at least `1` (toplevel circuit only),
+  # but could be larger than one (e.g. `2` means toplevel circuit with subcircuits,
+  # `3` means toplevel circuits + subcircuits + sub-subcircuits, etc.)
+  def maxlevel(tree : ParseTree) : Int32
+    case tree
+    in InertLeaf, GndLeaf     then 1
+    in ScopeNode, MixtureNode then maxlevel(tree.child)
+    in GroupNode, CircuitNode then tree.levels.size
+    end
+  end
+
+  # Calculates the population statistic for *tree* (the number of ground
+  # nodes in it).
+  def population(tree : ParseTree) : UInt32
+    case tree
+    in InertLeaf
+      0u32
+    in GndLeaf
+      1u32
+    in GroupNode, CircuitNode
+      tree.levels.sum(&.population)
+    in ScopeNode, MixtureNode
+      population(tree.child)
+    end
+  end
+
+  # Returns `true` if one or more nodes with the given *head* exist in *tree*.
+  def head?(tree : ParseTree, head : Term) : Bool
+    case tree
+    in InertLeaf
+      false
+    in GndLeaf
+      tree.head == head
+    in GroupNode, CircuitNode
+      tree.levels.present? && head.in?(tree.levels.last.heads)
+    in ScopeNode, MixtureNode
+      head?(tree.child, head)
+    end
   end
 
   # *Unaugmented parse trees* are clear of "augmentation" features such as
@@ -327,6 +508,103 @@ module Ww::D7
   private def parse(clf, cache, term : Term, reply)
     cache.put_if_absent(term) do
       parse(clf, cache, clf.call(term), reply)
+    end
+  end
+
+  # Replaces `GndLeaf` nodes in *tree* according to *replacements*.
+  #
+  # HACK: Avoid this function if you can because it makes ground nodes and their
+  # parents go out of sync with `Term`s stored in `Feature#node`. The only use
+  # case where `gnd_map` is appropriate is when you want to make a "shadow"
+  # replacement of a ground node and you can guarantee that you'll discard
+  # the returned parse tree eventually instead of `repair`ing it! Basically,
+  # by `gnd_map`ing a *tree*, you invalidate all `Feature#node`s in it; so if
+  # you plan on using them, you shouldn't `gnd_map`!
+  def gnd_map(tree : ParseTree, replacements : Hash(NodeAddr, Gnd)) : ParseTree
+    gnd_map(NodeAddr.empty, tree, replacements)
+  end
+
+  private def gnd_map(addr, tree : InertLeaf, replacements) : ParseTree
+    tree
+  end
+
+  private def gnd_map(addr, tree : GndLeaf, replacements) : ParseTree
+    if feature = replacements[addr]?
+      return GndLeaf.new(feature)
+    end
+
+    tree
+  end
+
+  private def gnd_map(addr, tree : MixtureNode, replacements) : ParseTree
+    child1 = gnd_map(addr, tree.child, replacements)
+    if tree.child.same?(child1)
+      return tree # unchanged
+    end
+
+    MixtureNode.new(tree.feature, child1)
+  end
+
+  private def gnd_map(addr, tree : ScopeNode, replacements) : ParseTree
+    child1 = gnd_map(addr, tree.child, replacements)
+    if tree.child.same?(child1)
+      return tree # unchanged
+    end
+
+    ScopeNode.new(tree.feature, child1)
+  end
+
+  # :nodoc:
+  GND_REPLACEMENTS_SMALL = 16
+
+  private def gnd_map(addr, tree : GroupNode | CircuitNode, replacements) : ParseTree
+    # Prune this branch if no replacements talk about it. Most often replacements
+    # is very small so this should be cheap enough versus traversal down to
+    # ground nodes.
+    if replacements.size < GND_REPLACEMENTS_SMALL
+      possibly_contains = false
+
+      replacements.each_key do |replacement_addr|
+        next unless replacement_addr.starts_with?(addr)
+        possibly_contains = true
+        break
+      end
+
+      unless possibly_contains
+        return tree
+      end
+    end
+
+    changed_indices = Pf::Kit.stack_array(Int32, 8)
+    changed_children = Pf::Kit.stack_array(ParseTree, 8)
+
+    tree.children.each_with_index do |child0, child_index|
+      key = tree.feature.range.begin + child_index
+      child1 = gnd_map(addr.append(key), child0, replacements)
+      next if child0.same?(child1)
+
+      changed_indices << child_index
+      changed_children << child1
+    end
+
+    if changed_indices.empty?
+      return tree # unchanged
+    end
+
+    # Apply changes to a mutable copy of children.
+    children1 = tree.children.dup
+    changed_children.zip(changed_indices) do |child, child_index|
+      children1[child_index] = child
+    end
+
+    # Make the copy read-only.
+    children1 = Slice.new(children1.to_unsafe, children1.size, read_only: true)
+
+    case tree
+    in CircuitNode
+      CircuitNode.new(tree.feature, children1, gnd_map(addr, tree.leaf, replacements))
+    in GroupNode
+      GroupNode.new(tree.feature, children1)
     end
   end
 

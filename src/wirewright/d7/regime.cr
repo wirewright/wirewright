@@ -413,12 +413,12 @@ module Ww::D7
     def solve(hg : Hypergraph, proposals, &fn : MatchTable, Int32 -> Patch?) : Nil
       solns = Pf::Kit.stack_array(Soln)
 
-      hg.each_node_with_head do |node, head|
-        next unless queries = @queries[head]?
+      hg.each_node do |node|
+        next unless queries = @queries[node.head]?
 
         queries.each do |query|
           probably_matches = query.deps.all? do |_, dep|
-            dep.min.zero? || hg.has_head?(dep.head)
+            dep.min.zero? || hg.has_head_anywhere?(dep.head)
           end
 
           next unless probably_matches
