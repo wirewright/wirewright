@@ -102,6 +102,7 @@ module Ww::WebSocketServerService
         Log.trace { "client(#{client_id}): message relay is running" }
 
         loop do
+          Log.trace { "client(#{client_id}): relay is waiting for message" }
           item = queue.shift
           Log.trace { "client(#{client_id}): #{item}" }
 
@@ -110,9 +111,12 @@ module Ww::WebSocketServerService
             begin
               ws.send(item)
             rescue e : Socket::Error | IO::Error | OpenSSL::SSL::Error
+              Log.trace(exception: e) { "client(#{client_id})" }
+
               unless ws.closed?
                 ws.close(:abnormal_closure)
               end
+
               break
             end
           in OutboundInterrupt
@@ -423,7 +427,7 @@ module Ww::WebSocketClientService
     control = BlockingQueue(Command).new
 
     @@lock.synchronize do
-      return unless @@connections.has_key?(conn) # Closed before we can even do anything.
+      return unless @@connections.has_key?(conn) # Closed before we could even do anything.
 
       @@journals[conn] = Journal.empty
       @@controls[conn] = control
@@ -455,7 +459,10 @@ module Ww::WebSocketClientService
 
     ws.on_message do |message|
       @@lock.synchronize do
-        next unless journal = @@journals[conn]?
+        unless journal = @@journals[conn]?
+          Log.debug { "#{conn}: journal is missing!" }
+          next
+        end
 
         @@journals[conn] = journal.append(message)
         @@subscriptions.each(&.call)

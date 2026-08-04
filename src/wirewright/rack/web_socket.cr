@@ -20,13 +20,15 @@ module Ww::Rack::WebSocket
 
   defrecord StepContext,
     bindings : Set(String),
-    conns : Set(WebSocketClientService::Conn)
+    conns : Set(WebSocketClientService::Conn),
+    dequeue : Set(WebSocketClientService::Conn)
 
   def step(state : State, & : Proposer -> T) : T forall T
     seen_bindings = Set(String).new
     seen_conns = Set(WebSocketClientService::Conn).new
+    dequeue = Set(WebSocketClientService::Conn).new
 
-    ctx = StepContext.new(seen_bindings, seen_conns)
+    ctx = StepContext.new(seen_bindings, seen_conns, dequeue)
     result = yield Proposer.new(state, ctx)
 
     if state.serving.empty? && !seen_bindings.empty?
@@ -57,7 +59,7 @@ module Ww::Rack::WebSocket
 
     # Handle each client added.
     seen_conns.each do |conn|
-      if conn.in?(state.connected_to)
+      if conn.in?(dequeue)
         # To maintain synchronicity, we only do reads in `step` for `Client`.
         # If there are many `ws` nodes, all of them get the same message; which
         # we then dequeue here, once per connection.
@@ -277,6 +279,8 @@ module Ww::Rack::WebSocket
       next unless target = Rack.cell?(hg, variant.reply)
       next unless target.value?.nil?
       next unless reply = WebSocketClientService.head?(variant.conn)
+
+      ctx.dequeue << variant.conn
 
       D7.patch(target.node, {2, reply})
     end
