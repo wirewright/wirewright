@@ -11,8 +11,8 @@ symbolic AI, and beyond.
 
 One of the goals of Wirewright is the realization of the idea of *a program as a physical thing*,
 a kind of *symbolic mechanism*. What does one mean when one says, structure *is* computation, that is,
-structure is *the same thing* as computation? Wirewright is an attempt to answer this question, among
-many others.
+evolution of structure is *the same thing* as computation? Wirewright is an attempt to answer
+this question, among many others.
 
 In Wirewright,
 
