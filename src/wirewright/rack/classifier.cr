@@ -1059,6 +1059,14 @@ module Ww::Rack
       # |@ rack.sensor
       #
       # |@pattern
+      # [sensor (queue tspace_ pattern_) percepts_*]
+      matchpi %{[sensor (queue _ _) _*]} do
+        D7.gnd(node)
+      end
+
+      # |@ rack.sensor
+      #
+      # |@pattern
       # [sensor (view tspace_ pattern_) percepts_*]
       matchpi %{[sensor (view _ _) _*]} do
         D7.gnd(node)

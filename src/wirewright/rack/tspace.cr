@@ -109,7 +109,7 @@ module Ww::Rack::Tspace
   alias Sensor = StatefulSensor | StatelessSensor
 
   alias StatefulSensor = SingleSensor | SingleSensorCell | MultiSensor | MultiSensorCell |
-                         ViewSensor | ViewSensorCell
+                         ViewSensor | ViewSensorCell | QueueSensor
 
   alias StatelessSensor = JournalSensor
 
@@ -123,7 +123,8 @@ module Ww::Rack::Tspace
   # with the match env from *pattern*, separately, in a `cell`.
   defrecord SingleSensorCell, tspace : Term, pattern : Term, template : Term
 
-  # `MultiSensor`s can perceive and move many different values at once.
+  # A `MultiSensor` can perceive and transfer multiple different values at
+  # once; but it only does that if it's empty.
   defrecord MultiSensor, tspace : Term, pattern : Term
 
   # Like `SingleSensorCell` but for `MultiSensor`s.
@@ -144,6 +145,13 @@ module Ww::Rack::Tspace
   # or *disappear*.
   defrecord JournalSensor, tspace : Term, pattern : Term
 
+  # `QueueSensor`s can perceive and transfer multiple different values at once.
+  # Values within the same batch are sorted. A batch corresponds to one tick of
+  # time. Batches are *appended* to the sensor's structure. Therefore, the sensor'
+  # structure contains batches (whose elements are ordered lexicographically)
+  # ordered temporally.
+  defrecord QueueSensor, tspace : Term, pattern : Term
+
   # An appearance shows values to sensors. Sensors can *transfer* ("steal")
   # values from appearances or they can provide *views* of them ("observe"
   # them) or their evolution (see e.g. `JournalSensor`).
@@ -154,8 +162,8 @@ module Ww::Rack::Tspace
   #
   # - All surface events must respond to `#path : ParsePath`.
   # - All surface events must supprot`#copy_with`.
-  alias SurfaceEvent = SingleSensorReceived | MultiSensorReceived |
-                       ViewSensorReceived | JournalSensorNews | AppearanceConsumed
+  alias SurfaceEvent = SingleSensorReceived | MultiSensorReceived | ViewSensorReceived |
+                       JournalSensorNews | AppearanceConsumed
 
   defrecord SingleSensorReceived, path : ParsePath, match : Term, copying: true
   defrecord MultiSensorReceived, path : ParsePath, matches : Slice(Term), copying: true
@@ -411,6 +419,10 @@ module Ww::Rack::Tspace
         MultiSensor.new(tspace, pattern)
       end
 
+      matchpi %{[sensor (queue tspace_ pattern_)]} do
+        QueueSensor.new(tspace, pattern)
+      end
+
       matchpi %{[sensor (view tspace_ pattern_) _*]} do
         ViewSensor.new(tspace, pattern)
       end
@@ -562,6 +574,13 @@ module Ww::Rack::Tspace
     io << ")"
   end
 
+  private def hash128(io, surface : QueueSensor) : Nil
+    io << "Qx("
+    ML.compact(io, surface.tspace)
+    ML.compact(io, surface.pattern)
+    io << ")"
+  end
+
   private def hash128(io, surface : ViewSensor) : Nil
     io << "Vx("
     ML.compact(io, surface.tspace)
@@ -685,7 +704,7 @@ module Ww::Rack::Tspace
     end
   end
 
-  private def emit(events, consumed, path, sensor : MultiSensor, stimuli, consensus : Match?) : Nil
+  private def emit(events, consumed, path, sensor : MultiSensor | QueueSensor, stimuli, consensus : Match?) : Nil
     matches = stimuli.to_slice(&.match.value)
     # Make sure order is deterministic and human-comprehensible.
     matches.sort! { |a, b| Term.compare(a, b) }
