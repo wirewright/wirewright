@@ -402,6 +402,20 @@ module Enumerable(T)
 end
 
 abstract struct Int
+  def self.get(x : Int, *, bit_start : Int, bit_size : Int) : Int
+    new((x >> bit_start) & mask(bit_size))
+  end
+
+  def self.put(x : Int, value : Int, *, bit_start : Int, bit_size : Int) : Int
+    x &= ~(UInt64.mask(bit_size: bit_size) << bit_start)
+    x |= value << bit_start
+    x
+  end
+
+  def self.mask(bit_size : Int)
+    (new(1u64) << bit_size) &- 1
+  end
+
   # Reference: https://mostlymangling.blogspot.com/2019/01/better-stronger-mixer-and-test-procedure.html
   # See also: https://jonkagstrom.com/bit-mixer-construction/
   def self.mix(x : UInt64) : UInt64
@@ -1288,6 +1302,14 @@ struct Slice(T)
     end
 
     Slice.new(buffer, size)
+  end
+
+  def prior : Slice(T)
+    trim(size - 1)
+  end
+
+  def rest : Slice(T)
+    self + 1
   end
 
   def starts_with?(other : Slice(T)) : Bool
@@ -2365,6 +2387,10 @@ struct StaticArray(T, N)
 
   def to_voidptr : Void*
     to_unsafe.as(Void*)
+  end
+
+  def to_slice(size : Int)
+    to_slice.trim(size)
   end
 end
 
@@ -4842,5 +4868,15 @@ class String
     end
 
     to_slice == other.to_slice
+  end
+end
+
+class ::Pf::Kit::HybridArray(T, N)
+  def to_unsafe_readonly_buffer_or_spill_slice! : Slice(T)
+    if @spillsize.zero?
+      return Slice(T).new(@buffer, @bufsize, read_only: true)
+    end
+
+    to_unsafe_readonly_slice!
   end
 end
