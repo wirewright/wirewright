@@ -1,0 +1,125 @@
+;; Basic echo example
+;(rack
+  (frame
+    ;; A basic echo server
+    (module {}
+      (ws (@pool (local 9813) server)
+        (backsys {@:in, @:out}
+          {¦ in: (msg_ _*) out: (_* `>msg)}
+            <> {(msg): (), >msg: ^msg}))
+      (circuit (pool @pool)))
+    ;; A client
+    (module {}
+      (queue (@msg @msgs) ("Kaixo" "mundua"))
+      (ws (@msg -> "ws://127.0.0.1:9813" -> @replies))
+      (queue (@reply @replies) ())))
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (ws (@msg -> "ws://127.0.0.1:9813" -> @replies) up)
+      (queue (@reply @replies) ("Kaixo" "mundua")))))
+
+;; Chat example
+(rack
+  (frame
+    ;; A basic chat server
+    (module {}
+      (ws (@pool (local 9813) server)
+        (frag @rx (sensor (queue chat _string)))
+        (frag @tx (appearance chat))
+        (frag @user)
+        (frag @peers (sensor (journal users _string)))
+        (backsys {@:in, @:out, @:tx, @:rx, @:user, @:peers}
+          {¦ -user_ out: (_* `>msg)}
+            <> {user: pending, >msg: "Please enter your nickname."}
+          {¦ in: (nick_string _*) user_: pending}
+            <> {(nick): (), user: (appearance users ^(chomp nick))}
+          {¦ peers: (sensor _ event←(appeared nick_string) _*) out: (_* `>msg)}
+            <> {(event): (), >msg: ^"[⸢nick⸣ joined the chat]"}
+          {¦ peers: (sensor _ event←(disappeared nick_string) _*) out: (_* `>msg)}
+            <> {(event): (), >msg: ^"[⸢nick⸣ left the chat]"}
+          {¦ in: (msg_string _*) user: (_ _ nick_string) tx: (appearance _ `>msg)}
+            <> {(msg): (), >msg: ^"⸢nick⸣: ⸢msg⸣"}
+          {¦ out: (_* `>msgs) user: (_ _ _string) rx: (sensor _ msgs_string+)}
+            <> {(>msgs): ^msgs, (msgs): ()}))
+      (circuit (pool @pool)))
+
+    ;; Alice client
+    (module {}
+      (cell @state)
+      (queue (@msg @msgs) ())
+      (frag @socket
+        (ws (@msg -> "ws://127.0.0.1:9813?index=1" -> @replies)))
+      (queue (@reply @replies) ())
+      (backsys {@:state, @:msgs, @:reply, @:socket}
+        {¦ reply_} <> {(reply): ()}
+        {¦ reply: "Please enter your nickname." -msgs_}
+          <> {msgs: "alice"}
+        {¦ reply: "[bob joined the chat]" -msgs_ -state_}
+          <> {msgs: "hi bob", state: greeted}
+        {¦ reply: "bob: ack alice" -msgs_ -state_}
+          <> {msgs: "hi bob", state: greeted}
+        {¦ reply: "bob: hi alice" -msgs_}
+          <> {msgs: "how are you doing?"}
+        {¦ reply: "bob: I'm doing fine" -msgs_}
+          <> {msgs: "bye then"}
+        {¦ reply: "bob: yeah, bye" socket: (ws _ status←up)}
+          <> {status: dn}))
+
+    ;; Bob client
+    (module {}
+      (queue (@msg @msgs) ())
+      (ws (@msg -> "ws://127.0.0.1:9813?index=2" -> @replies))
+      (queue (@reply @replies) ())
+      (backsys {@:msgs, @:reply}
+        {¦ reply_} <> {(reply): ()}
+        {¦ reply: "Please enter your nickname." -msgs_}
+          <> {msgs: "bob"}
+        {¦ reply: "[alice joined the chat]" -msgs_}
+          <> {msgs: "ack alice"}
+        {¦ reply: "alice: hi bob" -msgs_}
+          <> {msgs: "hi alice"}
+        {¦ reply: "alice: how are you doing?" -msgs_}
+          <> {msgs: "I'm doing fine"}
+        {¦ reply: "alice: bye then" -msgs_}
+          <> {msgs: "yeah, bye"}))
+
+    ;; An observer we use for testing purposes.
+    (module {:@history}
+      (frag @chat
+        (sensor (many chat _string)))
+      (frag @users
+        (sensor (journal users _string)))
+      (backsys {@:history, @:chat, @:users}
+        {¦ history: (_* `entry) chat: (sensor _ msgs_+) users: (sensor _)}
+          <> {entry: (concurrent ^*msgs), (msgs): ()}
+        {¦ history: (_* `entry) chat: (sensor _) users: (sensor _ events_+)}
+          <> {entry: (concurrent ^*events), (events): ()}
+        {¦ history: (_* `entry) chat: (sensor _ msgs_+) users: (sensor _ events_+)}
+          <> {entry: (concurrent ^*msgs ^*events), (msgs): (), (events): ()}))
+
+    (cell @history ()))
+
+  ;; NOTE: It is rather hard to design a simple protocol which would have
+  ;; one single order with the setup we have here. So the order of the first
+  ;; few messages (greetings) is arbitrary (and some things / greetings may
+  ;; even coincide or be duplicated, i.e., Alice and Bob saying hi to each
+  ;; other simultaneously, or doing so multiple times before everything settles).
+  ;; After the greetings, though, the order is stable (at least I hope so...)
+  ;; It's a very interesting problem but I'm not sure I have the time to ponder
+  ;; on it for long, so we'll just live with the arbitrary order in the first
+  ;; few entries...
+  (frame pattern: true fast-forward: true
+    (_*
+     (cell @history
+       ((%group
+          (%all
+            ⟪(appeared "alice")⟫
+            ⟪(appeared "bob")⟫
+            (%any° ⟪"bob: hi alice"⟫ ⟪"alice: hi bob"⟫))
+          _*)
+        (concurrent "alice: how are you doing?")
+        (concurrent "bob: I'm doing fine")
+        (concurrent "alice: bye then")
+        (concurrent "bob: yeah, bye")
+        (concurrent (disappeared "alice")))))))
