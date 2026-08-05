@@ -575,72 +575,6 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
-      # |@ rack.rig
-      #
-      # |@pattern
-      # [rig (@edge_ selector_ -> patterns_*) child_]
-      #
-      # |@key edge rack.edge
-      # The edge where the rig should search for a source cell.
-      #
-      # |@key selector m1.operator
-      # The pattern to use to extract part(s) of the value at *edge*.
-      #
-      # |@key patterns m1.operator
-      # A list of alternative patterns to find part(s) of *child* with. The first
-      # matching pattern is used. The rig node assigns the captures made by *selector*
-      # to the same-named places identified by the matching pattern.
-      #
-      # |@summary
-      # Rewrites parts of a child node based on a cell.
-      #
-      # |@block
-      # Binds parts of the value at *edge* (determined by *selector*) to part(s)
-      # of a *child* node (determined by the first matching *pattern*) unidirectionally
-      # (*edge* controls *child* but not the other way).
-      #
-      # |@example
-      # ```wwml
-      # ;; Step 0
-      # (cell @xs (1 2 3))
-      #
-      # ;; Increment the middle number in @xs.
-      # (backsys @xs
-      #   (_ ±n _) <> {n: ^(+ n 1)})
-      #
-      # ;; Bind the value of the middle number to {count: _} in @ys using
-      # ;; the rig node.
-      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
-      #   (cell @ys))
-      #
-      # ;; Step 1
-      # (cell @xs (1 3 3))
-      # (backsys @xs
-      #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
-      #   (cell @ys {count: 3}))
-      #
-      # ;; Step 2
-      # (cell @xs (1 4 3))
-      # (backsys @xs
-      #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
-      #   (cell @ys {count: 4}))
-      #
-      # ;; Step 3
-      # (cell @xs (1 5 3))
-      # (backsys @xs
-      #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (rig (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
-      #   (cell @ys {count: 5}))
-      #
-      # ;; ...etc.
-      # ```
-      matchpi %{[rig (@edge_ _ -> _*) _]} do
-        leaf = D7.gnd(node, edge)
-        D7.circuit(node.as_d, 2u32...3u32, leaf)
-      end
-
       # |@ rack.circuit
       #
       # |@pattern
@@ -775,6 +709,89 @@ module Ww::Rack
             matchpi %{(cell @_ value1_)} { Term.morph(node, {2, value1}) }
           end
         end
+      end
+
+      # |@ rack.frag
+      #
+      # |@pattern
+      # [frag (@edge_ selector_ -> patterns_*) child_]
+      #
+      # |@key edge rack.edge
+      # The edge where the fragment should search for a source cell.
+      #
+      # |@key selector m1.operator
+      # The pattern to use to extract part(s) of the value at *edge*.
+      #
+      # |@key patterns m1.operator
+      # A list of alternative patterns to find part(s) of *child* with. The first
+      # matching pattern is used. The fragment node assigns the captures made by
+      # *selector* to the same-named places identified by the matching pattern.
+      #
+      # |@block
+      # Binds parts of the value at *edge* (determined by *selector*) to part(s)
+      # of a *child* node (determined by the first matching *pattern*) unidirectionally
+      # (*edge* controls *child* but not the other way).
+      #
+      # |@example
+      # ```wwml
+      # ;; Step 0
+      # (cell @xs (1 2 3))
+      #
+      # ;; Increment the middle number in @xs.
+      # (backsys @xs
+      #   (_ ±n _) <> {n: ^(+ n 1)})
+      #
+      # ;; Bind the value of the middle number to {count: _} in @ys using
+      # ;; the fragment node.
+      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      #   (cell @ys))
+      #
+      # ;; Step 1
+      # (cell @xs (1 3 3))
+      # (backsys @xs
+      #   (_ ±n _) <> {n: ^(+ n 1)})
+      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      #   (cell @ys {count: 3}))
+      #
+      # ;; Step 2
+      # (cell @xs (1 4 3))
+      # (backsys @xs
+      #   (_ ±n _) <> {n: ^(+ n 1)})
+      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      #   (cell @ys {count: 4}))
+      #
+      # ;; Step 3
+      # (cell @xs (1 5 3))
+      # (backsys @xs
+      #   (_ ±n _) <> {n: ^(+ n 1)})
+      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      #   (cell @ys {count: 5}))
+      #
+      # ;; ...etc.
+      # ```
+      matchpi %{[frag (@edge_ _ -> _*) child0_]} do
+        mix0 = Term.of(:group, Term.morph(node, {0, :rig}), child0)
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.case(mix1) do
+            # New value arrived. Higher priority.
+            matchpi %{(group [_ _ child1_] _)} do
+              continue if child0 == child1
+
+              Term.morph(node, {2, child1})
+            end
+
+            # New value computed.
+            matchpi %{(group _ child1_)} do
+              Term.morph(node, {2, child1})
+            end
+          end
+        end
+      end
+
+      # I'm not sure there's a point in exposing this node...
+      matchpi %{[rig (@edge_ _ -> _*) _]} do
+        D7.gnd(node, edge)
       end
 
       # |@ rack.delay
@@ -1506,9 +1523,9 @@ module Ww::Rack
       #         handled: true})
       #
       # (supervisor (@reports @report [path (path_string report) _] - @pool)
-      #   (rig (@report [path (path_string report) _]
-      #               -> (appearance paths `path)
-      #                  (appearance paths path_))
+      #   (frag (@report [path (path_string report) _]
+      #                    -> (appearance paths `path)
+      #                       (appearance paths path_))
       #     (appearance paths)))
       #
       # (circuit (pool @pool))

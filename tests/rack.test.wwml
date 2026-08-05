@@ -3518,13 +3518,13 @@
       (backsys @a  N←x <> {N: y}))
     end)
 
-  ;; Integration with tspace, rig node
+  ;; Integration with tspace, frag (rig) node
   (rack
     (frame
       (cell @expr (+ 1 2))
       (part (@expr @x) (+ x_ _))
       (backsys @x  ±n <> {n: ^(+ n 1)})
-      (rig (@x x_ -> (appearance _ `x) (appearance _ x_))
+      (frag (@x x_ -> (appearance _ `x) (appearance _ x_))
         (appearance local))
       (sensor (view local x_)))
     (frame pattern: true
