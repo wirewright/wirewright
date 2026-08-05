@@ -390,6 +390,7 @@ module Ww::WebSocketClientService
         retry_budget = conn.max_retries
 
         handle(conn, ws)
+        break
       rescue e : Socket::ConnectError | IO::Error
         if retry_budget.zero? # Expended
           Log.trace { "#{conn}: max retries exceeded" }
@@ -421,6 +422,8 @@ module Ww::WebSocketClientService
         end
       end
     end
+
+    Log.trace { "#{conn}: runloop exited nominally" }
   end
 
   private def handle(conn : Conn, ws : HTTP::WebSocket) : Nil

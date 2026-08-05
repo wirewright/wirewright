@@ -59,14 +59,18 @@ module Ww::Rack::WebSocket
 
     # Handle each client added.
     seen_conns.each do |conn|
+      unless conn.in?(state.connected_to)
+        WebSocketClientService.connect(conn)
+        next
+      end
+
       if conn.in?(dequeue)
-        # To maintain synchronicity, we only do reads in `step` for `Client`.
+        # To maintain synchronicity, we only do *reads* in `step` for `Client`.
         # If there are many `ws` nodes, all of them get the same message; which
         # we then dequeue here, once per connection.
         WebSocketClientService.dequeue(conn)
+        next
       end
-
-      WebSocketClientService.connect(conn)
     end
 
     # Handle each client removed.
@@ -154,6 +158,10 @@ module Ww::Rack::WebSocket
 
           variant = Server.new(node, node.resolve(pool), binding, input, output, template.as_d)
           step(state, ctx, hg, variant)
+        end
+
+        # Allow the circuit to use an errorless `dn` to disable the socket.
+        matchpi %{[ws (@_ -> _ -> @_) dn]} do
         end
 
         matchpi %{[ws (@message_ -> connQ_ -> @reply_) _?]} do
