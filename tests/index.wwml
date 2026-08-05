@@ -49,11 +49,11 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 
 (test "rack/tspace.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack))
+  tags: (d7 delta7 rack rack-misc))
 
 (test "rack/ws.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack))
+  tags: (d7 delta7 rack rack-misc))
 
 (test "editR.test.wwml"
   color: (oklch 0.7 0.1 indigo)

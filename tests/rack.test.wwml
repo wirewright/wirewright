@@ -6693,7 +6693,7 @@
   end)
 
 ;; Conditional parent
-(group
+;,(group
   ;; Basic
   (rack
     (frame
@@ -7034,4 +7034,52 @@
       (guard (@a 100) (cell @foo "Hi"))
       (cell @bar)
       (feed @foo @bar))
-    end))
+    end)
+
+  ;; From docs
+  (rack
+    (frame
+      (backsys @turn
+        t←alice <> {t: bob}
+        t←bob <> {t: alice})
+      (feed @x @ys)
+      (cell @turn alice)
+      (guard (@turn alice) (queue (@x @xs) (1 2 3)))
+      (guard (@turn bob) (queue (@x @xs) (100 200 300)))
+      (queue (@y @ys) ()))
+    (frame/tail
+      (cell @turn bob)
+      (guard (@turn alice) (queue (@x @xs) (2 3)))
+      (guard (@turn bob) (queue (@x @xs) (100 200 300)))
+      (queue (@y @ys) (1)))
+    (frame/tail
+      (cell @turn alice)
+      (guard (@turn alice) (queue (@x @xs) (2 3)))
+      (guard (@turn bob) (queue (@x @xs) (200 300)))
+      (queue (@y @ys) (1 100)))
+    (frame/tail
+      (cell @turn bob)
+      (guard (@turn alice) (queue (@x @xs) (3)))
+      (guard (@turn bob) (queue (@x @xs) (200 300)))
+      (queue (@y @ys) (1 100 2)))
+    (frame/tail
+      (cell @turn alice)
+      (guard (@turn alice) (queue (@x @xs) (3)))
+      (guard (@turn bob) (queue (@x @xs) (300)))
+      (queue (@y @ys) (1 100 2 200)))
+    (frame/tail
+      (cell @turn bob)
+      (guard (@turn alice) (queue (@x @xs) ()))
+      (guard (@turn bob) (queue (@x @xs) (300)))
+      (queue (@y @ys) (1 100 2 200 3)))
+    (frame/tail
+      (cell @turn alice)
+      (guard (@turn alice) (queue (@x @xs) ()))
+      (guard (@turn bob) (queue (@x @xs) ()))
+      (queue (@y @ys) (1 100 2 200 3 300)))
+    (frame/tail
+      (cell @turn bob)
+      (guard (@turn alice) (queue (@x @xs) ()))
+      (guard (@turn bob) (queue (@x @xs) ()))
+      (queue (@y @ys) (1 100 2 200 3 300)))))
+    ;; ...

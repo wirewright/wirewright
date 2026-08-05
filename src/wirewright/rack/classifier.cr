@@ -513,6 +513,87 @@ module Ww::Rack
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
       end
 
+      # |@ rack.guard
+      #
+      # |@pattern
+      # [guard (@edge_ pattern_) children_*]
+      #
+      # |@key edge rack.edge
+      # The edge to search for cells at. The guard node will only attempt a match
+      # if there is exactly one cell at *edge*. The node is "confused" by many cells
+      # (even if some or all of them match).
+      #
+      # |@key pattern m1.operator
+      # The pattern to match. All captures are discarded so there's no reason to
+      # make them.
+      #
+      # |@key children rack
+      # Child nodes to activate or deactivate. They are *not* isolated in any way.
+      # If they are active, it's as if the guard does not exist.
+      #
+      # |@summary
+      # Conditional activation of children based on a cell.
+      #
+      # |@block
+      # Activates or deactivates *children* based on whether the cell at *edge*
+      # matches *pattern*.
+      #
+      # |@example
+      # ```wwml
+      # ;; Step 0
+      # (cell @turn alice)
+      # (backsys @turn
+      #   t←alice <> {t: bob}
+      #   t←bob <> {t: alice})
+      #
+      # (guard (@turn alice)
+      #   (queue (@x @xs) (1 2 3)))
+      #
+      # (guard (@turn bob)
+      #   (queue (@x @xs) (100 200 300)))
+      #
+      # (feed @x @ys)
+      # (queue (@y @ys) ())
+      #
+      # ;; Step 1 (omitting backsys because it stays the same)
+      # (cell @turn bob)
+      # (guard (@turn alice)
+      #   (queue (@x @xs) (2 3)))
+      # (guard (@turn bob)
+      #   (queue (@x @xs) (100 200 300)))
+      # (feed @x @ys)
+      # (queue (@y @ys) (1))
+      #
+      # ;; Step 2
+      # (cell @turn alice)
+      # (guard (@turn alice)
+      #   (queue (@x @xs) (2 3)))
+      # (guard (@turn bob)
+      #   (queue (@x @xs) (200 300)))
+      # (feed @x @ys)
+      # (queue (@y @ys) (1 100))
+      #
+      # ;; Step 3
+      # (cell @turn bob)
+      # (guard (@turn alice)
+      #   (queue (@x @xs) (3)))
+      # (guard (@turn bob)
+      #   (queue (@x @xs) (200 300)))
+      # (feed @x @ys)
+      # (queue (@y @ys) (1 100 2))
+      #
+      # ;; Step 4
+      # (cell @turn alice)
+      # (guard (@turn alice)
+      #   (queue (@x @xs) (3)))
+      # (guard (@turn bob)
+      #   (queue (@x @xs) (300)))
+      # (feed @x @ys)
+      # (queue (@y @ys) (1 100 2 200))
+      #
+      # ;; ... and so on until both queues are empty; at which point @turn
+      # ;; just continues to cycle indefinitely.
+      # ```
       matchpi %{[guard (@edge_ pattern_) _*]} do
         D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr, scope|
           ann = GuardAnnotation.new(addr)
