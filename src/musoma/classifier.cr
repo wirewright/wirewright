@@ -162,7 +162,7 @@ module MuSoma
   defrecord Trunk, active : Term::Rep?
 
   # :nodoc:
-  def distill(codex, tree : D7::InertLeaf, addr, trunk) : Term::Rep
+  def distill(µ, hg, addr, scope, tree : D7::InertLeaf, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -177,7 +177,7 @@ module MuSoma
       end
 
       matchpi %{[head_ _*]} do
-        continue unless codex.preset?(head)
+        continue unless µ.preset?(head)
 
         curate(node)
       end
@@ -189,7 +189,7 @@ module MuSoma
   end
 
   # :nodoc:
-  def distill(codex, tree : D7::GndLeaf, addr, trunk) : Term::Rep
+  def distill(µ, hg, addr, scope, tree : D7::GndLeaf, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -221,7 +221,22 @@ module MuSoma
   end
 
   # :nodoc:
-  def distill(codex, tree : D7::ParentNode, addr, trunk) : Term::Rep
+  def distill(µ, hg, addr, scope, tree : D7::ParentNode, trunk) : Term::Rep
+    # Impassable GroupNodes must not make it into the distilled markup. For
+    # example, in:
+    #
+    #   (cell @x 0)
+    #   (guard (@x 0) (p "x is 0"))
+    #   (guard (@x 1) (p "x is 1"))
+    #
+    # Only the first `p` should be visible.
+    if tree.is_a?(D7::GroupNode)
+      predicate = tree.feature.passable
+      unless predicate.call(hg, addr, scope)
+        return Term.rep
+      end
+    end
+
     pred = nil
     buffer = Pf::Kit.stack_array(Term::Rep, 8)
 
@@ -234,7 +249,7 @@ module MuSoma
         child_trunk = trunk
       end
 
-      rep = distill(codex, child, addr.append(key), child_trunk)
+      rep = distill(µ, hg, addr.append(key), scope, child, child_trunk)
       if !child_adjunct && pred
         buffer << pred
       end
@@ -310,16 +325,21 @@ module MuSoma
   end
 
   # :nodoc:
-  def distill(codex, tree : D7::MixtureNode | D7::ScopeNode, addr, trunk) : Term::Rep
-    distill(codex, tree.child, addr, trunk)
+  def distill(µ, hg, addr, scope, tree : D7::MixtureNode, trunk) : Term::Rep
+    distill(µ, hg, addr, scope, tree.child, trunk)
+  end
+
+  # :nodoc:
+  def distill(µ, hg, addr, scope, tree : D7::ScopeNode, trunk) : Term::Rep
+    distill(µ, hg, addr, scope.append(addr, tree.feature.scope), tree.child, trunk)
   end
 
   # Finds Microfold and Scenery nodes in *tree* and returns a list of roots
   # for trees built this way.
   def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
-    addr = D7::NodeAddr.empty
+    hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
     trunk = Trunk.new(active: nil)
-    Term.of(distill(codex, tree, addr, trunk))
+    Term.of(distill(codex, hg, D7::NodeAddr.empty, D7::NodeScope.empty, tree, trunk))
   end
 
   defrecord WindowInfo, id : Term, defn : Term, open : Bool

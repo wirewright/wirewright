@@ -23,7 +23,7 @@ module Ww::Rack::Assembler
   def recipe(clf : D7::Classifier, body : Term) : Recipe
     Term.case(body) do
       matchpi %{[component bindings_dict interior_*]} do
-        tree = D7.parse(clf, interior, reply: D7::ParseTree)
+        tree = D7.parse(clf, interior)
 
         ComponentRecipe.new(bindings.as_d, tree)
       end
@@ -523,7 +523,6 @@ module Ww::Rack::Assembler
   end
 
   def step(state : State, parser : D7::Parser, library : RuleLibrary, circuit : Term) : Slice(Term)
-    rtree = parser.parse(circuit, reply: D7::ParseTree)
-    Slice[step(parser.clf, rtree, state, library)]
+    Slice[step(parser.clf, parser.parse(circuit), state, library)]
   end
 end

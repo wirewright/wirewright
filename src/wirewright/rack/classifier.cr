@@ -1,4 +1,7 @@
 module Ww::Rack
+  # Prevents `rack.guard` cycles.
+  defrecord GuardAnnotation, addr : D7::NodeAddr, includes: {D7::Hypergraph::Annotation}
+
   # :nodoc:
   def classify!(node : Term) : D7::Feature
     M1::PatternSet.case(node) do
@@ -508,6 +511,21 @@ module Ww::Rack
       # [locals locals←((%past @_ min: 0)) _*]
       matchpi %{[locals locals←((%past @_ min: 0)) _*]} do
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
+      end
+
+      matchpi %{[guard (@edge_ pattern_) _*]} do
+        D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr, scope|
+          ann = GuardAnnotation.new(addr)
+          next false if hg.annotated_with?(ann) # cycle
+
+          hg.annotate(ann) do
+            next false unless dep = Rack.cell?(hg, scope.resolve(edge))
+            next false unless value = dep.value?
+            next false unless M1.probe?(pattern, value)
+
+            true # passable
+          end
+        end
       end
 
       # |@ rack.device

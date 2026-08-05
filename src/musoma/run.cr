@@ -150,7 +150,7 @@ module MuSoma
     # if it is paused. However while paused we prevent the circuit from affecting
     # the real world.
     Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ (%any . ...) draft_)}}) do
-      draft_tree = ws.parser.parse(draft, reply: D7::ParseTree)
+      draft_tree = ws.parser.parse(draft)
 
       EntangleContinuation.entangle(ws, plan, *agents.entangle) do |sink|
         D7.each_flat_feature_with_addr(draft_tree) do |feature, addr|
@@ -175,7 +175,7 @@ module MuSoma
     if plan.present?
       ws.state.update do |state|
         Term.matchpi?(state, %{{¦ timeline: (_ I _ _ draft_)}}) do
-          draft_tree = ws.parser.parse(draft, reply: D7::ParseTree)
+          draft_tree = ws.parser.parse(draft)
           draft1 = MuSoma.perturb(draft_tree, plan)
           state = Term.morph(state, {:timeline, 4, draft1})
         end

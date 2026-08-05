@@ -103,7 +103,7 @@ module MuSoma
   # or draft. Contributes and maintains the `circuit-µ` variable in the state.
   class PrettyAgent
     def initialize
-      @cache = GenerationalCache(Term, D7::UnaugmentedParseTree).new
+      @parser = D7::Parser.new(PrettyAgent.fbclf)
     end
 
     # The feedback classifier is used for pretty-printing nodes in the circuit
@@ -205,7 +205,7 @@ module MuSoma
       end
     end
 
-    private def self.repr(codex : Microfold::SyncCodex, tree : D7::InertLeaf, addr : D7::NodeAddr) : Term
+    private def self.repr(µ, hg, addr, scope, tree : D7::InertLeaf) : Term
       repr = Term::Dict.build do |commit|
         commit << :inert << tree.feature.node
 
@@ -219,7 +219,7 @@ module MuSoma
       Term.of(repr)
     end
 
-    private def self.repr(codex : Microfold::SyncCodex, tree : D7::GndLeaf, addr) : Term
+    private def self.repr(µ, hg, addr, scope, tree : D7::GndLeaf) : Term
       node = tree.feature.node
 
       Term.case(node) do
@@ -261,8 +261,8 @@ module MuSoma
 
         matchpi %{[figure _*]} do
           trunk = Trunk.new(active: nil)
-          tree = D7.parse(MuSoma.clf, node, reply: D7::ParseTree, range: 1u32...node.uitemsize)
-          Term.of(:figure, MuSoma.distill(codex, tree, addr, trunk))
+          tree = D7.parse(MuSoma.clf, node, range: 1u32...node.uitemsize)
+          Term.of(:figure, MuSoma.distill(µ, hg, addr, scope, tree, trunk))
         end
 
         otherwise do
@@ -271,7 +271,15 @@ module MuSoma
       end
     end
 
-    private def self.repr(codex : Microfold::SyncCodex, tree : D7::UnaugmentedParentNode, addr) : Term
+    private def self.repr(µ, hg, addr, scope, tree : D7::MixtureNode) : Term
+      repr(µ, hg, addr, scope, D7::InertLeaf.new(D7.inert(tree.feature.node)))
+    end
+
+    private def self.repr(µ, hg, addr, scope, tree : D7::ScopeNode) : Term
+      repr(µ, hg, addr, scope.append(addr, tree.feature.scope), tree.child)
+    end
+
+    private def self.repr(µ, hg, addr, scope, tree : D7::ParentNode) : Term
       parent = tree.feature
 
       repr = parent.node.pairspart.transaction do |commit|
@@ -288,7 +296,7 @@ module MuSoma
           index = key - parent.range.begin
           child = tree.children[index]
 
-          commit << repr(codex, child, addr.append(key))
+          commit << repr(µ, hg, addr.append(key), scope, child)
         end
       end
 
@@ -313,8 +321,9 @@ module MuSoma
 
     # Returns the representation tree for *tree*. This tree is ready for
     # pretty-printing.
-    def self.repr(codex : Microfold::SyncCodex, tree : D7::UnaugmentedParseTree) : Term
-      repr = repr(codex, tree, D7::NodeAddr.empty)
+    def self.repr(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
+      hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
+      repr = repr(codex, hg, D7::NodeAddr.empty, D7::NodeScope.empty, tree)
 
       # Mark the topmost parent as root for styling in prettyR.
       Term.matchpi(repr, %{[parent _*]}) do
@@ -356,11 +365,7 @@ module MuSoma
 
       @seen_circuit = circuit
 
-      tree = @cache.epoch do
-        D7.parse(PrettyAgent.fbclf, circuit, reply: D7::UnaugmentedParseTree, cache: @cache)
-      end
-
-      repr = PrettyAgent.repr(mu_codex, tree)
+      repr = PrettyAgent.repr(mu_codex, @parser.parse(circuit))
 
       # Fast path if the representation did not change. This accounts for
       # things like folds (e.g. `section`, `slot`). If something is inside
@@ -396,9 +401,7 @@ module MuSoma
         # Note that regardless of what we do, we cannot *really* interact with the live draft.
         # We are always competing with time.
         matchpi %{{¦ timeline: (_ I * _ draft_)}} do
-          feature_tree = @cache.epoch do
-            D7.parse(PrettyAgent.fbclf, draft, cache: @cache, reply: D7::UnaugmentedParseTree)
-          end
+          feature_tree = @parser.parse(draft)
 
           draft1 = D7.perturb(feature_tree) do |node, addr|
             fb_dsts.each do |dst, msg|
@@ -417,9 +420,7 @@ module MuSoma
 
         # Interact with a past version of the circuit.
         matchpi %{{¦ timeline: (behind←(_* current_dict) I _dict _ _)}} do
-          feature_tree = @cache.epoch do
-            D7.parse(PrettyAgent.fbclf, current, cache: @cache, reply: D7::UnaugmentedParseTree)
-          end
+          feature_tree = @parser.parse(current)
 
           new_current = D7.perturb(feature_tree) do |node, addr|
             fb_dsts.each do |dst, msg|
@@ -487,7 +488,7 @@ module MuSoma
           circuit = MuSoma.hide_single(circuit)
         end
 
-        tree = ws.parser.parse(circuit, reply: D7::ParseTree)
+        tree = ws.parser.parse(circuit)
 
         window_infos = MuSoma.window_infos(mu, tree)
         window_infos.each do |window_info|

@@ -325,7 +325,7 @@ module Ww::D7
   private def fuse_map(parser : Parser, circuit : Term)
     nodes = {} of NodeAddr => Term
 
-    feature_tree = parser.parse(circuit, reply: UnaugmentedParseTree)
+    feature_tree = parser.parse(circuit)
     D7.each_flat_feature_with_addr(feature_tree) do |feature, addr|
       nodes[addr] = feature.node
     end

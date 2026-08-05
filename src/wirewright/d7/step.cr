@@ -103,7 +103,7 @@ module Ww::D7
 
   # :nodoc:
   def update(parser : Parser, circuit : Term, level : Int, &fn : NodeAddr, Flat -> Term) : Term
-    feature_tree = parser.parse(circuit, reply: ParseTree)
+    feature_tree = parser.parse(circuit)
     update(feature_tree, level, &fn)
   end
 
@@ -166,6 +166,10 @@ module Ww::D7
       return Term.of(tree.feature.node)
     end
 
+    # TODO: If GroupNode is impassable, that's just a pointless walk down. If *fn* was
+    # a hashmap (which it could very well be, I suppose) we could just skip going down
+    # if no addr in the hashmap is prefixed by *addr*...
+
     repair(tree) do |child, index|
       key = tree.feature.range.begin + index
       update(addr.append(key), child, level, fn)
@@ -208,7 +212,7 @@ module Ww::D7
     MAX_SUBSTEPS.times do |level|
       substeps << circuit
 
-      tree = parser.parse(circuit, reply: D7::ParseTree)
+      tree = parser.parse(circuit)
       hg = Hypergraph.new(tree, level)
 
       # No nodes in hypergraph => No nodes found at *level* => We're done.

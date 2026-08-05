@@ -2543,6 +2543,26 @@ class SyncHash(K, V)
   end
 end
 
+class SyncSet(T)
+  def initialize
+    @set = Set(T).new
+    @lock = Sync::Mutex.new
+  end
+
+  def includes?(object : T) : Bool
+    @lock.synchronize { @set.includes?(object) }
+  end
+
+  def <<(object : T) : self
+    @lock.synchronize { @set << object }
+    self
+  end
+
+  def delete(object : T) : Bool
+    @lock.synchronize { @set.delete(object) }
+  end
+end
+
 module InspectToS
   def to_s(io)
     inspect(io)

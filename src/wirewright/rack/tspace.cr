@@ -35,7 +35,7 @@ module Ww::Rack::Tspace
   end
 
   def step(state : State, parser : D7::Parser, circuit circuit0 : Term, prepass) : Slice(Term)
-    tree = parser.parse(circuit0, reply: D7::ParseTree)
+    tree = parser.parse(circuit0)
     index = state.indices.epoch { index(state.indices, tree) }
 
     # TODO: Working with Bags like we do here is really, really inefficient in terms

@@ -48,11 +48,35 @@ module Ww::D7
   # A hypergraph is a graph whose edges can include any number of nodes; each edge
   # is a subset of the set of nodes in the graph. It's easier to think of a hypergraph
   # as a society of nodes, where each node can participate in zero or more groups,
-  # each group consisting of other nodes in the community.
+  # and each group consists of other nodes in the community.
+  #
+  # The hypergraph representation used in D7 is *ephemeral*: the hypergraph is never
+  # materialized. Instead, `Hypergraph` and related offer a way to query a `ParseTree`
+  # *as if* it was a hypergraph. `ParseTree`, in turn, contains some recursive
+  # measurements, statistics, and indices to help `Hypergraph` find things.
+  #
+  # NOTE: A hypergraph can contain annotations. I'm not a big fan of them, because they
+  # make Hypergraph stateful/mutable; but anything else doesn't seem nice either.
+  class Hypergraph
+    # Includers can be used to annotate a `Hypergraph`.
+    module Annotation
+    end
 
-  struct Hypergraph
     # Returns the target level of this hypergraph.
     getter level : UInt32
+
+    @annotations = Atomic(SyncSet(Annotation)?).new(nil)
+
+    # Most hypergraphs don't have annotations.
+    private def annotations : SyncSet(Annotation)
+      if set = @annotations.get(:acquire)
+        return set
+      end
+
+      proposal = SyncSet(Annotation).new
+      set, _ = @annotations.compare_and_set(nil, proposal, :acquire_release, :acquire)
+      set || proposal
+    end
 
     # :nodoc:
     def initialize(@tree : ParseTree, @level : UInt32)
@@ -63,7 +87,7 @@ module Ww::D7
 
     # :nodoc:
     defrecord WalkContext,
-      root : ParseTree,
+      hg : Hypergraph,
       guide : Guide,
       ids : Range(NodeId, NodeId),
       sink : NodeId, NodeAddr, NodeScope, Gnd -> WalkFlow
@@ -75,7 +99,7 @@ module Ww::D7
     end
 
     # :nodoc:
-    def self.walk(root : ParseTree, level : UInt32, guide : Guide, fn : Node, Set(Term) -> WalkFlow, ids : Range(NodeId, NodeId) = NodeId::MIN...NodeId::MAX) : Nil
+    def self.walk(hg : Hypergraph, guide : Guide, fn : Node, Set(Term) -> WalkFlow, ids : Range(NodeId, NodeId) = NodeId::MIN...NodeId::MAX) : Nil
       assert ids.exclusive?
       assert ids.begin <= ids.end
 
@@ -88,8 +112,8 @@ module Ww::D7
         fn.call(node, feature.edges)
       end
 
-      ctx = WalkContext.new(root, guide, ids, sink)
-      walk(ctx, NodeAddr.empty, NodeScope.empty, root, level, 0u32)
+      ctx = WalkContext.new(hg, guide, ids, sink)
+      walk(ctx, NodeAddr.empty, NodeScope.empty, hg.@tree, hg.@level, 0u32)
     end
 
     private def self.walk(ctx, addr, scope, tree : InertLeaf, level, id_zero) : WalkFlow
@@ -149,6 +173,11 @@ module Ww::D7
         return WalkFlow::Continue
       end
 
+      predicate = tree.feature.passable
+      unless predicate.call(ctx.hg, addr, scope)
+        return WalkFlow::Continue
+      end
+
       assert ctx.ids.exclusive?
 
       tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
@@ -170,7 +199,8 @@ module Ww::D7
     end
 
     # :nodoc:
-    def self.descend?(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree, NodeScope}?
+    def self.descend?(hg : Hypergraph, addr : NodeAddr) : {NodeId, ParseTree, NodeScope}?
+      tree = hg.@tree
       id_zero = NodeId.new(0)
       prefix = NodeAddr.empty
       scope = NodeScope.empty
@@ -188,6 +218,12 @@ module Ww::D7
             tree = tree.child
             next
           in GroupNode, CircuitNode
+            # Edges defined inside impassable groups are unreachable.
+            if tree.is_a?(GroupNode)
+              predicate = tree.feature.passable
+              return unless predicate.call(hg, prefix, scope)
+            end
+
             offset = tree.feature.range.begin
             assert index >= offset
 
@@ -211,12 +247,12 @@ module Ww::D7
 
     # :nodoc:
     defrecord ResolveContext,
-      root : ParseTree,
+      hg : Hypergraph,
       guide : Guide,
       sink : NodeId, NodeAddr, NodeScope, Gnd ->
 
     # :nodoc:
-    def self.resolve(root : ParseTree, addr : NodeAddr, scope : NodeScope, guide : Guide, membership : Slice(Term), id_zero, fn : Node ->) : Nil
+    def self.resolve(hg : Hypergraph, root : ParseTree, addr : NodeAddr, scope : NodeScope, guide : Guide, membership : Slice(Term), id_zero, fn : Node ->) : Nil
       sink = ->(id : NodeId, addr : NodeAddr, scope : NodeScope, feature : Gnd) do
         # Use Gnd#defn (the node's definition) rather than #node here.
         # The hypergraph should only ever see the defn.
@@ -224,7 +260,7 @@ module Ww::D7
         fn.call(node)
       end
 
-      ctx = ResolveContext.new(root, guide, sink)
+      ctx = ResolveContext.new(hg, guide, sink)
       resolve_root(ctx, addr, scope, root, membership, id_zero)
     end
 
@@ -316,6 +352,9 @@ module Ww::D7
       return unless membership.all?(&.in?(stat.edges))
       return unless ctx.guide.call(tree)
 
+      predicate = tree.feature.passable
+      return unless predicate.call(ctx.hg, addr, scope)
+
       tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
         resolve_inner(ctx, addr.append(key), scope, child, membership, id_zero)
         id_zero += D7.population(child)
@@ -352,7 +391,7 @@ module Ww::D7
         WalkFlow::Break
       end
 
-      Hypergraph.walk(@tree, @level, guide, sink)
+      Hypergraph.walk(self, guide, sink)
 
       empty
     end
@@ -366,7 +405,7 @@ module Ww::D7
         WalkFlow::Continue
       end
 
-      Hypergraph.walk(@tree, @level, guide, sink)
+      Hypergraph.walk(self, guide, sink)
     end
 
     def gnd_map(replacements : Hash(NodeAddr, Gnd)) : Hypergraph
@@ -392,7 +431,7 @@ module Ww::D7
         WalkFlow::Continue
       end
 
-      Hypergraph.walk(@tree, @level, guide, sink)
+      Hypergraph.walk(self, guide, sink)
     end
 
     def each_node_with_head(head : Term, *, memberof : Tuple(AbsEdge), &fn : Node ->) : Nil
@@ -416,7 +455,7 @@ module Ww::D7
 
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = Hypergraph.descend?(@tree, edge.module)
+      return unless row = Hypergraph.descend?(self, edge.module)
 
       addr = edge.module
       id_zero, origin, scope = row
@@ -431,7 +470,7 @@ module Ww::D7
       end
 
       needle = edge.term
-      Hypergraph.resolve(origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, sink)
+      Hypergraph.resolve(self, origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, sink)
     end
 
     private def single(node_id : NodeId) : {Node, Set(Term)}
@@ -443,7 +482,7 @@ module Ww::D7
         WalkFlow::Break
       end
 
-      Hypergraph.walk(@tree, @level, guide, sink, ids: node_id...node_id + 1)
+      Hypergraph.walk(self, guide, sink, ids: node_id...node_id + 1)
 
       buffer.single
     end
@@ -456,14 +495,14 @@ module Ww::D7
     def each_member(edge : AbsEdge, &fn : Node ->) : Nil
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = Hypergraph.descend?(@tree, edge.module)
+      return unless row = Hypergraph.descend?(self, edge.module)
 
       addr = edge.module
       id_zero, origin, scope = row
 
       guide = Guide.new { true }
       needle = edge.term
-      Hypergraph.resolve(origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, fn)
+      Hypergraph.resolve(self, origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, fn)
     end
 
     def each_neighbor(of node_id : NodeId, on edge : AbsEdge, &fn : Node ->) : Nil
@@ -510,6 +549,20 @@ module Ww::D7
 
           proposals << proposal
         end
+      end
+    end
+
+    def annotated_with?(ann : Annotation) : Bool
+      ann.in?(annotations)
+    end
+
+    def annotate(ann : Annotation, &)
+      annotations << ann
+
+      begin
+        yield
+      ensure
+        annotations.delete(ann)
       end
     end
   end

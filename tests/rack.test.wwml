@@ -6691,3 +6691,347 @@
     (cell @plan ()))
 
   end)
+
+;; Conditional parent
+(group
+  ;; Basic
+  (rack
+    (frame
+      (cell @active false)
+      (guard (@active true) (cell @x 0))
+      (guard (@active true) (cell @y))
+      (guard (@x _number) (feed @x @y))
+      (guard (@y _number) (feed @y @x))
+      (backsys @active
+        x←true <> {x: false}
+        x←false <> {x: true}))
+    (frame
+      (cell @active true)
+      (guard (@active true) (cell @x 0))
+      (guard (@active true) (cell @y))
+      (guard (@x _number) (feed @x @y))
+      (guard (@y _number) (feed @y @x))
+      (backsys @active
+        x←true <> {x: false}
+        x←false <> {x: true}))
+    (frame
+      (cell @active false)
+      (guard (@active true) (cell @x))
+      (guard (@active true) (cell @y 0))
+      (guard (@x _number) (feed @x @y))
+      (guard (@y _number) (feed @y @x))
+      (backsys @active
+        x←true <> {x: false}
+        x←false <> {x: true}))
+    (frame
+      (cell @active true)
+      (guard (@active true) (cell @x))
+      (guard (@active true) (cell @y 0))
+      (guard (@x _number) (feed @x @y))
+      (guard (@y _number) (feed @y @x))
+      (backsys @active
+        x←true <> {x: false}
+        x←false <> {x: true}))
+    (frame
+      (cell @active false)
+      (guard (@active true) (cell @x 0))
+      (guard (@active true) (cell @y))
+      (guard (@x _number) (feed @x @y))
+      (guard (@y _number) (feed @y @x))
+      (backsys @active
+        x←true <> {x: false}
+        x←false <> {x: true})))
+    ;; ...
+
+  ;; Counter
+  (rack
+    (frame
+      (feed @x @ys)
+      (backsys @turn ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 0)
+      (guard (@turn 0) (queue (@x @xs) ("Joe" "Samantha")))
+      (guard (@turn 1) (queue (@x @xs) ("Jane" "David" "Alice")))
+      (guard (@turn 2) (queue (@x @xs) ("Barbara" "Bob")))
+      (queue (@y @ys) ()))
+    (frame/tail
+      (cell @turn 1)
+      (guard (@turn 0) (queue (@x @xs) ("Samantha")))
+      (guard (@turn 1) (queue (@x @xs) ("Jane" "David" "Alice")))
+      (guard (@turn 2) (queue (@x @xs) ("Barbara" "Bob")))
+      (queue (@y @ys) ("Joe")))
+    (frame/tail
+      (cell @turn 2)
+      (guard (@turn 0) (queue (@x @xs) ("Samantha")))
+      (guard (@turn 1) (queue (@x @xs) ("David" "Alice")))
+      (guard (@turn 2) (queue (@x @xs) ("Barbara" "Bob")))
+      (queue (@y @ys) ("Joe" "Jane")))
+    (frame/tail
+      (cell @turn 0)
+      (guard (@turn 0) (queue (@x @xs) ("Samantha")))
+      (guard (@turn 1) (queue (@x @xs) ("David" "Alice")))
+      (guard (@turn 2) (queue (@x @xs) ("Bob")))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara")))
+    (frame/tail
+      (cell @turn 1)
+      (guard (@turn 0) (queue (@x @xs) ()))
+      (guard (@turn 1) (queue (@x @xs) ("David" "Alice")))
+      (guard (@turn 2) (queue (@x @xs) ("Bob")))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara" "Samantha")))
+    (frame/tail
+      (cell @turn 2)
+      (guard (@turn 0) (queue (@x @xs) ()))
+      (guard (@turn 1) (queue (@x @xs) ("Alice")))
+      (guard (@turn 2) (queue (@x @xs) ("Bob")))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara" "Samantha" "David")))
+    (frame/tail
+      (cell @turn 0)
+      (guard (@turn 0) (queue (@x @xs) ()))
+      (guard (@turn 1) (queue (@x @xs) ("Alice")))
+      (guard (@turn 2) (queue (@x @xs) ()))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara" "Samantha" "David" "Bob")))
+    (frame/tail
+      (cell @turn 1)
+      (guard (@turn 0) (queue (@x @xs) ()))
+      (guard (@turn 1) (queue (@x @xs) ("Alice")))
+      (guard (@turn 2) (queue (@x @xs) ()))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara" "Samantha" "David" "Bob")))
+    (frame/tail
+      (cell @turn 2)
+      (guard (@turn 0) (queue (@x @xs) ()))
+      (guard (@turn 1) (queue (@x @xs) ()))
+      (guard (@turn 2) (queue (@x @xs) ()))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara" "Samantha" "David" "Bob" "Alice")))
+    (frame/tail
+      (cell @turn 0)
+      (guard (@turn 0) (queue (@x @xs) ()))
+      (guard (@turn 1) (queue (@x @xs) ()))
+      (guard (@turn 2) (queue (@x @xs) ()))
+      (queue (@y @ys) ("Joe" "Jane" "Barbara" "Samantha" "David" "Bob" "Alice"))))
+    ;; ...
+
+  ;; Counter and feeds
+  (rack
+    (frame
+      (cell @counter 0)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y))))
+    (frame
+      (cell @counter 1)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y))))
+    (frame
+      (cell @counter 2)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y))))
+    (frame
+      (cell @counter 0)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100))))
+    (frame
+      (cell @counter 1)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100))))
+    (frame
+      (cell @counter 2)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x)
+          (feed @x @y @x)
+          (cell @y 100))))
+    (frame
+      (cell @counter 0)
+      (backsys @counter ±n <> {n: ^(mod (+ n 1) 3)})
+      (guard (@counter 0)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 1)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))
+      (guard (@counter 2)
+        (module {}
+          (cell @x 100)
+          (feed @x @y @x)
+          (cell @y)))))
+    ;; ...
+
+  ;; Chain
+  (rack
+    (frame
+      (feed (copy @a) @b)
+      (feed (copy @b) @c)
+      (feed (copy @c) @d)
+      (feed @d @a)
+      (cell @a "kaixo")
+      (guard (@a _string)
+        (cell @b))
+      (guard (@b _string)
+        (cell @c)
+        (discard @a))
+      (guard (@c _string)
+        (cell @d)
+        (discard @b)))
+    (frame/tail
+      (cell @a "kaixo")
+      (guard (@a _string)
+        (cell @b "kaixo"))
+      (guard (@b _string)
+        (cell @c)
+        (discard @a))
+      (guard (@c _string)
+        (cell @d)
+        (discard @b)))
+    (frame/tail
+      (cell @a)
+      (guard (@a _string)
+        (cell @b "kaixo"))
+      (guard (@b _string)
+        (cell @c "kaixo")
+        (discard @a))
+      (guard (@c _string)
+        (cell @d)
+        (discard @b)))
+    ;; NOTE: Progress is blocked because @b _string guard wants @b to be a string;
+    ;; @a _string guard wants @a to be a string. @a is empty. @a _string guard fails
+    ;; and deactivates @b cell. @b _string cell doesn't find the @b cell and deactivates
+    ;; itself. Thus, the whole circuit reaches quiescence.
+    end)
+
+  ;; Cycle. The only requirement is for this thing not to segfault.
+  (rack
+    (frame
+      (guard (@a _string)
+        (cell @b "Kaixo"))
+      (guard (@b _string)
+        (cell @a "mundua")))
+    end)
+
+  ;; Module passable
+  (rack
+    (frame
+      (module {:@a} (cell @a 100))
+      (module {:@b} (cell @b 200))
+      (guard (@a 100) (cell @foo "Hi"))
+      (guard (@b 100) (cell @foo "Bye"))
+      (cell @bar)
+      (feed @foo @bar)
+      (discard @bar))
+    (frame
+      (module {:@a} (cell @a 100))
+      (module {:@b} (cell @b 200))
+      (guard (@a 100) (cell @foo))
+      (guard (@b 100) (cell @foo "Bye"))
+      (cell @bar "Hi")
+      (feed @foo @bar)
+      (discard @bar))
+    (frame
+      (module {:@a} (cell @a 100))
+      (module {:@b} (cell @b 200))
+      (guard (@a 100) (cell @foo))
+      (guard (@b 100) (cell @foo "Bye"))
+      (cell @bar)
+      (feed @foo @bar)
+      (discard @bar))
+    end)
+
+  ;; Module impassable
+  (rack
+    (frame
+      (module {} (cell @a 100))
+      (guard (@a 100) (cell @foo "Hi"))
+      (cell @bar)
+      (feed @foo @bar))
+    end)
+
+  ;; Circuit impassable
+  (rack
+    (frame
+      (device (cell @a 100))
+      (guard (@a 100) (cell @foo "Hi"))
+      (cell @bar)
+      (feed @foo @bar))
+    end))
