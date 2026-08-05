@@ -779,9 +779,8 @@ module Ww::Rack
       # a part or "pocket" of the current running circuit. Since we use synchronous rewriting,
       # anything that reads the frag or stuff within it (e.g. cells defined in the frag)
       # sees only the previous frame; so there's nothing unexpected on that end.
-      #
-      # NOTE: The empty case is handled below.
       matchpi %{[frag @edge_ value0_]} do
+        # NOTE: The empty case is handled below.
         mix0 = Term.of(:group, {:cell, edge, value0}, {:group, value0})
 
         D7.mixture(node, mix0) do |mix1|
@@ -793,7 +792,12 @@ module Ww::Rack
               Term.morph(node, {2, value1})
             end
 
-            # New value computed.
+            # Value was erased. Higher priority.
+            matchpi %{(group (cell @_) _)} do
+              Term.morph(node, {2, nil})
+            end
+
+            # If cell did not change, use the updated group content as value.
             matchpi %{(group _ (group value1_))} do
               Term.morph(node, {2, value1})
             end

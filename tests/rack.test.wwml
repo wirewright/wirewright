@@ -2213,6 +2213,16 @@
       (feed @bridge-src @bridge-dst))
     end)
 
+  ;; Erase
+  (rack
+    (frame
+      (frag @x 100)
+      (discard @x))
+    (frame
+      (frag @x)
+      (discard @x))
+    end)
+
   (rack
     (frame
       (view (@count ±n @y) ^"Count: ⸢n⸣")
@@ -6693,7 +6703,7 @@
   end)
 
 ;; Conditional parent
-;,(group
+(group
   ;; Basic
   (rack
     (frame
@@ -7081,5 +7091,37 @@
       (cell @turn bob)
       (guard (@turn alice) (queue (@x @xs) ()))
       (guard (@turn bob) (queue (@x @xs) ()))
-      (queue (@y @ys) (1 100 2 200 3 300)))))
+      (queue (@y @ys) (1 100 2 200 3 300))))
     ;; ...
+
+  ;; The same example but with control so that it terminates
+  (rack
+    (frame
+      (frag @alice
+        (guard (@turn alice)
+          (queue (@x @xs) (1 2 3))))
+      (frag @bob
+        (guard (@turn bob)
+          (queue (@x @xs) (100 200 300))))
+      (backsys {@:driver, @:alice, @:bob}
+        {¦ alice: (_ _ (queue _ ())) bob: (_ _ (queue _ ())) driver_}
+          <> {(driver): ()})
+      (feed @x @ys)
+      (cell @turn alice)
+      (frag @driver
+        (backsys @turn
+          t←alice <> {t: bob}
+          t←bob <> {t: alice}))
+      (queue (@y @ys) ()))
+    (frame/tail fast-forward: true ;; this step removes @driver
+      (cell @turn alice)
+      (frag @driver
+        (backsys @turn
+          t←alice <> {t: bob}
+          t←bob <> {t: alice}))
+      (queue (@y @ys) (1 100 2 200 3 300)))
+    (frame/tail fast-forward: true
+      (cell @turn bob) ;; but it had a chance to run so the turn is bob's forever
+      (frag @driver)
+      (queue (@y @ys) (1 100 2 200 3 300)))
+    end))
