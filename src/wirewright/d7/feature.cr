@@ -110,6 +110,20 @@ module Ww::D7
   defrecord ScopeOpenExcept, edges : Slice(Term)
   defrecord ScopeClosedExcept, bindings : Term::Dict
 
+  # A sentinel value used in `Parent#passable` to state that a parent is
+  # passable. Some optimizations rely on this since they cannot look "into"
+  # a `PassablePredicate` to determine whether it is something like `-> { true }`.
+  module Passable
+    extend self
+
+    def call(hg : Hypergraph, addr : NodeAddr) : Bool
+      true
+    end
+  end
+
+  # Uses a function to determine whether a parent is passable.
+  alias PassablePredicate = Hypergraph, NodeAddr -> Bool
+
   # Represents the children nodes of *node* found within an exclusive positive
   # range of its items.
   #
@@ -117,7 +131,7 @@ module Ww::D7
   defrecord Parent,
     node : Term::Dict,
     range : Range(UInt32, UInt32),
-    passable : Hypergraph, NodeAddr -> Bool
+    passable : Passable.class | PassablePredicate
 
   # Constructs a parent feature.
   #
@@ -128,11 +142,13 @@ module Ww::D7
 
   # :ditto:
   def parent(node : Term::Dict, range : Range(UInt32, UInt32)) : Parent
-    parent(node, range) { true }
+    assert range.exclusive?
+
+    Parent.new(node, range, Passable)
   end
 
   # :ditto:
-  def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : Hypergraph, NodeAddr -> Bool) : Parent
+  def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : PassablePredicate) : Parent
     assert range.exclusive?
 
     Parent.new(node, range, passable)

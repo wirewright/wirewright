@@ -201,21 +201,11 @@ module Ww::D7
     end
 
     # :nodoc:
-    defrecord ResolveContext,
-      hg : Hypergraph,
-      guide : Guide,
-      sink : NodeId, NodeAddr, Gnd ->
+    defrecord ResolveContext, hg : Hypergraph, guide : Guide, fn : Node ->
 
     # :nodoc:
     def self.resolve(hg : Hypergraph, root : ParseTree, addr : NodeAddr, guide : Guide, membership : Slice(Term), id_zero, fn : Node ->) : Nil
-      sink = ->(id : NodeId, addr : NodeAddr, feature : Gnd) do
-        # Use Gnd#defn (the node's definition) rather than #node here.
-        # The hypergraph should only ever see the defn.
-        node = Node.new(id, addr, feature.head, feature.defn)
-        fn.call(node)
-      end
-
-      ctx = ResolveContext.new(hg, guide, sink)
+      ctx = ResolveContext.new(hg, guide, fn)
       resolve_root(ctx, addr, root, membership, id_zero)
     end
 
@@ -251,7 +241,10 @@ module Ww::D7
       return if membership.empty?
       return unless membership.all?(&.in?(tree.feature.edges))
 
-      ctx.sink.call(id_zero, addr, tree.feature)
+      # Use Gnd#defn (the node's definition) rather than #node here.
+      # The hypergraph should only ever see the defn.
+      node = Node.new(id_zero, addr, tree.feature.head, tree.feature.defn)
+      ctx.fn.call(node)
     end
 
     private def self.resolve_inner(ctx, addr, tree : ScopeNode, membership, id_zero) : Nil
