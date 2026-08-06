@@ -460,7 +460,7 @@
        (node @mouse (mouse))
 
        (comment
-         "The backsystem below controls the behavior of the scrollbar. Notice how it \
+         "The rewriter below controls the behavior of the scrollbar. Notice how it \
           is a severely capped exhR. But even with limit: 3 there's a lot of opportunities \
           for the rules to apply. exhR is needed here to make sure we do the clamps during \
           just one tick; we can't spread it over multiple ticks due to UX concerns.")

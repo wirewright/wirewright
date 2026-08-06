@@ -255,25 +255,25 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Step 0
+      # ;; Frame 0
       # (cell @a 0)
       # (cell @b)
       # (cell @c)
       # (feed @a @b @c @a)
       #
-      # ;; Step 1
+      # ;; Frame 1
       # (cell @a)
       # (cell @b 0)
       # (cell @c)
       # (feed @a @b @c @a)
       #
-      # ;; Step 2
+      # ;; Frame 2
       # (cell @a)
       # (cell @b)
       # (cell @c 0)
       # (feed @a @b @c @a)
       #
-      # ;; Step 3
+      # ;; Frame 3
       # (cell @a 0)
       # (cell @b)
       # (cell @c)
@@ -540,7 +540,7 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Step 0
+      # ;; Frame 0
       # (cell @turn alice)
       # (backsys @turn
       #   t←alice <> {t: bob}
@@ -555,7 +555,7 @@ module Ww::Rack
       # (feed @x @ys)
       # (queue (@y @ys) ())
       #
-      # ;; Step 1 (omitting backsys because it stays the same)
+      # ;; Frame 1 (omitting backsys because it stays the same)
       # (cell @turn bob)
       # (guard (@turn alice)
       #   (queue (@x @xs) (2 3)))
@@ -564,7 +564,7 @@ module Ww::Rack
       # (feed @x @ys)
       # (queue (@y @ys) (1))
       #
-      # ;; Step 2
+      # ;; Frame 2
       # (cell @turn alice)
       # (guard (@turn alice)
       #   (queue (@x @xs) (2 3)))
@@ -573,7 +573,7 @@ module Ww::Rack
       # (feed @x @ys)
       # (queue (@y @ys) (1 100))
       #
-      # ;; Step 3
+      # ;; Frame 3
       # (cell @turn bob)
       # (guard (@turn alice)
       #   (queue (@x @xs) (3)))
@@ -582,7 +582,7 @@ module Ww::Rack
       # (feed @x @ys)
       # (queue (@y @ys) (1 100 2))
       #
-      # ;; Step 4
+      # ;; Frame 4
       # (cell @turn alice)
       # (guard (@turn alice)
       #   (queue (@x @xs) (3)))
@@ -837,7 +837,7 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Step 0
+      # ;; Frame 0
       # (cell @xs (1 2 3))
       #
       # ;; Increment the middle number in @xs.
@@ -849,21 +849,21 @@ module Ww::Rack
       # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys))
       #
-      # ;; Step 1
+      # ;; Frame 1
       # (cell @xs (1 3 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
       # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys {count: 3}))
       #
-      # ;; Step 2
+      # ;; Frame 2
       # (cell @xs (1 4 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
       # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
       #   (cell @ys {count: 4}))
       #
-      # ;; Step 3
+      # ;; Frame 3
       # (cell @xs (1 5 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
@@ -1457,7 +1457,7 @@ module Ww::Rack
       # |@key path
       # Specifies the path to a file, for example, `/tmp/test.txt`.
       #
-      # |@key reading path.reading
+      # |@key reading rack.path.reading
       # The *reading* of the file, if available.
       #
       # |@block
@@ -1530,7 +1530,7 @@ module Ww::Rack
       # Specifies the path to a file system entry, for example, `/tmp/test.txt`
       # or `/tmp/dir`.
       #
-      # |@key report path.report
+      # |@key report rack.path.report
       # The *report* about the file system entry, if available.
       #
       # |@block
@@ -1574,7 +1574,7 @@ module Ww::Rack
       #
       # ;; $ touch /tmp/dir/c.txt
       #
-      # ;; Frame 4
+      # ;; Frame 5
       # (path ("/tmp/dir" report)
       #   (dir timestamp: "2026-07-28 18:01:62 UTC" ;; timestamp changed!
       #     (dir "a")
@@ -1844,20 +1844,15 @@ module Ww::Rack
       # (supervisor (@xs @x (k_ _) - @pool))
       # (circuit (pool @pool)
       #   (device
-      #     (cell @key a)
       #     (cell @x (a 1))
       #     (p "Hello World"))
       #   (device
-      #     (cell @key b)
       #     (cell @x (b 2))
       #     (p "Hello World"))
       #   (device
-      #     (cell @key c)
       #     (cell @x (c 3))
       #     (p "Hello World")))
       # ```
-      #
-      # Notice how the `@key` cell was created automatically.
       matchpi %{[supervisor (@values_ @_ _ - @pool_) _*]} do
         # NOTE: the other edge, @values_ ⏏@value_⏏, is an interior edge, it
         # is not exposed to the outside world.
