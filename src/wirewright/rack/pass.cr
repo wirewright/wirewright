@@ -505,7 +505,7 @@ module Ww::Rack
       Term.case(node.term) do
         matchpi %{[rig header←(@input_ selector_ -> _*) payload_]} do
           patterns = header.items.move(2)
-          rig_step(hg, node, node.resolve(input), selector, patterns, payload)
+          rig_step(hg, node, hg.resolve(node.addr, input), selector, patterns, payload)
         end
 
         otherwise { }

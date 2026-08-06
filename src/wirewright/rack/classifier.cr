@@ -595,12 +595,12 @@ module Ww::Rack
       # ;; just continues to cycle indefinitely.
       # ```
       matchpi %{[guard (@edge_ pattern_) _*]} do
-        D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr, scope|
+        D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr|
           ann = GuardAnnotation.new(addr)
           next false if hg.annotated_with?(ann) # cycle
 
           hg.annotate(ann) do
-            next false unless dep = Rack.cell?(hg, scope.resolve(edge))
+            next false unless dep = Rack.cell?(hg, hg.resolve(addr, edge))
             next false unless value = dep.value?
             next false unless M1.probe?(pattern, value)
 

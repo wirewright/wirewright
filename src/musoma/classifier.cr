@@ -162,7 +162,7 @@ module MuSoma
   defrecord Trunk, active : Term::Rep?
 
   # :nodoc:
-  def distill(µ, hg, addr, scope, tree : D7::InertLeaf, trunk) : Term::Rep
+  def distill(µ, hg, addr, tree : D7::InertLeaf, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -189,7 +189,7 @@ module MuSoma
   end
 
   # :nodoc:
-  def distill(µ, hg, addr, scope, tree : D7::GndLeaf, trunk) : Term::Rep
+  def distill(µ, hg, addr, tree : D7::GndLeaf, trunk) : Term::Rep
     node = tree.feature.node
 
     Term.case(node) do
@@ -221,7 +221,7 @@ module MuSoma
   end
 
   # :nodoc:
-  def distill(µ, hg, addr, scope, tree : D7::ParentNode, trunk) : Term::Rep
+  def distill(µ, hg, addr, tree : D7::ParentNode, trunk) : Term::Rep
     # Impassable GroupNodes must not make it into the distilled markup. For
     # example, in:
     #
@@ -232,7 +232,7 @@ module MuSoma
     # Only the first `p` should be visible.
     if tree.is_a?(D7::GroupNode)
       predicate = tree.feature.passable
-      unless predicate.call(hg, addr, scope)
+      unless predicate.call(hg, addr)
         return Term.rep
       end
     end
@@ -249,7 +249,7 @@ module MuSoma
         child_trunk = trunk
       end
 
-      rep = distill(µ, hg, addr.append(key), scope, child, child_trunk)
+      rep = distill(µ, hg, addr.append(key), child, child_trunk)
       if !child_adjunct && pred
         buffer << pred
       end
@@ -325,13 +325,8 @@ module MuSoma
   end
 
   # :nodoc:
-  def distill(µ, hg, addr, scope, tree : D7::MixtureNode, trunk) : Term::Rep
-    distill(µ, hg, addr, scope, tree.child, trunk)
-  end
-
-  # :nodoc:
-  def distill(µ, hg, addr, scope, tree : D7::ScopeNode, trunk) : Term::Rep
-    distill(µ, hg, addr, scope.append(addr, tree.feature.scope), tree.child, trunk)
+  def distill(µ, hg, addr, tree : D7::ScopeNode | D7::MixtureNode, trunk) : Term::Rep
+    distill(µ, hg, addr, tree.child, trunk)
   end
 
   # Finds Microfold and Scenery nodes in *tree* and returns a list of roots
@@ -339,7 +334,7 @@ module MuSoma
   def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
     hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
     trunk = Trunk.new(active: nil)
-    Term.of(distill(codex, hg, D7::NodeAddr.empty, D7::NodeScope.empty, tree, trunk))
+    Term.of(distill(codex, hg, D7::NodeAddr.empty, tree, trunk))
   end
 
   defrecord WindowInfo, id : Term, defn : Term, open : Bool

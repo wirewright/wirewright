@@ -100,19 +100,19 @@ module Ww::Rack::Parser
 
       Term.case(node.term) do
         matchpiT %{[parser (@input_ -> top_symbol -> @output_) ruleset_*]} do
-          variant = Transfer.new(node.resolve(input), top, node.resolve(output), ruleset)
+          variant = Transfer.new(hg.resolve(node.addr, input), top, hg.resolve(node.addr, output), ruleset)
         end
 
         matchpiT %{[parser (@input_ -> top_symbol -> @output_ / @error_) ruleset_*]} do
-          variant = TransferError.new(node.resolve(input), top, node.resolve(output), node.resolve(error), ruleset)
+          variant = TransferError.new(hg.resolve(node.addr, input), top, hg.resolve(node.addr, output), hg.resolve(node.addr, error), ruleset)
         end
 
         matchpiT %{[parser (@input_ - top_symbol - @output_) ruleset_*]} do
-          variant = View.new(node.resolve(input), top, node.resolve(output), ruleset)
+          variant = View.new(hg.resolve(node.addr, input), top, hg.resolve(node.addr, output), ruleset)
         end
 
         matchpiT %{[parser (@input_ - top_symbol - @output_ / @error_) ruleset_*]} do
-          variant = ViewError.new(node.resolve(input), top, node.resolve(output), node.resolve(error), ruleset)
+          variant = ViewError.new(hg.resolve(node.addr, input), top, hg.resolve(node.addr, output), hg.resolve(node.addr, error), ruleset)
         end
 
         otherwise { }

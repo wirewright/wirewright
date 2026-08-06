@@ -38,66 +38,16 @@ module Ww::D7
     def append(key : UInt32) : NodeAddr
       NodeAddr.new(@addr.append(key))
     end
-  end
 
-  # Records the scopes that the traversal process passes through. The addr
-  # is that of the scope (e.g. `module`, but in general, see `Scope`), and
-  # the dict is its bindings dict.
-  struct NodeScope
-    alias Any = OpenExcept | ClosedExcept
+    def trim(newsize : Int32) : NodeAddr
+      assert newsize <= size
 
-    defrecord OpenExcept, edges : Slice(Term)
-    defrecord ClosedExcept, bindings : Term::Dict
-
-    def initialize(@trace : Slice({NodeAddr, Any}))
-    end
-
-    def self.empty : NodeScope
-      new(Slice({NodeAddr, Any}).empty)
-    end
-
-    def resolve(edge : Term) : AbsEdge
-      trace = @trace
-
-      while entry = trace.last?
-        addr, scope = entry
-
-        case scope
-        in OpenExcept
-          if edge.in?(scope.edges)
-            # In Rack:
-            #  (local (⏏@dst⏏) ;; <<- WE ARE HERE, @dst found, so it's a local!
-            #    (feed @src ⏏@dst⏏)
-            return AbsEdge.new(addr, edge)
-          end
-          # Continue climbing. This edge falls into "open", thus outer-scoped,
-          # not "except" and thus inner-scoped.
-          #
-          # In Rack:
-          #  (local (@dst) ;; <<- WE ARE HERE, @src NOT found, so it's outerly-scoped.
-          #    (feed ⏏@src⏏ @dst)
-        in ClosedExcept
-          unless exterior = scope.bindings[edge]?
-            # In Rack:
-            #  (module {@x: @y} ;; <<- WE ARE HERE, no @a, so it's a local!
-            #    (feed ⏏@a⏏ @x)
-            return AbsEdge.new(addr, edge)
-          end
-
-          # In Rack:
-          #  (module {⏏@x⏏: @y} ;; @x found, its *exterior* is the outerly-scoped @y.
-          #    (feed @a ⏏@x⏏)
-          edge = exterior
-        end
-
-        trace = trace[...-1]
+      newaddr = @addr
+      (size - newsize).times do
+        newaddr = newaddr.prior
       end
 
-      AbsEdge.new(NodeAddr.empty, edge)
-    end
-
-    def append(addr : NodeAddr, scope : Any) : NodeScope
-      NodeScope.new(@trace.append({addr, scope}))
+      NodeAddr.new(newaddr)
     end
   end
 

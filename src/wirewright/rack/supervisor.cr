@@ -22,7 +22,7 @@ module Ww::Rack::Supervisor
   def propose(hg : D7::Hypergraph, proposals)
     hg.propose(proposals, :supervisor) do |node|
       Term.matchpi?(node.term, %{[supervisor (@values_ @value_ pattern_ - @pool_) template_*]}) do
-        variant = Standard.new(node.resolve(values), value, pattern, node.resolve(pool), template)
+        variant = Standard.new(hg.resolve(node.addr, values), value, pattern, hg.resolve(node.addr, pool), template)
         step(hg, node, variant)
       end
     end

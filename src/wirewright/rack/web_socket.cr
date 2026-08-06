@@ -156,7 +156,7 @@ module Ww::Rack::WebSocket
         matchpi %{[ws (@pool_ bindingQ_ server _? ⍊ in: (%optional @in @input_) out: (%optional @out @output_)) template_*]} do
           continue unless binding = binding?(bindingQ)
 
-          variant = Server.new(node, node.resolve(pool), binding, input, output, template.as_d)
+          variant = Server.new(node, hg.resolve(node.addr, pool), binding, input, output, template.as_d)
           step(state, ctx, hg, variant)
         end
 
@@ -167,7 +167,7 @@ module Ww::Rack::WebSocket
         matchpi %{[ws (@message_ -> connQ_ -> @reply_) _?]} do
           continue unless conn = WebSocketClientService.conn?(connQ)
 
-          variant = Client.new(node, node.resolve(message), conn, node.resolve(reply))
+          variant = Client.new(node, hg.resolve(node.addr, message), conn, hg.resolve(node.addr, reply))
           step(state, ctx, hg, variant)
         end
 

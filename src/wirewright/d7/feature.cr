@@ -91,19 +91,24 @@ module Ww::D7
   end
 
   # Wraps a continuation feature *cont* in a lexical scope qualified by *scope*.
-  defcase Scope, scope : NodeScope::Any, cont : Feature
+  defcase Scope, scope : NodeScope, cont : Feature
 
   # Constructs a scope feature.
   #
   # See `Scope`.
   def scope(cont : Feature, *, bindings : Term::Dict) : Scope
-    Scope.new(NodeScope::ClosedExcept.new(bindings), cont)
+    Scope.new(ScopeClosedExcept.new(bindings), cont)
   end
 
   # :ditto:
   def scope(cont : Feature, *, locals : Indexable(Term)) : Scope
-    Scope.new(NodeScope::OpenExcept.new(locals.to_readonly_slice(&.itself)), cont)
+    Scope.new(ScopeOpenExcept.new(locals.to_readonly_slice(&.itself)), cont)
   end
+
+  alias NodeScope = ScopeOpenExcept | ScopeClosedExcept
+
+  defrecord ScopeOpenExcept, edges : Slice(Term)
+  defrecord ScopeClosedExcept, bindings : Term::Dict
 
   # Represents the children nodes of *node* found within an exclusive positive
   # range of its items.
@@ -112,7 +117,7 @@ module Ww::D7
   defrecord Parent,
     node : Term::Dict,
     range : Range(UInt32, UInt32),
-    passable : Hypergraph, NodeAddr, NodeScope -> Bool
+    passable : Hypergraph, NodeAddr -> Bool
 
   # Constructs a parent feature.
   #
@@ -127,7 +132,7 @@ module Ww::D7
   end
 
   # :ditto:
-  def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : Hypergraph, NodeAddr, NodeScope -> Bool) : Parent
+  def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : Hypergraph, NodeAddr -> Bool) : Parent
     assert range.exclusive?
 
     Parent.new(node, range, passable)
@@ -184,9 +189,35 @@ module Ww::D7
     feature : Mixture,
     child : ParseTree
 
-  defcase ScopeNode,
-    feature : Scope,
-    child : ParseTree
+  class ScopeNode
+    getter feature : Scope
+    getter child : InertLeaf | GndLeaf | MixtureNode | ParentNode
+
+    def initialize(@feature, child : ParseTree)
+      # Our lookup algorithm(s) rely on this so let's make ScopeNode maintain
+      # this as an invariant.
+      assert ScopeNode.has_addr?(child), "scope node child must have an address"
+
+      @child = child.as(InertLeaf | GndLeaf | MixtureNode | ParentNode)
+    end
+
+    # :nodoc:
+    def self.has_addr?(node : ScopeNode) : Bool
+      false
+    end
+
+    # :nodoc:
+    def self.has_addr?(node : MixtureNode) : Bool
+      has_addr?(node.child)
+    end
+
+    # :nodoc:
+    def self.has_addr?(node : InertLeaf | GndLeaf | ParentNode) : Bool
+      true
+    end
+
+    def_equals_and_hash @feature, @child
+  end
 
   alias ParentNode = GroupNode | CircuitNode
 
@@ -308,14 +339,14 @@ module Ww::D7
     edges = Set(Term).new
 
     case scope = tree.feature.scope
-    in NodeScope::OpenExcept
+    in ScopeOpenExcept
       child_level.edges.each do |edge|
         # If edge is absent in edges, it's local, so it does not propagate outwards.
         next if edge.in?(scope.edges)
 
         edges << edge
       end
-    in NodeScope::ClosedExcept
+    in ScopeClosedExcept
       child_level.edges.each do |edge|
         # If no exterior is defined, the edge is local to the scope, and
         # does not propagate outwards.

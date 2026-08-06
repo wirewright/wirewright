@@ -62,7 +62,7 @@ module Ww::D7
 
   alias MatchGroup = Slice(Match)
 
-  defrecord Match, node : Node, env : Term::Dict
+  defrecord Match, hg : Hypergraph, node : Node, env : Term::Dict
 
   # Returns the first `Match` in *object*.
   def match(object : Match) : Match
@@ -162,14 +162,9 @@ module Ww::D7
     goal.to_readonly_slice { |term| table[D7.resolve(term, wrt: dev)] }
   end
 
-  # See `Node#resolve`.
-  def resolve(edge : Term, *, wrt node : Node) : AbsEdge
-    node.resolve(edge)
-  end
-
-  # :ditto:
+  # See `Hypergraph#resolve`.
   def resolve(edge : Term, *, wrt match : Match) : AbsEdge
-    resolve(edge, wrt: match.node)
+    match.hg.resolve(match.node.addr, edge)
   end
 
   # An immutable map of node ids to replacement terms.

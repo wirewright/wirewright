@@ -96,7 +96,7 @@ module Ww::Rack::Database
     hg.propose(proposals, :db) do |node|
       Term.case(node.term) do
         matchpi %{[db (@stmt_ -> uri_string -> @response_) _?]}, uri: String do
-          variant = Transfer.new(node, node.resolve(stmt), URI.parse(uri), node.resolve(response))
+          variant = Transfer.new(node, hg.resolve(node.addr, stmt), URI.parse(uri), hg.resolve(node.addr, response))
           step(state, ctx, hg, variant)
         end
 

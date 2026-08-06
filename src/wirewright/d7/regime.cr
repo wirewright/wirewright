@@ -147,7 +147,7 @@ module Ww::D7
 
           matches = Pf::Kit.stack_array(Match)
 
-          link_edge_abs = node.resolve(link_edge)
+          link_edge_abs = hg.resolve(node.addr, link_edge)
 
           hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
             next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
@@ -174,11 +174,11 @@ module Ww::D7
             # wrt. their scope, we'd think of them as the same cell, which leads to
             # invalid behavior.
             dep_edge = dep_env[link.capture]
-            dep_edge_abs = neighbor.resolve(dep_edge)
+            dep_edge_abs = hg.resolve(neighbor.addr, dep_edge)
             next unless link_edge_abs == dep_edge_abs
 
             seen = seen.add(neighbor.id)
-            matches << Match.new(neighbor, dep_env)
+            matches << Match.new(hg, neighbor, dep_env)
           end
 
           responses << matches.to_readonly_slice(&.itself)
@@ -194,18 +194,18 @@ module Ww::D7
           response = link_edges.items.to_readonly_slice do |link_edge|
             matches = Pf::Kit.stack_array(Match)
 
-            link_edge_abs = node.resolve(link_edge)
+            link_edge_abs = hg.resolve(node.addr, link_edge)
 
             hg.each_neighbor(of: node.id, on: link_edge_abs) do |neighbor|
               next if neighbor.id.in?(seen) # Don't allow to depend on the same node twice.
               next unless dep_env = match?(dep.pattern_id, neighbor)
 
               dep_edge = dep_env[link.dep_capture]
-              dep_edge_abs = neighbor.resolve(dep_edge)
+              dep_edge_abs = hg.resolve(neighbor.addr, dep_edge)
               next unless link_edge_abs == dep_edge_abs
 
               seen = seen.add(neighbor.id)
-              matches << Match.new(neighbor, dep_env)
+              matches << Match.new(hg, neighbor, dep_env)
             end
 
             matches.to_readonly_slice(&.itself)
@@ -215,7 +215,7 @@ module Ww::D7
         end
       end
 
-      match_table = MatchTable.assoc(query.name, MatchGroup[Match.new(node, query_env)])
+      match_table = MatchTable.assoc(query.name, MatchGroup[Match.new(hg, node, query_env)])
 
       # Make sure dependency bounds are satisfied after agreement.
       query.deps.zip(responses) do |(_, dep), response|

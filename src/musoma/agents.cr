@@ -205,7 +205,7 @@ module MuSoma
       end
     end
 
-    private def self.repr(µ, hg, addr, scope, tree : D7::InertLeaf) : Term
+    private def self.repr(µ, hg, addr, tree : D7::InertLeaf) : Term
       repr = Term::Dict.build do |commit|
         commit << :inert << tree.feature.node
 
@@ -219,7 +219,7 @@ module MuSoma
       Term.of(repr)
     end
 
-    private def self.repr(µ, hg, addr, scope, tree : D7::GndLeaf) : Term
+    private def self.repr(µ, hg, addr, tree : D7::GndLeaf) : Term
       node = tree.feature.node
 
       Term.case(node) do
@@ -262,7 +262,7 @@ module MuSoma
         matchpi %{[figure _*]} do
           trunk = Trunk.new(active: nil)
           tree = D7.parse(MuSoma.clf, node, range: 1u32...node.uitemsize)
-          Term.of(:figure, MuSoma.distill(µ, hg, addr, scope, tree, trunk))
+          Term.of(:figure, MuSoma.distill(µ, hg, addr, tree, trunk))
         end
 
         otherwise do
@@ -271,15 +271,15 @@ module MuSoma
       end
     end
 
-    private def self.repr(µ, hg, addr, scope, tree : D7::MixtureNode) : Term
-      repr(µ, hg, addr, scope, D7::InertLeaf.new(D7.inert(tree.feature.node)))
+    private def self.repr(µ, hg, addr, tree : D7::MixtureNode) : Term
+      repr(µ, hg, addr, D7::InertLeaf.new(D7.inert(tree.feature.node)))
     end
 
-    private def self.repr(µ, hg, addr, scope, tree : D7::ScopeNode) : Term
-      repr(µ, hg, addr, scope.append(addr, tree.feature.scope), tree.child)
+    private def self.repr(µ, hg, addr, tree : D7::ScopeNode) : Term
+      repr(µ, hg, addr, tree.child)
     end
 
-    private def self.repr(µ, hg, addr, scope, tree : D7::ParentNode) : Term
+    private def self.repr(µ, hg, addr, tree : D7::ParentNode) : Term
       parent = tree.feature
 
       repr = parent.node.pairspart.transaction do |commit|
@@ -296,7 +296,7 @@ module MuSoma
           index = key - parent.range.begin
           child = tree.children[index]
 
-          commit << repr(µ, hg, addr.append(key), scope, child)
+          commit << repr(µ, hg, addr.append(key), child)
         end
       end
 
@@ -323,7 +323,7 @@ module MuSoma
     # pretty-printing.
     def self.repr(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
       hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
-      repr = repr(codex, hg, D7::NodeAddr.empty, D7::NodeScope.empty, tree)
+      repr = repr(codex, hg, D7::NodeAddr.empty, tree)
 
       # Mark the topmost parent as root for styling in prettyR.
       Term.matchpi(repr, %{[parent _*]}) do

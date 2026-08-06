@@ -7,26 +7,11 @@ module Ww::D7
   struct Node
     getter id : NodeId
     getter addr : NodeAddr
-    getter scope : NodeScope
     getter head : Term
     getter term : Term
 
     # :nodoc:
-    def initialize(@id, @addr, @scope, @head, @term)
-    end
-
-    # Resolves *edge* with respect to this node.
-    #
-    # This is necessary in cases where you read an edge from a node (e.g.
-    # using pattern matching). You can't use the edge as-is because the actual
-    # cell (or node) it refers to can be different due
-    # to modules in-between. You must first pass the edge through `resolve`
-    # so that it finds the correct edge with respect to the node that you've
-    # read it from.
-    #
-    # See also: `AbsEdge`.
-    def resolve(edge : Term) : AbsEdge
-      @scope.resolve(edge)
+    def initialize(@id, @addr, @head, @term)
     end
   end
 
@@ -65,21 +50,10 @@ module Ww::D7
     # Returns the target level of this hypergraph.
     getter level : UInt32
 
-    @annotations = Atomic(SyncSet(Annotation)?).new(nil)
-
-    # Most hypergraphs don't have annotations.
-    private def annotations : SyncSet(Annotation)
-      if set = @annotations.get(:acquire)
-        return set
-      end
-
-      proposal = SyncSet(Annotation).new
-      set, _ = @annotations.compare_and_set(nil, proposal, :acquire_release, :acquire)
-      set || proposal
-    end
-
     # :nodoc:
     def initialize(@tree : ParseTree, @level : UInt32)
+      @lock = Sync::Mutex.new
+      @annotations = Set(Annotation).new
     end
 
     # :nodoc:
@@ -90,7 +64,7 @@ module Ww::D7
       hg : Hypergraph,
       guide : Guide,
       ids : Range(NodeId, NodeId),
-      sink : NodeId, NodeAddr, NodeScope, Gnd -> WalkFlow
+      sink : NodeId, NodeAddr, Gnd -> WalkFlow
 
     # :nodoc:
     enum WalkFlow
@@ -103,42 +77,38 @@ module Ww::D7
       assert ids.exclusive?
       assert ids.begin <= ids.end
 
-      sink = ->(id : NodeId, addr : NodeAddr, scope : NodeScope, feature : Gnd) do
+      sink = ->(id : NodeId, addr : NodeAddr, feature : Gnd) do
         assert id.in?(ids)
 
         # Use Gnd#defn (the node's definition) rather than #node here.
         # The hypergraph should only ever see the defn.
-        node = Node.new(id, addr, scope, feature.head, feature.defn)
+        node = Node.new(id, addr, feature.head, feature.defn)
         fn.call(node, feature.edges)
       end
 
       ctx = WalkContext.new(hg, guide, ids, sink)
-      walk(ctx, NodeAddr.empty, NodeScope.empty, hg.@tree, hg.@level, 0u32)
+      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level, 0u32)
     end
 
-    private def self.walk(ctx, addr, scope, tree : InertLeaf, level, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : InertLeaf, level, id_zero) : WalkFlow
       WalkFlow::Continue
     end
 
-    private def self.walk(ctx, addr, scope, tree : GndLeaf, level, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : GndLeaf, level, id_zero) : WalkFlow
       unless level.zero?
         return WalkFlow::Continue
       end
 
-      ctx.sink.call(id_zero, addr, scope, tree.feature)
+      ctx.sink.call(id_zero, addr, tree.feature)
     end
 
-    private def self.walk(ctx, addr, scope, tree : ScopeNode, level, id_zero) : WalkFlow
-      walk(ctx, addr, scope.append(addr, tree.feature.scope), tree.child, level, id_zero)
+    private def self.walk(ctx, addr, tree : ScopeNode | MixtureNode, level, id_zero) : WalkFlow
+      walk(ctx, addr, tree.child, level, id_zero)
     end
 
-    private def self.walk(ctx, addr, scope, tree : MixtureNode, level, id_zero) : WalkFlow
-      walk(ctx, addr, scope, tree.child, level, id_zero)
-    end
-
-    private def self.walk(ctx, addr, scope, tree : CircuitNode, level, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : CircuitNode, level, id_zero) : WalkFlow
       if level.zero?
-        return walk(ctx, addr, scope, tree.leaf, level, id_zero)
+        return walk(ctx, addr, tree.leaf, level, id_zero)
       end
 
       # This branch cannot possibly contain circuits at the target level.
@@ -146,21 +116,11 @@ module Ww::D7
         return WalkFlow::Continue
       end
 
-      # NOTE: Circuits must surround themselves with scopes to seal themselves off
-      # from the outside world completely. Otherwise, two circuits with the same
-      # level would be able to communicate, and that would go against our semantics.
-      #
-      #   ;; Must NOT work!
-      #   (circuit @0 (cell @x 100))
-      #   (circuit @1 (cell @y))
-      #   (circuit @2 (feed @x @y))
-      #
-      subscope = scope.append(addr, NodeScope::ClosedExcept.new(Term[]))
       treatment = GroupNode.new(D7.parent(tree.feature.node, tree.feature.range), tree.children)
-      walk(ctx, addr, subscope, treatment, level - 1, id_zero)
+      walk(ctx, addr, treatment, level - 1, id_zero)
     end
 
-    private def self.walk(ctx, addr, scope, tree : GroupNode, level, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : GroupNode, level, id_zero) : WalkFlow
       # This branch cannot possibly contain circuits at the target level.
       if D7.maxlevel(tree) < level
         return WalkFlow::Continue
@@ -174,7 +134,7 @@ module Ww::D7
       end
 
       predicate = tree.feature.passable
-      unless predicate.call(ctx.hg, addr, scope)
+      unless predicate.call(ctx.hg, addr)
         return WalkFlow::Continue
       end
 
@@ -185,7 +145,7 @@ module Ww::D7
         break if ctx.ids.end <= id_zero
 
         if ctx.ids.begin < id_zero + id_width
-          case walk(ctx, addr.append(key), scope, child, level, id_zero)
+          case walk(ctx, addr.append(key), child, level, id_zero)
           in .continue?
           in .break?
             return WalkFlow::Break
@@ -199,29 +159,24 @@ module Ww::D7
     end
 
     # :nodoc:
-    def self.descend?(hg : Hypergraph, addr : NodeAddr) : {NodeId, ParseTree, NodeScope}?
+    def self.descend?(hg : Hypergraph, addr : NodeAddr) : {NodeId, ParseTree}?
       tree = hg.@tree
       id_zero = NodeId.new(0)
       prefix = NodeAddr.empty
-      scope = NodeScope.empty
 
       addr.each do |index|
         loop do
           case tree
           in InertLeaf, GndLeaf
             return
-          in MixtureNode
-            tree = tree.child
-            next
-          in ScopeNode
-            scope = scope.append(prefix, tree.feature.scope)
+          in ScopeNode, MixtureNode
             tree = tree.child
             next
           in GroupNode, CircuitNode
             # Edges defined inside impassable groups are unreachable.
             if tree.is_a?(GroupNode)
               predicate = tree.feature.passable
-              return unless predicate.call(hg, prefix, scope)
+              return unless predicate.call(hg, prefix)
             end
 
             offset = tree.feature.range.begin
@@ -242,83 +197,76 @@ module Ww::D7
         prefix = prefix.append(index)
       end
 
-      {id_zero, tree, scope}
+      {id_zero, tree}
     end
 
     # :nodoc:
     defrecord ResolveContext,
       hg : Hypergraph,
       guide : Guide,
-      sink : NodeId, NodeAddr, NodeScope, Gnd ->
+      sink : NodeId, NodeAddr, Gnd ->
 
     # :nodoc:
-    def self.resolve(hg : Hypergraph, root : ParseTree, addr : NodeAddr, scope : NodeScope, guide : Guide, membership : Slice(Term), id_zero, fn : Node ->) : Nil
-      sink = ->(id : NodeId, addr : NodeAddr, scope : NodeScope, feature : Gnd) do
+    def self.resolve(hg : Hypergraph, root : ParseTree, addr : NodeAddr, guide : Guide, membership : Slice(Term), id_zero, fn : Node ->) : Nil
+      sink = ->(id : NodeId, addr : NodeAddr, feature : Gnd) do
         # Use Gnd#defn (the node's definition) rather than #node here.
         # The hypergraph should only ever see the defn.
-        node = Node.new(id, addr, scope, feature.head, feature.defn)
+        node = Node.new(id, addr, feature.head, feature.defn)
         fn.call(node)
       end
 
       ctx = ResolveContext.new(hg, guide, sink)
-      resolve_root(ctx, addr, scope, root, membership, id_zero)
+      resolve_root(ctx, addr, root, membership, id_zero)
     end
 
-    private def self.resolve_root(ctx, addr, scope, tree : InertLeaf, membership, id_zero) : Nil
+    private def self.resolve_root(ctx, addr, tree : InertLeaf, membership, id_zero) : Nil
     end
 
-    private def self.resolve_root(ctx, addr, scope, tree : GndLeaf, membership, id_zero) : Nil
-      resolve_inner(ctx, addr, scope, tree, membership, id_zero)
+    private def self.resolve_root(ctx, addr, tree : GndLeaf, membership, id_zero) : Nil
+      resolve_inner(ctx, addr, tree, membership, id_zero)
     end
 
-    private def self.resolve_root(ctx, addr, scope, tree : ScopeNode, membership, id_zero) : Nil
-      scope_step = tree.feature.scope
-      resolve_inner(ctx, addr, scope.append(addr, scope_step), tree.child, membership, id_zero)
+    private def self.resolve_root(ctx, addr, tree : ScopeNode | MixtureNode, membership, id_zero) : Nil
+      resolve_root(ctx, addr, tree.child, membership, id_zero)
     end
 
-    private def self.resolve_root(ctx, addr, scope, tree : MixtureNode, membership, id_zero) : Nil
-      resolve_root(ctx, addr, scope, tree.child, membership, id_zero)
-    end
-
-    private def self.resolve_root(ctx, addr, scope, tree : CircuitNode, membership, id_zero) : Nil
+    private def self.resolve_root(ctx, addr, tree : CircuitNode, membership, id_zero) : Nil
       stat = tree.levels[-2]? || LevelSummary.new
       return unless membership.all?(&.in?(stat.edges))
 
-      subscope = scope.append(addr, NodeScope::ClosedExcept.new(Term[]))
-
       tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
-        resolve_inner(ctx, addr.append(key), subscope, child, membership, id_zero)
+        resolve_inner(ctx, addr.append(key), child, membership, id_zero)
         id_zero += D7.population(child)
       end
     end
 
-    private def self.resolve_root(ctx, addr, scope, tree : GroupNode, membership, id_zero) : Nil
-      resolve_inner(ctx, addr, scope, tree, membership, id_zero)
+    private def self.resolve_root(ctx, addr, tree : GroupNode, membership, id_zero) : Nil
+      resolve_inner(ctx, addr, tree, membership, id_zero)
     end
 
-    private def self.resolve_inner(ctx, addr, scope, tree : InertLeaf, membership, id_zero) : Nil
+    private def self.resolve_inner(ctx, addr, tree : InertLeaf, membership, id_zero) : Nil
     end
 
-    private def self.resolve_inner(ctx, addr, scope, tree : GndLeaf, membership, id_zero) : Nil
+    private def self.resolve_inner(ctx, addr, tree : GndLeaf, membership, id_zero) : Nil
       return if membership.empty?
       return unless membership.all?(&.in?(tree.feature.edges))
 
-      ctx.sink.call(id_zero, addr, scope, tree.feature)
+      ctx.sink.call(id_zero, addr, tree.feature)
     end
 
-    private def self.resolve_inner(ctx, addr, scope, tree : ScopeNode, membership, id_zero) : Nil
+    private def self.resolve_inner(ctx, addr, tree : ScopeNode, membership, id_zero) : Nil
       return if membership.empty?
 
       scope_step = tree.feature.scope
 
       case scope_step
-      in NodeScope::OpenExcept
+      in ScopeOpenExcept
         # If `locals` blocks any one edge from *membership*, prune. Only if
         # `locals` lets all edges from *membership* pass through, do we descend.
         return unless membership.all? { |edge| !edge.in?(scope_step.edges) }
 
-        resolve_inner(ctx, addr, scope.append(addr, scope_step), tree.child, membership, id_zero)
-      in NodeScope::ClosedExcept
+        resolve_inner(ctx, addr, tree.child, membership, id_zero)
+      in ScopeClosedExcept
         translated = Pf::Kit.stack_array(Term, 8)
 
         membership.each do |member|
@@ -329,23 +277,23 @@ module Ww::D7
         end
 
         translated_slice = translated.to_unsafe_readonly_buffer_or_spill_slice!
-        resolve_inner(ctx, addr, scope.append(addr, scope_step), tree.child, translated_slice, id_zero)
+        resolve_inner(ctx, addr, tree.child, translated_slice, id_zero)
       end
     end
 
-    private def self.resolve_inner(ctx, addr, scope, tree : MixtureNode, membership, id_zero) : Nil
+    private def self.resolve_inner(ctx, addr, tree : MixtureNode, membership, id_zero) : Nil
       return if membership.empty?
 
-      resolve_inner(ctx, addr, scope, tree.child, membership, id_zero)
+      resolve_inner(ctx, addr, tree.child, membership, id_zero)
     end
 
-    private def self.resolve_inner(ctx, addr, scope, tree : CircuitNode, membership, id_zero) : Nil
+    private def self.resolve_inner(ctx, addr, tree : CircuitNode, membership, id_zero) : Nil
       return if membership.empty?
 
-      resolve_inner(ctx, addr, scope, tree.leaf, membership, id_zero)
+      resolve_inner(ctx, addr, tree.leaf, membership, id_zero)
     end
 
-    private def self.resolve_inner(ctx, addr, scope, tree : GroupNode, membership, id_zero) : Nil
+    private def self.resolve_inner(ctx, addr, tree : GroupNode, membership, id_zero) : Nil
       return if membership.empty?
 
       stat = tree.levels.last? || LevelSummary.new
@@ -353,10 +301,10 @@ module Ww::D7
       return unless ctx.guide.call(tree)
 
       predicate = tree.feature.passable
-      return unless predicate.call(ctx.hg, addr, scope)
+      return unless predicate.call(ctx.hg, addr)
 
       tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
-        resolve_inner(ctx, addr.append(key), scope, child, membership, id_zero)
+        resolve_inner(ctx, addr.append(key), child, membership, id_zero)
         id_zero += D7.population(child)
       end
     end
@@ -458,7 +406,7 @@ module Ww::D7
       return unless row = Hypergraph.descend?(self, edge.module)
 
       addr = edge.module
-      id_zero, origin, scope = row
+      id_zero, origin = row
 
       guide = Guide.new { |group| D7.head?(group, head) }
 
@@ -470,7 +418,7 @@ module Ww::D7
       end
 
       needle = edge.term
-      Hypergraph.resolve(self, origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, sink)
+      Hypergraph.resolve(self, origin, addr, guide, pointerof(needle).to_slice(1), id_zero, sink)
     end
 
     private def single(node_id : NodeId) : {Node, Set(Term)}
@@ -489,7 +437,7 @@ module Ww::D7
 
     def each_edge(node_id : NodeId, & : AbsEdge ->) : Nil
       node, edges = single(node_id)
-      edges.each { |edge| yield node.resolve(edge) }
+      edges.each { |edge| yield resolve(node.addr, edge) }
     end
 
     def each_member(edge : AbsEdge, &fn : Node ->) : Nil
@@ -498,11 +446,11 @@ module Ww::D7
       return unless row = Hypergraph.descend?(self, edge.module)
 
       addr = edge.module
-      id_zero, origin, scope = row
+      id_zero, origin = row
 
       guide = Guide.new { true }
       needle = edge.term
-      Hypergraph.resolve(self, origin, addr, scope, guide, pointerof(needle).to_slice(1), id_zero, fn)
+      Hypergraph.resolve(self, origin, addr, guide, pointerof(needle).to_slice(1), id_zero, fn)
     end
 
     def each_neighbor(of node_id : NodeId, on edge : AbsEdge, &fn : Node ->) : Nil
@@ -553,17 +501,108 @@ module Ww::D7
     end
 
     def annotated_with?(ann : Annotation) : Bool
-      ann.in?(annotations)
+      @lock.synchronize { ann.in?(@annotations) }
     end
 
     def annotate(ann : Annotation, &)
-      annotations << ann
+      @lock.synchronize { @annotations << ann }
 
       begin
         yield
       ensure
-        annotations.delete(ann)
+        @lock.synchronize { @annotations.delete(ann) }
       end
+    end
+
+    # Resolves *edge* with respect to the node at *addr*.
+    #
+    # This is necessary in cases where you read an edge from a node (e.g.
+    # using pattern matching). You can't use the edge as-is because the actual
+    # cell (or node) it refers to can be different due to modules in-between.
+    # You must first pass the edge through `resolve` so that it finds the correct
+    # edge with respect to the node that you've read it from.
+    #
+    # See also: `AbsEdge`.
+    def resolve(addr : NodeAddr, edge : Term) : AbsEdge
+      node = @tree
+      scopes = Pf::Kit.stack_array({Int32, NodeScope}, 8)
+
+      addr.each_with_index do |key, key_index|
+        loop do
+          case node
+          in InertLeaf, GndLeaf
+            raise KeyError.new
+          in MixtureNode
+            node = node.child
+            next
+          in ScopeNode
+            scopes << {key_index, node.feature.scope}
+            node = node.child
+            next
+          in ParentNode
+            # NOTE: Circuits must surround themselves with scopes to seal themselves off
+            # from the outside world completely. Otherwise, two circuits with the same
+            # level would be able to communicate, and that would go against our semantics.
+            #
+            #   ;; Must NOT work!
+            #   (circuit @0 (cell @x 100))
+            #   (circuit @1 (cell @y))
+            #   (circuit @2 (feed @x @y))
+            #
+            if node.is_a?(CircuitNode)
+              scopes << {key_index, ScopeClosedExcept.new(Term[])}
+            end
+
+            index = key - node.feature.range.begin
+            unless 0 <= index < node.children.size
+              raise KeyError.new
+            end
+
+            node = node.children.unsafe_fetch(index)
+          end
+
+          break
+        end
+      end
+
+      # NOTE: Below, we use `trim(key_index)` instead of `trim(key_index + 1)`
+      # because ScopeNodes themselves do not have an address -- they are "virtual"
+      # nodes. So if we use `key_index + 1` for the "module" of the edge, that'd
+      # mean the ScopeNode's *child* is the module -- which is incorrect! Instead,
+      # we use simply `key_index`, which refers to the parent of the scope node.
+
+      scopes.reverse_each do |key_index, scope|
+        case scope
+        in ScopeOpenExcept
+          if edge.in?(scope.edges)
+            # In Rack:
+            #
+            #  (local (⏏@dst⏏) ;; @dst found, so it's a local!
+            #    (feed @src ⏏@dst⏏)
+            return AbsEdge.new(addr.trim(key_index), edge)
+          end
+          # Continue climbing. This edge falls into "open", thus outer-scoped,
+          # not "except" and thus inner-scoped.
+          #
+          # In Rack:
+          #  (local (@dst) ;; <<- @src NOT found, so it's outerly-scoped.
+          #    (feed ⏏@src⏏ @dst)
+        in ScopeClosedExcept
+          unless exterior = scope.bindings[edge]?
+            # In Rack:
+            #  (module {@x: @y} ;; <<- no @a, so it's a local!
+            #    (feed ⏏@a⏏ @x)
+            return AbsEdge.new(addr.trim(key_index), edge)
+          end
+
+          # In Rack:
+          #  (module {⏏@x⏏: @y} ;; @x found, its *exterior* is the outerly-scoped @y.
+          #    (feed @a ⏏@x⏏)
+          edge = exterior
+        end
+      end
+
+      AbsEdge.new(NodeAddr.empty, edge)
     end
   end
 end
