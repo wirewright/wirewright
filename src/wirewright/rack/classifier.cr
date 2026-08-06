@@ -846,28 +846,28 @@ module Ww::Rack
       #
       # ;; Bind the value of the middle number to {count: _} in @ys using
       # ;; the fragment node.
-      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
-      #   (cell @ys))
+      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+      #   (cell @ys {}))
       #
       # ;; Frame 1
       # (cell @xs (1 3 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {count: 3}))
       #
       # ;; Frame 2
       # (cell @xs (1 4 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {count: 4}))
       #
       # ;; Frame 3
       # (cell @xs (1 5 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (frag (@xs (_ ±n _) -> (cell @ys {| -count: mid}) (cell @ys {count: mid_}))
+      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {count: 5}))
       #
       # ;; ...etc.

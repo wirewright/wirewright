@@ -7125,3 +7125,103 @@
       (frag @driver)
       (queue (@y @ys) (1 100 2 200 3 300)))
     end))
+
+;; frag...->...
+(group
+  ;; From docs
+  (rack
+    (frame
+      (cell @xs (1 2 3))
+      (backsys @xs
+        (_ ±n _) <> {n: ^(+ n 1)})
+      (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+        (cell @ys {})))
+    (frame
+      (cell @xs (1 3 3))
+      (backsys @xs
+        (_ ±n _) <> {n: ^(+ n 1)})
+      (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+        (cell @ys {count: 3})))
+    (frame
+      (cell @xs (1 4 3))
+      (backsys @xs
+        (_ ±n _) <> {n: ^(+ n 1)})
+      (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+        (cell @ys {count: 4}))))
+    ;; ...
+
+  ;; Manipulate guard
+  (rack
+    (frame
+      (cell @count 0)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (100 200 300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn) (feed @x @ys)))
+      (queue (@y @ys) ()))
+    (frame
+      (cell @count 1)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (100 200 300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 1) (feed @x @ys)))
+      (queue (@y @ys) ()))
+    (frame
+      (cell @count 2)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (200 300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 2) (feed @x @ys)))
+      (queue (@y @ys) (100)))
+    (frame
+      (cell @count 0)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (200 300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 0) (feed @x @ys)))
+      (queue (@y @ys) (100)))
+    (frame
+      (cell @count 1)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (200 300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 1) (feed @x @ys)))
+      (queue (@y @ys) (100)))
+    (frame
+      (cell @count 2)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 2) (feed @x @ys)))
+      (queue (@y @ys) (100 200)))
+    (frame
+      (cell @count 0)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 0) (feed @x @ys)))
+      (queue (@y @ys) (100 200)))
+    (frame
+      (cell @count 1)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) (300))
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 1) (feed @x @ys)))
+      (queue (@y @ys) (100 200)))
+    (frame
+      (cell @count 2)
+      (backsys @count ±n <> {n: ^(mod (+ n 1) 3)})
+      (cell @turn 1)
+      (queue (@x @xs) ())
+      (frag (@count n_ -> (guard (@_ `n) _*) (guard (@_ n_) _*))
+        (guard (@turn 2) (feed @x @ys)))
+      (queue (@y @ys) (100 200 300)))))
+    ;; ...
