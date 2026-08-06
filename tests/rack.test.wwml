@@ -7124,7 +7124,86 @@
       (cell @turn bob) ;; but it had a chance to run so the turn is bob's forever
       (frag @driver)
       (queue (@y @ys) (1 100 2 200 3 300)))
-    end))
+    end)
+
+  (rack
+    (frame
+      (part (@state @count) {¦ ±count})
+      (backsys @count ±n <> {n: ^(+ n 1)})
+      (guard (@count (%pipe (mod 2) 0))
+        (feed @d @sink))
+      (feed @a @b @c @d)
+      (discard @sink)
+      (cell @state {count: 0})
+      (cell @a 100)
+      (cell @b 200)
+      (cell @c 300)
+      (cell @d 400)
+      (cell @sink))
+    (frame/tail
+      (cell @state {count: 1})
+      (cell @a 100)
+      (cell @b 200)
+      (cell @c 300)
+      (cell @d)
+      (cell @sink 400))
+    (frame/tail
+      (cell @state {count: 2})
+      (cell @a 100)
+      (cell @b 200)
+      (cell @c)
+      (cell @d 300)
+      (cell @sink))
+    (frame/tail
+      (cell @state {count: 3})
+      (cell @a 100)
+      (cell @b)
+      (cell @c 200)
+      (cell @d)
+      (cell @sink 300))
+    (frame/tail
+      (cell @state {count: 4})
+      (cell @a)
+      (cell @b 100)
+      (cell @c)
+      (cell @d 200)
+      (cell @sink))
+    (frame/tail
+      (cell @state {count: 5})
+      (cell @a)
+      (cell @b)
+      (cell @c 100)
+      (cell @d)
+      (cell @sink 200))
+    (frame/tail
+      (cell @state {count: 6})
+      (cell @a)
+      (cell @b)
+      (cell @c)
+      (cell @d 100)
+      (cell @sink))
+    (frame/tail
+      (cell @state {count: 7})
+      (cell @a)
+      (cell @b)
+      (cell @c)
+      (cell @d)
+      (cell @sink 100))
+    (frame/tail
+      (cell @state {count: 8})
+      (cell @a)
+      (cell @b)
+      (cell @c)
+      (cell @d)
+      (cell @sink))
+    (frame/tail
+      (cell @state {count: 9})
+      (cell @a)
+      (cell @b)
+      (cell @c)
+      (cell @d)
+      (cell @sink))))
+    ;; ...
 
 ;; frag...->...
 (group
