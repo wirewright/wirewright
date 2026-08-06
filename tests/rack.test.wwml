@@ -1827,7 +1827,33 @@
        [cell @product 330]
        [cell @view1 (11 30)]⟫))
     ;; ...
-  )
+
+  ;; Edge inference shorthand
+  (rack
+    (frame
+      (backsys
+        {¦ ±x} <> {x: ^(+ x 1)}
+        {¦ ±y} <> {y: ^(- y 1)})
+      (cell @x 0)
+      (cell @y 0))
+    (frame/tail
+      (cell @x 1)
+      (cell @y -1))
+    (frame/tail
+      (cell @x 2)
+      (cell @y -2)))
+    ;; ...
+
+  (rack
+    (frame
+      (backsys
+        {| ±x ±y} <> {x: ^(+ x y), (y): ()}) ;; |
+      (cell @x 100)
+      (cell @y 200))
+    (frame/tail
+      (cell @x 300)
+      (cell @y))
+    end))
 
 ;; Circuit
 (group

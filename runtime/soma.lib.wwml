@@ -46,7 +46,7 @@
        (comment
          "The backsystem below then relates everything together. The rewrite rules \
           below are responsible for the button's behavior.")
-       (backsys {@:mouse @:input @:key @:desc @:node @:msg @:msgs}
+       (backsys
          ;; The key that this button is watching for was pressed.
          {¦ input: ⟨K'←K_⟩ key: K_ msg_ node: {¦ -active_} -msgs_}
            <> {(K'): (), active: tap, msgs: ^msg}

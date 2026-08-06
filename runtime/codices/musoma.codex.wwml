@@ -570,6 +570,14 @@ history-limit: 128
        (atom type: (expander ^addr icon: "expand_more") mass: 0)
        (term ^node))
 
+(closed-backsys-widget addr_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (inline
+         (group detail: (dict generic lbr: "(" rbr: ")")
+           (atom "backsys" type: symbol)
+           (atom "…" type: punct))))
+
 (closed-backsys-widget addr_ header_)
   => (group detail: seq
        (atom type: (expander ^addr icon: "chevron_right") mass: 0)

@@ -998,6 +998,96 @@ module Ww::Rack
       # |@ rack.backsys
       #
       # |@pattern
+      # [backsys [backmap pattern_ _] backmaps_*]
+      #
+      # |@key pattern m1.operator
+      # This key applies to all patterns in backmaps; I'm just highlighting
+      # the first one. The following patterns are supported:
+      #
+      #  - `(%'%layer _ side_dict)`: takes pair keys from the *side* dict.
+      #  - `_dict`: takes pair keys from the dict.
+      #  - Other patterns are ignored.
+      #
+      # |@key backmaps
+      # The other backmaps should have patterns like those described in *pattern*
+      # to be able to participate in edge inference.
+      #
+      # |@block
+      # Defines a backsystem over edges whose names are *inferred* from *backmaps*
+      # based on their *pattern*.
+      #
+      # Instead of listing edges manually, you can let the `backsys` node infer
+      # edges based on keys featured in *pattern*s. This helps avoid explicit
+      # edge lists getting out of sync with what is actually needed by backmaps
+      # in the backsystem -- which happens much more often than you'd expect
+      # due to the need for manual maintenance!
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0
+      # (backsys
+      #   {¦ ±x} <> {x: ^(+ x 1)}
+      #   {¦ ±y} <> {y: ^(- y 1)})
+      #
+      # (cell @x 0)
+      # (cell @y 0)
+      #
+      # ;; Frame 1 (omitting backsys because it does not change)
+      # (cell @x 1)
+      # (cell @y -1)
+      #
+      # ;; Frame 2 (omitting backsys because it does not change)
+      # (cell @x 2)
+      # (cell @y -2)
+      #
+      # ;; etc...
+      # ```
+      #
+      # The `backsys` above is the same as explicitly writing:
+      #
+      # ```wwml
+      # (backsys {@:x, @:y}
+      #   {¦ ±x} <> {x: ^(+ x 1)}
+      #   {¦ ±y} <> {y: ^(- y 1)})
+      # ```
+      matchpi %{[backsys [backmap _ _] _*]} do
+        keys = Set(Term).new
+
+        backmaps = node.items.move(1)
+        backmaps.each do |(_, pattern, _)|
+          Term.case(pattern) do
+            matchpi %{(%'%layer _ side_dict)} do
+              side.each_entry(in: Term::Dict.pairspart) do |key, _|
+                keys << key
+              end
+            end
+
+            matchpi %{_dict} do
+              pattern.each_entry(in: Term::Dict.pairspart) do |key, _|
+                keys << key
+              end
+            end
+
+            otherwise { }
+          end
+        end
+
+        edges = Set(Term).new
+
+        pairsrcs = Term::Dict.build do |commit|
+          keys.each do |key|
+            edge = Term.of(:edge, key)
+            edges << edge
+            commit.with(key, edge)
+          end
+        end
+
+        D7.gnd(node, edges, defn: Term.of(:backsys, Term[], edges, pairsrcs, backmaps))
+      end
+
+      # |@ rack.backsys
+      #
+      # |@pattern
       # [backsys @src_ backmaps_*]
       matchpi %{[backsys @src_ backmaps_*]} do
         offspring = Term::Dict.build do |commit|

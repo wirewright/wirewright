@@ -223,6 +223,10 @@ module MuSoma
       node = tree.feature.node
 
       Term.case(node) do
+        matchpi %{(backsys [backmap _ _] _* ⍊ -open)} do
+          Term.of(:"closed-backsys-widget", addr)
+        end
+
         matchpi %{(backsys header_dict _* ⍊ -open)} do
           Term.of(:"closed-backsys-widget", addr, header)
         end

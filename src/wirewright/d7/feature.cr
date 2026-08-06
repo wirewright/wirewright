@@ -54,15 +54,18 @@ module Ww::D7
     head : Term,
     edges : Set(Term)
 
-  # Constructs a grounded node from an enumerable of edges *ee*.
+  # Constructs a grounded node from an enumerable of *edges*.
   #
   # See `Gnd`.
+  #
+  # NOTE: If *edges* is a `Set`, it will be reused! Make sure to not mutate it;
+  # if you will, create a copy and pass the copy instead.
   def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node) : Gnd
     unless head = node.as_d?.try(&.items.first?)
       raise ArgumentError.new("could not determine the head of node")
     end
 
-    Gnd.new(node, defn, head, edges.to_set)
+    Gnd.new(node, defn, head, edges.as?(Set(Term)) || edges.to_set)
   end
 
   # Constructs a grounded node with the given *edges*.
