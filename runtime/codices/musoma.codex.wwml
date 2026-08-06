@@ -581,8 +581,11 @@ history-limit: 128
 (closed-backsys-widget addr_ header_)
   => (group detail: seq
        (atom type: (expander ^addr icon: "chevron_right") mass: 0)
-       (group detail: backsys
-         (term ^header)))
+       (inline
+         (group detail: (dict generic lbr: "(" rbr: ")")
+           (atom "backsys" type: symbol)
+           (term ^header)
+           (atom "…" type: punct))))
 
 ;; Section widget
 
@@ -1085,9 +1088,6 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
   => (group style: "flow-row gap-1/3"
        ^l ^op ^r)
 
-(group header_ ⍊ detail: backsys)
-  => (BlockWidget "rule" ^header)
-
 (group [atom] ⍊ detail: (µ-string style_string))
   => (MuStyleWidget ^style)
 
@@ -1575,13 +1575,6 @@ scroll: {}
              hover: ^(any? hover-over ('expander addr))
              ^:center
          ^icon))
-
-;; Used for `closed-backsys-widget` etc.
-(BlockWidget icon_ term_)
-  => (group style: "content flow-row gap-1/2 px-2/3 rounded-sm border border-b-sm \
-                    bg-theme-surface border-theme-overlay text-theme-muted"
-       (icon ^icon style: "pt-2/3")
-       ^term)
 
 (LongStringWidget content_string)
   => (^let prefix: (runes content 0 ..< 30)
