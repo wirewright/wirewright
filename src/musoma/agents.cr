@@ -260,9 +260,8 @@ module MuSoma
         end
 
         matchpi %{[figure _*]} do
-          trunk = Trunk.new(active: nil)
           tree = D7.parse(MuSoma.clf, node, range: 1u32...node.uitemsize)
-          Term.of(:figure, MuSoma.distill(µ, hg, addr, tree, trunk))
+          Term.of(:figure, MuSoma.distill(µ, hg, addr, tree, sites: Slice(Term).empty, site_zero: 0u32))
         end
 
         otherwise do

@@ -604,9 +604,10 @@
                      page-y: (0 px)
              (content y: true
                (comment
-                 "Scroll is an *adjunct*. An adjunct is \"attached\" to a *trunk*. So \
-                  `trunk` here refers to that trunk.")
-               (trunk))))
+                 "Scroll is meant to head an *ensemble* that consists of two nodes: \
+                  the one for the scroll itself and the one for the body. This site \
+                  here is basically a \"reference\" to the body.")
+               (site))))
          (align x: 1
            (slot (YScrollbar @thumb-offset @thumb-size @track-size @show))))
        (slot (Scroll (bar @thumb-offset @thumb-size @track-size @show) (view @desc @node) (axis y))))

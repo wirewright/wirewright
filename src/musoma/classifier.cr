@@ -74,15 +74,25 @@ module MuSoma
           D7.gnd(node)
         end
 
-        matchpi %{[trunk]} do
+        # |@ musoma.node.site
+        #
+        # |@pattern
+        # [site]
+        matchpi %{[site]} do
           D7.gnd(node)
         end
 
-        # adjunct is a special node which defines a point-of-view for adjacency
-        # queries in distill, in particular, trunk queries. I.e., when you do `(trunk)`,
-        # the question is, trunk with respect to what? The answer is, with respect to
-        # to the enclosing `adjunct`.
-        matchpi %{[adjunct _*]} do
+        # |@ musoma.node.ensemble
+        #
+        # |@pattern
+        # [ensemble body_ members_*]
+        #
+        # |@key body musoma.node
+        #
+        # |@key members musoma.node
+        # NOTE: Sites occurring within an ensemble's *members* belong to the nearest
+        # enclosing ensemble, not the ensemble being constructed.
+        matchpi %{[ensemble _*]} do
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
@@ -159,69 +169,58 @@ module MuSoma
     end
   end
 
-  defrecord Trunk, active : Term::Rep?
-
   # :nodoc:
-  def distill(µ, hg, addr, tree : D7::InertLeaf, trunk) : Term::Rep
+  def distill(µ, hg, addr, tree : D7::InertLeaf, sites, site_zero) : {Term::Rep, UInt32}
     node = tree.feature.node
 
     Term.case(node) do
       matchpi %{{¦ style}} do
-        curate(node)
+        {curate(node), site_zero}
       end
 
       matchpi %{[head_]} do
         continue unless Scenery::KnowledgeBase.leaf_head?(head)
 
-        curate(node)
+        {curate(node), site_zero}
       end
 
       matchpi %{[head_ _*]} do
         continue unless µ.preset?(head)
 
-        curate(node)
+        {curate(node), site_zero}
       end
 
       otherwise do
-        Term.rep # omit
+        {Term.rep, site_zero} # omit
       end
     end
   end
 
   # :nodoc:
-  def distill(µ, hg, addr, tree : D7::GndLeaf, trunk) : Term::Rep
+  def distill(µ, hg, addr, tree : D7::GndLeaf, sites, site_zero) : {Term::Rep, UInt32}
     node = tree.feature.node
 
     Term.case(node) do
-      matchpi %{[trunk]} do
-        Term.rep(trunk.active || Slice(Term).empty) # active or omit
+      matchpi %{[site]} do
+        {Term.rep(sites[site_zero]? || Slice(Term).empty), site_zero} # present or omit
       end
 
       matchpi %{[slot _]} do
-        Term.rep(Term.of({:loading}))
+        {Term.rep(Term.of({:loading})), site_zero}
       end
 
       matchpi %{{¦ style}} do
-        curate(node)
+        {curate(node), site_zero}
       end
 
       otherwise do
-        Term.rep # omit
+        {Term.rep, site_zero} # omit
       end
-    end
-  end
-
-  private def adjunct?(tree : D7::ParseTree) : Bool
-    return false unless tree.is_a?(D7::ParentNode)
-
-    Term.case(tree.feature.node) do
-      matchpi %{[adjunct _*]} { true }
-      otherwise { false }
     end
   end
 
   # :nodoc:
-  def distill(µ, hg, addr, tree : D7::ParentNode, trunk) : Term::Rep
+  def distill(µ, hg, addr, tree : D7::ParentNode, sites, site_zero) : {Term::Rep, UInt32}
     # Impassable GroupNodes must not make it into the distilled markup. For
     # example, in:
     #
@@ -233,62 +232,73 @@ module MuSoma
     if tree.is_a?(D7::GroupNode)
       predicate = tree.feature.passable
       unless predicate.call(hg, addr)
-        return Term.rep
+        return Term.rep, site_zero
       end
     end
 
-    pred = nil
-    buffer = Pf::Kit.stack_array(Term::Rep, 8)
+    node = tree.feature.node
 
-    tree.children.zip(tree.feature.range) do |child, key|
-      child_adjunct = adjunct?(child)
-
-      if child_adjunct
-        child_trunk = Trunk.new(pred)
-      else
-        child_trunk = trunk
-      end
-
-      rep = distill(µ, hg, addr.append(key), child, child_trunk)
-      if !child_adjunct && pred
-        buffer << pred
-      end
-
-      pred = rep
-    end
-
-    # Flush the last one.
-    if pred
-      buffer << pred
-    end
-
-    children = Term.flatten(buffer, &.itself)
-
-    Term.case(tree.feature.node) do
+    Term.case(node) do
       matchpi %{[group [reflection @_] _*]} do
+        children, site_zero = distill(µ, hg, addr, tree.children, tree.feature.range, sites, site_zero)
+
         distilled = Term::Dict.build do |commit|
           commit << :vantage
           commit.with(:id, {:reflection, addr.append(1)})
           commit.concat(children)
         end
 
-        Term.rep_of(distilled)
+        {Term.rep_of(distilled), site_zero}
+      end
+
+      matchpi %{[ensemble _ _*]} do
+        body = tree.children.first
+        sites = tree.children.rest.to_readonly_slice do |child, index|
+          key = tree.feature.range.begin + index + 1 # skip body
+          child, site_zero = distill(µ, hg, addr.append(key), child, sites, site_zero)
+          child
+        end
+
+        distill(µ, hg, addr, body, sites, site_zero)
       end
 
       matchpi %{[window _*]}, %{{¦ style}} do
-        curate(tree, children)
+        children, site_zero = distill(µ, hg, addr, tree.children, tree.feature.range, sites, site_zero)
+        {curate(tree, children), site_zero}
       end
 
       matchpi %{[head_ _*]} do
         continue unless Scenery::KnowledgeBase.parent_head?(head)
 
-        curate(tree, children)
+        children, site_zero = distill(µ, hg, addr, tree.children, tree.feature.range, sites, site_zero)
+        {curate(tree, children), site_zero}
       end
 
       otherwise do
-        children
+        distill(µ, hg, addr, tree.children, tree.feature.range, sites, site_zero)
       end
     end
+  end
+
+  private def distill(µ, hg, addr, nodes : Slice(D7::ParseTree), range : Range(UInt32, UInt32), sites, site_zero) : {Term::Rep, UInt32}
+    result = Term.flatten(nodes) do |child, index|
+      key = range.begin + index
+      rep, site_zero = distill(µ, hg, addr.append(key), child, sites, site_zero)
+      rep
+    end
+
+    {result, site_zero}
+  end
+
+  # :nodoc:
+  def distill(µ, hg, addr, tree : D7::ScopeNode | D7::MixtureNode, sites, site_zero) : {Term::Rep, UInt32}
+    distill(µ, hg, addr, tree.child, sites, site_zero)
+  end
+
+  def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
+    hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
+    markup, _ = distill(codex, hg, D7::NodeAddr.empty, tree, sites: Slice(Term).empty, site_zero: 0u32)
+    Term.of(markup)
   end
 
   private def curate(tree : D7::ParentNode, children : Enumerable(Term)) : Term::Rep
@@ -322,19 +332,6 @@ module MuSoma
     end
 
     Term.rep_of(curated)
-  end
-
-  # :nodoc:
-  def distill(µ, hg, addr, tree : D7::ScopeNode | D7::MixtureNode, trunk) : Term::Rep
-    distill(µ, hg, addr, tree.child, trunk)
-  end
-
-  # Finds Microfold and Scenery nodes in *tree* and returns a list of roots
-  # for trees built this way.
-  def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
-    hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
-    trunk = Trunk.new(active: nil)
-    Term.of(distill(codex, hg, D7::NodeAddr.empty, tree, trunk))
   end
 
   defrecord WindowInfo, id : Term, defn : Term, open : Bool
