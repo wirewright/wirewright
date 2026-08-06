@@ -156,33 +156,41 @@ module Ww::D7
   # Replacement proceeds top-down (see `D7` for reasoning).
   #
   # See `D7` for terminology (e.g. subframe vs. substep).
-  def step(parser : Parser, circuit : Term, &) : Slice(Term)
+  def step(parser : Parser, circuit : Term, required_heads : Indexable(Term) = Slice(Term).empty, &) : Slice(Term)
+    tree = parser.parse(circuit)
+    hg = Hypergraph.new(tree, level: 0)
+    if required_heads.present? && required_heads.none? { |head| hg.has_head_anywhere?(head) }
+      return Slice[circuit]
+    end
+
     substeps = Pf::Kit.stack_array(Term, 8)
+    substeps << circuit
 
     MAX_SUBSTEPS.times do |level|
-      substeps << circuit
+      patch = yield hg
 
-      tree = parser.parse(circuit)
-      hg = Hypergraph.new(tree, level)
+      if patch.present?
+        # TODO: Remove this when it'd be possible to get rid of nodeids. We can
+        # just use nodeaddrs. There's no need for nodeids.
+        addr_patch = patch.to_h do |node_id, replacement|
+          {hg[node_id].addr, replacement}
+        end
+
+        circuit = update(parser, circuit, level) do |addr, flat|
+          case flat
+          in Inert then flat.node
+          in Gnd   then addr_patch[addr]? || flat.node
+          end
+        end
+        substeps << circuit
+
+        tree = parser.parse(circuit)
+      end
+
+      hg = Hypergraph.new(tree, level + 1)
 
       # No nodes in hypergraph => No nodes found at *level* => We're done.
       break if hg.bottom?
-
-      patch = yield hg
-      next if patch.empty?
-
-      # TODO: Remove this when it'd be possible to get rid of nodeids. We can
-      # just use nodeaddrs. There's no need for nodeids.
-      addr_patch = patch.to_h do |node_id, replacement|
-        {hg[node_id].addr, replacement}
-      end
-
-      circuit = update(parser, circuit, level) do |addr, flat|
-        case flat
-        in Inert then flat.node
-        in Gnd   then addr_patch[addr]? || flat.node
-        end
-      end
     end
 
     substeps.to_readonly_slice(&.itself)

@@ -493,7 +493,7 @@ module Ww::Rack
   end
 
   def rig_step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    D7.step(parser, circuit) do |hg|
+    D7.step(parser, circuit, required_heads: {Term.of(:rig)}) do |hg|
       prepass.call(hg) do |hg|
         D7::Regime.merge(hg, proposals: rig_step(hg))
       end
