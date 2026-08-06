@@ -324,7 +324,13 @@ module MuSoma
     def self.repr(codex : Microfold::SyncCodex, base_tree : D7::ParseTree, repr_tree : D7::ParseTree) : Term
       base_hg = D7::Hypergraph.new(base_tree, level: 0u32) # ?!
       repr_hg = D7::Hypergraph.new(repr_tree, level: 0u32) # ?!
-      repr = repr(codex, base_hg, repr_hg, D7::NodeAddr.empty, repr_tree)
+
+      repr = Term.of # ?!
+
+      _ = Rack::Prepass.call(base_hg) do |base_hg| # ?!
+        repr = repr(codex, base_hg, repr_hg, D7::NodeAddr.empty, repr_tree)
+        D7::Patch.new # ?!
+      end
 
       # Mark the topmost parent as root for styling in prettyR.
       Term.matchpi(repr, %{[parent _*]}) do

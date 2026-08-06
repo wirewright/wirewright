@@ -313,7 +313,14 @@ module MuSoma
 
   def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
     hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
-    markup, _ = distill(codex, hg, D7::NodeAddr.empty, tree, sites: Slice(Term).empty, site_zero: 0u32)
+
+    markup = Term.rep # ?!
+
+    _ = Rack::Prepass.call(hg) do |hg| # ?!
+      markup, _ = distill(codex, hg, D7::NodeAddr.empty, tree, sites: Slice(Term).empty, site_zero: 0u32)
+      D7::Patch.new
+    end
+
     Term.of(markup)
   end
 
