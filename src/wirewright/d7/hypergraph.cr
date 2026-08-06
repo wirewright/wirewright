@@ -391,25 +391,41 @@ module Ww::D7
       edges.each { |edge| yield resolve(node.addr, edge) }
     end
 
-    def each_member(edge : AbsEdge, &fn : Node ->) : Nil
+    def each_member(edge : AbsEdge, *, heads : Indexable(Term) = Slice(Term).empty, &fn : Node ->) : Nil
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
       return unless row = D7.follow?(self, @tree, edge.module)
 
+      # Then we conduct a search in the subtree reached this way.
       addr = edge.module
       id_zero, origin = row
 
-      guide = Guide.new { true }
+      guide = Guide.new do |group|
+        heads.all? { |head| D7.head?(group, head) }
+      end
+
       needle = edge.term
       Hypergraph.resolve(self, origin, addr, guide, pointerof(needle).to_slice(1), id_zero, fn)
     end
 
-    def each_neighbor(of node_id : NodeId, on edge : AbsEdge, &fn : Node ->) : Nil
+    def each_neighbor(of node_id : NodeId, on edge : AbsEdge, **kwargs, &fn : Node ->) : Nil
+      seen = Pf::Kit.stack_array(NodeId, 8)
+      seen << node_id
+      seen_set : Set(NodeId)? = nil # allocate on demand
+
       each_edge(node_id) do |candidate_edge|
         next unless edge == candidate_edge
 
-        each_member(candidate_edge) do |neighbor|
-          next if neighbor.id == node_id # Skip self
+        each_member(candidate_edge, **kwargs) do |neighbor|
+          next if neighbor.id.in?(seen)
+
+          if set = seen_set
+            next unless set.add?(neighbor.id)
+          elsif seen.size == 8
+            seen_set = Set{neighbor.id}
+          else
+            seen << neighbor.id
+          end
 
           fn.call(neighbor)
         end
