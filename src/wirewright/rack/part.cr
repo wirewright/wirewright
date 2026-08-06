@@ -180,7 +180,7 @@ module Ww::Rack::Part
     pred = ctx.preds.last
     recursed = false
 
-    ctx.hg.each_neighbor(of: root.id, on: pred) do |candidate|
+    ctx.hg.each_neighbor(of: root.id, on: pred, heads: {SYM_PART}) do |candidate|
       Term.case(candidate.term) do
         matchpi %{[part (@from_ to←(%'edge capture_)) pattern_]} do
           from_abs = ctx.hg.resolve(candidate.addr, from)
