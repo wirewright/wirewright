@@ -159,48 +159,6 @@ module Ww::D7
     end
 
     # :nodoc:
-    def self.descend?(hg : Hypergraph, addr : NodeAddr) : {NodeId, ParseTree}?
-      tree = hg.@tree
-      id_zero = NodeId.new(0)
-      prefix = NodeAddr.empty
-
-      addr.each do |index|
-        loop do
-          case tree
-          in InertLeaf, GndLeaf
-            return
-          in ScopeNode, MixtureNode
-            tree = tree.child
-            next
-          in GroupNode, CircuitNode
-            # Edges defined inside impassable groups are unreachable.
-            if tree.is_a?(GroupNode)
-              predicate = tree.feature.passable
-              return unless predicate.call(hg, prefix)
-            end
-
-            offset = tree.feature.range.begin
-            assert index >= offset
-
-            # Do not forget to shift the id of the child by all prior ids.
-            prior = tree.children.trim(index - offset)
-            prior.each do |child|
-              id_zero += D7.population(child)
-            end
-
-            tree = tree.children[index - offset]
-          end
-
-          break
-        end
-
-        prefix = prefix.append(index)
-      end
-
-      {id_zero, tree}
-    end
-
-    # :nodoc:
     defrecord ResolveContext, hg : Hypergraph, guide : Guide, fn : Node ->
 
     # :nodoc:
@@ -396,7 +354,7 @@ module Ww::D7
 
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = Hypergraph.descend?(self, edge.module)
+      return unless row = D7.follow?(self, @tree, edge.module)
 
       addr = edge.module
       id_zero, origin = row
@@ -436,7 +394,7 @@ module Ww::D7
     def each_member(edge : AbsEdge, &fn : Node ->) : Nil
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = Hypergraph.descend?(self, edge.module)
+      return unless row = D7.follow?(self, @tree, edge.module)
 
       addr = edge.module
       id_zero, origin = row

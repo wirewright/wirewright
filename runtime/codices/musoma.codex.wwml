@@ -517,7 +517,7 @@ history-limit: 128
 ;; Figures are considered very visually "heavy", so we effectively force
 ;; them to be rendered multiline.
 [figure trees←(_*)]
-  => (atom type: ^('figure trees) mass: 64)
+  => (atom type: ^('figure trees) mass: 64) ;; use ' to avoid infinite recursion...
 
 (gnd term_) => (inert ^term)
 

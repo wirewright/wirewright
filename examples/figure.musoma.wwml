@@ -6,15 +6,11 @@
   (cell @msg)
   (comment "... a backsystem responsible for its behavior:")
   (backsys {@:count, @:msg}
-    {¦ ±count msg_: inc}
-      <> {count: ^(+ count 1), (msg): ()}
-    {¦ ±count msg_: dec}
-      <> {count: ^(- count 1), (msg): ()})
+    {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
+    {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
   (comment "... and then there's a bunch of stuff that comprises its appearance.")
-  (view (@count ±n @display)
-    (p ^n style: "text-6xl font-bold text-theme-text center"))
   (group style: "max-w-5xs bg-theme-surface px-5 py-3 gap-3 rounded-lg"
-    (node @display)
+    (p @count style: "text-6xl font-bold text-theme-text center")
     (group style: "flow-row gap-3 item-fr-1"
       (slot (Button (@msg inc) "Increment"))
       (slot (Button (@msg dec) "Decrement"))))

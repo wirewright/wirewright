@@ -630,6 +630,50 @@ module Ww::D7
     end
   end
 
+  def follow?(hg : Hypergraph, tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}?
+    id_zero = NodeId.new(0)
+    prefix = NodeAddr.empty
+
+    addr.each do |index|
+      loop do
+        case tree
+        in InertLeaf, GndLeaf
+          return
+        in ScopeNode, MixtureNode
+          tree = tree.child
+          next
+        in GroupNode, CircuitNode
+          # Edges defined inside impassable groups are unreachable.
+          if tree.is_a?(GroupNode)
+            predicate = tree.feature.passable
+            return unless predicate.call(hg, prefix)
+          end
+
+          offset = tree.feature.range.begin
+          assert index >= offset
+
+          # Do not forget to shift the id of the child by all prior ids.
+          prior = tree.children.trim(index - offset)
+          prior.each do |child|
+            id_zero += D7.population(child)
+          end
+
+          tree = tree.children[index - offset]
+        end
+
+        break
+      end
+
+      prefix = prefix.append(index)
+    end
+
+    {id_zero, tree}
+  end
+
+  def follow(hg : Hypergraph, tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}
+    follow?(hg, tree, addr) || raise KeyError.new
+  end
+
   # `ParseTree`s are usually rewritten; we call that *repair*, and represent
   # its result with `RepairTree`.
   #

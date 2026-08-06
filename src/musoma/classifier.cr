@@ -100,6 +100,10 @@ module MuSoma
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
+        matchpi %{[p @edge_]} do
+          D7.gnd(node, edge)
+        end
+
         matchpi %{(comment _string)} do
           D7.gnd(node)
         end
@@ -209,6 +213,18 @@ module MuSoma
         {Term.rep(Term.of({:loading})), site_zero}
       end
 
+      matchpi %{[p @edge_]} do
+        unless value = Rack.cell?(hg, hg.resolve(addr, edge)).try(&.value?)
+          next Term.rep, site_zero # omit
+        end
+
+        unless value.type.string?
+          value = Term.of(ML.compact(value))
+        end
+
+        {Term.rep(Term.morph(node, {1, value})), site_zero}
+      end
+
       matchpi %{{¦ style}} do
         {curate(node), site_zero}
       end
@@ -280,7 +296,7 @@ module MuSoma
     end
   end
 
-  private def distill(µ, hg, addr, nodes : Slice(D7::ParseTree), range : Range(UInt32, UInt32), sites, site_zero) : {Term::Rep, UInt32}
+  def distill(µ, hg, addr, nodes : Slice(D7::ParseTree), range : Range(UInt32, UInt32), sites, site_zero) : {Term::Rep, UInt32}
     result = Term.flatten(nodes) do |child, index|
       key = range.begin + index
       rep, site_zero = distill(µ, hg, addr.append(key), child, sites, site_zero)
