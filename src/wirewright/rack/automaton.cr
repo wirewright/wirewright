@@ -118,6 +118,10 @@ class Ww::Rack::Automaton
     @measure : Bool = false,
     @display_mask : DisplayMask = DisplayMask::Frame,
   )
+    # Use a separate parser for `D7.fuse` so that the main parser's
+    # cache is not erased by past frames.
+    @fuse_parser = D7::Parser.new(@parser.clf)
+
     # Automaton state.
     @epoch = Epoch.new(@alarm)
     @display = Deque(DisplayAction).new
@@ -264,7 +268,7 @@ class Ww::Rack::Automaton
 
       seen = circuit0
 
-      D7.fuse(@parser, seen, subframes.to_readonly_slice) do |subframe|
+      D7.fuse(@fuse_parser, seen, subframes.to_readonly_slice) do |subframe|
         next if seen == subframe
 
         fused << subframe
@@ -284,7 +288,7 @@ class Ww::Rack::Automaton
 
       seen = circuit0
 
-      D7.fuse(@parser, seen, frames.to_readonly_slice) do |frame|
+      D7.fuse(@fuse_parser, seen, frames.to_readonly_slice) do |frame|
         next if seen == frame
 
         fused << frame
