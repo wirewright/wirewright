@@ -29,9 +29,12 @@ module Ww::Rack::Supervisor
   end
 
   private def step(hg : D7::Hypergraph, node : D7::Node, variant : Standard) : D7::Patch?
-    return unless values_cell = Rack.cell?(hg, variant.values)
-    return unless values = values_cell.value?.as_d?
     return unless pool = Rack.pool?(hg, variant.pool)
+
+    # Empty the pool if the value cell is not found.
+    unless values = Rack.cell?(hg, variant.values).try(&.value?).as_d?
+      return D7.patch(pool.node, {2, Term[]})
+    end
 
     item_buckets = {} of Term => Set(Term)
 

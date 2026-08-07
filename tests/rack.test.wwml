@@ -7330,3 +7330,218 @@
         (guard (@turn 2) (feed @x @ys)))
       (queue (@y @ys) (100 200 300)))))
     ;; ...
+
+;; supervisor
+(rack
+  (frame
+    (cell @clock 0)
+    (backsys @clock ±t <> {t: ^(+ t 1)})
+
+    ;; Key added, device added.
+    (guard (@clock 0)
+      (backsys @xs (_* `x) <> {x: (a 100)}))
+    (guard (@clock 1)
+      (backsys @xs (_* `x) <> {x: (b 200)}))
+    (guard (@clock 2)
+      (backsys @xs (_* `x) <> {x: (c 300)}))
+
+    ;; let it evolve for 3..<6
+
+    ;; Key removed, device removed.
+    (guard (@clock 6)
+      (backsys @xs (x_ _*) <> {(x): ()}))
+
+    ;; Key turnover (same key, different item), item changed, device updated.
+    (guard (@clock 7)
+      (backsys @xs (_* x_) <> {x: (c 400)}))
+
+    ;; Item changed, device updated.
+    (guard (@clock 8)
+      (backsys @xs (x_ _*) <> {x: (foo 234)}))
+
+    ;; let it evolve for 9
+
+    ;; Key conflict, both devices removed.
+    (guard (@clock 10)
+      (backsys @xs (_* `x) <> {x: (foo 123)}))
+
+    ;; let it evolve for 11
+
+    ;; Key conflict resolved, device reintroduced.
+    (guard (@clock 12)
+      (backsys @xs (x_ _*) <> {(x): ()}))
+
+    ;; let it evolve for 13..<15
+
+    ;; Remove list
+    (guard (@clock 15)
+      (backsys {¦ xs_} <> {(xs): ()}))
+
+    ;; let it evolve for 16
+
+    ;; Reintroduce list
+    (guard (@clock 17)
+      (backsys {¦ -xs_} <> {xs: ((qux 100) (qyx 200))}))
+
+    (supervisor (@xs @x (key_ _) - @pool)
+      (cell @state 0)
+      (backsys
+        ;; Make sure we have read-only access to the item.
+        {¦ x: (_ ±n)} <> {n: ^(+ n 1)}
+        ;; Make sure we can modify internal state.
+        {¦ ±state} <> {state: ^(+ state 1)}))
+
+    (cell @xs ())
+    (circuit (pool @pool)))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((a 100)))
+     (circuit (pool @pool))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((a 100) (b 200)))
+     (circuit (pool @pool)
+       (device (cell @x (a 101)) (cell @state 1) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((a 100) (b 200) (c 300)))
+     (circuit (pool @pool)
+       (device (cell @x (a 101)) (cell @state 2) _*)
+       (device (cell @x (b 201)) (cell @state 1) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((a 100) (b 200) (c 300)))
+     (circuit (pool @pool)
+       (device (cell @x (a 101)) (cell @state 3) _*)
+       (device (cell @x (b 201)) (cell @state 2) _*)
+       (device (cell @x (c 301)) (cell @state 1) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((a 100) (b 200) (c 300)))
+     (circuit (pool @pool)
+       (device (cell @x (a 101)) (cell @state 4) _*)
+       (device (cell @x (b 201)) (cell @state 3) _*)
+       (device (cell @x (c 301)) (cell @state 2) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((a 100) (b 200) (c 300)))
+     (circuit (pool @pool)
+       (device (cell @x (a 101)) (cell @state 5) _*)
+       (device (cell @x (b 201)) (cell @state 4) _*)
+       (device (cell @x (c 301)) (cell @state 3) _*))))
+
+  ;; remove a
+  (frame pattern: true
+    (_*
+     (cell @xs ((b 200) (c 300)))
+     (circuit (pool @pool)
+       (device (cell @x (a 101)) (cell @state 6) _*)
+       (device (cell @x (b 201)) (cell @state 5) _*)
+       (device (cell @x (c 301)) (cell @state 4) _*))))
+
+  ;; change c
+  (frame pattern: true
+    (_*
+     (cell @xs ((b 200) (c 400)))
+     (circuit (pool @pool)
+       (device (cell @x (b 201)) (cell @state 6) _*)
+       (device (cell @x (c 301)) (cell @state 5) _*))))
+
+  ;; replace (b 200) -> (foo 234)
+  (frame pattern: true
+    (_*
+     (cell @xs ((foo 234) (c 400)))
+     (circuit (pool @pool)
+       (device (cell @x (b 201)) (cell @state 7) _*)
+       (device (cell @x (c 401)) (cell @state 6) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((foo 234) (c 400)))
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 7) _*)
+       (device (cell @x (foo 235)) (cell @state 1) _*))))
+
+  ;; Collide key foo
+  (frame pattern: true
+    (_*
+     (cell @xs ((foo 234) (c 400) (foo 123)))
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 8) _*)
+       (device (cell @x (foo 235)) (cell @state 2) _*))))
+
+  ;; Devices with colliding keys disappear
+  (frame pattern: true
+    (_*
+     (cell @xs ((foo 234) (c 400) (foo 123)))
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 9) _*))))
+
+  ;; Collision is removed
+  (frame pattern: true
+    (_*
+     (cell @xs ((c 400) (foo 123)))
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 10) _*))))
+
+  ;; Supervisor reintroduces foo keyed node
+  (frame pattern: true
+    (_*
+     (cell @xs ((c 400) (foo 123)))
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 11) _*)
+       (device (cell @x (foo 124)) (cell @state 1) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((c 400) (foo 123)))
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 12) _*)
+       (device (cell @x (foo 124)) (cell @state 2) _*))))
+
+  ;; List is emptied
+  (frame pattern: true
+    (_*
+     (cell @xs)
+     (circuit (pool @pool)
+       (device (cell @x (c 401)) (cell @state 13) _*)
+       (device (cell @x (foo 124)) (cell @state 3) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs)
+     (circuit (pool @pool))))
+
+  ;; List is reintroduced
+  (frame pattern: true
+    (_*
+     (cell @xs ((qux 100) (qyx 200)))
+     (circuit (pool @pool))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((qux 100) (qyx 200)))
+     (circuit (pool @pool)
+       (device (cell @x (qux 101)) (cell @state 1) _*)
+       (device (cell @x (qyx 201)) (cell @state 1) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((qux 100) (qyx 200)))
+     (circuit (pool @pool)
+       (device (cell @x (qux 101)) (cell @state 2) _*)
+       (device (cell @x (qyx 201)) (cell @state 2) _*))))
+
+  (frame pattern: true
+    (_*
+     (cell @xs ((qux 100) (qyx 200)))
+     (circuit (pool @pool)
+       (device (cell @x (qux 101)) (cell @state 3) _*)
+       (device (cell @x (qyx 201)) (cell @state 3) _*)))))
+  ;; ...

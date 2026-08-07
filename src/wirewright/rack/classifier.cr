@@ -716,10 +716,7 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
-      # |@ rack.pool
-      #
-      # |@pattern
-      # [pool @edge_ value_]
+      # Internal
       matchpi %{[pool @edge_ _]} do
         D7.gnd(node, edge)
       end
