@@ -344,9 +344,14 @@ module MuSoma
 
     def present(ws : Workspace) : Nil
       force = Var.pending?(ws.codex, ws.mu_codex)
-      return unless Var.pending?({ws.state, :timeline}, or_if: force)
+      return unless Var.pending?({ws.state, :timeline}, {ws.state, :"collapsed-pane"}, or_if: force)
 
       ws.state.update do |state|
+        # If the circuit pane is collapsed, don't waste time pretty printing it.
+        Term.matchpi?(state, %{{¦ collapsed-pane: circuit-pane}}) do
+          return unless force
+        end
+
         codex = ws.codex.get
         mu_codex = ws.mu_codex.get
         present(ws.parser, codex.pretty, mu_codex, state, force)
