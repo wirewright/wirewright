@@ -48,7 +48,7 @@
       (step {¦ l: O m_: >}) <> {m: O}
       (step {¦ l: O m_: *}) <> {m: .}
       (step {¦ m_: * r: O}) <> {m: .})
-    (backsys {@:history, @:action}
+    (backsys
       {¦ history: (((%gap n_) (%flex _) (%flex O) _*)
                    ((%gap n_) (%flex O) _*))
          -action_}

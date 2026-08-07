@@ -6,7 +6,7 @@
 
 (figure
   (cell @msg)
-  (backsys {@:msg @:front @:input @:output}
+  (backsys
     ;; Fallback (catches e.g. clear something that's empty).
     {¦ msg_} <> {(msg): ()}
     {¦ msg_: feed front_ -input_}

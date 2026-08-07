@@ -10,7 +10,7 @@
 
     (cell @msg)
 
-    (backsys {@:msg @:count}
+    (backsys
       {¦ msg_: (add ±n) count: [p ±count]}
         <> {(msg): (), count: ^(+ count n)}
       {¦ msg_: (sub ±n) count: [p ±count]}

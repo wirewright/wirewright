@@ -62,7 +62,7 @@
 (comment
   "NOTE: We're ignoring several error states here and discarding others. \
    This isn't the best ever way to do things but it works for a demo just fine.")
-(backsys {@:msg @:query @:response @:name @:age @:contacts @:err}
+(backsys
   {¦ msg: initialize -query_ -response}
     <> {query: (exec "create table if not exists contacts (name text, age int) strict")}
   {¦ msg_: initialize -query response_: (ok _)}

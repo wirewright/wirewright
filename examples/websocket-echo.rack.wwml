@@ -1,5 +1,5 @@
 (ws (@pool (local 5000) server)
-  (backsys {@:id, @:in, @:out}
+  (backsys
     {¦ in: (M_string _*) out: (_* `>M)}
       <> {(M): (), >M: ^M}
     {¦ in: (M←"bye\n" _*) id_}

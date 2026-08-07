@@ -28,7 +28,7 @@
     (cell @below)
     (cell @force)
     (cell @state up)
-    (backsys {@:above @:below @:force @:state}
+    (backsys
       {¦ state_: up -above below: .} <> {state: dn}
       {¦ state_: dn above: . -below} <> {state: up}
       {¦ state: up above: . -force_} <> {force: up}

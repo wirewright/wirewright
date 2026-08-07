@@ -123,7 +123,7 @@
        the cursor according to what the buttons say, appends digits, surrounds \
        the cursor with more complex structure such as the infixes and so on.")
 
-    (backsys {@:workspace @:action @:history @:engine-in}
+    (backsys
       {¦ action_}
         <> {(action): ()}
       {¦ action_string workspace: ⟪(in buffer_string)⟫}
@@ -190,7 +190,7 @@
         (/ ±a ±b) => ^(/ a b))))
 
   (section "Answer transfer"
-    (backsys {@:workspace @:engine-out}
+    (backsys
       {¦ workspace: (top expr←wait) ±engine-out}
         <> {expr: (in ^(ml/compact engine-out)), (engine-out): ()})))
 

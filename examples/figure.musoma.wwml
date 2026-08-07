@@ -5,7 +5,7 @@
   (cell @count 15)
   (cell @msg)
   (comment "... a backsystem responsible for its behavior:")
-  (backsys {@:count, @:msg}
+  (backsys
     {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
     {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
   (comment "... and then there's a bunch of stuff that comprises its appearance.")

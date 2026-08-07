@@ -8,6 +8,6 @@
        selection-anchor: 0
        selection-span: 0
       "Kaixo mundua" ))
-  (backsys {@:driver @:text}
+  (backsys
     {¦ driver: ⟨(> state_boolean)⟩ text: {¦ on_: (%optional false _boolean)}}
       <> {on: ^state}))

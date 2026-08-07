@@ -6,7 +6,7 @@
    a rewriter, because the rules *must* cooperate within a single tick \
    (in this particular arrangement).")
 
-(backsys {@:data, @:program, @:input, @:output}
+(backsys
   ;; Aux: Begin reading program.
   {¦ program_string}
     <> {program: ("" ^program)}

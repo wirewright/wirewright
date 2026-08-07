@@ -3,7 +3,7 @@
   (frag @tx (appearance chat))
   (frag @user)
   (frag @peers (sensor (journal users _string)))
-  (backsys {@:in, @:out, @:tx, @:rx, @:user, @:peers}
+  (backsys
     ;; Ask for nick.
     {¦ -user_ out: (_* `>msg)}
       <> {user: pending, >msg: "Please enter your nickname."}
