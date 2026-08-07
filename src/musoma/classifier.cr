@@ -275,7 +275,7 @@ module MuSoma
           child
         end
 
-        distill(µ, hg, addr, body, sites, site_zero)
+        distill(µ, hg, addr.append(1), body, sites, site_zero)
       end
 
       matchpi %{[window _*]}, %{{¦ style}} do
