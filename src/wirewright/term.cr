@@ -343,7 +343,7 @@ module Ww
 
     # Constructs a `Term` wrapping the given number term *instance*.
     def self.of(instance : Num) : Term
-      case a = instance.@k
+      case a = instance.@repr
       in Int64
         bits = Num::Int61.bits(a) # 61 bit, 3 MSB clear
         address = (bits << 3) | Tag::NumInt.value
