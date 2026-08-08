@@ -1,5 +1,5 @@
 ;; Basic echo example
-;(rack
+(rack
   (frame
     ;; A basic echo server
     (module {}
@@ -123,3 +123,157 @@
         (concurrent "alice: bye then")
         (concurrent "bob: yeah, bye")
         (concurrent (disappeared "alice")))))))
+
+;; JSON server echo
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (@pool (local 9813) server format: json format-policy: discard)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@msg @msgs)
+        (⎡100⎤
+         ⎡"hello"⎤
+         ⎡{"x": 100, "y": 200}⎤
+         ⎡invalid message⎤
+         ⎡[1, {"type": "cat", "name": "Smokey"}, 2]⎤))
+      (queue (@reply @replies) ())
+      (ws (@msg -> (local 9813) -> @replies))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (queue (@reply @replies)
+        (⎡100⎤
+         ⎡"hello"⎤
+         ⎡{"x":100,"y":200}⎤
+         ;; invalid message was discarded
+         ⎡[1,{"name":"Smokey","type":"cat"},2]⎤))
+      (ws (@msg -> (local 9813) -> @replies) up))))
+
+;; ML server echo
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (@pool (local 9813) server format: ml format-policy: discard)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@msg @msgs)
+        (⎡100⎤
+         ⎡hello⎤
+         ⎡(+ 1 2)⎤
+         ⎡{x: 100, y: 200}⎤
+         ⎡invalid message⎤
+         ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
+      (queue (@reply @replies) ())
+      (ws (@msg -> (local 9813) -> @replies))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (queue (@reply @replies)
+        (⎡100⎤
+         ⎡hello⎤
+         ⎡(+ 1 2)⎤
+         ⎡{x: 100 y: 200}⎤
+         ;; invalid message was discarded
+         ⎡(1 {name: "Smokey" type: cat} 2 x: 100 y: 200)⎤))
+      (ws (@msg -> (local 9813) -> @replies) up))))
+
+;; PrettyML server echo
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (@pool (local 9813) server format: prettyml format-policy: discard)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@msg @msgs)
+        (⎡100⎤
+         ⎡hello⎤
+         ⎡(+ 1 2)⎤
+         ⎡{x: 100, y: 200}⎤
+         ⎡invalid message⎤
+         ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
+      (queue (@reply @replies) ())
+      (ws (@msg -> (local 9813) -> @replies))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (queue (@reply @replies)
+        ("100\n"
+         "hello\n"
+         "(+ 1 2)\n"
+         "{x: 100, y: 200}\n"
+         ;; invalid message was discarded
+         "(1 {name: \"Smokey\", type: cat} 2 x: 100 y: 200)\n"))
+      (ws (@msg -> (local 9813) -> @replies) up))))
+
+;; Arithmetic demo, policy: wrap
+(rack
+  (frame
+    (module {}
+      (schema (@schema json)
+        expr => _number
+        expr => (seq + (ref expr) (ref expr))
+        expr => (seq - (ref expr) (ref expr))
+        expr => (seq * (ref expr) (ref expr))
+        expr => (seq / (ref expr) (ref expr)))
+
+      (ws (@pool (local 9813) server
+            format: (json @schema expr)
+            format-policy: wrap)
+        (cell @expr)
+        (cell @value)
+        (backsys
+          {¦ in: (M←(ok expr_) _*) -expr: >expr}
+            <> {(M): (), >expr: ^expr}
+          ;; NOTE: we use -expr to make sure there's no reordering; there's actually
+          ;; a few ticks of delay between expr and value feeding to out so errors can
+          ;; be handled in the meantime; we don't want that in tests though...
+          {¦ in: (M←(err _string) _*) -expr out: (_* `>reply)}
+            <> {(M): (), >reply: ^M}
+          {¦ value_ out: (_* `>reply)}
+            <> {(value): (), >reply: (ok ^value)})
+        (rewriter (@expr -> (ascR (rulesetR)) -> @value)
+          (+ ±a ±b) => ^(+ a b)
+          (- ±a ±b) => ^(- a b)
+          (* ±a ±b) => ^(* a b)
+          (/ ±a ±b) => ^(/ a b)))
+
+      (circuit (pool @pool)))
+
+    (module {}
+      (queue (@expr @exprs)
+        (⎡100⎤
+         ⎡["+", 100, 200]⎤
+         ⎡["+", 1, ["*", 2, 3]]⎤
+         ⎡["-", ["/", 1.23, 3], 5]⎤
+         ⎡["+", ["*", 2, 3], 1]⎤
+         ⎡invalid message⎤))
+      (queue (@value @values) ())
+      (ws (@expr -> (local 9813) -> @values))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@expr @exprs) ())
+      (queue (@value @values)
+        (⎡["ok",100]⎤
+         ⎡["ok",300]⎤
+         ⎡["ok",7]⎤
+         ⎡["ok",-4.59]⎤
+         ⎡["ok",7]⎤
+         ⎡["err","invalid message"]⎤))
+      (ws (@expr -> (local 9813) -> @values) up))))

@@ -1,0 +1,31 @@
+(schema (@schema json)
+  expr => _number
+  expr => (seq + (ref expr) (ref expr))
+  expr => (seq - (ref expr) (ref expr))
+  expr => (seq * (ref expr) (ref expr))
+  expr => (seq / (ref expr) (ref expr)))
+
+(ws (@pool (local 5000) server
+      format: (json @schema expr)
+      format-policy: wrap)
+  (cell @expr)
+  (cell @value)
+  (backsys
+    {¦ in: (M←(ok expr_) _*) -expr: >expr}
+      <> {(M): (), >expr: ^expr}
+    {¦ in: (M←(err _string) _*) out: (_* `>reply)}
+      <> {(M): (), >reply: ^M}
+    {¦ value_ out: (_* `>reply)}
+      <> {(value): (), >reply: (ok ^value)})
+  (rewriter (@expr -> (ascR (rulesetR)) -> @value)
+    (+ ±a ±b) => ^(+ a b)
+    (- ±a ±b) => ^(- a b)
+    (* ±a ±b) => ^(* a b)
+    (/ ±a ±b) => ^(/ a b)))
+
+(circuit (pool @pool))
+
+;; Example inputs:
+;; 100
+;; ["+", 100, 200]
+;; ["+", 1, ["*", 2, 3]]

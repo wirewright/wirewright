@@ -1530,6 +1530,10 @@ module Ww::Rack
         D7.gnd(node, input, output, error)
       end
 
+      matchpi %{[parser @spec_ _*]} do
+        D7.gnd(node, spec)
+      end
+
       # |@ rack.path
       #
       # |@summary
@@ -1844,6 +1848,17 @@ module Ww::Rack
 
       matchpi %{[ws (@messages_ -> _ -> @replies_) _?]} do
         D7.gnd(node, messages, replies)
+      end
+
+      # |@ rack.schema
+      #
+      # |@pattern
+      # [schema (@edge_ json) schema_*]
+      #
+      # |@block
+      # EXPERIMENTAL
+      matchpi %{[schema (@edge_ json) _*]} do
+        D7.gnd(node, edge)
       end
 
       # |@ rack.supervisor

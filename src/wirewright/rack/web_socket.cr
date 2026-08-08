@@ -101,7 +101,9 @@ module Ww::Rack::WebSocket
     binding : String,
     in_edge : Term,
     out_edge : Term,
-    template : Term::Dict
+    template : Term::Dict,
+    format : Format::Any,
+    format_policy : FormatPolicy
 
   defrecord Client,
     node : D7::Node,
@@ -149,14 +151,242 @@ module Ww::Rack::WebSocket
     end
   end
 
+  # See `rack.ws.format` to learn about the supported formats.
+  #
+  # TODO: limits, limits, limits!!
+  module Format
+    alias Any = None | TermJSON | TermJSONSchema | TermML | TermPrettyML
+
+    defrecord None
+    defrecord TermJSON
+    defrecord TermJSONSchema, schema : Schema::JSON::Schema, top : Term
+    defrecord TermML
+    defrecord TermPrettyML
+  end
+
+  private def format?(hg : D7::Hypergraph, node : D7::Node, term : Term) : Format::Any?
+    Term.case(term) do
+      matchpi %{none} do
+        Format::None.new
+      end
+
+      matchpi %{json} do
+        Format::TermJSON.new
+      end
+
+      matchpi %{ml} do
+        Format::TermML.new
+      end
+
+      matchpi %{prettyml} do
+        Format::TermPrettyML.new
+      end
+
+      matchpi %{(json @edge_ top_)} do
+        schemas = Pf::Kit.stack_array(Schema::JSON::Schema, 1)
+
+        hg.each_member(hg.resolve(node.addr, edge), heads: {Term.of(:schema)}) do |candidate|
+          Term.matchpi?(candidate.term, %{[schema (@_ json) schemaQ_*]}) do
+            schemas << Schema::JSON.schema(schemaQ)
+          end
+        end
+
+        continue unless schema = schemas.single?
+
+        Format::TermJSONSchema.new(schema, top)
+      end
+
+      otherwise { }
+    end
+  end
+
+  enum FormatPolicy
+    Discard
+    Kick
+    Wrap
+  end
+
+  def format_policy?(term : Term) : FormatPolicy?
+    # |@ rack.ws.format.policy
+    #
+    # |@summary
+    # Determines how adherence to a format is maintained.
+    Term.case(term) do
+      # |@ rack.ws.format.policy
+      #
+      # |@pattern
+      # discard
+      #
+      # |@block
+      # Messages that were decoded successfully are passed as-is. Messages that
+      # were not are discarded without notifying the offending client.
+      matchpi %{discard} do
+        FormatPolicy::Discard
+      end
+
+      # |@ rack.ws.format.policy
+      #
+      # |@pattern
+      # kick
+      #
+      # |@block
+      # Messages that were decoded successfully are passed as-is. Messages that
+      # were not trigger closure of the offending client's connection.
+      matchpi %{kick} do
+        FormatPolicy::Kick
+      end
+
+      # |@ rack.ws.format.policy
+      #
+      # |@pattern
+      # wrap
+      #
+      # |@block
+      # Messages are wrapped in a result type: `(ok msg_)` if decoded successfully,
+      # where *msg* is the decoded message; or `(err detail_string)`, explaining
+      # why decoding failed.
+      #
+      # The client device is free to interpret this however it may; e.g., by
+      # notifying the corresponding client of the error, or by somehow handling
+      # it entirely on the server-side.
+      matchpi %{wrap} do
+        FormatPolicy::Wrap
+      end
+
+      otherwise { }
+    end
+  end
+
+  private def encode?(format : Format::None, term : Term) : String?
+    if str = term.as_s?
+      return str.to(String)
+    end
+
+    ML.compact(term)
+  end
+
+  # TODO: TermJSONSchema should probably do the same checks on terms, handling
+  # the emit side as well.
+  private def encode?(format : Format::TermJSON | Format::TermJSONSchema, term : Term) : String?
+    JSON.build do |json|
+      encode(format, json, term)
+    end
+  end
+
+  private def encode?(format : Format::TermML, term : Term) : String?
+    ML.compact(term)
+  end
+
+  private def encode?(format : Format::TermPrettyML, term : Term) : String?
+    ML.display(term, maxwidth: 80)
+  end
+
+  private def encode(format, json : JSON::Builder, term : Term) : Nil
+    encode(format, json, Term[term])
+  end
+
+  private def encode(format, json : JSON::Builder, term : Term::Num) : Nil
+    case repr = term.repr
+    in Int64, Float32
+      json.number(repr)
+    in BigRational
+      # if format.fractions
+      #   string
+      # else
+      #   to_f64
+      json.number(repr.to_f64)
+    end
+  end
+
+  private def encode(format, json : JSON::Builder, term : Term::Str | Term::Sym) : Nil
+    json.string(term.to(String))
+  end
+
+  private def encode(format, json : JSON::Builder, term : Term::Boolean) : Nil
+    json.bool(term.true?)
+  end
+
+  private def encode(format, json : JSON::Builder, term : Term::Dict) : Nil
+    if term.itemsonly?
+      json.array do
+        term.items.each do |item|
+          encode(format, json, item)
+        end
+      end
+
+      return
+    end
+
+    json.object do
+      # Generic dictionary.
+      term.each_entry(in: Term::Dict.entries_ord) do |key, value|
+        if key.type.string?
+          json.string(key.to(String))
+        else
+          # x: 100 becomes "x": 100
+          # {x: 100, y: 200}: 300 becomes "{x: 100, y: 200}": 300
+          #
+          # When we decode, we can only recover the key if the user explicitly tells
+          # us to (e.g. through a schema).
+          json.string(ML.compact(key))
+        end
+
+        encode(format, json, value)
+      end
+    end
+  end
+
+  private def encode(format, json : JSON::Builder, term : Term::Blob) : Nil
+    json.string do |io|
+      Base64.strict_encode(term, io)
+    end
+  end
+
+  private def decode?(format : Format::None, message : String) : Term?
+    Term.of(message)
+  end
+
+  private def decode?(format : Format::TermJSON, message : String) : Term?
+    begin
+      Schema::JSON.read(message)
+    rescue e : JSON::ParseException
+      Log.debug(exception: e) { "error while decoding `(term json)` message" }
+    end
+  end
+
+  private def decode?(format : Format::TermJSONSchema, message : String) : Term?
+    begin
+      Schema::JSON.read(format.schema, format.top, message)
+    rescue e : JSON::ParseException
+      Log.debug(exception: e) { "error while decoding `(term json)` message" }
+    end
+  end
+
+  private def decode?(format : Format::TermML | Format::TermPrettyML, message : String) : Term?
+    begin
+      ML.term(message)
+    rescue e : ML::SyntaxError
+      Log.debug(exception: e) { "error while decoding `(term json)` message" }
+    end
+  end
+
   # :nodoc:
   def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :ws) do |node|
       Term.case(node.term) do
-        matchpi %{[ws (@pool_ bindingQ_ server _? ⍊ in: (%optional @in @input_) out: (%optional @out @output_)) template_*]} do
+        matchpi(<<-WWML) do
+        [ws (@pool_ bindingQ_ server _?
+              ⍊ in: (%optional @in @input_)
+                out: (%optional @out @output_)
+                format: (%optional none formatQ_)
+                format-policy: (%optional discard policyQ_))
+          template_*]
+        WWML
           continue unless binding = binding?(bindingQ)
+          continue unless format = format?(hg, node, formatQ)
+          continue unless format_policy = format_policy?(policyQ)
 
-          variant = Server.new(node, hg.resolve(node.addr, pool), binding, input, output, template.as_d)
+          variant = Server.new(node, hg.resolve(node.addr, pool), binding, input, output, template.as_d, format, format_policy)
           step(state, ctx, hg, variant)
         end
 
@@ -176,22 +406,23 @@ module Ww::Rack::WebSocket
     end
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, variant : Server) : D7::Patch?
+  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, server : Server) : D7::Patch?
     # If there's no associated pool, then the server's "machine" is incomplete,
     # so it cannot handle requests -- nor does it *exist*, really.
-    unless pool = Rack.pool?(hg, variant.pool)
-      return D7.patch(variant.node, {1, 3, {:dn, "missing pool"}})
+    unless pool = Rack.pool?(hg, server.pool)
+      # (ws (_ _ server ⏏) _*)
+      return D7.patch(server.node, {1, 3, {:dn, "missing pool"}})
     end
 
-    ctx.bindings << variant.binding
+    ctx.bindings << server.binding
 
-    case status = WebSocketServerService.checkout?(variant.binding)
+    case status = WebSocketServerService.checkout?(server.binding)
     in Nil, WebSocketServerService::Pending
       # (ws (_ _ server ⏏) _*)
-      D7.patch(variant.node, {1, 3, :pending})
+      D7.patch(server.node, {1, 3, :pending})
     in WebSocketServerService::Dn # Error
       # (ws (_ _ server ⏏) _*)
-      D7.patch(variant.node, {1, 3, {:dn, status.detail}})
+      D7.patch(server.node, {1, 3, {:dn, status.detail}})
     in WebSocketServerService::Up
       journal = status.journal
 
@@ -202,8 +433,10 @@ module Ww::Rack::WebSocket
       journal.each do |event|
         case event
         in WebSocketServerService::ClientConnected
-          contents1 = contents1.append(client_repr(event.id, variant))
+          # O(1)
+          contents1 = contents1.append(client_repr(event.id, server))
         in WebSocketServerService::ClientDisconnected
+          # O(N) ?!?!?!?
           contents1 = fmap(contents1) do |client|
             case client
             in ConnectedClient
@@ -212,14 +445,26 @@ module Ww::Rack::WebSocket
             end
           end
         in WebSocketServerService::ClientReceived
+          message = decode?(server.format, event.message)
+          next if message.nil? && server.format_policy.discard?
+
+          # O(N) ?!?!?!?
           contents1 = fmap(contents1) do |client|
             case client
             in ConnectedClient
-              unless client.id == event.id
-                next client
+              next client unless client.id == event.id
+              next client unless inbound = client.inbound?
+
+              # Kick client if message fails to decode.
+              next if message.nil? && server.format_policy.kick?
+
+              if server.format_policy.wrap?
+                message = message ? Term.of(:ok, message) : Term.of(:err, "invalid message")
               end
 
-              send(client, event.message)
+              assert message
+
+              client.copy_with(inbound: inbound.copy_with(queue: inbound.queue.append(message)))
             in DisconnectedClient
             end
           end
@@ -229,15 +474,32 @@ module Ww::Rack::WebSocket
       seen = Set(UUID).new
 
       # Find outbound messages from clients.
+      #
+      # O(N) ?!?!?!?
       contents1 = fmap(contents1) do |client|
         case client
         in ConnectedClient
           seen << client.id
-          each_outbound_message(client) do |message|
-            WebSocketServerService.send(variant.binding, client.id, message)
+
+          if outbound = client.outbound?
+            outq = outbound.queue.items
+            while term = outq.first?
+              # If the message fails to encode, instead of suppressing it, which would
+              # just be a source of hard-to-find bugs, we "clog" the outbound queue.
+              #
+              # TODO: We should also provide a descriptive error message! Encode doesn't
+              # fail by itself, only when *format* limits are exceeded by *term*.
+              break unless message = encode?(server.format, term)
+
+              WebSocketServerService.send(server.binding, client.id, message)
+
+              outq = outq.move(1)
+            end
+
+            client = client.copy_with(outbound: outbound.copy_with(queue: outq.collect))
           end
 
-          drain(client)
+          client
         in DisconnectedClient
         end
       end
@@ -247,48 +509,48 @@ module Ww::Rack::WebSocket
       status.clients.each do |client_id|
         next if client_id.in?(seen)
 
-        WebSocketServerService.drop(variant.binding, client_id)
+        WebSocketServerService.drop(server.binding, client_id)
       end
 
       # (ws (_ _ server ⏏) _*)
       # (circuit @pool ⏏)
       D7.patches(
-        D7.patch(variant.node, {1, 3, :up}),
+        D7.patch(server.node, {1, 3, :up}),
         D7.patch(pool.node, {2, contents1}),
       )
     end
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, variant : Client) : D7::Patch?
-    ctx.conns << variant.conn
+  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, client : Client) : D7::Patch?
+    ctx.conns << client.conn
 
-    case event = WebSocketClientService.checkout?(variant.conn)
+    case event = WebSocketClientService.checkout?(client.conn)
     in Nil # Disconnected
-      status_patch = D7.patch(variant.node, {2, nil})
+      status_patch = D7.patch(client.node, {2, nil})
     in WebSocketClientService::Up
-      status_patch = D7.patch(variant.node, {2, :up})
+      status_patch = D7.patch(client.node, {2, :up})
     in WebSocketClientService::Dn
-      status_patch = D7.patch(variant.node, {2, {:dn, event.detail}})
+      status_patch = D7.patch(client.node, {2, {:dn, event.detail}})
     in WebSocketClientService::Pending
-      status_patch = D7.patch(variant.node, {2, :pending})
+      status_patch = D7.patch(client.node, {2, :pending})
     end
 
     source_patch = pass do
-      next unless source = Rack.cell?(hg, variant.message)
+      next unless source = Rack.cell?(hg, client.message)
       next unless message = source.value?
 
       message = stringify(message)
-      next unless WebSocketClientService.send?(variant.conn, message)
+      next unless WebSocketClientService.send?(client.conn, message)
 
       D7.patch(source.node, {2, nil})
     end
 
     target_patch = pass do
-      next unless target = Rack.cell?(hg, variant.reply)
+      next unless target = Rack.cell?(hg, client.reply)
       next unless target.value?.nil?
-      next unless reply = WebSocketClientService.head?(variant.conn)
+      next unless reply = WebSocketClientService.head?(client.conn)
 
-      ctx.dequeue << variant.conn
+      ctx.dequeue << client.conn
 
       D7.patch(target.node, {2, reply})
     end
@@ -313,13 +575,13 @@ module Ww::Rack::WebSocket
 
   defrecord DisconnectedClient
 
-  private def client_repr(id : UUID, variant : Server) : Term
+  private def client_repr(id : UUID, server : Server) : Term
     device = Term::Dict.build do |commit|
       commit << :device
       commit << {:cell, {:edge, :id}, id.to_s}
-      commit << {:cell, variant.in_edge, Term[]}
-      commit << {:cell, variant.out_edge, Term[]}
-      commit.concat(variant.template.items)
+      commit << {:cell, server.in_edge, Term[]}
+      commit << {:cell, server.out_edge, Term[]}
+      commit.concat(server.template.items)
     end
 
     Term.of(device)
@@ -343,14 +605,14 @@ module Ww::Rack::WebSocket
           end
 
           # Recognize the inbox cell.
-          matchpi %{[cell @in msgs←(_string*)]} do
+          matchpi %{[cell @in msgs←(_*)]} do
             next if inbound # Duplicate `in`
 
             inbound = ClientQueue.new(key, msgs.as_d)
           end
 
           # Recognize the outbox cell.
-          matchpi %{[cell @out msgs←(_string*)]} do
+          matchpi %{[cell @out msgs←(_*)]} do
             next if outbound # Duplicate `out`
 
             outbound = ClientQueue.new(key, msgs.as_d)
@@ -380,26 +642,6 @@ module Ww::Rack::WebSocket
     end
 
     result
-  end
-
-  private def send(client : ConnectedClient, message : String) : ClientRepr
-    return client unless inbound = client.inbound?
-
-    client.copy_with(inbound: inbound.copy_with(queue: inbound.queue.append(message)))
-  end
-
-  private def drain(client : ConnectedClient) : ClientRepr
-    return client unless outbound = client.outbound?
-
-    client.copy_with(outbound: outbound.copy_with(queue: Term[]))
-  end
-
-  private def each_outbound_message(client : ClientRepr, & : String ->) : Nil
-    return unless outbound = client.outbound?
-
-    outbound.queue.items.each do |item|
-      yield stringify(item)
-    end
   end
 
   private def fmap(contents : Term::Dict, & : ClientRepr -> ClientRepr?) : Term::Dict
