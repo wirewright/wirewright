@@ -293,44 +293,9 @@ module Ww::WebSocketClientService
     host : String,
     port : UInt16,
     path : String,
-    index : UInt32, # FIXME: key : Term
+    key : Term,
     secure : Bool,
     max_retries : UInt32
-
-  DEFAULT_MAX_RETRIES = 10u32
-
-  def conn?(term : Term) : Conn?
-    Term.case(term) do
-      matchpiT %{(local port←(%number u16))} do
-        Conn.new("127.0.0.1", port, "", 0, false, DEFAULT_MAX_RETRIES)
-      end
-
-      matchpiT %{(public port←(%number u16))} do
-        Conn.new("0.0.0.0", port, "", 0, false, DEFAULT_MAX_RETRIES)
-      end
-
-      matchpi %{_string} do
-        return unless uri = URI.parse(term.to(String))
-        return unless host = uri.host
-        return unless port = uri.port
-        return unless UInt16::MIN <= port <= UInt16::MAX
-
-        case uri.scheme
-        when "ws"  then secure = false
-        when "wss" then secure = true
-        else
-          return
-        end
-
-        index = uri.query_params["index"]?.try(&.to_u32?) || 0u32
-        max_retries = uri.query_params["max-retries"]?.try(&.to_u32?) || DEFAULT_MAX_RETRIES
-
-        Conn.new(host, port.to_u16, uri.path, index, secure, max_retries)
-      end
-
-      otherwise { }
-    end
-  end
 
   alias Command = Send | Disconnect
 
@@ -517,6 +482,7 @@ module Ww::WebSocketClientService
       return unless journal.present?
 
       @@journals[conn] = journal + 1
+      @@subscriptions.each(&.call)
     end
   end
 

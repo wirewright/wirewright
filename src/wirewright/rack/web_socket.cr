@@ -3,15 +3,17 @@ module Ww::Rack::WebSocket
 
   defcase State,
     serving : Set(String),
-    connected_to : Set(WebSocketClientService::Conn),
+    connected_to : Set(ClientConn),
     subscription : ->,
+    schemas : GenerationalCache(Term, Schema::JSON),
     mutation: true
 
   def state(epoch : Automaton::Epoch) : State
     serving = Set(String).new
-    connected_to = Set(WebSocketClientService::Conn).new
+    connected_to = Set(ClientConn).new
     subscription = -> { epoch.call }
-    State.new(serving, connected_to, subscription)
+    schemas = GenerationalCache(Term, Schema::JSON).new
+    State.new(serving, connected_to, subscription, schemas)
   end
 
   def pending?(state : State) : Bool
@@ -20,16 +22,18 @@ module Ww::Rack::WebSocket
 
   defrecord StepContext,
     bindings : Set(String),
-    conns : Set(WebSocketClientService::Conn),
-    dequeue : Set(WebSocketClientService::Conn)
+    conns : Set(ClientConn),
+    dequeue : Set(ClientConn)
 
   def step(state : State, & : Proposer -> T) : T forall T
     seen_bindings = Set(String).new
-    seen_conns = Set(WebSocketClientService::Conn).new
-    dequeue = Set(WebSocketClientService::Conn).new
+    seen_conns = Set(ClientConn).new
+    dequeue = Set(ClientConn).new
 
-    ctx = StepContext.new(seen_bindings, seen_conns, dequeue)
-    result = yield Proposer.new(state, ctx)
+    result = state.schemas.epoch do
+      ctx = StepContext.new(seen_bindings, seen_conns, dequeue)
+      yield Proposer.new(state, ctx)
+    end
 
     if state.serving.empty? && !seen_bindings.empty?
       WebSocketServerService.subscribe(state.subscription)
@@ -95,7 +99,7 @@ module Ww::Rack::WebSocket
     end
   end
 
-  defrecord Server,
+  defcase Server,
     node : D7::Node,
     pool : D7::AbsEdge,
     binding : String,
@@ -105,13 +109,19 @@ module Ww::Rack::WebSocket
     format : Format::Any,
     format_policy : FormatPolicy
 
-  defrecord Client,
+  defcase Client,
     node : D7::Node,
     message : D7::AbsEdge,
-    conn : WebSocketClientService::Conn,
-    reply : D7::AbsEdge
+    conn : ClientConn,
+    reply : D7::AbsEdge,
+    format : Format::Any,
+    format_policy : FormatPolicy
 
   private def binding?(binding : Term) : String?
+    # |@ rack.ws.binding
+    #
+    # |@summary
+    # Describes where to bind a WebSocket server.
     Term.case(binding) do
       # |@ rack.ws.binding
       #
@@ -159,35 +169,118 @@ module Ww::Rack::WebSocket
 
     defrecord None
     defrecord TermJSON
-    defrecord TermJSONSchema, schema : Schema::JSON::Schema, top : Term
+    defrecord TermJSONSchema, schema : Schema::JSON, top : Term
     defrecord TermML
     defrecord TermPrettyML
   end
 
-  private def format?(hg : D7::Hypergraph, node : D7::Node, term : Term) : Format::Any?
+  private def format?(state : State, hg : D7::Hypergraph, node : D7::Node, term : Term) : Format::Any?
+    # |@ rack.ws.format
+    #
+    # |@summary
+    # Describes how to (de)serialize terms.
     Term.case(term) do
+      # |@ rack.ws.format
+      #
+      # |@pattern
+      # none
+      #
+      # |@block
+      # Allows to communicate using UTF-8 encoded messages (string terms) and
+      # arbitrary byte payloads (blob terms).
       matchpi %{none} do
         Format::None.new
       end
 
+      # |@ rack.ws.format
+      #
+      # |@pattern
+      # json
+      #
+      # |@block
+      # (De)serializes terms into JSON. This uses a *very* loose mapping of terms to
+      # JSON. This is because terms do not map to JSON exactly, nor the other way.
+      # Without you providing hints during deserialization, the terms you get out of
+      # `format: json` can look very ugly.
+      #
+      # For example, the term `(+ 1 2 x: 100 y: 200)` is serialized by `format: json`
+      # into `{"0": "+", "1": 1, "2": 2, "x": 100, "y": 200}`, which deserializes
+      # into the term `{"0": "+", "1": 1, "2": 2, "x": 100, "y": 200}`.
+      #
+      # Use this only as a last resort. The better options are `jsonp` (JSON protocol,
+      # where we serialize terms into JSON objects properly tagged with types etc.)
+      # or `(json @_ _)`, where you can specify a schema to drive the decoding. The latter
+      # is the recommended approach since it reduces the attack surface by forcing
+      # you to explicitly specify the kinds of JSON that are accepted.
       matchpi %{json} do
         Format::TermJSON.new
       end
 
+      # |@ rack.ws.format
+      #
+      # |@pattern
+      # ml
+      #
+      # |@block
+      # Uses a compact, restricted subset of WwML to (de)serialize terms
+      # transparently for you.
+      #
+      # Compact ML includes the following parts of the WwML grammar:
+      # - Number literals such as `100`, `1.23`, `≈100`, `1/2`.
+      # - String literals such as `"hello"`.
+      # - Symbol literals such as `xyz`, `⸍qux⸝`.
+      # - Boolean literals `true` and `false`.
+      # - Dictionary terms of the general form:  `()`, `(+ 1 2)`, `(+ 1 2 x: 100 y: 200)`,
+      #   etc. Even pairsonly dictionaries are represented this way: `(x: 100 y: 200)`.
+      #
+      # NOTE: Right now, this still uses the full-blown WwML parser; which means
+      # `ml` is vulnerable to all sorts of things; in the future, we plan to use
+      # a smaller, faster, better fortified parser for this, since we expect `format: ml`
+      # to be Internet-facing in some scenarios.
       matchpi %{ml} do
         Format::TermML.new
       end
 
+      # |@ rack.ws.format
+      #
+      # |@pattern
+      # prettyml
+      #
+      # |@block
+      # Uses WwML to encode (pretty print) the term, with all the shorthands and
+      # associated slowness. May produce multiline output. For example, `±x`
+      # is serialized as `(%let x _number)` when using `ml`, but with `prettyml`,
+      # it is serialized as `±x`.
+      #
+      # Use this for debugging / visualization only. `prettyml` is not guaranteed
+      # to be fast -- not to parse, nor to pretty print.
       matchpi %{prettyml} do
         Format::TermPrettyML.new
       end
 
+      # |@ rack.ws.format
+      #
+      # |@pattern
+      # (json @edge_ top_)
+      #
+      # |@key edge rack.edge
+      # Tells where to look for the JSON schema node (see `rack.schema`).
+      #
+      # |@key top
+      # Selects a toplevel rule from the JSON schema.
+      #
+      # |@block
+      # Uses a JSON schema to (de)serialize terms. See `rack.schema` for
+      # more info.
       matchpi %{(json @edge_ top_)} do
-        schemas = Pf::Kit.stack_array(Schema::JSON::Schema, 1)
+        schemas = Pf::Kit.stack_array(Schema::JSON, 1)
 
         hg.each_member(hg.resolve(node.addr, edge), heads: {Term.of(:schema)}) do |candidate|
           Term.matchpi?(candidate.term, %{[schema (@_ json) schemaQ_*]}) do
-            schemas << Schema::JSON.schema(schemaQ)
+            schema = state.schemas.put_if_absent(schemaQ) do
+              Schema::JSON.new(schemaQ)
+            end
+            schemas << schema
           end
         end
 
@@ -202,17 +295,17 @@ module Ww::Rack::WebSocket
 
   enum FormatPolicy
     Discard
-    Kick
+    Abort
     Wrap
   end
 
   def format_policy?(term : Term) : FormatPolicy?
-    # |@ rack.ws.format.policy
+    # |@ rack.ws.format-policy
     #
     # |@summary
     # Determines how adherence to a format is maintained.
     Term.case(term) do
-      # |@ rack.ws.format.policy
+      # |@ rack.ws.format-policy
       #
       # |@pattern
       # discard
@@ -224,19 +317,19 @@ module Ww::Rack::WebSocket
         FormatPolicy::Discard
       end
 
-      # |@ rack.ws.format.policy
+      # |@ rack.ws.format-policy
       #
       # |@pattern
-      # kick
+      # abort
       #
       # |@block
       # Messages that were decoded successfully are passed as-is. Messages that
-      # were not trigger closure of the offending client's connection.
-      matchpi %{kick} do
-        FormatPolicy::Kick
+      # were not trigger connection closure.
+      matchpi %{abort} do
+        FormatPolicy::Abort
       end
 
-      # |@ rack.ws.format.policy
+      # |@ rack.ws.format-policy
       #
       # |@pattern
       # wrap
@@ -251,6 +344,47 @@ module Ww::Rack::WebSocket
       # it entirely on the server-side.
       matchpi %{wrap} do
         FormatPolicy::Wrap
+      end
+
+      otherwise { }
+    end
+  end
+
+  alias ClientConn = WebSocketClientService::Conn
+
+  CLIENT_DEFAULT_MAX_RETRIES = 10u32
+
+  # NOTE: Can only be a string for compatibility with the circuit-side (URIs
+  # can only do strings, we don't and probably shouldn't parse them any further).
+  CLIENT_DEFAULT_KEY = Term.of("master")
+
+  def client_conn?(term : Term) : ClientConn?
+    Term.case(term) do
+      matchpiT %{(local port←(%number u16))} do
+        ClientConn.new("127.0.0.1", port, "", CLIENT_DEFAULT_KEY, false, CLIENT_DEFAULT_MAX_RETRIES)
+      end
+
+      matchpiT %{(public port←(%number u16))} do
+        ClientConn.new("0.0.0.0", port, "", CLIENT_DEFAULT_KEY, false, CLIENT_DEFAULT_MAX_RETRIES)
+      end
+
+      matchpi %{_string} do
+        return unless uri = URI.parse(term.to(String))
+        return unless host = uri.host
+        return unless port = uri.port
+        return unless UInt16::MIN <= port <= UInt16::MAX
+
+        case uri.scheme
+        when "ws"  then secure = false
+        when "wss" then secure = true
+        else
+          return
+        end
+
+        key = Term.of(uri.query_params["key"]?) || CLIENT_DEFAULT_KEY
+        max_retries = uri.query_params["max-retries"]?.try(&.to_u32?) || CLIENT_DEFAULT_MAX_RETRIES
+
+        ClientConn.new(host, port.to_u16, uri.path, key, secure, max_retries)
       end
 
       otherwise { }
@@ -350,7 +484,7 @@ module Ww::Rack::WebSocket
     begin
       Schema::JSON.read(message)
     rescue e : JSON::ParseException
-      Log.debug(exception: e) { "error while decoding `(term json)` message" }
+      Log.debug(exception: e) { "error while decoding JSON message" }
     end
   end
 
@@ -358,7 +492,7 @@ module Ww::Rack::WebSocket
     begin
       Schema::JSON.read(format.schema, format.top, message)
     rescue e : JSON::ParseException
-      Log.debug(exception: e) { "error while decoding `(term json)` message" }
+      Log.debug(exception: e) { "error while decoding JSON message" }
     end
   end
 
@@ -366,7 +500,7 @@ module Ww::Rack::WebSocket
     begin
       ML.term(message)
     rescue e : ML::SyntaxError
-      Log.debug(exception: e) { "error while decoding `(term json)` message" }
+      Log.debug(exception: e) { "error while decoding WwML message" }
     end
   end
 
@@ -375,7 +509,7 @@ module Ww::Rack::WebSocket
     hg.propose(proposals, :ws) do |node|
       Term.case(node.term) do
         matchpi(<<-WWML) do
-        [ws (@pool_ bindingQ_ server _?
+        [ws (server @pool_ bindingQ_ _?
               ⍊ in: (%optional @in @input_)
                 out: (%optional @out @output_)
                 format: (%optional none formatQ_)
@@ -383,21 +517,34 @@ module Ww::Rack::WebSocket
           template_*]
         WWML
           continue unless binding = binding?(bindingQ)
-          continue unless format = format?(hg, node, formatQ)
+          continue unless format = format?(state, hg, node, formatQ)
           continue unless format_policy = format_policy?(policyQ)
 
-          variant = Server.new(node, hg.resolve(node.addr, pool), binding, input, output, template.as_d, format, format_policy)
+          abs_pool = hg.resolve(node.addr, pool)
+          variant = stack_alloc Server.new(node, abs_pool, binding, input, output, template.as_d, format, format_policy)
           step(state, ctx, hg, variant)
         end
 
-        # Allow the circuit to use an errorless `dn` to disable the socket.
-        matchpi %{[ws (@_ -> _ -> @_) dn]} do
+        # - Allow the circuit to use an errorless `dn` to disable the socket.
+        # - Use `closed` instead of simply `dn` for both to avoid confusing server-side
+        #   closure (`closed`) and client-side closure (`dn`).
+        matchpi %{[ws [client (@_ -> _ -> @_)] (%any dn closed)]} do
         end
 
-        matchpi %{[ws (@message_ -> connQ_ -> @reply_) _?]} do
-          continue unless conn = WebSocketClientService.conn?(connQ)
+        matchpi(<<-WWML) do
+        [ws
+          (client (@message_ -> connQ_ -> @reply_)
+            ⍊ format: (%optional none formatQ_)
+              format-policy: (%optional discard policyQ_))
+          _?]
+        WWML
+          continue unless conn = client_conn?(connQ)
+          continue unless format = format?(state, hg, node, formatQ)
+          continue unless format_policy = format_policy?(policyQ)
 
-          variant = Client.new(node, hg.resolve(node.addr, message), conn, hg.resolve(node.addr, reply))
+          abs_message = hg.resolve(node.addr, message)
+          abs_reply = hg.resolve(node.addr, reply)
+          variant = stack_alloc Client.new(node, abs_message, conn, abs_reply, format, format_policy)
           step(state, ctx, hg, variant)
         end
 
@@ -456,7 +603,7 @@ module Ww::Rack::WebSocket
               next client unless inbound = client.inbound?
 
               # Kick client if message fails to decode.
-              next if message.nil? && server.format_policy.kick?
+              next if message.nil? && server.format_policy.abort?
 
               if server.format_policy.wrap?
                 message = message ? Term.of(:ok, message) : Term.of(:err, "invalid message")
@@ -522,16 +669,25 @@ module Ww::Rack::WebSocket
   end
 
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, client : Client) : D7::Patch?
-    ctx.conns << client.conn
-
-    case event = WebSocketClientService.checkout?(client.conn)
-    in Nil # Disconnected
-      status_patch = D7.patch(client.node, {2, nil})
-    in WebSocketClientService::Up
+    case status = WebSocketClientService.checkout?(client.conn)
+    in Nil # Not connected
+      if client.conn.in?(state.connected_to)
+        # Client was connected and now isn't.
+        status_patch = D7.patch(client.node, {2, :closed})
+      else
+        # Client was not connected (the client just joined the circuit and
+        # wants to connect).
+        ctx.conns << client.conn
+        status_patch = D7.patch(client.node, {2, nil})
+      end
+    in WebSocketClientService::Up # Connected
+      ctx.conns << client.conn
       status_patch = D7.patch(client.node, {2, :up})
-    in WebSocketClientService::Dn
-      status_patch = D7.patch(client.node, {2, {:dn, event.detail}})
-    in WebSocketClientService::Pending
+    in WebSocketClientService::Dn # Tried to connect, but ended up with an error
+      ctx.conns << client.conn
+      status_patch = D7.patch(client.node, {2, {:dn, status.detail}})
+    in WebSocketClientService::Pending # Connecting...
+      ctx.conns << client.conn
       status_patch = D7.patch(client.node, {2, :pending})
     end
 
@@ -539,7 +695,12 @@ module Ww::Rack::WebSocket
       next unless source = Rack.cell?(hg, client.message)
       next unless message = source.value?
 
-      message = stringify(message)
+      # If the message fails to encode (e.g. due to limits) we "clog" the message
+      # cell so that failure is evident.
+      #
+      # TODO: We should also provide a descriptive error message explaining why
+      # the thing doesn't encode!
+      next unless message = encode?(client.format, message)
       next unless WebSocketClientService.send?(client.conn, message)
 
       D7.patch(source.node, {2, nil})
@@ -551,6 +712,23 @@ module Ww::Rack::WebSocket
       next unless reply = WebSocketClientService.head?(client.conn)
 
       ctx.dequeue << client.conn
+
+      reply = decode?(client.format, reply)
+
+      case client.format_policy
+      in .discard?
+        next if reply.nil?
+      in .abort?
+        if reply.nil?
+          return D7.patch(client.node, {2, {:dn, "invalid message"}})
+        end
+      in .wrap?
+        if reply
+          reply = Term.of(:ok, reply)
+        else
+          reply = Term.of(:err, "invalid message")
+        end
+      end
 
       D7.patch(target.node, {2, reply})
     end
@@ -658,13 +836,5 @@ module Ww::Rack::WebSocket
 
       rep
     end
-  end
-
-  private def stringify(term : Term) : String
-    if str = term.as_s?
-      return str.to(String)
-    end
-
-    ML.compact(term)
   end
 end

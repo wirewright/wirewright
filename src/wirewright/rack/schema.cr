@@ -4,8 +4,18 @@
 module Ww::Rack::Schema
 end
 
-module Ww::Rack::Schema::JSON
-  extend self
+struct Ww::Rack::Schema::JSON
+  # :nodoc:
+  getter entries : Hash(Term, Array(Entry))
+
+  # :nodoc:
+  def initialize(@entries)
+  end
+
+  # Constructs an empty JSON schema.
+  def self.empty : self
+    new({} of Term => Array(Entry))
+  end
 
   alias Op = Blank | Literal | FieldSet | Seq | ArrayOf | Choice | RuleRef
 
@@ -27,36 +37,52 @@ module Ww::Rack::Schema::JSON
   defrecord RequiredField, key : Term, name : Term, value : Op
   defrecord OptionalField, key : Term, name : Term, value : Op, default : Term?
 
-  private def repr(term : Term) : String
+  private def self.repr(term : Term) : String
     term.type.string? ? term.to(String) : ML.compact(term)
   end
 
-  private def fields(rows : Indexable(Term)) : Hash(String, Field)
+  private def self.fields(rows : Indexable(Term)) : Hash(String, Field)
     fields = {} of String => Field
 
     rows.each do |row|
       field = Term.case(row) do
-        matchpi %{(field key_ value_)} do
-          RequiredField.new(key, key, operator(value))
-        end
-
-        matchpi %{(field key_ value_ as: name_)} do
+        # |@ rack.schema.field
+        #
+        # |@pattern
+        # (field key_ value_ ⍊ ⋮name)
+        #
+        # |@key key
+        # The key is treated literally (not an operator!)
+        #
+        # |@key value rack.schema.operator
+        #
+        # |@key name
+        # Allows you to rename the key.
+        matchpi %{[field key_ value_]} do
+          name = row[:as]? || key
           RequiredField.new(key, name, operator(value))
         end
 
-        matchpi %{(field? key_ value_)} do
-          OptionalField.new(key, key, operator(value), default: nil)
-        end
-
-        matchpi %{(field? key_ value_ as: name_)} do
-          OptionalField.new(key, name, operator(value), default: nil)
-        end
-
-        matchpi %{(field? key_ value_ default: default_)} do
-          OptionalField.new(key, key, operator(value), default)
-        end
-
-        matchpi %{(field? key_ value_ as: name_ default: default_)} do
+        # |@ rack.schema.field
+        #
+        # |@pattern
+        # (field? key_ value_ ⍊ ⋮name ⋮default)
+        #
+        # |@key key
+        # The key is treated literally (not an operator!)
+        #
+        # |@key value rack.schema.operator
+        #
+        # |@key name
+        # Allows you to rename the key.
+        #
+        # |@key default
+        # If the field is missing and *default* is not set, the entry will be
+        # omitted from the resulting term. If *default* is set, the entry will
+        # be created.
+        matchpi %{[field? key_ value_]} do
+          name = row[:as]? || key
+          default = row[:default]?
           OptionalField.new(key, name, operator(value), default)
         end
 
@@ -71,42 +97,86 @@ module Ww::Rack::Schema::JSON
     fields
   end
 
-  def operator(term : Term) : Op
+  def self.operator(term : Term) : Op
+    # |@ rack.schema.operator
+
     Term.case(term) do
-      matchpi %{[array successor_]} do
+      # |@ rack.schema.operator.array
+      #
+      # |@pattern
+      # (array value_ ⍊ min⋮ 0 max⋮ 1024)
+      #
+      # |@key value rack.schema.operator
+      matchpi %{[array value_]} do
         min = term[:min]?.as_n?.try(&.index32?) || 0u32
         max = term[:max]?.as_n?.try(&.index32?) || 1024u32
 
-        ArrayOf.new(operator(successor), min, max)
+        ArrayOf.new(operator(value), min, max)
       end
 
+      # |@ rack.schema.operator.any
+      #
+      # |@pattern
+      # [any options_*]
+      #
+      # |@key options rack.schema.operator
       matchpi %{[any _*]} do
         subterms = term.items.move(1)
         options = subterms.to_readonly_slice { |subterm| operator(subterm) }
         Choice.new(options)
       end
 
+      # |@ rack.schema.operator.literal
+      #
+      # |@pattern
+      # [literal term_]
       matchpi %{[literal term_]} do
         Literal.new(term)
       end
 
+      # |@ rack.schema.operator.literal
+      #
+      # |@pattern
+      # [seq values_*]
+      #
+      # |@key values rack.schema.operator
       matchpi %{[seq _*]} do
         subterms = term.items.move(1)
         Seq.new(subterms.to_readonly_slice { |subterm| operator(subterm) })
       end
 
+      # |@ rack.schema.operator.object
+      #
+      # |@pattern
+      # [object fields_* ...]
+      #
+      # |@key fields rack.schema.field
       matchpi %{[object _* ...]} do
         FieldSet.new(fields(term.items.move(1)), open: true)
       end
 
+      # |@ rack.schema.operator.object
+      #
+      # |@pattern
+      # [object fields_*]
+      #
+      # |@key fields rack.schema.field
       matchpi %{[object _*]} do
         FieldSet.new(fields(term.items.move(1)), open: false)
       end
 
+      # |@ rack.schema.operator.ref
+      #
+      # |@pattern
+      # [ref name_]
       matchpi %{[ref name_]} do
         RuleRef.new(name)
       end
 
+      # |@ rack.schema.operator.blank
+      #
+      # |@pattern
+      # (%symbol blank)
       matchpi %{_symbol} do
         continue unless blank = term.as_sym.blank?
         continue unless blank.singular?
@@ -114,34 +184,37 @@ module Ww::Rack::Schema::JSON
         Blank.new(blank.type)
       end
 
+      # |@ rack.schema.operator.literal
+      #
+      # |@pattern
+      # _number
+      # _string
+      # _symbol
+      # _boolean
+      # _dict
+      # _blob
       otherwise do
         Literal.new(term)
       end
     end
   end
 
-  defrecord Schema, entries : Hash(Term, Array(Schema::Entry))
-
-  def Schema.empty
-    Schema.new({} of Term => Array(Schema::Entry))
-  end
-
-  alias Schema::Entry = Rule
+  alias Entry = Rule
 
   defrecord Rule, op : Op
 
-  def schema(document : Term) : Schema
+  def self.new(document : Term) : self
     unless document = document.as_d?
-      return Schema.empty
+      return empty
     end
 
-    entries = {} of Term => Array(Schema::Entry)
+    entries = {} of Term => Array(Entry)
 
     document.items.each do |item|
       Term.case(item) do
         matchpi %{[rule name_ op_]} do
           entry = Rule.new(operator(op))
-          overloads = entries.put_if_absent(name) { [] of Schema::Entry }
+          overloads = entries.put_if_absent(name) { [] of Entry }
           overloads << entry
         end
 
@@ -149,11 +222,11 @@ module Ww::Rack::Schema::JSON
       end
     end
 
-    Schema.new(entries)
+    new(entries)
   end
 
   # A generic / fallback term reading function.
-  private def read?(parser : ::JSON::PullParser) : Term?
+  private def self.read?(parser : ::JSON::PullParser) : Term?
     case parser.kind
     in .null?
       parser.read_null
@@ -186,7 +259,7 @@ module Ww::Rack::Schema::JSON
     end
   end
 
-  private def read(op : Term::Num.class, parser) : Term
+  private def self.read(op : Term::Num.class, parser) : Term
     case parser.kind
     when .int?   then Term.of(parser.read_int)
     when .float? then Term.of(parser.read_float)
@@ -195,19 +268,19 @@ module Ww::Rack::Schema::JSON
     end
   end
 
-  private def read(op : Term::Str.class, parser) : Term
+  private def self.read(op : Term::Str.class, parser) : Term
     Term.of(parser.read_string)
   end
 
-  private def read(op : Term::Sym.class, parser) : Term
+  private def self.read(op : Term::Sym.class, parser) : Term
     Term.of(Term::Sym.new(parser.read_string))
   end
 
-  private def read(op : Term::Boolean.class, parser) : Term
+  private def self.read(op : Term::Boolean.class, parser) : Term
     Term.of(parser.read_bool)
   end
 
-  private def read(op : Term::Dict.class, parser) : Term
+  private def self.read(op : Term::Dict.class, parser) : Term
     case parser.kind
     when .begin_array?, .begin_object?
       read?(parser) || unreachable
@@ -216,7 +289,7 @@ module Ww::Rack::Schema::JSON
     end
   end
 
-  private def read(op : Term::Blob.class, parser) : Term
+  private def self.read(op : Term::Blob.class, parser) : Term
     data = parser.read_string
 
     result = Term::Blob.build do |io|
@@ -228,7 +301,7 @@ module Ww::Rack::Schema::JSON
     Term.of(result)
   end
 
-  private def read?(schema, op : Blank, parser) : Term?
+  private def self.read?(schema, op : Blank, parser) : Term?
     case op.type
     in .any?     then read?(parser)
     in .number?  then read(Term::Num, parser)
@@ -240,9 +313,11 @@ module Ww::Rack::Schema::JSON
     end
   end
 
-  private def read?(schema, op : Literal, parser) : Term?
+  private def self.read?(schema, op : Literal, parser) : Term?
     expected = Term[op.term]
 
+    # FIXME: This doesn't work for dictionaries! I think we must decompose
+    # dictionaries at compile-time into primitive reads, sequences, etc.
     case {expected, parser.kind}
     when {Term::Num, .int?},
          {Term::Num, .float?},
@@ -261,7 +336,7 @@ module Ww::Rack::Schema::JSON
     op.term
   end
 
-  private def read?(schema, op : FieldSet, parser) : Term?
+  private def self.read?(schema, op : FieldSet, parser) : Term?
     result = Term::Dict.build do |commit|
       parser.read_object do |key, _|
         unless field = op.fields[key]?
@@ -296,7 +371,7 @@ module Ww::Rack::Schema::JSON
     Term.of(result)
   end
 
-  private def read?(schema, op : ArrayOf, parser) : Term?
+  private def self.read?(schema, op : ArrayOf, parser) : Term?
     result = Term::Dict.build do |commit|
       parser.read_array do
         if commit.size + 1 > op.max
@@ -314,7 +389,7 @@ module Ww::Rack::Schema::JSON
     Term.of(result)
   end
 
-  private def read?(schema, op : Seq, parser) : Term?
+  private def self.read?(schema, op : Seq, parser) : Term?
     result = Term::Dict.build do |commit|
       parser.read_begin_array
       op.values.each do |value|
@@ -326,21 +401,21 @@ module Ww::Rack::Schema::JSON
     Term.of(result)
   end
 
-  private def read?(schema, op : Choice, parser) : Term?
+  private def self.read?(schema, op : Choice, parser) : Term?
     choose(schema, op.options, parser) do |option, subparser|
       read?(schema, option, subparser)
     end
   end
 
-  private def read?(schema, op : RuleRef, parser) : Term?
+  private def self.read?(schema, op : RuleRef, parser) : Term?
     read?(schema, op.name, parser)
   end
 
-  private def read?(schema, top : Rule, parser) : Term?
+  private def self.read?(schema, top : Rule, parser) : Term?
     read?(schema, top.op, parser)
   end
 
-  private def read?(schema, top : Term, parser) : Term?
+  private def self.read?(schema, top : Term, parser) : Term?
     unless overloads = schema.entries[top]?
       # FIXME: Why are we doing this at runtime? Do a compile-time check
       # while building Schema!
@@ -356,7 +431,7 @@ module Ww::Rack::Schema::JSON
   # then Crystal's PullParser doesn't expose byte offsets; which makes me think we
   # need a custom, properly designed parser with cheap backtracking. Read_raw seems
   # to have a pretty expensive implementation...
-  private def choose(schema, options, parser : ::JSON::PullParser, &)
+  private def self.choose(schema, options, parser : ::JSON::PullParser, &)
     # Fast path.
     if option = options.single?
       return read?(schema, option, parser)
@@ -375,12 +450,12 @@ module Ww::Rack::Schema::JSON
     parser.raise("no matching option")
   end
 
-  def read(schema : Schema, top : Term, document : String) : Term
+  def self.read(schema : self, top : Term, document : String) : Term
     parser = ::JSON::PullParser.new(document)
     read?(schema, top, parser) || parser.raise("toplevel null not allowed")
   end
 
-  def read(document : String) : Term
+  def self.read(document : String) : Term
     parser = ::JSON::PullParser.new(document)
     read?(parser) || parser.raise("toplevel null not allowed")
   end

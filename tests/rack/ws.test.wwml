@@ -3,7 +3,7 @@
   (frame
     ;; A basic echo server
     (module {}
-      (ws (@pool (local 9813) server)
+      (ws (server @pool (local 9813))
         (backsys {@:in, @:out}
           {¦ in: (msg_ _*) out: (_* `>msg)}
             <> {(msg): (), >msg: ^msg}))
@@ -11,12 +11,12 @@
     ;; A client
     (module {}
       (queue (@msg @msgs) ("Kaixo" "mundua"))
-      (ws (@msg -> "ws://127.0.0.1:9813" -> @replies))
+      (ws (client (@msg -> "ws://127.0.0.1:9813" -> @replies)))
       (queue (@reply @replies) ())))
   (frame/tail fast-forward: true
     (module {}
       (queue (@msg @msgs) ())
-      (ws (@msg -> "ws://127.0.0.1:9813" -> @replies) up)
+      (ws (client (@msg -> "ws://127.0.0.1:9813" -> @replies)) up)
       (queue (@reply @replies) ("Kaixo" "mundua")))))
 
 ;; Chat example
@@ -24,7 +24,7 @@
   (frame
     ;; A basic chat server
     (module {}
-      (ws (@pool (local 9813) server)
+      (ws (server @pool (local 9813))
         (frag @rx (sensor (queue chat _string)))
         (frag @tx (appearance chat))
         (frag @user)
@@ -49,7 +49,7 @@
       (cell @state)
       (queue (@msg @msgs) ())
       (frag @socket
-        (ws (@msg -> "ws://127.0.0.1:9813?index=1" -> @replies)))
+        (ws (client (@msg -> "ws://127.0.0.1:9813?key=alice" -> @replies))))
       (queue (@reply @replies) ())
       (backsys {@:state, @:msgs, @:reply, @:socket}
         {¦ reply_} <> {(reply): ()}
@@ -69,7 +69,7 @@
     ;; Bob client
     (module {}
       (queue (@msg @msgs) ())
-      (ws (@msg -> "ws://127.0.0.1:9813?index=2" -> @replies))
+      (ws (client (@msg -> "ws://127.0.0.1:9813?key=bob" -> @replies)))
       (queue (@reply @replies) ())
       (backsys {@:msgs, @:reply}
         {¦ reply_} <> {(reply): ()}
@@ -129,7 +129,7 @@
   (frame
     ;; Server
     (module {}
-      (ws (@pool (local 9813) server format: json format-policy: discard)
+      (ws (server @pool (local 9813) format: json format-policy: discard)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -142,7 +142,7 @@
          ⎡invalid message⎤
          ⎡[1, {"type": "cat", "name": "Smokey"}, 2]⎤))
       (queue (@reply @replies) ())
-      (ws (@msg -> (local 9813) -> @replies))))
+      (ws (client (@msg -> (local 9813) -> @replies)))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -153,14 +153,14 @@
          ⎡{"x":100,"y":200}⎤
          ;; invalid message was discarded
          ⎡[1,{"name":"Smokey","type":"cat"},2]⎤))
-      (ws (@msg -> (local 9813) -> @replies) up))))
+      (ws (client (@msg -> (local 9813) -> @replies)) up))))
 
 ;; ML server echo
 (rack
   (frame
     ;; Server
     (module {}
-      (ws (@pool (local 9813) server format: ml format-policy: discard)
+      (ws (server @pool (local 9813) format: ml format-policy: discard)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -174,7 +174,7 @@
          ⎡invalid message⎤
          ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
       (queue (@reply @replies) ())
-      (ws (@msg -> (local 9813) -> @replies))))
+      (ws (client (@msg -> (local 9813) -> @replies)))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -186,14 +186,14 @@
          ⎡{x: 100 y: 200}⎤
          ;; invalid message was discarded
          ⎡(1 {name: "Smokey" type: cat} 2 x: 100 y: 200)⎤))
-      (ws (@msg -> (local 9813) -> @replies) up))))
+      (ws (client (@msg -> (local 9813) -> @replies)) up))))
 
 ;; PrettyML server echo
 (rack
   (frame
     ;; Server
     (module {}
-      (ws (@pool (local 9813) server format: prettyml format-policy: discard)
+      (ws (server @pool (local 9813) format: prettyml format-policy: discard)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -207,7 +207,7 @@
          ⎡invalid message⎤
          ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
       (queue (@reply @replies) ())
-      (ws (@msg -> (local 9813) -> @replies))))
+      (ws (client (@msg -> (local 9813) -> @replies)))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -219,9 +219,9 @@
          "{x: 100, y: 200}\n"
          ;; invalid message was discarded
          "(1 {name: \"Smokey\", type: cat} 2 x: 100 y: 200)\n"))
-      (ws (@msg -> (local 9813) -> @replies) up))))
+      (ws (client (@msg -> (local 9813) -> @replies)) up))))
 
-;; Arithmetic demo, policy: wrap
+;; Arithmetic demo, format-policy: wrap
 (rack
   (frame
     (module {}
@@ -232,7 +232,7 @@
         expr => (seq * (ref expr) (ref expr))
         expr => (seq / (ref expr) (ref expr)))
 
-      (ws (@pool (local 9813) server
+      (ws (server @pool (local 9813)
             format: (json @schema expr)
             format-policy: wrap)
         (cell @expr)
@@ -264,7 +264,7 @@
          ⎡["+", ["*", 2, 3], 1]⎤
          ⎡invalid message⎤))
       (queue (@value @values) ())
-      (ws (@expr -> (local 9813) -> @values))))
+      (ws (client (@expr -> (local 9813) -> @values)))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -276,4 +276,262 @@
          ⎡["ok",-4.59]⎤
          ⎡["ok",7]⎤
          ⎡["err","invalid message"]⎤))
-      (ws (@expr -> (local 9813) -> @values) up))))
+      (ws (client (@expr -> (local 9813) -> @values)) up))))
+
+;; TODO: format-policy: abort
+
+;; Client format: ml
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (server @pool (local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@message @messages)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n"))
+      (ws (client (@message -> (local 9813) -> @replies) format: ml))
+      (queue (@reply @replies) ())))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@message @messages) ())
+      (ws (client (@message -> (local 9813) -> @replies) format: ml) up)
+      (queue (@reply @replies)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n")))))
+
+;; Client format: prettyml
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (server @pool (local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@message @messages)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n"))
+      (ws (client (@message -> (local 9813) -> @replies) format: prettyml))
+      (queue (@reply @replies) ())))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@message @messages) ())
+      (ws (client (@message -> (local 9813) -> @replies) format: prettyml) up)
+      (queue (@reply @replies)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n")))))
+
+;; Client format: json
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (server @pool (local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@message @messages)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n"))
+      (ws (client (@message -> (local 9813) -> @replies) format: json))
+      (queue (@reply @replies) ())))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@message @messages) ())
+      (ws (client (@message -> (local 9813) -> @replies) format: json) up)
+      (queue (@reply @replies)
+        (100
+         ("+" 1 2)
+         ;; Since there's no schema, this is the best format: json can do!
+         {"0": "+", "1": 1, "2": 2, "x": 100, "y": 200}
+         "hello world\n")))))
+
+;; Client format: json schema
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (server @pool (local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (schema (@schema json)
+      expr => _number
+      expr => (seq + (ref expr) (ref expr)))
+
+    (ws (client (@message -> (local 9813) -> @replies) format: (json @schema expr)))
+    (queue (@message @messages)
+      (100
+       (+ 1 2)
+       (+ (+ 1 2) 3)
+       (+ 1 (+ 2 3))
+       (+ (+ 1 2) (+ 2 3))
+       (+ 1)
+       "invalid"
+       (+ 1.23 4.56)))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (queue (@message @messages) ())
+    (queue (@reply @replies)
+      (100
+       (+ 1 2)
+       (+ (+ 1 2) 3)
+       (+ 1 (+ 2 3))
+       (+ (+ 1 2) (+ 2 3))
+       ;; (+ 1) discarded
+       ;; "invalid" discarded
+       (+ ≈1.23 ≈4.56)))))
+
+;; Client format-policy: abort
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (server @pool (local 9813))
+        (cell @script ("(+ 1 2)" "(+ 1 error"))
+        (feed (@script front) (@out back)))
+      (circuit (pool @pool)))
+
+    (cell @message)
+    (ws (client (@message -> (local 9813) -> @replies) format: ml format-policy: abort))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (cell @message)
+    (ws (client (@message -> (local 9813) -> @replies) format: ml format-policy: abort)
+      (dn "invalid message")) ;; connection was dropped with an error
+    (queue (@reply @replies) ((+ 1 2)))))
+
+;; Client format-policy: wrap
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (ws (server @pool (local 9813))
+        (cell @script ("(+ 1 2)" "(+ 1 error"))
+        (feed (@script front) (@out back)))
+      (circuit (pool @pool)))
+
+    (cell @message)
+    (ws (client (@message -> (local 9813) -> @replies) format: ml format-policy: wrap))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (cell @message)
+    (ws (client (@message -> (local 9813) -> @replies) format: ml format-policy: wrap)
+      up)
+    (queue (@reply @replies)
+      ((ok (+ 1 2))
+       (err "invalid message")))))
+
+;; Client-Server exchange using terms
+(rack
+  (frame
+    (module {}
+      (ws (server @pool (local 9813) format: ml)
+        (backsys
+          {¦ in: (msg_ _*)}
+            <> {(msg): ()}
+          {¦ in: (n←(%number 0 <= _ < 5) _*) out: (_* `>n)}
+            <> {>n: ^(+ n 1)}
+          {¦ in: (5 _*) out: (_* `>reply)}
+            <> {>reply: done}))
+
+      (circuit (pool @pool)))
+
+    (backsys
+      {¦ reply_ log: (_* `>reply)}
+        <> {(reply): (), >reply: ^reply}
+      {¦ ±reply -messages_}
+        <> {messages: ^reply}
+      {¦ reply: done socket_}
+        <> {(socket): ()})
+
+    (cell @log ())
+    (queue (@message @messages) (0))
+    (frag @socket
+      (ws (client (@message -> (local 9813) -> @replies) format: ml)))
+    (queue (@reply @replies) ()))
+
+  ;; Wait until it counts up to `done`.
+  (frame/tail fast-forward: true
+    (cell @log (1 2 3 4 5))
+    (queue (@message @messages) ())
+    (frag @socket
+      (ws (client (@message -> (local 9813) -> @replies) format: ml)
+        up))
+    (queue (@reply @replies) (done)))
+
+  ;; Socket is removed in response to `done`:
+  (frame/tail
+    (cell @log (1 2 3 4 5 done))
+    (queue (@message @messages) ())
+    (frag @socket)
+    (queue (@reply @replies) ()))
+
+  ;; Make sure the server responds properly by cleaning up the connection.
+  (frame
+    (module {}
+      (ws (server @pool (local 9813) up format: ml) ;; < server is up
+        (backsys
+          {¦ in: (msg_ _*)}
+            <> {(msg): ()}
+          {¦ in: (n←(%number 0 <= _ < 5) _*) out: (_* `>n)}
+            <> {>n: ^(+ n 1)}
+          {¦ in: (5 _*) out: (_* `>reply)}
+            <> {>reply: done}))
+
+      (circuit (pool @pool))) ;; < pool is empty -- client disconnected
+
+    (backsys
+      {¦ reply_ log: (_* `>reply)}
+        <> {(reply): (), >reply: ^reply}
+      {¦ ±reply -messages_}
+        <> {messages: ^reply}
+      {¦ reply: done socket_}
+        <> {(socket): ()})
+
+    (cell @log (1 2 3 4 5 done))
+    (queue (@message @messages) ())
+    (frag @socket)
+    (queue (@reply @replies) ())))
+
+;; From docs: websocket client with format: ml.
+(rack
+  (frame
+    (ws (server @pool (local 5000))
+      (feed (@in front) (@out back)))
+    (circuit (pool @pool))
+    (queue (@message @messages) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
+    (queue (@reply @replies) ())
+    (ws (client (@message -> (local 5000) -> @replies) format: ml)))
+
+  (frame/tail fast-forward: true
+    (queue (@message @messages) ())
+    (queue (@reply @replies) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
+    (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      up)))
