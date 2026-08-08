@@ -252,7 +252,7 @@ module Ww::ParseKit
       #
       # |@block
       # Sequential or: tries to match each of *members* in turn.
-      matchpi %{[any  _*]} do
+      matchpi %{[any _*]} do
         subterms = term.items.move(1)
         members = subterms.to_readonly_slice { |subterm| parselet(subterm, observed).as(Parselet) }
         OrdChoice.new(members)
