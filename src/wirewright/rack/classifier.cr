@@ -255,7 +255,7 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Frame 0
+      # ;; Frame 0 (seed)
       # (cell @a 0)
       # (cell @b)
       # (cell @c)
@@ -540,7 +540,7 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Frame 0
+      # ;; Frame 0 (seed)
       # (cell @turn alice)
       # (backsys @turn
       #   t←alice <> {t: bob}
@@ -834,7 +834,7 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Frame 0
+      # ;; Frame 0 (seed)
       # (cell @xs (1 2 3))
       #
       # ;; Increment the middle number in @xs.
@@ -915,7 +915,7 @@ module Ww::Rack
       # Consider the following sequence of frames:
       #
       # ```wwml
-      # ;; Frame 0
+      # ;; Frame 0 (seed)
       # (delay 3 (cell @x 0))
       # (feed @x @y)
       # (cell @y)
@@ -1021,7 +1021,7 @@ module Ww::Rack
       #
       # |@example
       # ```wwml
-      # ;; Frame 0
+      # ;; Frame 0 (seed)
       # (backsys
       #   {¦ ±x} <> {x: ^(+ x 1)}
       #   {¦ ±y} <> {y: ^(- y 1)})
@@ -1641,7 +1641,7 @@ module Ww::Rack
       # populate `/tmp/dir`.
       #
       # ```wwml
-      # ;; Frame 0
+      # ;; Frame 0 (seed)
       # (path ("/tmp/dir" report))
       #
       # ;; Frame 1
@@ -1707,7 +1707,7 @@ module Ww::Rack
       #
       # In the above, the `@reports` circuit is effectively a nested symbolic world.
       # The ruleset in the rewriter defines some "laws" for the world. The rewriter
-      # itself, `(scanR (rulesetR))`, tells the rewriter to apply the laws. In
+      # itself, `(scanR (rulesetR))`, tells the rewriter *how* to apply the laws. In
       # particular, `rho.scanR` goes through the items of `@reports`, applying
       # `rho.rulesetR` (and therefore, our laws) to each item in turn.
       #
@@ -1761,8 +1761,8 @@ module Ww::Rack
       # reports you're interested in, etc.
       #
       # Alternatively, it is possible to use `rack.supervisor` to associate arbitrary
-      # `rack.device` with each report. For example, the program below will show paths
-      # that appear and disappear:
+      # `rack.device`s with each report. For example, the program below will record paths
+      # appearing and disappearing:
       #
       # ```wwml
       # (circuit @reports
@@ -1808,13 +1808,164 @@ module Ww::Rack
       # |@ rack.fs
       #
       # |@pattern
-      # [fs @requests_ @responses_]
+      # [fs @request_ @response_]
       #
-      # |@key requests rack.edge
+      # |@key request rack.edge
+      # The edge of a cell containing a file system request. See `rack.fs.request`.
       #
-      # |@key responses rack.edge
-      matchpi %{[fs @requests_ @responses_]} do
-        D7.gnd(node, requests, responses)
+      # |@key response rack.edge
+      # The edge of a cell where a file system response should be placed in
+      # response to a *request*. See `rack.fs.response`.
+      #
+      # |@summary
+      # A node for creating, deleting, writing files and directories.
+      #
+      # |@block
+      # A _f_ile _s_ystem manipulation machine.
+      #
+      # Real-world file systems are very hard to manipulate declaratively (due to
+      # the abundance of races). Instead of fighting with reality, Rack provides `fs`,
+      # a node that you can use to talk to the file system as if it was a "server":
+      # you send *requests*, and the file system replies with *responses*.
+      #
+      # |@example
+      # Creating a file:
+      #
+      # ```wwml
+      # ;; $ ls /tmp/a
+      # ;; ls: ... no such file or directory ...
+      #
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (create file "/tmp/a"))
+      # (fs @in @out)
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      # (fs @in @out)
+      # (cell @out (ok (present "/tmp/a")))
+      #
+      # ;; $ ls /tmp/a
+      # ;; /tmp/a
+      # ```
+      #
+      # Removing a file:
+      #
+      # ```wwml
+      # ;; $ ls /tmp/a
+      # ;; /tmp/a
+      #
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (delete file if exists "/tmp/a"))
+      # (fs @in @out)
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      # (fs @in @out)
+      # (cell @out (ok (absent "/tmp/a")))
+      #
+      # ;; $ ls /tmp/a
+      # ;; ls: ... no such file or directory ...
+      # ```
+      #
+      # Writing to a file:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (overwrite file "/tmp/a" "Kaixo mundua!"))
+      # (fs @in @out)
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      # (fs @in @out)
+      # (cell @out (ok (wrote "/tmp/a")))
+      #
+      # ;; $ cat /tmp/a
+      # ;; Kaixo mundua!
+      # ```
+      #
+      # Executing a sequence of requests:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (queue (@request @requests)
+      #   ((create dir if missing "/tmp/dir")
+      #    (overwrite "/tmp/dir/a" "Hello from file A")
+      #    (overwrite "/tmp/dir/b" "Hello from file B")))
+      # (fs @request @response)
+      # (cell @response)
+      # (discard @response (ok _))
+      #
+      # ;; Frame 1
+      #
+      # (queue (@request @requests)
+      #   ((overwrite "/tmp/dir/a" "Hello from file A")
+      #    (overwrite "/tmp/dir/b" "Hello from file B")))
+      # (fs @request @response)
+      # (cell @response (ok (present "/tmp/dir")))
+      # (discard @response (ok _))
+      #
+      # ;; Frame 2
+      # ;; NOTE: The fs node (as well as many other nodes) requires its output
+      # ;; cell (*response*) to be empty before it picks up a request. In this
+      # ;; frame, `discard` clears the response cell. `fs` does nothing.
+      #
+      # (queue (@request @requests)
+      #   ((overwrite "/tmp/dir/a" "Hello from file A")
+      #    (overwrite "/tmp/dir/b" "Hello from file B")))
+      # (fs @request @response)
+      # (cell @response)
+      # (discard @response (ok _))
+      #
+      # ;; Frame 3
+      # ;; Now that the response cell is clear, `fs` can pick up another request.
+      #
+      # (queue (@request @requests)
+      #   ((overwrite "/tmp/dir/b" "Hello from file B")))
+      # (fs @request @response)
+      # (cell @response (ok (wrote "/tmp/dir/a")))
+      # (discard @response (ok _))
+      #
+      # ;; Frame 4
+      #
+      # (queue (@request @requests)
+      #   ((overwrite "/tmp/dir/b" "Hello from file B")))
+      # (fs @request @response)
+      # (cell @response)
+      # (discard @response (ok _))
+      #
+      # ;; Frame 5
+      #
+      # (queue (@request @requests) ())
+      # (fs @request @response)
+      # (cell @response (ok (wrote "/tmp/b")))
+      # (discard @response (ok _))
+      #
+      # ;; Frame 6
+      #
+      # (queue (@request @requests) ())
+      # (fs @request @response)
+      # (cell @response)
+      # (discard @response (ok _))
+      #
+      # ;; $ ls /tmp/dir
+      # ;; a b
+      # ;; $ cat /tmp/a
+      # ;; Hello from file A
+      # ;; $ cat /tmp/b
+      # ;; Hello from file B
+      # ```
+      matchpi %{[fs @request_ @response_]} do
+        D7.gnd(node, request, response)
       end
 
       # |@ rack.resource
