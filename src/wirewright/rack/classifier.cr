@@ -1738,6 +1738,18 @@ module Ww::Rack
         D7.gnd(node)
       end
 
+      # |@ rack.fs
+      #
+      # |@pattern
+      # [fs @requests_ @responses_]
+      #
+      # |@key requests rack.edge
+      #
+      # |@key responses rack.edge
+      matchpi %{[fs @requests_ @responses_]} do
+        D7.gnd(node, requests, responses)
+      end
+
       # |@ rack.path
       #
       # |@pattern

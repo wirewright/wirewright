@@ -132,6 +132,7 @@ class Ww::Rack::Automaton
     @first = false
 
     # Subsystem state.
+    @fs_state = FS.state(@epoch)
     @tspace_state = Tspace.state
     @parser_state = Parser.state(@epoch)
     @database_state = Database.state(@epoch)
@@ -176,7 +177,8 @@ class Ww::Rack::Automaton
   # just "asynchronously busy".
   def pending? : Bool
     Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) ||
-      Database.pending?(@database_state) || WebSocket.pending?(@websocket_state)
+      Database.pending?(@database_state) || WebSocket.pending?(@websocket_state) ||
+      FS.pending?(@fs_state)
   end
 
   # FIXME: this method is a mess
@@ -215,18 +217,21 @@ class Ww::Rack::Automaton
         Parser.step(@parser_state) do |parser|
           WebSocket.step(@websocket_state) do |web_socket|
             Supervisor.step do |supervisor|
-              D7.step(@parser, subframes.last) do |hg|
-                prepass.call(hg) do |hg|
-                  proposals = [] of D7::Patch
+              FS.step(@fs_state) do |fs|
+                D7.step(@parser, subframes.last) do |hg|
+                  prepass.call(hg) do |hg|
+                    proposals = [] of D7::Patch
 
-                  extrinsics.propose(hg, proposals)
-                  parser.propose(hg, proposals)
-                  database.propose(hg, proposals)
-                  web_socket.propose(hg, proposals)
-                  supervisor.propose(hg, proposals)
-                  Rack.propose(hg, proposals)
+                    extrinsics.propose(hg, proposals)
+                    parser.propose(hg, proposals)
+                    database.propose(hg, proposals)
+                    web_socket.propose(hg, proposals)
+                    supervisor.propose(hg, proposals)
+                    fs.propose(hg, proposals)
+                    Rack.propose(hg, proposals)
 
-                  D7::Regime.merge(hg, proposals)
+                    D7::Regime.merge(hg, proposals)
+                  end
                 end
               end
             end
