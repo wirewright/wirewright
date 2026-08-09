@@ -1530,14 +1530,10 @@ module Ww::Rack
         D7.gnd(node, input, output, error)
       end
 
-      matchpi %{[parser @spec_ _*]} do
-        D7.gnd(node, spec)
-      end
-
       # |@ rack.path
       #
       # |@summary
-      # Lets you read, write, and observe file system entries, live.
+      # Live symbolic observation of a file system path.
 
       # |@ rack.path
       #
@@ -1580,7 +1576,7 @@ module Ww::Rack
       #
       # ```wwml
       # (path ("/tmp/test.txt" reading)
-      #   (absent "file does not exist")) ;; or something like that
+      #   (absent "file does not exist")) ;; error messages may depend on the OS!
       # ```
       #
       # If you want to operate on the content of the file, you're supposed
@@ -1674,55 +1670,106 @@ module Ww::Rack
       # ```
       #
       # ### Recursive watching
-      # Currently, it is possible to watch things recursively, but perhaps in
-      # a somewhat baroque way. This way also illustrates the philosophy behind
-      # Wirewright. Basically, below, we create a *rewrite environment*, a kind
-      # of "bubble" with the following "laws of physics":
-      #
-      # - Absent path reports disapper.
-      # - Present path reports mark themselves as handled and spawn child
-      #   reports. The "laws" are then applied to the child reports, and so on,
-      #   which achieves the "recursion".
+      # It is possible to watch things recursively:
       #
       # ```wwml
       # (circuit @reports
       #   (path ("/tmp/dir" report) root: true))
       #
       # (rewriter ((scanR (rulesetR)) <-> @reports)
-      #   ;; Remove reports that are absent, except the root report.
-      #   R←(path (_ report) [absent _] ⍊ -root)
-      #     <> {(R): ()}
-      #   ;; Spawn child reports.
-      #   R←(path (path_string report) [dir children_*] ⍊ -handled_)
-      #     <> {(R):
-      #           (^(up R) ;; < report with handled: true
-      #            (^each (children as [_ member_string])
-      #              (path (^"⸢path⸣/⸢member⸣" report)))),
-      #         handled: true})
+      #  ;; Remove reports that are absent, except the root report.
+      #  R←(path (_ report) [absent _] ⍊ -root)
+      #    <> {(R): ()}
+      #  ;; Spawn child reports.
+      #  R←(path (path_string report) (dir members_* ⍊ -valid_) ⍊ offspring⋮ {})
+      #    <> {(R):
+      #          (^(up R)
+      #           (^when ((members offspring) (⟨[_ member_string]⟩° (%-value member)))
+      #             (path (^"⸢path⸣/⸢member⸣" report))))
+      #        valid: true,
+      #        offspring: ^(set members [_ member_string])})
       # ```
       #
-      # You are supposed to then observe the evolution of `reports`, find reports
-      # for paths you're interested in, etc. Alternatively, it is possible to spawn
-      # not reports but modules containing internal logic, perhaps using `rack.sensor`s
-      # and `rack.appearance`s to communicate in a distributed manner. The `rack.supervisor`
-      # node is useful for such cases. For example, the program below will show paths
+      # Your first impression might be that this is a very baroque way of
+      # doing things. However, this example actually demonstrates how Wirewright
+      # wants you to think (even if the example itself is not particularly elegant
+      # in writing.)
+      #
+      # In the above, the `@reports` circuit is effectively a nested symbolic world.
+      # The ruleset in the rewriter defines some "laws" for the world. The rewriter
+      # itself, `(scanR (rulesetR))`, tells the rewriter to apply the laws. In
+      # particular, `rho.scanR` goes through the items of `@reports`, applying
+      # `rho.rulesetR` (and therefore, our laws) to each item in turn.
+      #
+      # There are two laws. The first one says that absent path reports except
+      # the root report (which we mark manually with `root: true`) must cease
+      # to exist. The second law says that updates to a path report must spawn
+      # offspring path reports.
+      #
+      # To understand the laws more intuitively, let's illustrate them in human terms.
+      # Remember path reports are basically symbolic file explorers? Imagine a standard
+      # OS file explorer. It gives you a live view of a directory (or a file). You
+      # can see the members of a directory; you can see them get added and
+      # removed, live.
+      #
+      # If you wanted to do recursive watching with this setup, by hand, what would
+      # you do? Open new file explorer windows for each member. Then more windows
+      # for subdirectories. Then open windows for their members in turn. In the end,
+      # you have a messy desktop filled with windows.
+      #
+      # The moment any window changes, you look at it to see what was *added* or
+      # *removed*. For things that were added, you spawn subwindows. That's
+      # the second law.
+      #
+      # The first law is, when you see a window telling "this path no longer exists",
+      # maybe grayed out, you close the window. That's it. Unless it's root, of course;
+      # if you close the root you won't have anything to watch, just a blank screen,
+      # and that's not good.
+      #
+      # Now, if you imagine each window *itself* subdivides into sub-windows, and each
+      # grayed out window closes itself automatically, rather than requiring a human
+      # to do it, then the picture you get is basically how the example above works --
+      # except instead of visual, OS file explorer windows, we have symbolic ones, residing
+      # inside `@reports`. The rewriter laws simply automate what a human would do:
+      # windows open sub-windows as directories appear, and dead windows close themselves
+      # automatically.
+      #
+      # The implementation of the second law is so intricate because we want to avoid
+      # spawing duplicate path reports. So when we spawn offspring reports (by "we",
+      # I mean the second law), we mark the directory as `valid`. When the environment
+      # updates our directory description, it takes down our `valid` flag (the fresh
+      # description simply doesn't have it; there is no deeper intent). The absence of
+      # the `valid` flag triggers us to check the report out. We only want to spawn
+      # offspring for members that were *added* to avoid duplication. To keep track
+      # of that we keep the previous set of members under *offspring*. The `alloy.when`
+      # then "diffs" and only spawns reports for new members. Again, we only take care
+      # of the new members. The old members we've already spawned; they are already
+      # "living freely" in `@reports`, recursively applying the same laws, and being
+      # updated by the environment.
+      #
+      # You are then supposed to *observe* the evolution of `@reports`, filter for
+      # reports you're interested in, etc.
+      #
+      # Alternatively, it is possible to use `rack.supervisor` to associate arbitrary
+      # `rack.device` with each report. For example, the program below will show paths
       # that appear and disappear:
       #
       # ```wwml
       # (circuit @reports
-      #   (path ("/tmp/dir" report) root: true))
+      #   (path ("/tmp/wirewright-path1" report) root: true))
       #
       # (rewriter ((scanR (rulesetR)) <-> @reports)
       #   ;; Remove reports that are absent, except the root report.
       #   R←(path (_ report) [absent _] ⍊ -root)
       #     <> {(R): ()}
       #   ;; Spawn child reports.
-      #   R←[path (path_string report) (dir children_* ⍊ -handled_)]
+      #   R←(path (path_string report) (dir members_* ⍊ -valid_) ⍊ offspring⋮ {})
       #     <> {(R):
-      #           (^(up R) ;; < report with handled: true
-      #            (^each (children as [_ member_string])
-      #              (path (^"⸢path⸣/⸢member⸣" report)))),
-      #         handled: true})
+      #           (^(up R)
+      #            (^when ((members offspring) (⟨[_ member_string]⟩° (%-value member)))
+      #              (path (^"⸢path⸣/⸢member⸣" report))))
+      #         valid: true,
+      #         offspring: ^(set members [_ member_string])})
       #
       # (supervisor (@reports @report [path (path_string report) _] - @pool)
       #   (frag (@report [path (path_string report) _]
@@ -1732,8 +1779,18 @@ module Ww::Rack
       #
       # (circuit (pool @pool))
       #
-      # (sensor (journal paths _string))
+      # (frag @journal
+      #   (sensor (journal paths _string)))
       # ```
+      #
+      # The first half is basically the same as in the previous example, but in
+      # the second half we have a `rack.supervisor` node maintaining a pool of
+      # devices associated with each path. The only thing each device does in
+      # this example is maintain an appearance containing the corresponding
+      # report's path. The appearance shows this path to the `paths` termspace.
+      #
+      # Finally, there's the journal sensor which tracks appearances joining
+      # and leaving the `paths` termspace.
       matchpi %{[path (_string report)]}, %{[path (_string report) _]} do
         D7.gnd(node)
       end

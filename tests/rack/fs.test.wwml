@@ -54,3 +54,112 @@
     (circuit @current))
 
   end)
+
+;; Recursive watching example from docs, also tests many `rack.fs` requests.
+(rack
+  (frame
+    (circuit @reports
+      (path ("/tmp/wirewright-path1" report) root: true))
+
+    (rewriter ((scanR (rulesetR)) <-> @reports)
+      ;; Remove reports that are absent, except the root report.
+      R←(path (_ report) [absent _] ⍊ -root)
+        <> {(R): ()}
+      ;; Spawn child reports.
+      R←(path (path_string report) (dir members_* ⍊ -valid_) ⍊ offspring⋮ {})
+        <> {valid: true,
+            offspring: ^(set members [_ member_string]),
+            (R):
+              (^(up R)
+               (^when ((members offspring) (⟨[_ member_string]⟩° (%-value member)))
+                 (path (^"⸢path⸣/⸢member⸣" report))))})
+
+    (supervisor (@reports @report [path (path_string report) _] - @pool)
+      (frag (@report [path (path_string report) _]
+                       -> (appearance paths `path)
+                          (appearance paths path_))
+        (appearance paths)))
+
+    (circuit (pool @pool))
+
+    (frag @journal
+      (sensor (journal paths _string)))
+
+    (cell @in)
+    (cell @out)
+    (fs @in @out)
+
+    (backsys
+      {¦ plan: (action_ _*) -in_ -out}
+        <> {(action): (), in: ^action}
+      {¦ plan: (action←(expect entries_*) _*) journal: ((%plural/max) (%plural/min entries)) out_: (ok _)}
+        <> {(action): (), (out): ()})
+
+    (cell @plan
+      ((delete dir if exists "/tmp/wirewright-path1" recursive: true)
+       (expect)
+
+       (create dir "/tmp/wirewright-path1")
+       (expect (appeared "/tmp/wirewright-path1"))
+
+       (create file "/tmp/wirewright-path1/a")
+       (expect (appeared "/tmp/wirewright-path1/a"))
+
+       (create file "/tmp/wirewright-path1/b")
+       (expect (appeared "/tmp/wirewright-path1/b"))
+
+       (create dir "/tmp/wirewright-path1/subdir")
+       (expect (appeared "/tmp/wirewright-path1/subdir"))
+
+       (create file "/tmp/wirewright-path1/subdir/x")
+       (expect (appeared "/tmp/wirewright-path1/subdir/x"))
+
+       (create file "/tmp/wirewright-path1/subdir/y")
+       (expect (appeared "/tmp/wirewright-path1/subdir/y"))
+
+       (create dir "/tmp/wirewright-path1/subdir/foo")
+       (expect (appeared "/tmp/wirewright-path1/subdir/foo"))
+
+       (create dir "/tmp/wirewright-path1/subdir/bar")
+       (expect (appeared "/tmp/wirewright-path1/subdir/bar"))
+
+       (create file "/tmp/wirewright-path1/subdir/foo/qux")
+       (expect (appeared "/tmp/wirewright-path1/subdir/foo/qux"))
+
+       (create file "/tmp/wirewright-path1/subdir/foo/qyx")
+       (expect (appeared "/tmp/wirewright-path1/subdir/foo/qyx"))
+
+       (delete file "/tmp/wirewright-path1/subdir/foo/qux")
+       (expect (disappeared "/tmp/wirewright-path1/subdir/foo/qux"))
+
+       (delete file "/tmp/wirewright-path1/subdir/foo/qyx")
+       (expect (disappeared "/tmp/wirewright-path1/subdir/foo/qyx"))
+
+       (delete dir "/tmp/wirewright-path1/subdir/foo")
+       (expect (disappeared "/tmp/wirewright-path1/subdir/foo"))
+
+       (delete dir "/tmp/wirewright-path1/subdir/bar")
+       (expect (disappeared "/tmp/wirewright-path1/subdir/bar"))
+
+       (delete file "/tmp/wirewright-path1/subdir/x")
+       (expect (disappeared "/tmp/wirewright-path1/subdir/x"))
+
+       (delete dir "/tmp/wirewright-path1/subdir" recursive: true)
+       (expect
+         (disappeared "/tmp/wirewright-path1/subdir")
+         (disappeared "/tmp/wirewright-path1/subdir/y"))
+
+       (delete file "/tmp/wirewright-path1/a")
+       (expect (disappeared "/tmp/wirewright-path1/a"))
+
+       (create file "/tmp/wirewright-path1/kaixo")
+       (expect (appeared "/tmp/wirewright-path1/kaixo"))
+
+       (delete dir "/tmp/wirewright-path1" recursive: true)
+       (expect
+         (disappeared "/tmp/wirewright-path1/b")
+         (disappeared "/tmp/wirewright-path1/kaixo")))))
+
+  ;; If it didn't clog this means we've executed successfully.
+  (frame/tail fast-forward: true
+    (cell @plan ())))
