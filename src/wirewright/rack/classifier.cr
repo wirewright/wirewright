@@ -1449,6 +1449,16 @@ module Ww::Rack
         D7.parent(node.as_d, 2u32...3u32)
       end
 
+      # |@ rack.journal
+      #
+      # |@pattern
+      # [journal (@edge_ _?) _*]
+      matchpi %{[journal (@edge_ _?) _*]} do
+        # TODO: This node should supersede `log`, and be the swiss army knife of
+        # temporal / evolution tracking in Rack.
+        D7.gnd(node, edge)
+      end
+
       # |@ rack.log
       #
       # |@pattern
@@ -1805,56 +1815,6 @@ module Ww::Rack
       # |@key responses rack.edge
       matchpi %{[fs @requests_ @responses_]} do
         D7.gnd(node, requests, responses)
-      end
-
-      # |@ rack.path
-      #
-      # |@pattern
-      # [path (path_string sink) goal←(present content_string)]
-      # [path (path_string sink) goal←(present content_blob)]
-      # [path (path_string sink) goal←absent]
-      # [path (path_string sink) [err detail_string]]
-      #
-      # |@key path
-      # Specifies the path to a file, for example, `/tmp/test.txt`.
-      #
-      # |@key goal
-      # The desired goal state of the file, either `present` or `absent`.
-      #
-      # |@key content
-      # For `present` goals, specifies the desired content of the file.
-      # It can be either a string (writes UTF-8) or a blob (writes an opaque
-      # stream of bytes).
-      #
-      # |@key detail
-      # In case of an error (for example, file does not exist during removal
-      # or write was denied), the goal is replaced by `[err detail_string]`,
-      # where *detail* should tell the reason for failure.
-      #
-      # |@block
-      # The `path...sink` node allows you to (over)write files and remove files.
-      #
-      # |@example
-      # Assuming `/tmp/test.txt` does not exist, we can create it by:
-      #
-      # ```wwml
-      # (path ("/tmp/test.txt" sink) (present "Kaixo mundua"))
-      # ```
-      #
-      # The above evolves into:
-      #
-      # ```wwml
-      # (path ("/tmp/test.txt" sink))
-      # ```
-      #
-      # That the `path` "consumed" the goal means it completed successfully:
-      #
-      # ```text
-      # $ cat /tmp/test.txt
-      # Kaixo mundua
-      # ```
-      matchpi %{[path (_string sink) _]} do
-        D7.gnd(node)
       end
 
       # |@ rack.resource

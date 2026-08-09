@@ -4,69 +4,14 @@ module Ww::Rack::Extrinsics
   # :nodoc:
   defcase State,
     epoch : Automaton::Epoch,
-    tasks : D7::TaskBoard(Automaton::Epoch, Task, Result),
     extrinsics : ExtrinsicMap,
     transcriptions : GenerationalCache(PathService::Reading | PathService::Report | ResourceService::Response, Term)
 
-  alias Task = WriteFile | RemoveFile
-  alias Result = WriteResult | RemoveResult
-
-  defrecord WriteFile, path : NormalPath, content : Term::Str | Term::Blob
-  defrecord RemoveFile, path : NormalPath
-
-  alias WriteResult = WriteCompleted | WriteFailed
-
-  defrecord WriteCompleted, content : Term::Str | Term::Blob
-  defrecord WriteFailed, detail : String
-
-  alias RemoveResult = RemoveCompleted | RemoveFailed
-
-  defrecord RemoveCompleted
-  defrecord RemoveFailed, detail : String
-
   def state(epoch : Automaton::Epoch) : State
     extrinsics = ExtrinsicMap.new(epoch)
-
-    tasks = D7::TaskBoard(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
-      execute(task, ping)
-    end
-
     transcriptions = GenerationalCache(PathService::Reading | PathService::Report | ResourceService::Response, Term).new
 
-    State.new(epoch, tasks, extrinsics, transcriptions)
-  end
-
-  private def execute(task : WriteFile, ping) : Result
-    ping.call
-    blob = Term[task.content.to_slice]
-    ping.call
-
-    result = PathService.write(task.path, blob).wait.unwrap
-
-    case result
-    in PathService::Present
-      # Use original content, not blob. Original content is what publishers
-      # are going to be searching for.
-      WriteCompleted.new(task.content)
-    in PathService::Absent
-      WriteFailed.new(result.detail)
-    end
-  end
-
-  private def execute(task : RemoveFile, ping) : Result
-    ping.call
-
-    begin
-      Log.debug { "removing file #{task.path}" }
-      File.delete(task.path.unwrap)
-      Log.debug { "removed file #{task.path}" }
-
-      RemoveCompleted.new
-    rescue e : File::Error
-      Log.debug(exception: e) { "file removal failed" }
-
-      RemoveFailed.new(e.message || "internal error")
-    end
+    State.new(epoch, extrinsics, transcriptions)
   end
 
   # NOTE: As a curious curiosity (and an important fact!), if there's one or
@@ -74,7 +19,7 @@ module Ww::Rack::Extrinsics
   # cannot truly reach quiescence because the corresponding path can change
   # at any moment.
   def pending?(state : State) : Bool
-    state.extrinsics.size > 0 || state.tasks.pending?
+    state.extrinsics.size > 0
   end
 
   # :nodoc:
@@ -83,30 +28,14 @@ module Ww::Rack::Extrinsics
   SYM_RESOURCE = Term[:resource]
 
   # :nodoc:
-  defrecord StepContext,
-    refs : Set(ExtrinsicMap::Ref),
-    tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result),
-    writes : Hash(NormalPath, Set(Task))
+  defrecord StepContext, refs : Set(ExtrinsicMap::Ref)
 
   def step(state : State, & : Proposer -> T) : T forall T
-    result = uninitialized T
     seen_refs = Set(ExtrinsicMap::Ref).new
 
-    state.transcriptions.epoch do
-      state.tasks.rdv do |tasks_rdv|
-        writes = {} of NormalPath => Set(Task)
-
-        ctx = StepContext.new(seen_refs, tasks_rdv, writes)
-        result = yield Proposer.new(state, ctx)
-
-        # Sync tasks.
-        writes.each do |path, bucket|
-          next unless bucket.size == 1
-
-          write = bucket.first
-          tasks_rdv.publish(write)
-        end
-      end
+    result = state.transcriptions.epoch do
+      ctx = StepContext.new(seen_refs)
+      yield Proposer.new(state, ctx)
     end
 
     # Despawn the fibers associated with ExtrinsicMap to avoid leaks.
@@ -156,8 +85,6 @@ module Ww::Rack::Extrinsics
 
   defrecord PathReading, node : D7::Node, path : NormalPath
   defrecord PathReport, node : D7::Node, path : NormalPath
-  defrecord PathPresent, node : D7::Node, path : NormalPath, content : Term::Blob | Term::Str
-  defrecord PathAbsent, node : D7::Node, path : NormalPath
   defrecord Resource, node : D7::Node, query : ResourceService::Query
 
   # :nodoc:
@@ -180,16 +107,6 @@ module Ww::Rack::Extrinsics
           path: NormalPath,
         ) do
           variant = PathReport.new(node, path)
-        end
-
-        matchpi %{[path (path_string sink) (present content_)]}, path: NormalPath do |content|
-          continue unless content = content.as_s? || content.as_blob?
-
-          variant = PathPresent.new(node, path, content)
-        end
-
-        matchpi %{[path (path_string sink) absent]}, path: NormalPath do
-          variant = PathAbsent.new(node, path)
         end
 
         matchpi %{[resource queryQ_]}, %{[resource queryQ_ _]} do
@@ -241,42 +158,6 @@ module Ww::Rack::Extrinsics
     end
 
     D7.patch(variant.node, {2, transcription})
-  end
-
-  private def step(state : State, ctx : StepContext, variant : PathPresent) : D7::Patch?
-    task = WriteFile.new(variant.path, variant.content)
-    result = ctx.tasks.result?(task)
-    assert result.is_a?(Nil) || result.is_a?(WriteResult)
-
-    case result
-    in Nil # Not available, propose for publishing.
-      bucket = ctx.writes.put_if_absent(variant.path) { Set(Task).new }
-      bucket << task
-
-      nil # no change yet
-    in WriteCompleted
-      D7.patch(variant.node, {2, nil})
-    in WriteFailed
-      D7.patch(variant.node, {2, {:err, result.detail}})
-    end
-  end
-
-  private def step(state : State, ctx : StepContext, variant : PathAbsent) : D7::Patch?
-    task = RemoveFile.new(variant.path)
-    result = ctx.tasks.result?(task)
-    assert result.is_a?(Nil) || result.is_a?(RemoveResult)
-
-    case result
-    in Nil # Not available, propose for publishing.
-      bucket = ctx.writes.put_if_absent(variant.path) { Set(Task).new }
-      bucket << task
-
-      nil # no change yet
-    in RemoveCompleted
-      D7.patch(variant.node, {2, nil})
-    in RemoveFailed
-      D7.patch(variant.node, {2, {:err, result.detail}})
-    end
   end
 
   private def step(state : State, ctx : StepContext, variant : Resource) : D7::Patch?

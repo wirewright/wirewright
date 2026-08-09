@@ -212,7 +212,7 @@ module Ww::Rack::Parser
   end
 
   private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : View) : D7::Patch?
-    return unless source = source?(hg, variant.input)
+    source = source?(hg, variant.input)
 
     # Find empty target cell(s).
     targets = Pf::Kit.stack_array(D7::Node, 1)
@@ -224,8 +224,15 @@ module Ww::Rack::Parser
 
     return if targets.empty?
 
+    unless source
+      # If source cell is absent or empty, clear target cell(s).
+      return D7.patches(targets, {2, nil})
+    end
+
     task = Task.new(source.value, variant.ruleset, variant.top)
-    return unless result = checkout?(ctx, task)
+    unless result = checkout?(ctx, task)
+      return # Not yet available. Do nothing.
+    end
 
     # Clear source and set target(s).
     case result

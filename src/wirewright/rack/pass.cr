@@ -489,6 +489,32 @@ module Ww::Rack
 
         D7.patch(dst, {2, out_term})
       end
+
+      rule(<<-WWML) do |dev, src|
+      [journal header←(@edge_ _?) events_*] dev
+        -> (one edge) [cell @edge_ _?] {name: src, min: 0, max: 1}
+      WWML
+        header, events = D7.fetch(dev, :header, :events)
+
+        if header.itemsize == 2
+          ref = header.items.last
+        end
+
+        goal = src.present? ? D7.part?(src, 2) : nil
+        next if ref.nil? && goal.nil?
+
+        if goal.nil?
+          assert ref
+          desc = Term.of(:disappeared, ref)
+        elsif ref.nil?
+          assert goal
+          desc = Term.of(:appeared, goal)
+        elsif ref != goal # ref : Term, goal : Term
+          desc = Term.of(:changed, goal)
+        end
+
+        D7.patch(dev, {1, 1, goal}, {2 + events.itemsize, desc})
+      end
     end
   end
 
