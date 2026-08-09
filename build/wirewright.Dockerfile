@@ -90,4 +90,4 @@ WORKDIR /wirewright
 RUN shards install
 
 # Build devtool
-RUN crystal build src/dev.cr --progress -Dpreview_mt -Dexecution_context -Dsyslibs
+RUN crystal build src/dev.cr --progress -Dsyslibs
