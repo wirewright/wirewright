@@ -33,7 +33,7 @@ module Ww::D7
   # A hypergraph is a graph whose edges can include any number of nodes; each edge
   # is a subset of the set of nodes in the graph. It's easier to think of a hypergraph
   # as a society of nodes, where each node can participate in zero or more groups,
-  # and each group consists of other nodes in the community.
+  # and each group can consist of one or more nodes.
   #
   # The hypergraph representation used in D7 is *ephemeral*: the hypergraph is never
   # materialized. Instead, `Hypergraph` and related offer a way to query a `ParseTree`
