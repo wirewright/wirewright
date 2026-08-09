@@ -12,7 +12,7 @@
 ;;  1 -> O
 ;; Only rules that rewrite the middle are left. Rules that do not rewrite *m*
 ;; can be omitted (and are omitted here).
-(rewriter ((adjR (rulesetR)) <-> @world)
+(rewriter ((adjR (rulesetR)) - @world)
   {¦ l: O m_: O r: O} <> {m: .}
   {¦ l: O m_: . r: O} <> {m: O}
   {¦ l: . m_: . r: O} <> {m: O})

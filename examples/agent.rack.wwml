@@ -1,4 +1,4 @@
-(rewriter ((chainR (adjR (rulesetR phase: move)) (adjR (rulesetR phase: look exh: true))) <-> @host)
+(rewriter ((chainR (adjR (rulesetR phase: move)) (adjR (rulesetR phase: look exh: true))) - @host)
   (move {¦ m_: . r_: ⟨(cell @action action←left)⟩})
     <> {m: ^(up r), (action): ()}
   (move {¦ l_: ⟨(cell @action action←right)⟩ m_: .})
@@ -29,7 +29,7 @@
     (cell @right #)
     (log (@history @guest limit: 2)
       ((* . . . . . . . O . . . * . . .)))
-    (rewriter ((chainR (rulesetR phase: entangle) (valueR guest (adjR (rulesetR phase: step)))) <-> {@:left, @:right, @:guest})
+    (rewriter ((chainR (rulesetR phase: entangle) (valueR guest (adjR (rulesetR phase: step)))) - {@:left, @:right, @:guest})
       (entangle {¦ left_ guest: (`dst O _*)}) <> {dst: ^left}
       (entangle {¦ right_ guest: (_* O `dst)}) <> {dst: ^right}
       (entangle {¦ left: . guest: ⟨l←(%not . < >) O⟩}) <> {l: .}

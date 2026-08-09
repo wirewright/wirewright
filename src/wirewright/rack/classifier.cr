@@ -1351,10 +1351,10 @@ module Ww::Rack
       # |@ rack.rewriter
       #
       # |@pattern
-      # [rewriter (spec_ <-> @edge_) grammar_*]
+      # [rewriter (spec_ - @edge_) grammar_*]
       #
       # |@key spec rho
-      matchpi %{[rewriter (spec_ <-> @edge_) body_*]} do
+      matchpi %{[rewriter (spec_ - @edge_) body_*]} do
         edges = [edge]
         D7.gnd(node, edges, defn: Term.of(:rewriter, spec, edge, body))
       end
@@ -1362,8 +1362,8 @@ module Ww::Rack
       # |@ rack.rewriter
       #
       # |@pattern
-      # [rewriter (@spec_ <-> ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) data_*]
-      matchpi %{[rewriter (@spec_ <-> ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) body_*]} do
+      # [rewriter (@spec_ - ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) data_*]
+      matchpi %{[rewriter (@spec_ - ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) body_*]} do
         edges = [spec]
         edges.concat(itemsrcs.items)
 
@@ -1388,13 +1388,13 @@ module Ww::Rack
       # |@ rack.rewriter
       #
       # |@pattern
-      # [rewriter (spec_ <-> srcs_dict) data_*]
+      # [rewriter (spec_ - srcs_dict) data_*]
       #
       # |@key spec rho
-      matchpi %{[rewriter (spec_ <-> srcs_dict) _*]} do
+      matchpi %{[rewriter (spec_ - srcs_dict) _*]} do
         # For example, the following rewriter:
         #
-        #   (rewriter ((rulesetR) <-> {@:n @:m})
+        #   (rewriter ((rulesetR) - {@:n @:m})
         #     {¦ ±n} <> {n: ^(+ n 1)}
         #     {¦ ±m} <> {n: ^(+ n 1)})
         #
@@ -1402,7 +1402,7 @@ module Ww::Rack
         #
         #   (module {@n: @(local n), @m: @(local m)}
         #     (cell @spec (rulesetR))
-        #     (rewriter (@spec <-> {n: @(local n), m: @(local m)})
+        #     (rewriter (@spec - {n: @(local n), m: @(local m)})
         #       {¦ ±n} <> {n: ^(+ n 1)}
         #       {¦ ±m} <> {n: ^(+ n 1)}))
         #
@@ -1686,7 +1686,7 @@ module Ww::Rack
       # (circuit @reports
       #   (path ("/tmp/dir" report) root: true))
       #
-      # (rewriter ((scanR (rulesetR)) <-> @reports)
+      # (rewriter ((scanR (rulesetR)) - @reports)
       #  ;; Remove reports that are absent, except the root report.
       #  R←(path (_ report) [absent _] ⍊ -root)
       #    <> {(R): ()}
@@ -1768,7 +1768,7 @@ module Ww::Rack
       # (circuit @reports
       #   (path ("/tmp/wirewright-path1" report) root: true))
       #
-      # (rewriter ((scanR (rulesetR)) <-> @reports)
+      # (rewriter ((scanR (rulesetR)) - @reports)
       #   ;; Remove reports that are absent, except the root report.
       #   R←(path (_ report) [absent _] ⍊ -root)
       #     <> {(R): ()}

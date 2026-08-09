@@ -2,7 +2,7 @@
   "Merge sort. The goal here isn't efficiency, just use `sort` in Nitrene to do \
    actual sorting. The goal is to demo how a sorting algorithm can be a symbolic machine.")
 
-(rewriter ((rulesetR) <-> {@:unsorted, @:sorted, @:workspace, @:busy})
+(rewriter ((rulesetR) - {@:unsorted, @:sorted, @:workspace, @:busy})
   ;; Move singletons into the workspace.
   {¦ unsorted: (±n _*) workspace: (_* `dst)}
     <> {dst: (^n), (n): ()}
@@ -38,7 +38,7 @@
   (cell @l)
   (cell @r)
   (cell @out ())
-  (rewriter ((rulesetR) <-> {@:workspace, @:busy, @:l, @:r, @:out})
+  (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
     ;; Take work.
     {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
       <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}

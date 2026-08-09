@@ -3784,7 +3784,7 @@
   ;; dirR axis
   (rack
     (frame
-      (rewriter ((chainR (descR (rulesetR phase: main) axis: in) (rulesetR phase: post)) <-> {@:in, @:bus})
+      (rewriter ((chainR (descR (rulesetR phase: main) axis: in) (rulesetR phase: post)) - {@:in, @:bus})
         (main {¦ in: (place var_ `dst) bus: ((set var_ value_) _* `reply)})
           <> {dst: ^value, reply: (changed ^var ^value)}
         (main {¦ in: (place var_ value_) bus: ((unset var_) _*)})
@@ -3967,7 +3967,7 @@
   ;; adjR
   (rack
     (frame
-      (rewriter ((adjR (rulesetR)) <-> @world)
+      (rewriter ((adjR (rulesetR)) - @world)
         {¦ m_: < -l} <> {m: >}
         {¦ m_: > -r} <> {m: <}
         {¦ m_: > r: .} <> {m: .}
@@ -4002,7 +4002,7 @@
   ;; valueR
   (rack
     (frame
-      (rewriter ((valueR x (rulesetR)) <-> @in)
+      (rewriter ((valueR x (rulesetR)) - @in)
         ±n <> {n: ^(+ n 1)})
       (cell @in {x: 100, y: 200}))
     (frame/tail
@@ -4014,7 +4014,7 @@
   ;; valueR replace with zero
   (rack
     (frame
-      (rewriter ((valueR x (rulesetR)) <-> @in)
+      (rewriter ((valueR x (rulesetR)) - @in)
         ±n <> {n: ^(+ n 1)}
         10 => (^splice))
       (cell @in {x: 7, y: 200}))
@@ -4657,7 +4657,7 @@
     (frame
       (cell @spec (rulesetR))
       (cell @n 0)
-      (rewriter (@spec <-> {@:n})
+      (rewriter (@spec - {@:n})
         {¦ ±n} <> {n: ^(+ n 1)}))
     (frame pattern: true
       ⟨(cell @n 1)⟩)
@@ -4668,7 +4668,7 @@
   (rack
     (frame
       (cell @n 0)
-      (rewriter ((rulesetR) <-> {@:n})
+      (rewriter ((rulesetR) - {@:n})
         {¦ ±n} <> {n: ^(+ n 1)}))
     (frame pattern: true
       ⟨(cell @n 1)⟩)
@@ -4680,7 +4680,7 @@
     (frame
       (cell @n 0)
       (cell @m)
-      (rewriter ((rulesetR) <-> {@:n @:m})
+      (rewriter ((rulesetR) - {@:n @:m})
         {¦ ±n -m_} <> {m: (counter ^n)}
         {¦ ±n m: (counter ±m)} <> {n: ^(+ n 1), m: ^n}
         {¦ ±n m_: (counter 3)} <> {(n): (), (m): ()}))
@@ -4818,7 +4818,7 @@
 ;; Merge sort (one module)
 (rack
   (frame
-    (rewriter ((rulesetR) <-> {@:unsorted, @:sorted, @:workspace, @:busy})
+    (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:workspace, @:busy})
       {¦ unsorted: (±n _*) workspace: (_* `dst)}
         <> {dst: (^n), (n): ()}
       {¦ unsorted: (±n ±m _*) workspace: (_* `dst)}
@@ -4833,7 +4833,7 @@
       (cell @l)
       (cell @r)
       (cell @out ())
-      (rewriter ((rulesetR) <-> {@:workspace, @:busy, @:l, @:r, @:out})
+      (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
         {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
           <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}
         {¦ workspace: (_* `dst) l_: () r_: () out_: (_*) ±busy}
@@ -4857,7 +4857,7 @@
 ;; so let's have them in tests!
 (rack
   (frame
-    (rewriter ((rulesetR) <-> {@:unsorted, @:sorted, @:workspace, @:busy})
+    (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:workspace, @:busy})
       {¦ unsorted: (±n _*) workspace: (_* `dst)}
         <> {dst: (^n), (n): ()}
       {¦ unsorted: (±n ±m _*) workspace: (_* `dst)}
@@ -4872,7 +4872,7 @@
       (cell @l)
       (cell @r)
       (cell @out ())
-      (rewriter ((rulesetR) <-> {@:workspace, @:busy, @:l, @:r, @:out})
+      (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
         {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
           <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}
         {¦ workspace: (_* `dst) l_: () r_: () out_: (_*) ±busy}
@@ -4889,7 +4889,7 @@
       (cell @l)
       (cell @r)
       (cell @out ())
-      (rewriter ((rulesetR) <-> {@:workspace, @:busy, @:l, @:r, @:out})
+      (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
         {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
           <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}
         {¦ workspace: (_* `dst) l_: () r_: () out_: (_*) ±busy}
@@ -4906,7 +4906,7 @@
       (cell @l)
       (cell @r)
       (cell @out ())
-      (rewriter ((rulesetR) <-> {@:workspace, @:busy, @:l, @:r, @:out})
+      (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
         {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
           <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}
         {¦ workspace: (_* `dst) l_: () r_: () out_: (_*) ±busy}
@@ -4923,7 +4923,7 @@
       (cell @l)
       (cell @r)
       (cell @out ())
-      (rewriter ((rulesetR) <-> {@:workspace, @:busy, @:l, @:r, @:out})
+      (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
         {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
           <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}
         {¦ workspace: (_* `dst) l_: () r_: () out_: (_*) ±busy}
@@ -4955,7 +4955,7 @@
        (< none)
        (< none)
        (< none)))
-    (rewriter ((rulesetR exh: true) <-> @world)
+    (rewriter ((rulesetR exh: true) - @world)
       ⟨x←(> _) ±a ±b⟩° <> {x: ^a, a: ^x}
       ⟨±a ±b x←(< _)⟩° <> {b: ^x, x: ^b}
       ⟨x←(> state_) ±a b←(%number _ < (var a))⟩°
@@ -4978,7 +4978,7 @@
   (frame
     (cell @world (. . . . . . . O))
     (feed (copy @world) (@worlds back))
-    (rewriter ((adjR (rulesetR)) <-> @world)
+    (rewriter ((adjR (rulesetR)) - @world)
       {¦ l: O m_: O r: O} <> {m: .}
       {¦ l: O m_: . r: O} <> {m: O}
       {¦ l: . m_: . r: O} <> {m: O})

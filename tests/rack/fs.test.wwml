@@ -103,7 +103,7 @@
     (circuit @reports
       (path ("/tmp/wirewright-path1" report) root: true))
 
-    (rewriter ((scanR (rulesetR)) <-> @reports)
+    (rewriter ((scanR (rulesetR)) - @reports)
       ;; Remove reports that are absent, except the root report.
       R←(path (_ report) [absent _] ⍊ -root)
         <> {(R): ()}
