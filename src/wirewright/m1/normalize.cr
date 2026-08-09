@@ -166,7 +166,7 @@ module Ww::M1
         return Term.of(:"%literal", term)
       end
 
-      Term.case(term, engine: M0) do
+      Term.case(term, engine: M0, block_type: :proc) do
         # |@ m1.quoted.unquote
         #
         # |@pattern
@@ -232,7 +232,7 @@ module Ww::M1
   def normalize(prod : Π::Item) : Term
     item = prod.item
 
-    Term.case(item, engine: M0) do
+    Term.case(item, engine: M0, block_type: :proc) do
       # |@ m1.operator.seq.polyblank
       #
       # |@pattern
@@ -789,7 +789,7 @@ module Ww::M1
   def normalize(prod : Π::EntryKV) : Term
     key, value = prod.key, prod.value
 
-    Term.case(value, engine: M0) do
+    Term.case(value, engine: M0, block_type: :proc) do
       # |@ m1.operator.entry.optional
       #
       # |@pattern
@@ -1030,7 +1030,7 @@ module Ww::M1
   def normalize(prod : Π::Pattern(Term)) : Term
     pattern = prod.pattern
 
-    Term.case(pattern, engine: M0) do
+    Term.case(pattern, engine: M0, block_type: :proc) do
       matchpi %{_dict} do
         # NOTE: this is a fast path for itemsonly dictionaries. They'd otherwise be
         # matched at the very bottom, which wouldn't be good because they're very frequent

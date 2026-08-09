@@ -1115,12 +1115,9 @@ module Ww
     # Advanced: Direct form of `Term.case` allowing explicit control over the matcher
     # instance and the initial environment.
     #
-    # See also: `Case.defcase`, `Case.scan`.
-    macro case(matchee, *, matcher, env = Term[], **kwargs, &block)
-      {% unless kwargs.empty? %}\
-        {% raise "unrecognized keyword arguments passed to Term.case" %}
-      {% end %}\
-      {{@type}}::Case.scan({{matcher}}, Term.of({{matchee}}), {{env}}) {{block}}
+    # See also: `Case.def_caselike`, `Case.scan`.
+    macro case(matchee, *, matcher, block_type = :block, env = Term[], &block)
+      {{@type}}::Case.scan({{matcher}}, Term.of({{matchee}}), {{env}}, {{block_type}}) {{block}}
     end
 
     # Advanced: Lets you pick an engine explicitly (e.g. `M0`, `M1`), constructing
@@ -1129,14 +1126,14 @@ module Ww
     # NOTE: You can use `engine: :m0` or `engine: :m1` in case Crystal fails to
     # resolve *engine* at the call-site. `Case::MM` compile-time raises on M0/M1
     # which actually helps you here.
-    macro case(matchee, *, engine, **kwargs, &block)
+    macro case(matchee, *, engine, block_type = :block, env = Term[], &block)
       {% cls = engine.resolve? %}
       {% if cls == M0 || engine.id.downcase == :m0 %}
-        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM0, {{kwargs.double_splat}}) {{block}}
+        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM0, block_type: {{block_type}}, env: {{env}}) {{block}}
       {% elsif cls == M1 || engine.id.downcase == :m1 %}
-        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM1, {{kwargs.double_splat}}) {{block}}
+        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM1, block_type: {{block_type}}, env: {{env}}) {{block}}
       {% else %}
-        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM({{engine}}), {{kwargs.double_splat}}) {{block}}
+        {{@type}}.case({{matchee}}, matcher: {{@type}}::Case::MM({{engine}}), block_type: {{block_type}}, env: {{env}}) {{block}}
       {% end %}
     end
 
@@ -1173,8 +1170,8 @@ module Ww
     # ```
     #
     # See `Case` for details on syntax.
-    macro case(matchee, **kwargs, &block)
-      {{@type}}.case({{matchee}}, engine: M1, {{kwargs.double_splat}}) {{block}}
+    macro case(matchee, *, block_type = :block, env = Term[], &block)
+      {{@type}}.case({{matchee}}, engine: M1, block_type: {{block_type}}, env: {{env}}) {{block}}
     end
 
     # A shorthand for wrapping `Term.case` in `Term.of`.

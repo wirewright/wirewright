@@ -447,7 +447,7 @@ module Ww::Nitrene
       return Inert.new
     end
 
-    Term.case(expr) do
+    Term.case(expr, block_type: :proc) do
       matchpi %{(literal subexpr_)} do
         subexpr
       end
@@ -711,7 +711,7 @@ module Ww::Nitrene
       return Inert.new
     end
 
-    Term.case(expr) do
+    Term.case(expr, block_type: :proc) do
       # |@ nitrene.sum
       #
       # |@pattern

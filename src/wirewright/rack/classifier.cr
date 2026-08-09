@@ -4,7 +4,7 @@ module Ww::Rack
 
   # :nodoc:
   def classify!(node : Term) : D7::Feature
-    M1::PatternSet.case(node) do
+    M1::PatternSet.case(node, block_type: :proc) do
       # |@ rack.cell
       #
       # |@summary

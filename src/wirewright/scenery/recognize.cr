@@ -68,7 +68,7 @@ module Ww::Scenery
   end
 
   private def recognize!(cache : CacheSet, node : Term) : RecognizedNode
-    Term.case(node) do
+    Term.case(node, block_type: :proc) do
       # |@ scenery.rect
       #
       # |@pattern

@@ -3,7 +3,7 @@ module Ww::M1
   def compile(prod : Π::ItemOrd(Term)) : Op::Item::Any
     ordsrc, item = prod.ordsrc, prod.item
 
-    Term.case(item, engine: M0) do
+    Term.case(item, engine: M0, block_type: :proc) do
       matchpi %{[%'%singular successor_]}, cue: :"%singular" do
         Op::Item::Singular.new(compile(Π.pattern(successor)))
       end
@@ -139,7 +139,7 @@ module Ww::M1
   def compile(prod : Π::Entry(Term)) : Op::Entry::Any
     entry = prod.entry
 
-    Term.case(entry, engine: M0) do
+    Term.case(entry, engine: M0, block_type: :proc) do
       matchpi(
         %{[%'%entry/required [%'%key key_] [%'%pass]]},
         cue: {:"%entry/required", :"%key", :"%pass"},
@@ -237,7 +237,7 @@ module Ww::M1
   def compile(prod : Π::Pattern(Term)) : Op::Any
     pattern = prod.pattern
 
-    Term.case(pattern, engine: M0) do
+    Term.case(pattern, engine: M0, block_type: :proc) do
       matchpi %{[%'%let [%'%capture name_] successor_]}, cue: {:"%let", :"%capture"} do
         Op::Capture.new(name, compile(Π.pattern(successor)))
       end

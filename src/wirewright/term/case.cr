@@ -636,11 +636,18 @@ module Ww::Term::Case
   # - *matcher* is the case matcher *class* to use for compiling and matching patterns.
   # - *matchee* is the term to match.
   # - *env* is the base environment.
-  def_caselike scan(matcher, matchee, env) do |id, branches, sink|
+  # - *block_type* can be `:proc` or `:block`.
+  def_caselike scan(matcher, matchee, env, block_type) do |id, branches, sink|
     {% begin %}
-      {% if branches.empty? %}
-        {% raise "empty case not allowed" %}
-      {% end %}\
+      {%
+        if branches.empty?
+          raise "empty case not allowed"
+        end
+
+        unless block_type == :proc || block_type == :block
+          raise "block_type must be :proc or :block"
+        end
+      %}\
 
       %matcher = ::Ww::Term::Case::MATCHERS.put_if_absent({{id}}) do
         %specs = Slice[
@@ -672,7 +679,12 @@ module Ww::Term::Case
         case %index
         {% for branch, i in branches %}\
         when {{i}}
+          {% if block_type == :block %}
           pass do
+          {% elsif block_type == :proc %}
+          (-> do
+            pass do
+          {% end %}
             {% for capture, var in branch[:captures] %}\
               {% if type = branch[:cast][var] %}\
                 {{var.id}} = (%env[{{capture}}]? || raise("#{ {{branch[:location]}} }: missing capture `{{capture.id}}`")).to({{type}})
@@ -681,7 +693,12 @@ module Ww::Term::Case
               {% end %}\
             {% end %}
             {{branch[:body]}}
+          {% if block_type == :block %}
           end
+          {% elsif block_type == :proc %}
+            end
+          end).call
+          {% end %}
         {% end %}
         else
           unreachable

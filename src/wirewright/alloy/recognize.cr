@@ -148,7 +148,7 @@ module Ww::Alloy
   end
 
   private def recognize(template : Term, filter : Term -> Bool) : Template
-    Term.case(template) do
+    Term.case(template, block_type: :proc) do
       # |@ alloy.var
       #
       # |@pattern
