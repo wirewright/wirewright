@@ -51,6 +51,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-misc rack-tspace))
 
+(test "rack/fs.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-misc rack-path))
+
 (test "rack/ws.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-misc rack-ws))
