@@ -645,7 +645,7 @@ module Ww::Term::Case
         end
 
         unless block_type == :proc || block_type == :block
-          raise "block_type must be :proc or :block"
+          block_type.raise "block_type must be :proc or :block"
         end
       %}\
 
@@ -682,7 +682,11 @@ module Ww::Term::Case
           {% if block_type == :block %}
           pass do
           {% elsif block_type == :proc %}
-          (-> do
+            {% if matchee.is_a?(Var) %}
+          (->(%env : Term::Dict, {{matchee.id}} : Term) do # Shadow the env to avoid capturing it
+            {% else %}
+          (->(%env : Term::Dict) do
+            {% end %}
             pass do
           {% end %}
             {% for capture, var in branch[:captures] %}\
@@ -697,7 +701,11 @@ module Ww::Term::Case
           end
           {% elsif block_type == :proc %}
             end
-          end).call
+            {% if matchee.is_a?(Var) %}
+          end).call(%env, %matchee)
+            {% else %}
+          end).call(%env)
+            {% end %}
           {% end %}
         {% end %}
         else

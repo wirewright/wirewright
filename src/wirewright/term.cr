@@ -1117,7 +1117,7 @@ module Ww
     #
     # See also: `Case.def_caselike`, `Case.scan`.
     macro case(matchee, *, matcher, block_type = :block, env = Term[], &block)
-      {{@type}}::Case.scan({{matcher}}, Term.of({{matchee}}), {{env}}, {{block_type}}) {{block}}
+      {{@type}}::Case.scan({{matcher}}, {{matchee}}, {{env}}, {{block_type}}) {{block}}
     end
 
     # Advanced: Lets you pick an engine explicitly (e.g. `M0`, `M1`), constructing
