@@ -673,6 +673,32 @@ module Ww::Nitrene
         eval(it, vars1, bodyQ)
       end
 
+      matchpi %{(set argQ_ selector_)} do
+        arg = eval(it, vars, argQ)
+        unless arg = arg.as_d?
+          return Term.of # empty set
+        end
+
+        result = Term::Dict.build do |commit|
+          arg.items.each do |item|
+            envs = M1.matches(selector, item)
+            next if envs.empty?
+
+            envs.each do |env|
+              if env.empty?
+                commit.with(item, true)
+                next
+              end
+
+              _, value = env.ee.first
+              commit.with(value, true)
+            end
+          end
+        end
+
+        Term.of(result)
+      end
+
       otherwise do
         Inert.new
       end
@@ -1592,6 +1618,16 @@ module Ww::Nitrene
 
       matchpi %{(reverse _)} do
         Term.of(:attn, Term[], Term[])
+      end
+
+      matchpiT %{(set arg_dict)} do
+        set = Term::Dict.build do |commit|
+          arg.items.each do |item|
+            commit.with(item, true)
+          end
+        end
+
+        Term.of(set)
       end
 
       matchpi %{(in? (b_ ..< e_) value_)} do
