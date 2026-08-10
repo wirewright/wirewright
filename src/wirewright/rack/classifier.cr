@@ -1308,6 +1308,407 @@ module Ww::Rack
         D7.parent(node.as_d, 1u32...2u32)
       end
 
+      # |@ rack.rewriter
+      #
+      # |@summary
+      # A family of nodes that let you use `rho` to rewrite terms.
+
+      # |@ rack.rewriter
+      #
+      # |@pattern
+      # [rewriter (@input_ -> spec_ -> @output_) data_*]
+      #
+      # |@key input rack.edge
+      # The edge of the input cell.
+      #
+      # |@key spec
+      # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
+      #
+      # |@key output rack.edge
+      # The edge of the output cell.
+      #
+      # |@key data
+      # Data supplied to the rewriter. Almost always this is a list of rules
+      # interpreted by *spec*.
+      #
+      # |@block
+      # Rewrites the term at *input* using a Rho *spec*, and places the result in
+      # *output*. The *input* cell is cleared when rewriting finishes. Therefore,
+      # this is the *transfer* variant (because it works like `rack.transfer`).
+      #
+      # |@example
+      # Let's start with the simplest rewriter of them all, `noR` (see `rho.noR`):
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 100)
+      # (rewriter (@x -> noR -> @y))
+      # (cell @y)
+      #
+      # ;; Frame 1
+      #
+      # (cell @x)
+      # (rewriter (@x -> noR -> @y))
+      # (cell @y 100)
+      # ```
+      #
+      # As you can see, `noR` changed absolutely nothing. The next simplest
+      # rewriter is `rho.constR`:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (queue (@x @xs) (100 "Kaixo" true {x: 1, y: 2}))
+      # (rewriter (@x -> (constR nope) -> @ys))
+      # (queue (@y @ys) ())
+      #
+      # ;; Frame 1
+      #
+      # (queue (@x @xs) ("Kaixo" true {x: 1, y: 2}))
+      # (rewriter (@x -> (constR nope) -> @ys))
+      # (queue (@y @ys) (nope))
+      #
+      # ;; Frame 2
+      #
+      # (queue (@x @xs) (true {x: 1, y: 2}))
+      # (rewriter (@x -> (constR nope) -> @ys))
+      # (queue (@y @ys) (nope nope))
+      #
+      # ;; Frame 3
+      #
+      # (queue (@x @xs) ({x: 1, y: 2}))
+      # (rewriter (@x -> (constR nope) -> @ys))
+      # (queue (@y @ys) (nope nope true))
+      #
+      # ;; Frame 4
+      #
+      # (queue (@x @xs) ())
+      # (rewriter (@x -> (constR nope) -> @ys))
+      # (queue (@y @ys) (nope nope nope nope))
+      # ```
+      #
+      # As you can see from the evolution, constR replaces with a constant
+      # term unconditionally.
+      #
+      # Now we can graduate to `rho.rulesetR`, which is ubiquitously used in
+      # practice. For rulesetR, *data* becomes useful; we can use it to
+      # define rules.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (1 2 3))
+      #
+      # (rewriter (@in -> (rulesetR) -> @out)
+      #   (±n _ _) <> {(n): ("Kaixo" ^(+ n 1))}
+      #   (_ _ ±n) <> {(n): (^(* n n) "mundua!")})
+      #
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      #
+      # (rewriter (@in -> (rulesetR) -> @out)
+      #   (±n _ _) <> {n: ("Kaixo" ^(+ n 100))}
+      #   (_ _ n←(%number _ > 0)) <> {n: (^(* n n) "mundua!")})
+      #
+      # (cell @out (1 2 (9 "mundua!")))
+      # ```
+      #
+      # The distinctive feature of plain `rulesetR` rewriters is that only one rule
+      # wins -- the most specific one. This is what you see above. The second rule
+      # wins because it says "I want a number greater than zero", which is more specific
+      # than the first rule's "I want a number". If you want to let all rules contribute
+      # during one rewrite tick, use `rewriter exh: true`. This is called an *exhaustive
+      # ruleset rewriter*. When you use such a rewriter, all rules will be given a chance
+      # to fire, but only once. The rule that contributes successfully is withdrawn from
+      # the rule pool for the remainder of the tick.
+      #
+      # The order of rule applications is still determined by specificity, even with
+      # `exh: true`; the most specific rule gets the chance to rewrite the term, and
+      # is then withdrawn; then, the next most specific rule *that matches the rewritten
+      # term* fires, and so on.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (1 2 3))
+      #
+      # (rewriter (@in -> (rulesetR exh: true) -> @out)
+      #   (±n _ _) <> {(n): ("Kaixo" ^(+ n 1))}
+      #   (_ _ ±n) <> {(n): (^(* n n) "mundua!")})
+      #
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      #
+      # (rewriter (@in -> (rulesetR) -> @out)
+      #   (±n _ _) <> {n: ("Kaixo" ^(+ n 100))}
+      #   (_ _ n←(%number _ > 0)) <> {n: (^(* n n) "mundua!")})
+      #
+      # (cell @out (("Kaixo" 101) 2 (9 "mundua!")))
+      # ```
+      #
+      # Notice how both rules were able to rewrite the term, thanks to `exh: true`.
+      # Please note that unlike backsystems (`rack.backsys`), matching and rewriting
+      # is not parallel but *sequential*. That is, one `rewriter` tick is split into
+      # many sub-ticks; and during each sub-tick, only one rule can fire and change
+      # the term. The results of that are available on the next sub-tick, and so on.
+      #
+      # The next tier of rewriting is represented by `rho.scanR`, which performs a pass
+      # over a dictionary's items, applying its successor rewriter (here, we use
+      # `rulesetR`) to each item in turn:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (1 2 3))
+      #
+      # (rewriter (@in -> (scanR (rulesetR)) -> @out)
+      #   ;; `=>` is an Alloy rule whereas `<>` is a backmap. The choice of either
+      #   ;; is on you; use whichever you prefer. Backmaps are good at small, targeted
+      #   ;; changes where you don't care about "the rest of the term" -- in other words,
+      #   ;; use backmaps when you want to rewrite *parts* of a term. Alloy rules
+      #   ;; (known simply as *rules*, in constrast with *backmaps*) are then used
+      #   ;; for the opposite, when you want to rewrite the *whole* term.
+      #   ±n => ^(+ n 1))
+      #
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      #
+      # (rewriter (@in -> (scanR (rulesetR)) -> @out)
+      #   ±n => ^(+ n 1))
+      #
+      # (cell @out (2 3 4)) ;; all numbers incremented
+      # ```
+      #
+      # Now that we've covered single value rewriting and sequence rewriting we can
+      # look at tree rewriting. Rho features many tree rewriters, but in this example
+      # we'll use `rho.ascR`, which performs an *ascending rewrite* -- meaning it climbs
+      # the tree bottom up, from leaves to the root:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in (+ (* 2 3) (/ 4 (- 5 2)))) ;; 2*3+4/(5-3)
+      #
+      # ;; A simple arithmetic evaluator.
+      # (rewriter (@in -> (ascR (rulesetR)) -> @out)
+      #   (+ ±a ±b) => ^(+ a b)
+      #   (- ±a ±b) => ^(- a b)
+      #   (* ±a ±b) => ^(* a b)
+      #   (/ ±a ±b) => ^(/ a b))
+      #
+      # (cell @out)
+      #
+      # ;; Frame 1
+      #
+      # (cell @in)
+      #
+      # (rewriter (@in -> (ascR (rulesetR)) -> @out)
+      #   (+ ±a ±b) => ^(+ a b)
+      #   (- ±a ±b) => ^(- a b)
+      #   (* ±a ±b) => ^(* a b)
+      #   (/ ±a ±b) => ^(/ a b))
+      #
+      # (cell @out 8)
+      # ```
+      #
+      # A handful of lines of grammar can turn this into a tiny arithmetic language:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @text "2*3+4/(5-3)")
+      #
+      # (parser (@text -> expr -> @term)
+      #   (expr sum)
+      #   (sum a←sum "+" b←factor) => (+ ^a ^b)
+      #   (sum a←sum "-" b←factor) => (- ^a ^b)
+      #   (sum factor)
+      #   (factor a←factor "*" b←atom) => (* ^a ^b)
+      #   (factor a←factor "/" b←atom) => (/ ^a ^b)
+      #   (factor atom)
+      #   (atom "(" a←expr ")") => ^a
+      #   (atom nat)
+      #   (nat (form "[0-9]+" nat)))
+      #
+      # (cell @term)
+      #
+      # (rewriter (@term -> (ascR (rulesetR)) -> @value)
+      #   (+ ±a ±b) => ^(+ a b)
+      #   (- ±a ±b) => ^(- a b)
+      #   (* ±a ±b) => ^(* a b)
+      #   (/ ±a ±b) => ^(/ a b))
+      #
+      # (cell @value)
+      #
+      # ;; Frame 1 (omitting parser and rewriter for brevity, they stay the same)
+      #
+      # (cell @text)
+      # (cell @term (+ (* 2 3) (/ 4 (- 5 2))))
+      # (cell @value)
+      #
+      # ;; Frame 2
+      #
+      # (cell @text)
+      # (cell @term)
+      # (cell @value 8)
+      # ```
+      #
+      # Note that in practice, for such a simple example, you'd probably calculate
+      # the value directly in `parser` instead of using a separate `rewriter`. But
+      # the moment you need abstract syntax trees etc., this is pretty much how you
+      # can start.
+      #
+      # Rewriters can be chained using `rho.chainR`. This is a good opportunity to
+      # show that *spec* can be an edge, too:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @spec
+      #   (scanR
+      #     (chainR
+      #       (rulesetR phase: double)
+      #       (rulesetR phase: square))))
+      #
+      # (rewriter (@in -> @spec -> @out)
+      #   (double ±n) => ^(+ n n)
+      #   (square ±n) => ^(* n n))
+      #
+      # (cell @in (1 2 3))
+      # (cell @out)
+      #
+      # ;; Frame 1 (omitting `cell @spec` and `rewriter` because they're the same)
+      #
+      # (cell @in)
+      # (cell @out (4 16 36))
+      #
+      # ;; Our rewriter did the following in one tick:
+      # ;;    scanR
+      # ;;   -------->
+      # ;;   (1 2 3)
+      # ;;    | | |  double  }
+      # ;;    2 4 6          } chainR
+      # ;;    | | \  square  }
+      # ;;   (4 16 36)
+      # ```
+      #
+      # A rewriter can be applied *exhaustively*, meaning it will be applied
+      # until the underlying term *stops changing* (aka reaches a fixpoint,
+      # aka reaches quiescence):
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in 0)
+      #
+      # ;; Just a silly example. In practice you'd use exhR for normalization
+      # ;; loops, repeated simplification, rewriting until some normal form,
+      # ;; optimization, finite / terminating evolution, etc.
+      # (rewriter (@in -> (exhR (rulesetR)) -> @out)
+      #   n←(%number _ < 5) => ^(+ n 1))
+      #
+      # (cell @out)
+      #
+      # ;; Frame 1 (omitting `rewriter`)
+      #
+      # (cell @in)
+      # (cell @out 5)
+      # ```
+      #
+      # Exhaustive rewriters are particularly "dangerous" because they are potentially
+      # nonterminating. For example, if we remove the condition that n < 5 in the example
+      # above, it will increment forever, and we won't get a chance to see the final number --
+      # because there is none! Similarly, some arrangements of things may oscillate between
+      # some number of states, and therefore, never reach termination.
+      #
+      # Rack makes sure to run `rewriter`s that deserve it on a separate thread (roughly speaking...)
+      # So nonterminating `exhR` is still cancellable from within the program, e.g.,
+      # with a timeout; or you can manually clear the in cell which will kill the task.
+      #
+      # Most simple rewriters run synchronously during the main Rack tick. Heavy rewriters
+      # (taking more than approximately 100 microseconds) will be moved away; and therefore,
+      # rewriting will become asynchronous, instead of completing in the next tick. This
+      # shouldn't make a difference (that's one of the premises of Wirewright!), but you
+      # should still be aware that arbitrary rewriting does not necessarily finish in just
+      # one tick. The main guarantee you have is it is nonblocking / asynchronous past
+      # a very small threshold.
+      #
+      # To learn more about rewriters, you should visit `rho`. At this point you should
+      # be well equipped to swap *spec*s for your own ones.
+
+      # |@ rack.rewriter
+      #
+      # |@pattern
+      # [rewriter (@input_ - spec_ - @output_) data_*]
+      #
+      # |@key input rack.edge
+      # The edge of the input cell.
+      #
+      # |@key spec
+      # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
+      #
+      # |@key output rack.edge
+      # The edge of the output cell.
+      #
+      # |@key data
+      # Data supplied to the rewriter. Almost always this is a list of rules
+      # interpreted by *spec*.
+      #
+      # |@block
+      # Maintains a live rewrite of the term at *input* in the cell at *output*.
+      #
+      # "Live" here is used very loosely; there is a delay or of one or more ticks,
+      # depending on whether *spec* is executed synchronously or asynchronously.
+      # Clears *output* if *input* is missing.
+      #
+      # |@example
+      # Basic usage:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @num 10)
+      # (cell @square)
+      # (rewriter (@num - (rulesetR) - @square)
+      #   ±n => ^(* n n))
+      #
+      # ;; Frame 1
+      #
+      # (cell @num 10)
+      # (cell @square 100)
+      # (rewriter (@num - (rulesetR) - @square)
+      #   ±n => ^(* n n))
+      #
+      # ;; Frame 2
+      # ;; I change 10 to 4.
+      #
+      # (cell @num 4)
+      # (cell @square 100)
+      # (rewriter (@num - (rulesetR) - @square)
+      #   ±n => ^(* n n))
+      #
+      # ;; Frame 3
+      # ;; The rewriter "heals" or "repairs" @square.
+      #
+      # (cell @num 4)
+      # (cell @square 16)
+      # (rewriter (@num - (rulesetR) - @square)
+      #   ±n => ^(* n n))
+      # ```
+      #
+      # See the examples section of the transfer variant of `rack.rewriter`
+      # to learn more about rewriters in general.
+
       matchpi(
         %{[rewriter (@input_ -> spec_ -> @output_) _*]},
         %{[rewriter (@input_ - spec_ - @output_) _*]},
@@ -1324,7 +1725,83 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
-      matchpiT %{[rewriter (spec_ - dependencies_dict) _*]} do
+      # |@ rack.rewriter
+      #
+      # |@pattern
+      # [rewriter (spec_ - target_) _*]
+      #
+      # |@key spec
+      # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
+      #
+      # |@key target
+      # Either an edge (`rack.edge`) or a template dictionary with edge values,
+      # e.g. `(+ @x @y a: @foo b: @bar)`. The rewriter node replaces each such
+      # edge value with the value at the corresponding cell to obtain the term
+      # to rewrite.
+      #
+      # For template targets, the rewritten term is "unpacked" or "destructured"
+      # afterwards, and the resulting values are written to the corresponding cells.
+      #
+      # Removal is not allowed in the itemspart but allowed in the pairspart. For
+      # example, if the rewriter removes `a` from `{a: @a, b: @b}` (or more compactly,
+      # `{@:a, @:b}`), the `@a` cell will be cleared.
+      #
+      # |@block
+      # The *regime* variant of the rewriter node allows you to maintain a *rewrite
+      # regime* at a *target* cell, relate two or more target cells, or both.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @names (a b c))
+      # (cell @env {a: 10, b: 20})
+      # (rewriter ((scanR (rulesetR) axis: names) - {@:names, @:env})
+      #   {¦ names: name←key_  env: (%value key value_)}
+      #     <> {name: ^value})
+      #
+      # ;; Frame 1 (omitting `rewriter`)
+      #
+      # (cell @names (10 20 c))
+      # (cell @env {a: 10, b: 20})
+      #
+      # ;; Frame 2
+      # ;; I add `c` to the env dict
+      #
+      # (cell @names (10 20 c))
+      # (cell @env {a: 10, b: 20, c: 30})
+      #
+      # ;; Frame 3
+      # ;; The rewriter "heals" @names
+      #
+      # (cell @names (10 20 30))
+      # (cell @env {a: 10, b: 20, c: 30})
+      # ```
+      #
+      # With a single *target* cell:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @n 0)
+      # (rewriter ((rulesetR) - @n)
+      #   ±n => ^(+ n 1))
+      #
+      # ;; Frame 1
+      #
+      # (cell @n 1)
+      # (rewriter ((rulesetR) - @n)
+      #   ±n => ^(+ n 1))
+      #
+      # ;; Frame 2
+      #
+      # (cell @n 2)
+      # (rewriter ((rulesetR) - @n)
+      #   ±n => ^(+ n 1))
+      #
+      # ;; etc...
+      # ```
+      matchpiT %{[rewriter (spec_ - target_dict) _*]} do
         edges = Pf::Kit.stack_array(Term, 8)
 
         pass do
@@ -1335,13 +1812,13 @@ module Ww::Rack
           end
 
           # (rewriter (noR - @x) ...)
-          if Term.edge?(dependencies, type: :any)
+          if Term.edge?(target, type: :any)
             edges << spec
             next
           end
 
           # (rewriter (noR - {@:x, @:y, @:z}) ...)
-          dependencies.each_entry do |_, value|
+          target.each_entry do |_, value|
             next unless Term.edge?(value)
 
             edges << value
