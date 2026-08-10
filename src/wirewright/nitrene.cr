@@ -410,33 +410,49 @@ module Ww::Nitrene
   end
 
   def eval(it : Interpreter, vars : Term::Dict, expr : Term) : Term
-    value = it.composite.call(it, vars, expr)
-    if value.is_a?(Term)
-      return value
+    case evaln = evaln(it, vars, expr)
+    in Term      then evaln
+    in Unchanged then expr
+    end
+  end
+
+  defrecord Unchanged
+
+  def evaln(it : Interpreter, vars : Term::Dict, expr : Term) : Term | Unchanged
+    evaln = it.composite.call(it, vars, expr)
+    if evaln.is_a?(Term)
+      return evaln
     end
 
+    changed = false
+
     # Evaluate recursively.
-    if dict = expr.as_d?
-      dict = dict.transaction do |commit|
-        dict.each_entry do |key, value|
-          commit.with(key, eval(it, vars, value))
+    if expr_dict0 = expr.as_d?
+      expr_dict1 = expr_dict0.transaction do |commit|
+        expr_dict0.each_entry do |key, value|
+          case evaln = evaln(it, vars, value)
+          in Term
+            commit.with(key, evaln)
+          in Unchanged
+          end
         end
       end
 
-      expr = Term.of(dict)
+      expr = Term.of(expr_dict1)
+      changed = !expr_dict0.same?(expr_dict1)
     end
 
-    value = it.primitive.call(it, vars, expr)
-    if value.is_a?(Term)
+    evaln = it.primitive.call(it, vars, expr)
+    if evaln.is_a?(Term)
+      return evaln
+    end
+
+    if value = vars[expr]?
       return value
     end
 
-    vars[expr]? || expr
+    changed ? expr : Unchanged.new
   end
-
-  # TODO: Nontrivial branches in `composite` and `primitive` below must be extracted into
-  # their own functions. Otherwise we're forced to consume a lot of stack-space per call (are we?)
-  # when only one or none of the branches match, which is dangerous in deep calls.
 
   # TODO: all attention functions should end with `*`, e.g., `reduce*`, `sum*`. Their non-
   # attention counterparts (if any) should not end with it (e.g., `reduce`, `sum`).
@@ -447,7 +463,7 @@ module Ww::Nitrene
       return Inert.new
     end
 
-    Term.case(expr, block_type: :proc) do
+    Term.case(expr, block_type: {:proc, it : Interpreter, vars : Term::Dict}) do
       matchpi %{(literal subexpr_)} do
         subexpr
       end
@@ -711,7 +727,7 @@ module Ww::Nitrene
       return Inert.new
     end
 
-    Term.case(expr, block_type: :proc) do
+    Term.case(expr, block_type: {:proc, it : Interpreter, vars : Term::Dict}) do
       # |@ nitrene.sum
       #
       # |@pattern
