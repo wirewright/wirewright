@@ -297,7 +297,7 @@ module Ww::Rack::Rewriter
         commit.with(index, target_value)
       end
 
-      variant.targets.each_pair do |key, value|
+      variant.targets.each_entry(in: Term::Dict.pairspart) do |key, value|
         next unless Term.edge?(value)
 
         target = hg.resolve(node.addr, value)
