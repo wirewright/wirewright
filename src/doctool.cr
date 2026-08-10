@@ -303,6 +303,7 @@ module Doctool
     Console.display(STDOUT, Console::InfoLog.new("Wirewright doctool"))
 
     compositions = Doctool::DOCS.map { |article| Doctool.composition(article) }.to_a
+    compositions.sort_by! { |composition| composition.single?(Ref).try(&.parts) || [] of String }
     Console.display(STDOUT, Console::InfoLog.new("Processed #{compositions.size} composition(s)."))
 
     server = HTTP::Server.new do |context|
