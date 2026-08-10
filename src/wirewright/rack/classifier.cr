@@ -1308,132 +1308,47 @@ module Ww::Rack
         D7.parent(node.as_d, 1u32...2u32)
       end
 
-      # |@ rack.rewriter
-      #
-      # |@pattern
-      # [rewriter (@input_ -> @spec_ -> @output_) data_*]
-      matchpi %{[rewriter (@input_ -> @spec_ -> @output_) _*]} do
-        D7.gnd(node, input, spec, output)
-      end
-
-      # |@ rack.rewriter
-      #
-      # |@pattern
-      # [rewriter (@input_ - @spec_ - @output_) data_*]
-      matchpi %{[rewriter (@input_ - @spec_ - @output_) _*]} do
-        D7.gnd(node, input, spec, output)
-      end
-
-      # |@ rack.rewriter
-      #
-      # |@pattern
-      # [rewriter (@input_ - spec_ - @output_) data_*]
-      # [rewriter (@input_ -> spec_ -> @output_) data_*]
-      #
-      # |@key spec rho
       matchpi(
         %{[rewriter (@input_ -> spec_ -> @output_) _*]},
         %{[rewriter (@input_ - spec_ - @output_) _*]},
       ) do
-        bindings = Term[].with({:edge, :in}, input).with({:edge, :out}, output)
-        defn = Term.of(:module, bindings,
-          {:cell, {:edge, :spec}, spec},
-          Term.morph(node,
-            {1, 0, {:edge, :in}},
-            {1, 2, {:edge, :spec}},
-            {1, 4, {:edge, :out}},
-          ),
-        )
+        edges = Pf::Kit.stack_array(Term, 3)
+        edges << input << output
 
-        D7.mixture(node, defn) { node }
+        # (rewriter (@input -> @spec -> @output) ...)
+        # (rewriter (@input - @spec - @output) ...)
+        if Term.edge?(spec)
+          edges << spec
+        end
+
+        D7.gnd(node, edges)
       end
 
-      # |@ rack.rewriter
-      #
-      # |@pattern
-      # [rewriter (spec_ - @edge_) grammar_*]
-      #
-      # |@key spec rho
-      matchpi %{[rewriter (spec_ - @edge_) body_*]} do
-        edges = [edge]
-        D7.gnd(node, edges, defn: Term.of(:rewriter, spec, edge, body))
-      end
+      matchpiT %{[rewriter (spec_ - dependencies_dict) _*]} do
+        edges = Pf::Kit.stack_array(Term, 8)
 
-      # |@ rack.rewriter
-      #
-      # |@pattern
-      # [rewriter (@spec_ - ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) data_*]
-      matchpi %{[rewriter (@spec_ - ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_)) body_*]} do
-        edges = [spec]
-        edges.concat(itemsrcs.items)
+        pass do
+          # (rewriter (@spec - @x) ...)
+          # (rewriter (@spec - {@:x, @:y, @:z}) ...)
+          if Term.edge?(spec)
+            edges << spec
+          end
 
-        res_edges, restab = Term::Dict.build do |res_edges, restab|
-          pairsrcs.each_entry do |key, value|
-            # Ignore numbers to avoid tricky cases where the resources dict is like
-            # (@a @b @c), which would invalidate the disjointedness of
-            # <src values dict> | <res dict>.
-            next if key.type.number?
+          # (rewriter (noR - @x) ...)
+          if Term.edge?(dependencies, type: :any)
+            edges << spec
+            next
+          end
+
+          # (rewriter (noR - {@:x, @:y, @:z}) ...)
+          dependencies.each_entry do |_, value|
             next unless Term.edge?(value)
 
             edges << value
-
-            res_edges << value
-            restab.with(key, value)
           end
         end
 
-        D7.gnd(node, edges, defn: Term.of(:rewriter, spec, itemsrcs, res_edges, restab, body))
-      end
-
-      # |@ rack.rewriter
-      #
-      # |@pattern
-      # [rewriter (spec_ - srcs_dict) data_*]
-      #
-      # |@key spec rho
-      matchpi %{[rewriter (spec_ - srcs_dict) _*]} do
-        # For example, the following rewriter:
-        #
-        #   (rewriter ((rulesetR) - {@:n @:m})
-        #     {¦ ±n} <> {n: ^(+ n 1)}
-        #     {¦ ±m} <> {n: ^(+ n 1)})
-        #
-        # ... should expand to:
-        #
-        #   (module {@n: @(local n), @m: @(local m)}
-        #     (cell @spec (rulesetR))
-        #     (rewriter (@spec - {n: @(local n), m: @(local m)})
-        #       {¦ ±n} <> {n: ^(+ n 1)}
-        #       {¦ ±m} <> {n: ^(+ n 1)}))
-        #
-
-        bindings, local_srcs = Term::Dict.build do |bindings_commit, local_srcs_commit|
-          srcs.items.each_with_index do |value, key|
-            next unless Term.edge?(value)
-
-            local = Term.of(:edge, {:local, key})
-            bindings_commit.with(local, value)
-            local_srcs_commit.with(key, local)
-          end
-
-          srcs.each_entry(in: Term::Dict.pairspart) do |key, value|
-            next if key.type.number?
-
-            local = Term.of(:edge, {:local, key})
-            bindings_commit.with(local, value)
-            local_srcs_commit.with(key, local)
-          end
-        end
-
-        defn = Term.of(:module, bindings,
-          {:cell, {:edge, :spec}, spec},
-          Term.morph(node,
-            {1, 0, {:edge, :spec}},
-            {1, 2, local_srcs},
-          ),
-        )
-
-        D7.mixture(node, defn) { node }
+        edges.empty? ? D7.inert(node) : D7.gnd(node, edges)
       end
 
       # |@ rack.slot

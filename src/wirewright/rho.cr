@@ -19,7 +19,10 @@ module Ww
     alias RewriterId = UInt64
     alias IRewriteCache = ICache({RewriterId, Term}, Term::Rep)
 
-    defrecord RewriteAttachments, id : RewriterId, cache : IRewriteCache
+    defrecord RewriteAttachments,
+      id : RewriterId,
+      cache : IRewriteCache,
+      ping : ->
 
     # Represents a Rho rewriter.
     struct Rewriter
@@ -50,8 +53,8 @@ module Ww
       #
       # NOTE: This is mostly for internal use, or if you want a `Term::Rep`; prefer
       # `Rho.rewrite` otherwise.
-      def call(input : Term, cache : IRewriteCache) : Term::Rep
-        @fn.call(RewriteAttachments.new(@id, cache), input)
+      def call(input : Term, cache : IRewriteCache, ping : ->) : Term::Rep
+        @fn.call(RewriteAttachments.new(@id, cache, ping), input)
       end
     end
 
@@ -73,25 +76,33 @@ module Ww
 
     # *Noop rewriter*. See `rho.noR`.
     def noR : Rewriter
-      finite { |_, input| Term.rep(input) }
+      finite do |attachments, input|
+        attachments.ping.call
+        Term.rep(input)
+      end
     end
 
     # *Constant rewriter*. See `rho.constR`.
     def constR(rep : Term::Rep) : Rewriter
-      finite { rep }
+      finite do |attachments, _|
+        attachments.ping.call
+        rep
+      end
     end
 
     # *Ruleset rewriter*. See `rho.rulesetR`.
     def rulesetR(ruleset : Ruleset, exh : Bool = false) : Rewriter
       if exh
-        finite { |_, input| exh_rulesetR(ruleset, input) }
+        finite { |attachments, input| exh_rulesetR(attachments, ruleset, input) }
       else
-        finite { |_, input| first_rulesetR(ruleset, input) }
+        finite { |attachments, input| first_rulesetR(attachments, ruleset, input) }
       end
     end
 
-    private def first_rulesetR(ruleset : Ruleset, input : Term) : Term::Rep
+    private def first_rulesetR(attachments, ruleset : Ruleset, input : Term) : Term::Rep
       ruleset.each_candidate(input) do |pattern, rule|
+        attachments.ping.call
+
         case rule
         in Rule::Template
           next unless env = M1.match?(Term[], pattern, input)
@@ -109,7 +120,7 @@ module Ww
       Term.rep(input)
     end
 
-    private def exh_rulesetR(ruleset : Ruleset, input : Term) : Term::Rep
+    private def exh_rulesetR(attachments, ruleset : Ruleset, input : Term) : Term::Rep
       seen = Pf::USet32.new
       workspace = Term.rep(input)
 
@@ -121,6 +132,8 @@ module Ww
           result = nil
 
           ruleset.each_candidate_with_id(offspring) do |(pattern, rule), id|
+            attachments.ping.call
+
             next if seen.includes?(id)
 
             case rule
@@ -177,10 +190,10 @@ module Ww
       end
 
       if leaf?(leafp.passable, leafp.impassable, input)
-        return successor.call(input, attachments.cache)
+        return successor.call(input, attachments.cache, attachments.ping)
       end
 
-      rep = successor.call(input, attachments.cache)
+      rep = successor.call(input, attachments.cache, attachments.ping)
       if Term.changes?(input, after: rep)
         return rep
       end
@@ -211,13 +224,13 @@ module Ww
       end
 
       if leaf?(leafp.passable, leafp.impassable, input)
-        return successor.call(input, attachments.cache)
+        return successor.call(input, attachments.cache, attachments.ping)
       end
 
       assert dict0 = input.as_d?
 
       dict1 = flatten(dict0, part, leafp.guide) do |value|
-        successor.call(value, attachments.cache)
+        successor.call(value, attachments.cache, attachments.ping)
       end
 
       rep = Term.rep_of(dict1)
@@ -242,7 +255,7 @@ module Ww
       end
 
       if leaf?(leafp.passable, leafp.impassable, input)
-        return successor.call(input, attachments.cache)
+        return successor.call(input, attachments.cache, attachments.ping)
       end
 
       assert dict0 = input.as_d?
@@ -253,7 +266,7 @@ module Ww
 
       output = Term.of(dict1)
 
-      rep = successor.call(output, attachments.cache)
+      rep = successor.call(output, attachments.cache, attachments.ping)
 
       if Term.changes?(input, after: rep)
         attachments.cache.put({attachments.id, input}, rep)
@@ -274,7 +287,7 @@ module Ww
         return rep
       end
 
-      rep = successor.call(input, attachments.cache)
+      rep = successor.call(input, attachments.cache, attachments.ping)
 
       if leaf?(leafp.passable, leafp.impassable, input)
         return rep
@@ -297,7 +310,7 @@ module Ww
         return Term.rep(input)
       end
 
-      rep = successor.call(output, attachments.cache)
+      rep = successor.call(output, attachments.cache, attachments.ping)
       attachments.cache.put({attachments.id, input}, rep)
 
       rep
@@ -316,12 +329,12 @@ module Ww
       end
 
       if leaf?(leafp.passable, leafp.impassable, input)
-        return successor.call(input, attachments.cache)
+        return successor.call(input, attachments.cache, attachments.ping)
       end
 
       assert dict0 = input.as_d?
 
-      rep0 = successor.call(input, attachments.cache)
+      rep0 = successor.call(input, attachments.cache, attachments.ping)
       rep1 = Term.flatten(rep0) do |offspring|
         unless dict1 = offspring.as_d?
           next Term.rep(offspring)
@@ -377,7 +390,7 @@ module Ww
           end
         end
 
-        responses0 = successor.call(Term.of(query), attachments.cache)
+        responses0 = successor.call(Term.of(query), attachments.cache, attachments.ping)
         responses1 = responses0.to_compact_readonly_slice do |response|
           response.as_d?.try { |r| r[:m]? }
         end
@@ -404,7 +417,7 @@ module Ww
 
     private def valueR(key, successor, attachments, input : Term) : Term::Rep
       Term.subst(input, {key}) do |value0|
-        successor.call(value0, attachments.cache)
+        successor.call(value0, attachments.cache, attachments.ping)
       end
     end
 
@@ -423,7 +436,9 @@ module Ww
 
     private def exhR(successor, attachments, input : Term, limit : UInt32)
       limit.times do |epoch|
-        rep = successor.call(input, attachments.cache)
+        attachments.ping.call
+
+        rep = successor.call(input, attachments.cache, attachments.ping)
         if rep.empty?
           return rep
         end
@@ -450,10 +465,10 @@ module Ww
     # *Chain rewriter*: see `rho.chainR`.
     def chainR(a : Rewriter, b : Rewriter) : Rewriter
       fn = Rewriter::Fn.new do |attachments, input|
-        rep = a.call(input, attachments.cache)
+        rep = a.call(input, attachments.cache, attachments.ping)
 
         Term.flatten(rep) do |offspring|
-          b.call(offspring, attachments.cache)
+          b.call(offspring, attachments.cache, attachments.ping)
         end
       end
 
@@ -551,7 +566,8 @@ module Ww
       end
     end
 
-    private def rewriter!(spec : Term, data : Term) : Rewriter
+    # Same as `rewriter`, but avoids hitting the rewriter cache.
+    def rewriter!(spec : Term, data : Term) : Rewriter
       Term.case(spec) do
         # |@ rho.noR
         #
@@ -983,10 +999,15 @@ module Ww
     # By default, `Uncached` is used, which means that for such rewriters, caching
     # will be disabled.
     #
-    # ```
-    # ```
-    def rewrite(rewriter : Rewriter, input : Term, *, cache : IRewriteCache = Uncached({RewriterId, Term}, Term::Rep).new) : Term
-      rep = rewriter.call(input, cache)
+    # *ping* is called periodically to allow cooperative scheduling, yields,
+    # timeouts, aborts, etc.
+    def rewrite(
+      rewriter : Rewriter,
+      input : Term, *,
+      cache : IRewriteCache = Uncached({RewriterId, Term}, Term::Rep).new,
+      ping = -> { },
+    ) : Term
+      rep = rewriter.call(input, cache, ping)
 
       Term.collapse(rep)
     end

@@ -1,3 +1,7 @@
+module Ww::Rack
+  alias Propose = D7::Hypergraph, Array(D7::Patch) ->
+end
+
 # A high-level API for `Rack`.
 #
 # High-level usage:
@@ -139,6 +143,7 @@ class Ww::Rack::Automaton
     @extrinsic_state = Extrinsics.state(@epoch)
     @websocket_state = WebSocket.state(@epoch)
     @assembler_state = Assembler.state
+    @rewriter_state = Rewriter.state(@epoch)
   end
 
   # Constructs an automaton using the standard classifier `Rack.clf`.
@@ -178,7 +183,7 @@ class Ww::Rack::Automaton
   def pending? : Bool
     Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) ||
       Database.pending?(@database_state) || WebSocket.pending?(@websocket_state) ||
-      FS.pending?(@fs_state)
+      FS.pending?(@fs_state) || Rewriter.pending?(@rewriter_state)
   end
 
   # FIXME: this method is a mess
@@ -218,19 +223,22 @@ class Ww::Rack::Automaton
           WebSocket.step(@websocket_state) do |web_socket|
             Supervisor.step do |supervisor|
               FS.step(@fs_state) do |fs|
-                D7.step(@parser, subframes.last) do |hg|
-                  prepass.call(hg) do |hg|
-                    proposals = [] of D7::Patch
+                Rewriter.step(@rewriter_state) do |rewriter|
+                  D7.step(@parser, subframes.last) do |hg|
+                    prepass.call(hg) do |hg|
+                      proposals = [] of D7::Patch
 
-                    extrinsics.propose(hg, proposals)
-                    parser.propose(hg, proposals)
-                    database.propose(hg, proposals)
-                    web_socket.propose(hg, proposals)
-                    supervisor.propose(hg, proposals)
-                    fs.propose(hg, proposals)
-                    Rack.propose(hg, proposals)
+                      extrinsics.propose(hg, proposals)
+                      parser.propose(hg, proposals)
+                      database.propose(hg, proposals)
+                      web_socket.propose(hg, proposals)
+                      supervisor.propose(hg, proposals)
+                      fs.propose(hg, proposals)
+                      rewriter.call(hg, proposals)
+                      Rack.propose(hg, proposals)
 
-                    D7::Regime.merge(hg, proposals)
+                      D7::Regime.merge(hg, proposals)
+                    end
                   end
                 end
               end

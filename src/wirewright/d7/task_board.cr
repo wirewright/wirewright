@@ -2,8 +2,10 @@
 #
 # TODO: Write more meaningful docs!
 class D7::TaskBoard(Alarm, Task, Result)
+  Log = ::Log.for(self)
+
   def initialize(@alarm : Alarm, &@fn : Task, Ping -> Result)
-    @clock = Atomic(UInt64).new(0)
+    @clock = Atomic(UInt64).new(1)
     @generation = 0u64
     @demand = {} of Task => UInt64
     @supply = Pf::Map(Task, Result).new
@@ -16,7 +18,7 @@ class D7::TaskBoard(Alarm, Task, Result)
     @callstack = CallStack.empty
   end
 
-  private class OutOfTime < Exception
+  private class TimedOut < Exception
     @callstack = CallStack.empty
   end
 
@@ -58,6 +60,8 @@ class D7::TaskBoard(Alarm, Task, Result)
       end
     end
 
+    Log.trace { "spawn task #{task.class}" }
+
     spawn(name: "Ww::D7::TaskBoard task") do
       result = @fn.call(task, ping)
 
@@ -90,13 +94,15 @@ class D7::TaskBoard(Alarm, Task, Result)
       now = Time.instant
       duration = now - start
       if duration >= deadline
-        raise OutOfTime.new
+        Log.trace { "task #{task.class} timeout duration=#{duration.total_microseconds}µs" }
+        raise TimedOut.new
       end
     end
 
     begin
       return @fn.call(task, ping)
-    rescue OutOfTime
+    rescue TimedOut
+      Log.trace { "task #{task.class} timed out" }
     end
 
     publish(task, throttle)
