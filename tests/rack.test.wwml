@@ -5427,13 +5427,15 @@
   ;; Many with separator (trailing: true)
   (rack
     (frame
-      (parser (@input -> xs -> @output)
+      (parser (@input -> xs -> @output / @error)
         (xs lst←(many num "," trailing: true)) => ^lst
         (num (form "[0-9]+" nat)))
       (queue (@front @back)
         ("" "," "1" "1," "1,2" "1,2," "1,2,3" "1,2,3,"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "") (cell @output))
@@ -5458,13 +5460,15 @@
   ;; Basic direct left recursion (same head)
   (rack
     (frame
-      (parser (@input -> expr -> @output)
+      (parser (@input -> expr -> @output / @error)
         (expr (any (seq a←expr "+" b←num) num))
         (num (form "[0-9]+" nat)))
       (queue (@front @back)
         ("1" "1+2" "1+2+3" "1+2+3+4"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "1") (cell @output))
@@ -5491,6 +5495,8 @@
          "1-2-3-4-5-6-7-8-9" "1-23-4-56-78-9"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "1") (cell @output))
@@ -5530,6 +5536,8 @@
          "5+((1+2)+((3)+4))"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "1") (cell @output))
@@ -5562,7 +5570,7 @@
   ;; Mutual recursion with multiple growth opportunities
   (rack
     (frame
-      (parser (@input -> expr -> @output)
+      (parser (@input -> expr -> @output / @error)
         (expr a←expr "+" b←term) => (+ ^a ^b)
         (expr term)
         (term a←term "*" b←factor) => (* ^a ^b)
@@ -5576,6 +5584,8 @@
          "((1+2)*(3+(4*5+6))*7)+8"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "0") (cell @output))
@@ -5618,7 +5628,7 @@
   ;; Recursion beneath repetition
   (rack
     (frame
-      (parser (@input -> list -> @output)
+      (parser (@input -> list -> @output / @error)
         (list x←expr xs←(many expr' min: 0)) => (^x ^*xs)
         (expr' ws x←expr) => ^x
         (expr a←expr "+" b←num) => (+ ^a ^b)
@@ -5634,6 +5644,8 @@
          "" "1+" "+1" "1 +2" "1+ 2" "1 + 2" "1\t+2" "1+\n2"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "0") (cell @output))
@@ -5682,17 +5694,20 @@
     (frame/tail (cell @input) (cell @output)) ;; failure
     (frame/tail (cell @input "1+\n2") (cell @output))
     (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @error) (cell @input) (cell @output))
     end)
 
   ;; Nullable left recursion
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a l←(maybe a) r←"a"))
       (queue (@front @back)
         ("" "a" "aa" "aaa" "aaaa" "aaaaa" "aaaaaa"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "") (cell @output))
@@ -5715,7 +5730,7 @@
   ;; Ambiguous growth
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a x←a "aa") => (two ^x)
         (a x←a "a") => (one ^x)
         (a "a") => leaf)
@@ -5723,6 +5738,8 @@
         ("" "a" "aa" "aaa" "aaaa" "aaaaa" "aaaaaa"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "") (cell @output))
@@ -5745,7 +5762,7 @@
   ;; Left recursion with optional many
   (rack
     (frame
-      (parser (@input -> expr -> @output)
+      (parser (@input -> expr -> @output / @error)
         (expr l←(maybe expr) "+" r←num) => (+ ^l ^r)
         (expr num)
         (num (form "[0-9]+" nat)))
@@ -5756,6 +5773,8 @@
          "" "+" "1+" "++1" "1++2" "+1+" "1+2+" "1+2+3+"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "1") (cell @output))
@@ -5802,17 +5821,20 @@
     (frame/tail (cell @input) (cell @output)) ;; failure
     (frame/tail (cell @input "1+2+3+") (cell @output))
     (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @error) (cell @input) (cell @output))
     end)
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a l←a "") => (N ^l)
         (a "x") => "x")
       (queue (@front @back)
         ("" "x" "xx" "xxx"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "") (cell @output))
@@ -5822,18 +5844,21 @@
     (frame/tail (cell @input "xx") (cell @output))
     (frame/tail (cell @input) (cell @output)) ;; failure due to cyclic production, we simply shouldn't crash or SEGFAULT!
     (frame/tail (cell @input "xxx") (cell @output))
-    (frame/tail (cell @input) (cell @output))
+    (frame/tail (cell @input) (cell @output)) ;; failure
+    (frame/tail (cell @error) (cell @input) (cell @output))
     end)
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a l←a "x") => (N ^l)
         (a "") => empty)
       (queue (@front @back)
         ("" "x" "xx" "xxx"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "") (cell @output))
@@ -5851,8 +5876,9 @@
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a a))
+      (cell @error)
       (cell @input "abc")
       (cell @output))
     (frame/tail
@@ -5862,8 +5888,9 @@
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a a ""))
+      (cell @error)
       (cell @input "abc")
       (cell @output))
     (frame/tail
@@ -5873,8 +5900,9 @@
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a "" a))
+      (cell @error)
       (cell @input "abc")
       (cell @output))
     (frame/tail
@@ -5884,9 +5912,10 @@
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a b)
         (b a))
+      (cell @error)
       (cell @input "abc")
       (cell @output))
     (frame/tail
@@ -5896,11 +5925,12 @@
 
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a b)
         (b c "" d)
         (c a)
         (d b))
+      (cell @error)
       (cell @input "abc")
       (cell @output))
     (frame/tail
@@ -5911,7 +5941,7 @@
   ;; Another degenerate grammar
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a b)
         (b a)
         (b "x") => x)
@@ -5919,6 +5949,8 @@
          ("" "x" "xx" "xxx"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail
@@ -5945,12 +5977,16 @@
     (frame/tail
       (cell @input)
       (cell @output)) ;; failure
+    (frame/tail
+      (cell @error)
+      (cell @input)
+      (cell @output))
     end)
 
   ;; More indirect left recursion
   (rack
     (frame
-      (parser (@input -> a -> @output)
+      (parser (@input -> a -> @output / @error)
         (a l←b "a") => (a ^l a)
         (a "x") => x
         (b l←a "b") => (b ^l b)
@@ -5963,6 +5999,8 @@
           "xbabababababababababababababababababababababababababababababababababababababababababababababababababa"))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     (frame/tail (cell @input "x") (cell @output))
@@ -6068,7 +6106,7 @@
 
   (rack
     (frame
-      (parser (@input -> json -> @output)
+      (parser (@input -> json -> @output / @error)
         (json element)
         (value object)
         (value array)
@@ -6129,6 +6167,8 @@
          ⎡{"a": 1, "a": 2}⎤ ⎡{"a": 1, "b": null, "c": 2}⎤))
       (feed @front @input)
       (discard @output)
+      (discard @error)
+      (cell @error)
       (cell @input)
       (cell @output))
     ;; Literals

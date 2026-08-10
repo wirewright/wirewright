@@ -163,8 +163,7 @@ module Ww::Rack::Parser
         D7.patches(targets, {2, result}),
       )
     in ParseKit::Err
-      # Target cell(s) are already empty, we don't have to clear them.
-      D7.patch(source.node, {2, nil})
+      # If there's a parse error and it has nowhere to go we clog the input.
     end
   end
 
