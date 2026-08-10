@@ -516,6 +516,10 @@ module Ww
         yield Term.of(key.repr), Term.of(value)
       end
 
+      each_pair { |key, value| yield key, value }
+    end
+
+    def each_pair(& : Term, Term ->) : Nil
       TermTrie.each(@ttrie) do |key, value|
         yield key, value
       end
@@ -588,7 +592,7 @@ module Ww
     # Yields each pairspart entry, out of order.
     @[Dncast]
     def each_entry(*, in part : Dict::Part::Pairs, & : Term, Term ->)
-      pairspart.each_entry { |key, value| yield key, value }
+      each_pair { |key, value| yield key, value }
     end
 
     # Yields each pairspart entry, ordered lexicographically.
