@@ -3,21 +3,27 @@ module Ww::Rack::Parser
 
   # :nodoc:
   defcase State,
+    errors : Set(Task),
     grammars : SyncHash(Term, ParseKit::GrammarF),
     tasks : D7::TaskBoard(Automaton::Epoch, Task, Result)
+
+  class State
+    setter errors
+  end
 
   defrecord Task, source : Term::Str, ruleset : Term, top : Term::Sym
 
   alias Result = Term | ParseKit::Err
 
   def state(epoch : Automaton::Epoch) : State
+    errors = Set(Task).new
     grammars = SyncHash(Term, ParseKit::GrammarF).new
 
     tasks = D7::TaskBoard(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
       execute(grammars, task, ping)
     end
 
-    State.new(grammars, tasks)
+    State.new(errors, grammars, tasks)
   end
 
   private def execute(grammars, task : Task, ping) : Result
@@ -37,15 +43,19 @@ module Ww::Rack::Parser
 
   defrecord StepContext,
     rulesets : Set(Term),
+    errors : Set(Task),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result)
 
   def step(state : State, & : Proposer -> T) : T forall T
     seen_rulesets = Set(Term).new
+    seen_errors = Set(Task).new
 
     result = state.tasks.rdv do |tasks_rdv|
-      ctx = StepContext.new(seen_rulesets, tasks_rdv)
+      ctx = StepContext.new(seen_rulesets, seen_errors, tasks_rdv)
       yield Proposer.new(state, ctx)
     end
+
+    state.errors = seen_errors
 
     # Tasks cannot garbage collect grammars so we have to do it ourselves. Only
     # do it if there's a chance something changed, though (in terms of grammars).
@@ -153,6 +163,15 @@ module Ww::Rack::Parser
     return if targets.empty?
 
     task = Task.new(source.value, variant.ruleset, variant.top)
+
+    # Instead of rescheduling the task over and over in case of an error,
+    # when we're clogged, simply remember the task is an error and wait
+    # until the input cell is unclogged.
+    if task.in?(state.errors)
+      ctx.errors << task
+      return
+    end
+
     return unless result = checkout?(ctx, task)
 
     # Clear source and set target(s).
@@ -164,6 +183,8 @@ module Ww::Rack::Parser
       )
     in ParseKit::Err
       # If there's a parse error and it has nowhere to go we clog the input.
+      ctx.errors << task
+      nil
     end
   end
 
