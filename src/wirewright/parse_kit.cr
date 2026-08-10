@@ -62,7 +62,7 @@ module Ww::ParseKit
   defcase Expect, member : Parselet, detail : String?
 
   def parselet(term : Term, observed : Bool) : Parselet
-    Term.case(term, block_type: :proc) do
+    Term.case(term, block_type: {:proc, observed : Bool}) do
       # |@ parsekit.parselet.stringp
       #
       # |@pattern

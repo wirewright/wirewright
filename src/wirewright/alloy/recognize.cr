@@ -147,8 +147,10 @@ module Ww::Alloy
     Sheet.new(document)
   end
 
+  # *filter* is used to distinguish between literal nodes (e.g. `(foo 1 2 3)`)
+  # and components.
   private def recognize(template : Term, filter : Term -> Bool) : Template
-    Term.case(template, block_type: :proc) do
+    Term.case(template, block_type: {:proc, filter : (Term -> Bool)}) do
       # |@ alloy.var
       #
       # |@pattern

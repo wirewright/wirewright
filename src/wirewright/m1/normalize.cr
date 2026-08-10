@@ -789,7 +789,7 @@ module Ww::M1
   def normalize(prod : Π::EntryKV) : Term
     key, value = prod.key, prod.value
 
-    Term.case(value, engine: M0, block_type: :proc) do
+    Term.case(value, engine: M0, block_type: {:proc, key : Term}) do
       # |@ m1.operator.entry.optional
       #
       # |@pattern

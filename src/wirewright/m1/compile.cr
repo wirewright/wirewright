@@ -3,7 +3,7 @@ module Ww::M1
   def compile(prod : Π::ItemOrd(Term)) : Op::Item::Any
     ordsrc, item = prod.ordsrc, prod.item
 
-    Term.case(item, engine: M0, block_type: :proc) do
+    Term.case(item, engine: M0, block_type: {:proc, ordsrc : (-> UInt32)}) do
       matchpi %{[%'%singular successor_]}, cue: :"%singular" do
         Op::Item::Singular.new(compile(Π.pattern(successor)))
       end

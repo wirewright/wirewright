@@ -644,7 +644,13 @@ module Ww::Term::Case
           raise "empty case not allowed"
         end
 
-        unless block_type == :proc || block_type == :block
+        proc_imports = [] of ::NoReturn
+
+        if block_type.is_a?(TupleLiteral) && block_type[0] == :proc
+          proc_imports = block_type[1..]
+          block_type = :proc
+        elsif block_type == :proc || block_type == :block
+        else
           block_type.raise "block_type must be :proc or :block"
         end
       %}\
@@ -683,9 +689,9 @@ module Ww::Term::Case
           pass do
           {% elsif block_type == :proc %}
             {% if matchee.is_a?(Var) %}
-          (->(%env : Term::Dict, {{matchee.id}} : Term) do # Shadow the env to avoid capturing it
+          (->(%env : Term::Dict, {{matchee.id}} : Term, {{proc_imports.splat}}) do # Shadow the env to avoid capturing it
             {% else %}
-          (->(%env : Term::Dict) do
+          (->(%env : Term::Dict, {{proc_imports.splat}}) do
             {% end %}
             pass do
           {% end %}
@@ -702,9 +708,9 @@ module Ww::Term::Case
           {% elsif block_type == :proc %}
             end
             {% if matchee.is_a?(Var) %}
-          end).call(%env, %matchee)
+          end).call(%env, %matchee, {{proc_imports.map(&.var).splat}})
             {% else %}
-          end).call(%env)
+          end).call(%env, {{proc_imports.map(&.var).splat}})
             {% end %}
           {% end %}
         {% end %}
