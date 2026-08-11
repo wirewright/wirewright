@@ -157,7 +157,7 @@
          "The following massive rewriter is where the \"symbolic physics\" of the input \
           field is described. A bit less pretentiously, these are the rewrite rules that \
           are responsible for the input's behavior.")
-       (rewriter ((rulesetR exh: true) <-> {@:state @:unit @:desc @:node @:input @:mouse @:motions})
+       (rewriter ((rulesetR exh: true) - {@:state @:unit @:desc @:node @:input @:mouse @:motions})
          ;; Input focused.
          {¦ input: {¦ focus: true} node: {¦ -focus_}}
            <> {focus: true}
@@ -464,7 +464,7 @@
           is a severely capped exhR. But even with limit: 3 there's a lot of opportunities \
           for the rules to apply. exhR is needed here to make sure we do the clamps during \
           just one tick; we can't spread it over multiple ticks due to UX concerns.")
-       (rewriter ((exhR (rulesetR exh: true) limit: 3) <-> {@:mouse @:thumb-dt @:thumb-h @:thumb-hover @:track-goal @:track-h @:scroll-hover @:node})
+       (rewriter ((exhR (rulesetR exh: true) limit: 3) - {@:mouse @:thumb-dt @:thumb-h @:thumb-hover @:track-goal @:track-h @:scroll-hover @:node})
          ;; Sync visual hover with logical hover: hover.
          {¦ thumb-hover mouse: [mouse] node: {¦ -hover_}}
            <> {hover: true}
@@ -536,7 +536,7 @@
           have simpler rules but more rewrite ticks. It's a trade-off seen all throughout \
           Wirewright's rewrite part, including the very D7/Rack design itself.")
        (rewriter ((exhR (rulesetR exh: true) limit: 3)
-                   <-> {@:show @:axis @:content-size @:input @:mouse @:thumb-offset
+                   - {@:show @:axis @:content-size @:input @:mouse @:thumb-offset
                         @:thumb-size @:track-size @:view-hover @:view-scroll
                         @:view-size @:view-aim @:ref-offset})
            ;; Detect changes to view offset: empty -> nonempty.
@@ -588,7 +588,7 @@
        (part (@desc @view-aim) [reflection {¦ aim-y: ±view-aim}])
        (part (@desc @view-hover) [reflection {¦ hit-hover: view-hover_}])
        (part (@desc @content-size) [reflection {¦ content-h: ±content-size}])
-       (slot open: true
+       (slot
          (Scroll
            (bar @thumb-offset @thumb-size @track-size @show)
            (view @view-scroll @view-size @view-hover @content-size @view-aim)
