@@ -3637,6 +3637,58 @@
          (cell @y (e 6 . 2))⟩)
     end)
 
+  (rack
+    (frame
+      (rewriter ((rulesetR exh: true) - (@a @b @:c @:d))
+        [±n _] <> {n: ^(+ n 1)}
+        [_ ±n] <> {n: ^(+ n 1)}
+        {¦ c: ±n} <> {n: ^(+ n 1)}
+        {¦ d: ±n -▢_} <> {n: ^(+ n 1), ▢: true}
+        {¦ d_: 403 -▢_} <> {(d): (), ▢: true}
+        {¦ -d_ -▢_} <> {d: 400, ▢: true})
+
+      (cell @a 100)
+      (cell @b 200)
+      (cell @c 300)
+      (cell @d 400))
+
+    (frame/tail
+      (cell @a 101)
+      (cell @b 201)
+      (cell @c 301)
+      (cell @d 401))
+
+    (frame/tail
+      (cell @a 102)
+      (cell @b 202)
+      (cell @c 302)
+      (cell @d 402))
+
+    (frame/tail
+      (cell @a 103)
+      (cell @b 203)
+      (cell @c 303)
+      (cell @d 403))
+
+    (frame/tail
+      (cell @a 104)
+      (cell @b 204)
+      (cell @c 304)
+      (cell @d))
+
+    (frame/tail
+      (cell @a 105)
+      (cell @b 205)
+      (cell @c 305)
+      (cell @d 400))
+
+    (frame/tail
+      (cell @a 106)
+      (cell @b 206)
+      (cell @c 306)
+      (cell @d 401)))
+    ;; ...
+
   ;; ascR: elementary
   (rack
     (frame
