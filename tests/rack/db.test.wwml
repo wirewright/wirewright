@@ -1,6 +1,4 @@
-
-
-;; db
+;; CRUD
 (rack
   (frame
     (cell @fs-request (delete file if exists "/tmp/wirewright-db0-people.db"))
