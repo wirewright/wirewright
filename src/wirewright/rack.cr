@@ -73,6 +73,47 @@ module Ww::Rack
 
     pools.single?
   end
+
+  defrecord FillTemplateTarget, key : Term, value : Term?, node : D7::Node, smart: true
+
+  # NOTE: This function does not implement rollback or transactionality; if it returns
+  # `nil`, all block yields prior must be reverted *by the caller*.
+  def fill?(hg : D7::Hypergraph, addr : D7::NodeAddr, template : Term::Dict, & : FillTemplateTarget ->) : Term::Dict?
+    template.transaction do |commit|
+      template.items.each_with_index do |item, index|
+        next unless Term.edge?(item)
+
+        abs_target = hg.resolve(addr, item)
+
+        # We can't leave holes in the itemspart, so back off if any cell from
+        # there is missing.
+        return unless target_cell = Rack.cell?(hg, abs_target)
+        return unless target_value = target_cell.value?
+
+        yield FillTemplateTarget.new(Term.of(index), target_value, target_cell.node)
+
+        commit.with(index, target_value)
+      end
+
+      template.each_entry(in: Term::Dict.pairspart) do |key, value|
+        next unless Term.edge?(value)
+
+        abs_target = hg.resolve(addr, value)
+
+        unless target_cell = Rack.cell?(hg, abs_target)
+          commit.without(key) # Skip if cell missing
+          next
+        end
+
+        target_value = target_cell.value?
+        yield FillTemplateTarget.new(key, target_value, target_cell.node)
+
+        # Omit (target_value : Nil) if cell value is missing, but still count as
+        # a target cell so that the rewriter can write there if necessary.
+        commit.with(key, target_value)
+      end
+    end
+  end
 end
 
 require "./rack/classifier"
@@ -81,6 +122,7 @@ require "./rack/part"
 require "./rack/tspace"
 require "./rack/assembler"
 require "./rack/pass"
+require "./rack/backsys"
 require "./rack/rewriter"
 require "./rack/parser"
 require "./rack/extrinsics"

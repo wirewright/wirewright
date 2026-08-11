@@ -4,7 +4,7 @@ module Ww::Rack::Rewriter
 
   # :nodoc:
   defcase State,
-    variants : GenerationalCache(Term, VariantQ),
+    variantsQ : GenerationalCache(Term, VariantQ),
     rewriters : GenerationalCache({Term, Term}, Rho::Rewriter),
     tasks : D7::TaskBoard(Automaton::Epoch, Task, Result)
 
@@ -15,12 +15,12 @@ module Ww::Rack::Rewriter
   alias Result = Term
 
   def state(epoch : Automaton::Epoch) : State
-    variants = GenerationalCache(Term, VariantQ).new
+    variantsQ = GenerationalCache(Term, VariantQ).new
     rewriters = GenerationalCache({Term, Term}, Rho::Rewriter).new
     tasks = D7::TaskBoard(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
       execute(task, ping)
     end
-    State.new(variants, rewriters, tasks)
+    State.new(variantsQ, rewriters, tasks)
   end
 
   private def execute(task : Task, ping) : Result
@@ -32,7 +32,7 @@ module Ww::Rack::Rewriter
   end
 
   def step(state : State, & : Propose -> T) : T forall T
-    state.variants.epoch do
+    state.variantsQ.epoch do
       state.rewriters.epoch do
         state.tasks.rdv do |tasks_rdv|
           propose = ->(hg : D7::Hypergraph, proposals : Array(D7::Patch)) do
@@ -47,9 +47,9 @@ module Ww::Rack::Rewriter
 
   private def propose(state, tasks, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :rewriter) do |node|
-      next unless variant_quote = variant_quote?(state.variants, node.term)
+      next unless variantQ = variantQ?(state.variantsQ, node.term)
 
-      variant = unquote(hg, node, variant_quote)
+      variant = unquote(hg, node, variantQ)
       step(state, tasks, hg, node, variant)
     end
   end
@@ -81,22 +81,22 @@ module Ww::Rack::Rewriter
   # :nodoc:
   defrecord RegimeMultiQ,
     spec : Rho::Rewriter | SpecQ,
-    targets : Term::Dict
+    template : Term::Dict
 
   # :nodoc:
   defrecord SpecQ, edge : Term, data : Term
 
-  private def variant_quote?(variants : ICache, term : Term) : VariantQ?
-    if variant = variants.get?(term)
+  private def variantQ?(variantsQ : ICache, term : Term) : VariantQ?
+    if variant = variantsQ.get?(term)
       return variant
     end
 
-    return unless variant = variant_quote?(term)
+    return unless variant = variantQ?(term)
 
-    variants.put(term, variant)
+    variantsQ.put(term, variant)
   end
 
-  private def variant_quote?(term : Term) : VariantQ?
+  private def variantQ?(term : Term) : VariantQ?
     # NOTE: Specs being edges (the SpecQ branch) is relatively uncommon in
     # practice. Most commonly the spec is written inline, e.g.
     #   (rewriter (@x -> ⏏noR⏏ -> @y) ...)
@@ -116,9 +116,9 @@ module Ww::Rack::Rewriter
         RegimeSingleQ.new(spec, target)
       end
 
-      matchpiT %{[rewriter (specQ_ - targets_dict) data_*]} do
+      matchpiT %{[rewriter (specQ_ - template_dict) data_*]} do
         spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
-        RegimeMultiQ.new(spec, targets)
+        RegimeMultiQ.new(spec, template)
       end
 
       otherwise { }
@@ -147,7 +147,7 @@ module Ww::Rack::Rewriter
 
   private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : RegimeMultiQ) : RegimeMulti
     spec = unquote(hg, node, quote.spec)
-    RegimeMulti.new(spec, quote.targets)
+    RegimeMulti.new(spec, quote.template)
   end
 
   private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : Rho::Rewriter) : Rho::Rewriter
@@ -182,7 +182,7 @@ module Ww::Rack::Rewriter
   # :nodoc:
   defrecord RegimeMulti,
     spec : Rho::Rewriter | Spec,
-    targets : Term::Dict
+    template : Term::Dict
 
   # :nodoc:
   defrecord Spec, edge : D7::AbsEdge, data : Term
@@ -279,54 +279,25 @@ module Ww::Rack::Rewriter
   private def step(state, tasks, hg, node : D7::Node, variant : RegimeMulti) : D7::Patch?
     return unless rewriter = rewriter?(state.rewriters, hg, variant.spec)
 
-    target_cells = Pf::Kit.stack_array({Term, D7::Node}, 8)
+    targets = Pf::Kit.stack_array(FillTemplateTarget)
 
-    input_dict = variant.targets.transaction do |commit|
-      variant.targets.items.each_with_index do |item, index|
-        next unless Term.edge?(item)
-
-        target = hg.resolve(node.addr, item)
-
-        # We can't leave holes in the itemspart, so back off if any cell from
-        # there is missing.
-        return unless target_cell = Rack.cell?(hg, target)
-        return unless target_value = target_cell.value?
-
-        target_cells << {Term.of(index), target_cell.node}
-
-        commit.with(index, target_value)
-      end
-
-      variant.targets.each_entry(in: Term::Dict.pairspart) do |key, value|
-        next unless Term.edge?(value)
-
-        target = hg.resolve(node.addr, value)
-
-        unless target_cell = Rack.cell?(hg, target)
-          commit.without(key) # Skip if cell missing
-          next
-        end
-
-        target_value = target_cell.value?
-        target_cells << {key, target_cell.node}
-
-        # Omit (target_value : Nil) if cell value is missing, but still count as
-        # a target cell so that the rewriter can write there if necessary.
-        commit.with(key, target_value)
-      end
+    input = Rack.fill?(hg, node.addr, variant.template) do |target|
+      targets << target
     end
 
-    input = Term.of(input_dict)
+    return unless input
 
     # We can't do anything if the rewriter damaged the itemspart or the input
     # term itself beyond recognition.
-    return unless output = output?(tasks, rewriter, input).as_d?
-    return unless variant.targets.itemsize == output.itemsize
-    return if input == output
+    return unless output = output?(tasks, rewriter, Term.of(input)).as_d?
+    return unless input.itemsize == output.itemsize
 
     # "Destructure" the rewriter's output and fill in the corresponding cells.
-    D7.patches(target_cells) do |(key, node)|
-      D7.patch(node, {2, output[key]?})
+    D7.patches(targets) do |target|
+      value1 = output[target.key]?
+      next if target.value? == value1
+
+      D7.patch(target.node, {2, value1})
     end
   end
 end

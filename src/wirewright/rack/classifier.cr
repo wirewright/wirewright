@@ -1071,7 +1071,7 @@ module Ww::Rack
 
         edges = Set(Term).new
 
-        pairsrcs = Term::Dict.build do |commit|
+        template = Term::Dict.build do |commit|
           keys.each do |key|
             edge = Term.of(:edge, key)
             edges << edge
@@ -1079,50 +1079,108 @@ module Ww::Rack
           end
         end
 
-        D7.gnd(node, edges, defn: Term.of(:backsys, Term[], edges, pairsrcs, backmaps))
+        # [backsys ⏏ [backmap _ _] _*]
+        defn = Term.of(node.replace(1...1, Term.rep_of(template)))
+
+        D7.gnd(node, edges, defn: defn)
       end
 
       # |@ rack.backsys
       #
       # |@pattern
-      # [backsys @src_ backmaps_*]
-      matchpi %{[backsys @src_ backmaps_*]} do
-        offspring = Term::Dict.build do |commit|
-          commit << :backsys << {src}
-
-          backmaps.items.each do |backmap|
-            Term.matchpi?(backmap, %{[backmap pattern_ backspec_]}) do
-              commit << Term.of(:backmap, {pattern}, backspec)
-            end
-          end
-        end
-
-        D7.mixture(node, offspring) { node }
+      # [backsys @target_ backmaps_*]
+      #
+      # |@key target rack.edge
+      # The edge of the cell whose term should be rewritten.
+      #
+      # |@key backmaps
+      # Zero or more *backmaps*.
+      #
+      # |@block
+      # Rewrites the term at a *target* cell using a backsystem.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @n 100)
+      # (backsys @n  ±n <> {n: ^(+ n 1)})
+      #
+      # ;; Frame 1
+      #
+      # (cell @n 101)
+      # (backsys @n  ±n <> {n: ^(+ n 1)})
+      #
+      # ;; Frame 2
+      #
+      # (cell @n 102)
+      # (backsys @n  ±n <> {n: ^(+ n 1)})
+      #
+      # ;; ...
+      # ```
+      matchpi %{[backsys @target_ _*]} do
+        D7.gnd(node, target)
       end
 
       # |@ rack.backsys
       #
       # |@pattern
-      # [backsys ((%group itemsrcs_ (%past @_ min: 0)) ¦ pairsrcs_) backmaps_*]
-      matchpi %{[backsys ((%group srcs_ (%past @_ min: 0)) ¦ res_) backmaps_*]} do
-        edges = [] of Term
-        edges.concat(srcs.items)
+      # [backsys template_dict backmaps_*]
+      #
+      # |@key template
+      # The template dict works the same as in `rack.rewriter`: edge entry values are
+      # replaced by the value of the corresponding edge. Edges in the itemspart are
+      # required and cannot be erased by the backmap (this will leave "holes" in
+      # the itemspart which the backsys node doesn't know how to handle). Edges in
+      # the pairspart can be removed, which in turn clears the corresponding cell.
+      #
+      # |@key backmaps
+      # Zero or more *backmaps*.
+      #
+      # |@block
+      # Relates terms as described by *template* using a backsystem.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @a 1)
+      # (cell @b 1)
+      # (cell @c 1)
+      # (cell @d 1)
+      #
+      # (backsys (@a @b @:c @:d)
+      #   {¦ ±a} <> {a: ^(+ a 1)}
+      #   {¦ ±b} <> {b: ^(+ b 1)}
+      #   {¦ ±c} <> {c: ^(+ c 1)}
+      #   {¦ ±d} <> {d: ^(+ d 1)})
+      #
+      # ;; Frame 1
+      #
+      # (cell @a 2)
+      # (cell @b 2)
+      # (cell @c 2)
+      # (cell @d 2)
+      #
+      # ;; Frame 2
+      #
+      # (cell @a 3)
+      # (cell @b 3)
+      # (cell @c 3)
+      # (cell @d 3)
+      #
+      # ;; ...
+      # ```
+      matchpiT %{[backsys template_dict _*]} do
+        edges = Set(Term).new
 
-        res_edges, restab = Term::Dict.build do |res_edges, restab|
-          res.each_entry do |key, value|
-            # Ignore numbers to avoid tricky cases where the resources dict is like
-            # (@a @b @c), which would invalidate the disjointedness of
-            # <src values dict> | <res dict>.
-            next if key.type.number?
-            next unless Term.edge?(value)
+        template.each_entry do |key, value|
+          next unless Term.edge?(value)
 
-            edges << value
-            res_edges << value
-            restab.with(key, value)
-          end
+          edges << value
         end
 
-        D7.gnd(node, edges, defn: Term.of(:backsys, srcs, res_edges, restab, backmaps))
+        D7.gnd(node, edges)
       end
 
       # |@ rack.queue

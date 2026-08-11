@@ -144,6 +144,7 @@ class Ww::Rack::Automaton
     @websocket_state = WebSocket.state(@epoch)
     @assembler_state = Assembler.state
     @rewriter_state = Rewriter.state(@epoch)
+    @backsys_state = Backsys.state
   end
 
   # Constructs an automaton using the standard classifier `Rack.clf`.
@@ -224,20 +225,23 @@ class Ww::Rack::Automaton
             Supervisor.step do |supervisor|
               FS.step(@fs_state) do |fs|
                 Rewriter.step(@rewriter_state) do |rewriter|
-                  D7.step(@parser, subframes.last) do |hg|
-                    prepass.call(hg) do |hg|
-                      proposals = [] of D7::Patch
+                  Backsys.step(@backsys_state) do |backsys|
+                    D7.step(@parser, subframes.last) do |hg|
+                      prepass.call(hg) do |hg|
+                        proposals = [] of D7::Patch
 
-                      extrinsics.propose(hg, proposals)
-                      parser.propose(hg, proposals)
-                      database.propose(hg, proposals)
-                      web_socket.propose(hg, proposals)
-                      supervisor.propose(hg, proposals)
-                      fs.propose(hg, proposals)
-                      rewriter.call(hg, proposals)
-                      Rack.propose(hg, proposals)
+                        extrinsics.propose(hg, proposals)
+                        parser.propose(hg, proposals)
+                        database.propose(hg, proposals)
+                        web_socket.propose(hg, proposals)
+                        supervisor.propose(hg, proposals)
+                        fs.propose(hg, proposals)
+                        rewriter.call(hg, proposals)
+                        backsys.call(hg, proposals)
+                        Rack.propose(hg, proposals)
 
-                      D7::Regime.merge(hg, proposals)
+                        D7::Regime.merge(hg, proposals)
+                      end
                     end
                   end
                 end

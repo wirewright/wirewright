@@ -210,10 +210,12 @@ module Ww::D7
   #
   # Conflicting changes from later patches (*objects*-wise, with greater index)
   # win over former ones.
-  def patches(objects : Enumerable(T), & : T, Int32 -> Patch) : Patch forall T
+  def patches(objects : Enumerable(T), & : T, Int32 -> Patch?) : Patch forall T
     patch = Patch.new
     objects.each_with_index do |object, index|
-      patch = patch.merge(yield object, index)
+      contrib = yield object, index
+      next if contrib.nil?
+      patch = patch.merge(contrib)
     end
     patch
   end
