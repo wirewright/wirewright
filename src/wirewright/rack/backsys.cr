@@ -16,10 +16,9 @@ module Ww::Rack::Backsys
 
   def step(state : State, & : Propose -> T) : T forall T
     state.variantsQ.epoch do
-      propose = ->(hg : D7::Hypergraph, proposals : Array(D7::Patch)) do
+      propose = Propose.new do |hg, proposals|
         propose(state.variantsQ, hg, proposals)
       end
-
       yield propose
     end
   end

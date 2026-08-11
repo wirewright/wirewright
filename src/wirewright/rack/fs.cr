@@ -255,23 +255,16 @@ module ::Ww::Rack::FS
     state.tasks.pending?
   end
 
-  def step(state : State, & : Proposer -> T) : T forall T
+  def step(state : State, & : Propose -> T) : T forall T
     result = state.tasks.rdv do |tasks_rdv|
-      yield Proposer.new(tasks_rdv)
+      propose = Propose.new do |hg, proposals|
+        propose(tasks_rdv, hg, proposals)
+      end
+      yield propose
     end
   end
 
-  struct Proposer
-    def initialize(@tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Request, Response))
-    end
-
-    def propose(hg : D7::Hypergraph, proposals) : Nil
-      FS.propose(@tasks, hg, proposals)
-    end
-  end
-
-  # :nodoc:
-  def propose(tasks, hg : D7::Hypergraph, proposals) : Nil
+  private def propose(tasks, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :fs) do |node|
       Term.matchpi?(node.term, %{[fs @request_ @response_]}) do
         abs_request = hg.resolve(node.addr, request)

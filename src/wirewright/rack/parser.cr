@@ -46,13 +46,16 @@ module Ww::Rack::Parser
     errors : Set(Task),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result)
 
-  def step(state : State, & : Proposer -> T) : T forall T
+  def step(state : State, & : Propose -> T) : T forall T
     seen_rulesets = Set(Term).new
     seen_errors = Set(Task).new
 
     result = state.tasks.rdv do |tasks_rdv|
       ctx = StepContext.new(seen_rulesets, seen_errors, tasks_rdv)
-      yield Proposer.new(state, ctx)
+      propose = Propose.new do |hg, proposals|
+        propose(state, ctx, hg, proposals)
+      end
+      yield propose
     end
 
     state.errors = seen_errors
@@ -66,15 +69,6 @@ module Ww::Rack::Parser
     end
 
     result
-  end
-
-  struct Proposer
-    def initialize(@state : State, @ctx : StepContext)
-    end
-
-    def propose(hg : D7::Hypergraph, proposals) : Nil
-      Parser.propose(@state, @ctx, hg, proposals)
-    end
   end
 
   defrecord Transfer,
@@ -103,8 +97,7 @@ module Ww::Rack::Parser
     error : D7::AbsEdge,
     ruleset : Term
 
-  # :nodoc:
-  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+  private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :parser) do |node|
       variant = nil
 

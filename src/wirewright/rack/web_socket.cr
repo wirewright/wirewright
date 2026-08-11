@@ -25,14 +25,17 @@ module Ww::Rack::WebSocket
     conns : Set(ClientConn),
     dequeue : Set(ClientConn)
 
-  def step(state : State, & : Proposer -> T) : T forall T
+  def step(state : State, & : Propose -> T) : T forall T
     seen_bindings = Set(String).new
     seen_conns = Set(ClientConn).new
     dequeue = Set(ClientConn).new
 
     result = state.schemas.epoch do
       ctx = StepContext.new(seen_bindings, seen_conns, dequeue)
-      yield Proposer.new(state, ctx)
+      propose = Propose.new do |hg, proposals|
+        propose(state, ctx, hg, proposals)
+      end
+      yield propose
     end
 
     if state.serving.empty? && !seen_bindings.empty?
@@ -88,15 +91,6 @@ module Ww::Rack::WebSocket
     state.serving = seen_bindings
 
     result
-  end
-
-  struct Proposer
-    def initialize(@state : State, @ctx : StepContext)
-    end
-
-    def propose(hg : D7::Hypergraph, proposals) : Nil
-      WebSocket.propose(@state, @ctx, hg, proposals)
-    end
   end
 
   defcase Server,
@@ -504,8 +498,7 @@ module Ww::Rack::WebSocket
     end
   end
 
-  # :nodoc:
-  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+  private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :ws) do |node|
       Term.case(node.term) do
         matchpi(<<-WWML) do

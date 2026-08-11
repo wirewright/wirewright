@@ -230,12 +230,12 @@ class Ww::Rack::Automaton
                       prepass.call(hg) do |hg|
                         proposals = [] of D7::Patch
 
-                        extrinsics.propose(hg, proposals)
-                        parser.propose(hg, proposals)
-                        database.propose(hg, proposals)
-                        web_socket.propose(hg, proposals)
-                        supervisor.propose(hg, proposals)
-                        fs.propose(hg, proposals)
+                        extrinsics.call(hg, proposals)
+                        parser.call(hg, proposals)
+                        database.call(hg, proposals)
+                        web_socket.call(hg, proposals)
+                        supervisor.call(hg, proposals)
+                        fs.call(hg, proposals)
                         rewriter.call(hg, proposals)
                         backsys.call(hg, proposals)
                         Rack.propose(hg, proposals)

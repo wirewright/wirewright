@@ -2,14 +2,11 @@
 module Ww::Rack::Supervisor
   extend self
 
-  def step(& : Proposer -> T) : T forall T
-    yield Proposer.new
-  end
-
-  struct Proposer
-    def propose(hg : D7::Hypergraph, proposals) : Nil
-      Supervisor.propose(hg, proposals)
+  def step(& : Propose -> T) : T forall T
+    propose = Propose.new do |hg, proposals|
+      propose(hg, proposals)
     end
+    yield propose
   end
 
   defrecord Standard,
@@ -19,7 +16,7 @@ module Ww::Rack::Supervisor
     pool : D7::AbsEdge,
     template : Term
 
-  def propose(hg : D7::Hypergraph, proposals)
+  private def propose(hg : D7::Hypergraph, proposals)
     hg.propose(proposals, :supervisor) do |node|
       Term.matchpi?(node.term, %{[supervisor (@values_ @value_ pattern_ - @pool_) template_*]}) do
         variant = Standard.new(hg.resolve(node.addr, values), value, pattern, hg.resolve(node.addr, pool), template)

@@ -30,12 +30,15 @@ module Ww::Rack::Extrinsics
   # :nodoc:
   defrecord StepContext, refs : Set(ExtrinsicMap::Ref)
 
-  def step(state : State, & : Proposer -> T) : T forall T
+  def step(state : State, & : Propose -> T) : T forall T
     seen_refs = Set(ExtrinsicMap::Ref).new
 
     result = state.transcriptions.epoch do
       ctx = StepContext.new(seen_refs)
-      yield Proposer.new(state, ctx)
+      propose = Propose.new do |hg, proposals|
+        propose(state, ctx, hg, proposals)
+      end
+      yield propose
     end
 
     # Despawn the fibers associated with ExtrinsicMap to avoid leaks.
@@ -74,21 +77,11 @@ module Ww::Rack::Extrinsics
     result
   end
 
-  struct Proposer
-    def initialize(@state : State, @ctx : StepContext)
-    end
-
-    def propose(hg : D7::Hypergraph, proposals) : Nil
-      Extrinsics.propose(@state, @ctx, hg, proposals)
-    end
-  end
-
   defrecord PathReading, node : D7::Node, path : NormalPath
   defrecord PathReport, node : D7::Node, path : NormalPath
   defrecord Resource, node : D7::Node, query : ResourceService::Query
 
-  # :nodoc:
-  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+  private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :path, :resource) do |node|
       variant = nil
 

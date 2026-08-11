@@ -35,10 +35,9 @@ module Ww::Rack::Rewriter
     state.variantsQ.epoch do
       state.rewriters.epoch do
         state.tasks.rdv do |tasks_rdv|
-          propose = ->(hg : D7::Hypergraph, proposals : Array(D7::Patch)) do
+          propose = Propose.new do |hg, proposals|
             propose(state, tasks_rdv, hg, proposals)
           end
-
           yield propose
         end
       end

@@ -35,12 +35,15 @@ module Ww::Rack::Database
     uris : Set(URI),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Term)
 
-  def step(state : State, & : Proposer -> T) : T forall T
+  def step(state : State, & : Propose -> T) : T forall T
     seen_uris = Set(URI).new
 
     result = state.tasks.rdv do |tasks_rdv|
       ctx = StepContext.new(seen_uris, tasks_rdv)
-      yield Proposer.new(state, ctx)
+      propose = Propose.new do |hg, proposals|
+        propose(state, ctx, hg, proposals)
+      end
+      yield propose
     end
 
     state.connections.diff(seen_uris) do |action|
@@ -74,15 +77,6 @@ module Ww::Rack::Database
     result
   end
 
-  struct Proposer
-    def initialize(@state : State, @ctx : StepContext)
-    end
-
-    def propose(hg : D7::Hypergraph, proposals) : Nil
-      Database.propose(@state, @ctx, hg, proposals)
-    end
-  end
-
   alias Variant = Transfer
 
   defrecord Transfer,
@@ -91,8 +85,7 @@ module Ww::Rack::Database
     uri : URI,
     response : D7::AbsEdge
 
-  # :nodoc:
-  def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+  private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :db) do |node|
       Term.case(node.term) do
         matchpi %{[db (@stmt_ -> uri_string -> @response_) _?]}, uri: String do
