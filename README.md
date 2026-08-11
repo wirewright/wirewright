@@ -5,6 +5,8 @@
 
 # Wirewright
 
+[![Discord](https://badgen.net/badge/icon/discord?icon=discord&label=Wirewright)](https://discord.com/invite/bkgmGU7FFQ)
+
 Wirewright is an experimental research project aiming to express computation as the evolution of symbolic structure inside an immutable
 world. Wirewright tries to push this idea as far as possible: into IO (including UI, audio [TODO], and networking),
 symbolic AI, and beyond.
