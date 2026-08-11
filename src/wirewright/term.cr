@@ -1227,8 +1227,14 @@ module Ww
       return false unless term.itemsonly?
       return false unless term.size == 2
       return false unless term.probably_includes?(SYM_EDGE)
+      return false unless term[0] == SYM_EDGE # unavoidable lookup
 
-      term[0] == SYM_EDGE && term[1].type.subtype?(type)
+      # Fast path to avoid term[1].
+      if type.any?
+        return true
+      end
+
+      term[1].type.subtype?(type)
     end
 
     # :ditto:
