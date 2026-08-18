@@ -1,9 +1,9 @@
-(ws (server @pool (local 5000))
+(server (@pool (ws local 5000))
   (backsys
     {¦ in: (M_string _*) out: (_* `>M)}
       <> {(M): (), >M: ^M}
-    {¦ in: (M←"bye\n" _*) id_}
-      <> {(M): (), (id): ()}))
+    {¦ in_: (M←"bye\n" _*) out_}
+      <> {(in): (), (out): ()}))
 
 (circuit (pool @pool))
 

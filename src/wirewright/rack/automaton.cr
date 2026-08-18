@@ -59,7 +59,7 @@ class Ww::Rack::Automaton
   # can be made. It is your responsibility to determine how (and whether) to
   # wait. `Automaton` will signal completion on the alarm you pass to `Automaton.new`.
   # The simplest way is, therefore, to simply call `BlockingSignal#wait`.
-  defrecord Wait
+  defrecord Wait, deadline : Time::Instant?, smart: true
 
   # `next` tells you to call it again.
   defrecord Again
@@ -106,6 +106,10 @@ class Ww::Rack::Automaton
     def wait(epoch : UInt64) : UInt64
       @alarm.wait(epoch)
     end
+
+    def wait_until(epoch : UInt64, timeout : Time::Span) : UInt64
+      @alarm.wait_until(epoch, timeout)
+    end
   end
 
   # Constructs a Rack automaton.
@@ -141,7 +145,7 @@ class Ww::Rack::Automaton
     @parser_state = Parser.state(@epoch)
     @database_state = Database.state(@epoch)
     @extrinsic_state = Extrinsics.state(@epoch)
-    @websocket_state = WebSocket.state(@epoch)
+    @accord_state = Accord.state(@epoch)
     @assembler_state = Assembler.state
     @rewriter_state = Rewriter.state(@epoch)
     @backsys_state = Backsys.state
@@ -178,13 +182,32 @@ class Ww::Rack::Automaton
     @epoch.get
   end
 
-  # Returns `true` if the underlying asynchronous subsystems of Rack are busy.
-  # This often determines whether the circuit truly reached quiescence, or is
-  # just "asynchronously busy".
+  # Returns `true` if the underlying asynchronous subsystems are busy. This
+  # tells whether the circuit truly reached quiescence, or is just waiting
+  # for asynchronous work to finish.
+  #
+  # See also: `deadline?`.
   def pending? : Bool
     Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) ||
-      Database.pending?(@database_state) || WebSocket.pending?(@websocket_state) ||
+      Database.pending?(@database_state) || Accord.pending?(@accord_state) ||
       FS.pending?(@fs_state) || Rewriter.pending?(@rewriter_state)
+  end
+
+  # Returns the smallest deadline among deadlines for asynchronous subsystems.
+  # The returned deadline is not guaranteed to be in the future. The caller
+  # is expected to timeout their `pending?` wait when the returned deadline
+  # is reached.
+  #
+  # Some subsystems need to wake up periodically without any extrinsic reason.
+  # Such subsystems declare a `deadline?`. The caller (often the interpreter
+  # of `Wait`) is the expected to wait until that instant.
+  #
+  # NOTE: The deadline will not necessarily be followed to the microsecond.
+  # `Automaton` only guarantees that it will wait if it can, and wake up
+  # after or at the deadline. No further guarantees as to how soon that will
+  # happen are given.
+  def deadline? : Time::Instant?
+    Accord.deadline?(@accord_state)
   end
 
   # FIXME: this method is a mess
@@ -221,7 +244,7 @@ class Ww::Rack::Automaton
     subframes.concat(Extrinsics.step(@extrinsic_state) do |extrinsics|
       Database.step(@database_state) do |database|
         Parser.step(@parser_state) do |parser|
-          WebSocket.step(@websocket_state) do |web_socket|
+          Accord.step(@accord_state) do |accord|
             Supervisor.step do |supervisor|
               FS.step(@fs_state) do |fs|
                 Rewriter.step(@rewriter_state) do |rewriter|
@@ -233,7 +256,7 @@ class Ww::Rack::Automaton
                         extrinsics.call(hg, proposals)
                         parser.call(hg, proposals)
                         database.call(hg, proposals)
-                        web_socket.call(hg, proposals)
+                        accord.call(hg, proposals)
                         supervisor.call(hg, proposals)
                         fs.call(hg, proposals)
                         rewriter.call(hg, proposals)
@@ -329,7 +352,7 @@ class Ww::Rack::Automaton
     # Check if any asynchronous work is in progress.
 
     if pending?
-      return circuit, Wait.new
+      return circuit, Wait.new(deadline?)
     end
 
     # If nothing is pending (no asynchronous work in progress), this means
@@ -349,7 +372,12 @@ class Ww::Rack::Automaton
       in DisplayAction, End
         return circuit, action
       in Wait
-        @alarm_epoch = @epoch.wait(@alarm_epoch)
+        if deadline = action.deadline?
+          timeout = deadline - Time.instant
+          @alarm_epoch = @epoch.wait_until(@alarm_epoch, timeout)
+        else
+          @alarm_epoch = @epoch.wait(@alarm_epoch)
+        end
       end
     end
   end

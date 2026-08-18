@@ -5,9 +5,7 @@
   expr => (seq * (ref expr) (ref expr))
   expr => (seq / (ref expr) (ref expr)))
 
-(ws (server @pool (local 5000)
-      format: (json @schema expr)
-      format-policy: wrap)
+(server (@pool (ws local 5000) format: (json @schema expr) format-policy: wrap)
   (cell @expr)
   (cell @value)
   (backsys

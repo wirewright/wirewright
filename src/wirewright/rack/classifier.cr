@@ -2465,126 +2465,123 @@ module Ww::Rack
         D7.gnd(node, stmt, response)
       end
 
-      # |@ rack.ws
-      #
-      # |@summary
-      # WebSocket server and client nodes.
-
-      # |@ rack.ws
+      # |@ rack.server
       #
       # |@pattern
-      # [ws (server @pool_ binding_ (%plural status min: 0 max: 1)
-      #       ⍊ format_⋮ none
-      #         format-policy_⋮ discard
-      #         in_⋮ @in
-      #         out_⋮ @out)
-      #   template_*]
+      # [server
+      #   (@pool_ transport_ (%plural status min: 0 max: 1)
+      #     ⍊ in: (%optional @in @input_)
+      #       out: (%optional @out @output_)
+      #       format: (%optional none formatQ_)
+      #       format-policy: (%optional discard policyQ_))
+      #     template_*]
       #
       # |@key pool rack.edge
-      # Tells where to look for the device circuit pool. For each active client
-      # connection, a device is created and maintained in the pool. This is very
-      # much like how `rack.supervisor` works, except instead of lists as the backing
-      # collection we have WebSocket connections.
+      # The edge of the client device pool.
       #
-      # |@key binding rack.ws.binding
-      # Specifies where to bind the server.
+      # |@key transport rack.server.transport
+      # The transport to use.
       #
       # |@key status
-      # The status of the server. Some applications display a green circle to indicate
-      # they are connected, then perhaps a blue one to indicate pending, and a red one
-      # to indicate failure to connect. `rack.ws` nodes do something similar, except
-      # instead of a circle we use a symbol. Below is an exhaustive list of the possible
-      # values for *status*. If *status* is missing, then for that frame it is indeterminate.
+      # The *status* of the server.
       #
-      # - `pending`: the server is starting up.
-      # - `up`: the server is running.
-      # - `(dn detail_string)`: the server is not running, with *detail* explaining why.
+      # | Status                    | Description                                                                                                              |
+      # | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+      # | *Missing*                 | The status is indeterminate.                                                                                             |
+      # | `pending`                 | The server is trying to start.                                                                                           |
+      # | `(pending detail_string)` | The server failed to start, another attempt will be made with backoff (*detail* explains the failure.)                   |
+      # | `up`                      | The server is running.                                                                                                   |
+      # | `dn`                      | The server is not running and will not restart automatically. To restart, you should remove this status.                 |
+      # | `(dn detail_string)`      | The server failed to start with *detail* and will not restart automatically.  To restart, you should remove this status. |
       #
-      # |@key format rack.ws.format
-      # Specifies the message format to use, for example, `none`, `json`, `ml`.
+      # |@key format rack.[network].format
+      # The (de)serialization format to use. For example: `none`, `json`, `ml`.
       #
-      # |@key format-policy rack.ws.format-policy
-      # Specifies how to ensure adherence to the format.
+      # |@key format-policy rack.[network].format-policy
+      # How to react to violations of *format*.
       #
-      # |@key in rack.edge
-      # Optionally, renames the incoming message queue.
+      # |@key input rack.edge
+      # The edge of the ingoing message queue.
       #
-      # |@key out rack.edge
-      # Optionally, renames the outgoing message queue.
+      # |@key output rack.edge
+      # The edge of the outgoing message queue.
       #
-      # |@key template rack
-      # Rack nodes to include in each instantiated device (one per client). Each
-      # client device is generated at least with these cells:
+      # |@key template
+      # Rack nodes to include in each client device. Each client device is generated
+      # with at least the following cells.
       #
-      # - `(cell @id _string)`: stores the UUID of the client.
-      # - `(cell @in (_*))`: the incoming message queue. It stores messages *after* they
-      #   are decoded by *format*. The edge can be renamed using *in*.
-      # - `(cell @out (_*))`: the outgoing message queue. It stores messages *before* they
-      #   are encoded by *format*. The edge can be renamed using *out*.
+      # | Cell                 | Description                                                                                                                  |
+      # | -------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+      # | `(cell @id _string)` | The UUID of the client (unique per client, unique per connection, universally unique)                                        |
+      # | `(cell @in (_*))`    | The ingoing message queue. It stores messages *after* they<br>  are decoded by *format*. The edge can be renamed using *in*. |
+      # | `(cell @out (_*))`   | The outgoing message queue. It stores messages *before* they are encoded by *format*. The edge can be renamed using *out*.   |
+      #
+      # |@summary
+      # A network server (WebSocket, HTTP, TCP, etc.)
       #
       # |@block
-      # Runs a WebSocket server at *binding*. This node works similar to `rack.supervisor`:
-      # it maintains a pool of devices, one per active client connection; and as clients come
-      # and go, their corresponding devices are added and removed. Devices can be extended
-      # by providing a *template*, which is the same as the template in `rack.supervisor`.
+      # Runs a *transport* server.  This node works similar to `rack.supervisor`:
+      # it maintains a pool of devices, one per active client connection, which
+      # we call *client devices*; and as clients come and go, their corresponding
+      # devices are added and removed.
       #
-      # When using `rack.ws` server, we distinguish the following things:
+      # Client devices can be extended by providing a *template*, in the same way
+      # you use it in `rack.supervisor`. The contents of *template* are appended
+      # as-is to each new client device.
+      #
+      # When using `rack.server`, it is useful for us to distinguish the following things:
       # - A *server* is a node maintaining a population of *client devices*.
-      # - A *client* is a node which is separated from the server by the network.
+      # - A *client* is a node which is separated from the server by the network
+      #   (see also `rack.client`).
       # - A *client device* is a `rack.device` representative of a client
       #   *on the server side*. Think of it as an "avatar" or an "ambassador"
       #   of the client, or a kind of "robotic arm" the client controls remotely.
-      #
-      # *template* equips each client device with the means to carry out whatever
-      # the corresponding client wants. Since the server controls what a client
-      # device can do, it also controls the kinds of behaviors a client can perform
-      # remotely. Clients can't just do arbitrary code execution (unless you
-      # explicitly allow it, and there are ways to do it safely in Wirewright,
-      # although it won't be "arbitrary" anymore).
+      #   The exact functionality of this "arm" (what it can and cannot do) is
+      #   ultimately defined by the server's *template*; in turn, restricting what
+      #   the client can and cannot do.
       #
       # ### Notes
       #
-      # - `ws` ignores non-`device` nodes in *pool*.
-      # - To close the connection on the server-side, the corresponding client device
-      #   must clear its id cell. `ws` garbage-collects nodes with an empty id cell.
-      # - Client devices do not structurally require the ingoing and outgoing message
-      #   queues. If the ingoing message queue cell is absent or empty, the client
-      #   device won't be able to receive messages from the client (all messages will
-      #   be discarded). Similarly, if the outgoing queue is disabled, the client device
-      #   will not be able to send messages back to the client. This behavior could be
-      #   if you want to "mute" clients.
+      # - `server` ignores non-`device` nodes in *pool*.
+      # - A client device may clear its ingoing message queue cell, in which case
+      #   it will stop accepting messages (it will discard all messages sent
+      #   by the client).
+      # - A client device may clear its outgoing message queue cell, in which case
+      #   it will not be able to send messages to the client.
+      # - If a client device clears *both* its ingoing and outgoing message queue
+      #   cells, the `server` node interprets this as *closure of the connection*.
+      #   The connection is closed and the client device is subsequently removed
+      #   from the pool.
       #
       # |@example
-      #
-      # ### Essentials
-      #
       # Let's start a noop server at 127.0.0.1:5000:
       #
       # ```wwml
-      # (ws (server @pool (local 5000)))
+      # ;; Frame 0 (seed)
+      #
+      # (server (@pool (ws local 5000)))
       # (circuit (pool @pool))
-      # ```
       #
-      # This evolves through the following:
-      #
-      # ```wwml
       # ;; Frame 1
-      # (ws (server @pool (local 5000) pending)) ;; The server is starting...
+      #
+      # (server (@pool (ws local 5000) pending))
       # (circuit (pool @pool))
       #
       # ;; Frame 2
-      # (ws (server @pool (local 5000) up)) ;; The server started successfully!
+      #
+      # (server (@pool (ws local 5000) up)) ;; < The server is running!
       # (circuit (pool @pool))
       # ```
       #
-      # Now let me connect to it:
+      # Now I'm going to connect to it:
       #
       # ```wwml
       # ;; Frame 3
-      # (ws (server @pool (local 5000) up))
+      #
+      # (server (@pool (ws local 5000) up))
       # (circuit (pool @pool)
       #   (device
-      #     ;; Your id will differ, ids are UUIDv4.
+      #     ;; Your id will differ, they are generated randomly!
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
       #     (cell @in ())
       #     (cell @out ())))
@@ -2594,7 +2591,8 @@ module Ww::Rack
       #
       # ```wwml
       # ;; Frame 4
-      # (ws (server @pool (local 5000) up))
+      #
+      # (server (@pool (ws local 5000) up))
       # (circuit (pool @pool)
       #   (device
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
@@ -2602,12 +2600,13 @@ module Ww::Rack
       #     (cell @out ())))
       # ```
       #
-      # Notice how it is directed to the incoming message queue. Let's introduce
+      # Notice how it is directed to the ingoing message queue. Let's introduce
       # another client:
       #
       # ```wwml
       # ;; Frame 5
-      # (ws (server @pool (local 5000) up))
+      #
+      # (server (@pool (ws local 5000) up))
       # (circuit (pool @pool)
       #   (device
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
@@ -2623,7 +2622,8 @@ module Ww::Rack
       #
       # ```wwml
       # ;; Frame 6
-      # (ws (server @pool (local 5000) up))
+      #
+      # (server (@pool (ws local 5000) up))
       # (circuit (pool @pool)
       #   (device
       #     (cell @id "77d394f2-9a54-4f58-a5d3-ead50973d4fc")
@@ -2638,29 +2638,32 @@ module Ww::Rack
       # Let's start an echo server at 127.0.0.1:5000:
       #
       # ```wwml
-      # (ws (server @pool (local 5000))
-      #   (feed (@in front) (@out back)))
+      # ;; Frame 0 (seed)
       #
+      # (server (@pool (ws local 5000))
+      #   ;; This `feed` takes a message from the *front* of the @in queue,
+      #   ;; and puts it at the *back* of the @out queue.
+      #   (feed (@in front) (@out back)))
       # (circuit (pool @pool))
       # ```
       #
-      # Let's trace its evolution as I connect to it and write `hello`:
+      # Let's trace its evolution as I connect to it and write `hello`.
       #
       # ```wwml
       # ;; Frame 1
-      # (ws (server @pool (local 5000) pending)
-      #   (feed (@in front) (@out back)))
       #
+      # (server (@pool (ws local 5000) pending)
+      #   (feed (@in front) (@out back)))
       # (circuit (pool @pool))
       #
       # ;; Frame 2
-      # (ws (server @pool (local 5000) up)
-      #   (feed (@in front) (@out back)))
       #
+      # (server (@pool (ws local 5000) up)
+      #   (feed (@in front) (@out back)))
       # (circuit (pool @pool))
       #
       # ;; Frame 3
-      # ;; I connect to the server. From now on I'll omit `ws` because it does
+      # ;; I connect to the server. From now on I'll omit `server` because it does
       # ;; not change.
       #
       # (circuit (pool @pool)
@@ -2705,15 +2708,13 @@ module Ww::Rack
       #
       # ### Format
       #
-      # Instead of taking with clients using plain text (or bytes), which is
-      # what the default `format: none` does, we can talk using terms. There
-      # are many ways to do that, see `rack.ws.format`. For example, we can
-      # use `ml`:
+      # Instead of talking with clients using plain text (or bytes), which is what
+      # the default `format: none` does, we can use terms. There are many ways to
+      # do that, see `rack.[network].format`. For example, we can use `ml`:
       #
       # ```wwml
-      # (ws (server @pool (local 5000) format: ml)
+      # (server (@pool (ws local 5000) format: ml)
       #   (feed (@in front) (@out back)))
-      #
       # (circuit (pool @pool))
       # ```
       #
@@ -2724,6 +2725,7 @@ module Ww::Rack
       #
       # ;; Frame N
       # ;; I connected
+      #
       # (circuit (pool @pool)
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
@@ -2733,6 +2735,7 @@ module Ww::Rack
       #
       # ;; Frame N+1
       # ;; I sent `(+ 1 2)`. Notice how it has arrived as a term.
+      #
       # (circuit (pool @pool)
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
@@ -2743,6 +2746,7 @@ module Ww::Rack
       # ;; Frame N+2
       # ;; The feed node moves the term to the outgoing message queue. The outgoing
       # ;; message queue, too, accepts terms now that we're using format: ml.
+      #
       # (circuit (pool @pool)
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
@@ -2762,135 +2766,131 @@ module Ww::Rack
       # ;; I see the server reply: `(+ 1 2)`.
       # ```
       #
-      # Again, see `rack.ws.format` to learn more about the available formats.
-      # For JSON, you might find `rack.schema` useful.
+      # Again, see `rack.[network].format` to learn more about the available formats.
       #
-      # By default, messages that fail to *decode* (client sends malformed stuff)
-      # are *discarded*. This behavior is controlled by `format-policy`. See
-      # `rack.ws.format-policy` to learn about other policies (e.g. closing connection,
-      # wrapping messages in a result type, etc.)
+      # For JSON, you might find `rack.schema` useful. By default, messages that
+      # fail to *decode* (client sends malformed stuff) are *discarded*. This
+      # behavior is controlled by `format-policy`. See `rack.[network].format-policy`
+      # to learn about other policies (e.g. closing connection, wrapping messages
+      # in a result type, etc.)
       #
       # ### More complex examples
       #
-      # See the examples directory for more complex examples. WebSocket examples
-      # are prefixed with `websocket-`.
-      matchpi %{[ws [server @pool_ _ _?] _*]} do
+      # See the examples directory for more complex examples. WebSocket examples are
+      # prefixed with `websocket-`; examples for other transports are prefixed accordingly.
+      matchpi %{[server [@pool_ _ _?] _*]} do
         D7.gnd(node, pool)
       end
 
-      # If a websocket is down (e.g. cannot connect to the server), don't waste
-      # time interacting with the WebSocket machinery.
-      matchpi %{[ws [client (@_ -> _ -> @_)] [dn _string]]} do
-        D7.inert(node)
-      end
-
-      # |@ rack.ws
+      # |@ rack.client
       #
       # |@pattern
-      # [ws (client (@message_ -> conn_ -> @reply_) ⍊ ⋮format ⋮format-policy)]
-      # [ws (client (@message_ -> conn_ -> @reply_) ⍊ ⋮format ⋮format-policy) status_]
+      # [client (@outgoing_ -> transport_ -> @ingoing_ ⍊ ⋮format ⋮format-policy)
+      #   (%plural status min: 0 max: 1)]
       #
-      # |@key message rack.edge
-      # Tells where to look for a message cell. Note that this expects a cell containing
-      # *just one message*, not a queue of messages. You can queue messages using the queue
-      # node `rack.queue`, or by other means (e.g. through a backsystem `rack.backsys` that
-      # eventually writes to the cell at *message*; or using `rack.part` instead of a cell
-      # for *message*).
+      # |@key outgoing rack.edge
+      # The edge of the cell where an outgoing message should be placed by the circuit.
       #
-      # The client clears *message* when it is filed. Note that since we're using
-      # plain WebSockets, we can't actually guarantee that a cleared *message* cell
-      # implies message delivered; the connection may close with the message
-      # in flight etc. So in "serious" scenarios, treat *message* as a "volatile"
-      # kind of cell; perhaps require the server to confirm receipt before clearing
-      # your own, logical message cell.
+      # The *outgoing* cell is for *just one message*, not a queue of messages,
+      # unlike `rack.server`'s device clients. You can queue messages using
+      # the queue node `rack.queue`, or by other means (e.g. through a backsystem
+      # `rack.backsys` that eventually writes to the cell at *outgoing*; or using
+      # `rack.part` instead of a cell for *outgoing*).
       #
-      # |@key conn rack.ws.conn
-      # Specifies where to find and how to connect to the WebSocket server
-      # of interest.
+      # The client clears *outgoing* when the message is filed. The exact behavior and
+      # guarantees depend on the *transport*. For example, with TCP or plain WebSockets,
+      # we can't actually guarantee that a cleared *outgoing* cell equals message delivered
+      # safely to the other side; the connection might have closed with the message in flight,
+      # or something else equally "horrible" might have happened. So in "serious" scenarios,
+      # where messages are valuable, treat *outgoing* as a "volatile" kind of cell which may
+      # lose (discard) your message arbitrarily; perhaps require the other side to confirm
+      # receipt on an application level before clearing your own, logical outgoing message cell.
       #
-      # |@key reply rack.edge
-      # Tells where to look for a reply cell. Just as with *message*, this expects
-      # a cell for *just one message*. If you want to queue messages (and most likely,
-      # you do!), use e.g. the `rack.queue` node.
+      # |@key transport rack.client.transport
+      # The transport to use.
       #
-      # There is no built-in backpressure with plain WebSockets. If the *reply* cell
-      # is occupied, the runtime will buffer messages until *reply* is cleared, which
-      # could, in degenerate cases, lead to memory leaks. So you are advised to
-      # queue *replies* yourself to avoid or at least have control over said leaks.
+      # |@key ingoing rack.edge
+      # The edge of the cell where an ingoing message should be placed by the runtime
+      # upon receipt.
       #
-      # |@key format rack.ws.format
-      # Specifies the message format to use, for example, `none`, `json`, `ml`.
+      # Like *outgoing*, the *ingoing* cell is for *just one message*, not a queue
+      # of messages.
       #
-      # |@key format-policy rack.ws.format-policy
-      # Specifies how to ensure adherence to the format.
+      # There is no built-in backpressure in most *transport*s. If the *ingoing*
+      # cell is occupied, the runtime will buffer messages until it is cleared,
+      # which could, in degenerate cases, lead to memory leaks. You are advised
+      # to queue *replies* yourself to avoid or at least have control over said
+      # leaks, unless *transport* does it for you (see `rack.client.transport`).
+      #
+      # |@key format rack.[network].format
+      # The (de)serialization format to use. For example: `none`, `json`, `ml`.
+      #
+      # |@key format-policy rack.[network].format-policy
+      # How to react to violations of *format*.
       #
       # |@key status
-      # Connection status. Some applications display a green circle to indicate they
-      # are connected, then perhaps a blue one to indicate pending, and a red one
-      # to indicate failure to connect. `rack.ws` nodes do something similar, except
-      # instead of a circle we use a symbol. Below is an exhaustive list of the possible
-      # values for *status*. If *status* is missing, then for that frame it is indeterminate.
+      # The *status* of the client.
       #
-      # - `pending`: the client is connecting to the server.
-      # - `up`: the connection is active.
-      # - `dn`: the connection was closed on the client-side (this is mainly used to
-      #   "disable" or "turn off" web socket clients without erasing them from
-      #   the circuit.)
-      # - `(dn detail_string)`: the connection failed and no reconnect attempts
-      #   will be made; *detail* explains the reason. To reconnect manually (aka "try again"),
-      #   you should replace this status by `pending` or remove it.
-      # - `closed`: the connection was closed nominally by the server. This is
-      #   different from `dn`, which represents client-initiated closure. To
-      #   reconnect, when necessary, you can replace `closed` by `pending` or
-      #   simply remove it.
+      # | Status                    | Description                                                                                                                                                                                                                                                                                            |
+      # | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+      # | *Missing*                 | The status is indeterminate.                                                                                                                                                                                                                                                                           |
+      # | `pending`                 | The client is trying to connect.                                                                                                                                                                                                                                                                       |
+      # | `(pending detail_string)` | The client failed to connect, another attempt will be made with backoff (*detail* explains the failure.)                                                                                                                                                                                               |
+      # | `up`                      | The client is connected.                                                                                                                                                                                                                                                                               |
+      # | `dn`                      | The client is not connected and will not reconnect automatically. To reconnect, you should remove this status. This status signifies client-initiated disconnect: if you replace the current `up` status with `dn`, this is the same as calling `close()` on the client-side in traditional languages. |
+      # | `(dn detail_string)`      | The server failed to start with *detail* and will not reconnect automatically.  To reconnect, you should remove this status.                                                                                                                                                                           |
+      # | `closed`                  | The client is not connected and will not reconnect automatically. To reconnect, you should remove this status. This status signifies server-initiated, nominal disconnect.                                                                                                                             |
+      #
+      # |@summary
+      # A network client (WebSocket, HTTP, TCP, etc.)
       #
       # |@block
-      # Maintains a connection to the WebSocket server at *conn*.
+      # Maintains a connection to the server at *transport*.
       #
       # |@example
       #
-      # ### Essentials
+      # ### No format
       #
-      # No format. We'll use the `format: none` echo server from the examples for
-      # the server overload.
+      # We'll use the `format: none` echo server from the examples for `rack.server`.
       #
-      # ```wwml
-      # (cell @message "Hello World")
-      # (cell @reply)
-      # (ws (client (@message -> (local 5000) -> @reply)))
-      # ```
+      #  ```wwml
+      #  ;; Frame 0 (seed)
       #
-      # The client node has to connect first:
+      #  (cell @message "Hello World")
+      #  (cell @reply)
+      #  (client (@message -> (ws local 5000) -> @reply))
       #
-      # ```wwml
-      # ;; Frame 1
+      #  ;; Frame 1
       #
-      # (cell @message "Hello World")
-      # (cell @reply)
-      # (ws (client (@message -> (local 5000) -> @reply))
-      #   pending) ;; Connecting...
+      #  (cell @message "Hello World")
+      #  (cell @reply)
+      #  (client (@message -> (ws local 5000) -> @reply)
+      #    pending) ;; Connecting...
       #
-      # ;; Frame 2
+      #  ;; Frame 2
       #
-      # (cell @message "Hello World")
-      # (cell @reply)
-      # (ws (client (@message -> (local 5000) -> @reply))
-      #   up) ;; Connected successfully!
+      #  (cell @message "Hello World")
+      #  (cell @reply)
+      #  (client (@message -> (ws local 5000) -> @reply)
+      #    up) ;; Connected successfully!
       #
-      # ;; Frame 3
+      #  ;; Frame 3
+      #  ;; Message was sent and is travelling over the wire.
       #
-      # (cell @message) ;; < message was sent
-      # (cell @reply)
-      # (ws (client (@message -> (local 5000) -> @reply))
-      #   up)
+      #  (cell @message)
+      #  (cell @reply)
+      #  (client (@message -> (ws local 5000) -> @reply)
+      #    up)
       #
-      # ;; Frame 4
+      #  ;; Frame 4
       #
-      # (cell @message)
-      # (cell @reply "Hello World") ;; we've received the response!
-      # (ws (client (@message -> (local 5000) -> @reply))
-      #   up)
-      # ```
+      #  (cell @message)
+      #  (cell @reply "Hello World") ;; we've received the response!
+      #  (client (@message -> (ws local 5000) -> @reply)
+      #    up)
+      #  ```
+      #
+      # ### Queues
       #
       # Using queues instead of `cell`s:
       #
@@ -2900,10 +2900,10 @@ module Ww::Rack
       #    "Second message"
       #    "Third message"))
       # (queue (@reply @replies) ())
-      # (ws (client (@message -> (local 5000) -> @reply)))
+      # (client (@message -> (ws local 5000) -> @reply))
       # ```
       #
-      # After the connection is initialized, you'll see messages from the message
+      # After the connection is established, you'll see messages from the message
       # queue being filed to the server, and responses coming back. The way I'm
       # going to number frames is just one way out of many. In this case, a lot
       # of alternative arrangements are possible depending on network latency etc.
@@ -2919,7 +2919,7 @@ module Ww::Rack
       #   ("Second message"
       #    "Third message"))
       # (queue (@reply @replies) ())
-      # (ws (client (@message -> (local 5000) -> @replies))
+      # (client (@message -> (ws local 5000) -> @replies)
       #   up)
       #
       # ;; Frame N+1
@@ -2929,7 +2929,7 @@ module Ww::Rack
       #   ("Third message"))
       # (queue (@reply @replies)
       #   ("First message"))
-      # (ws (client (@message -> (local 5000) -> @replies))
+      # (client (@message -> (ws local 5000) -> @replies)
       #   up)
       #
       # ;; Frame N+2
@@ -2939,7 +2939,7 @@ module Ww::Rack
       # (queue (@reply @replies)
       #   ("First message"
       #    "Second message"))
-      # (ws (client (@message -> (local 5000) -> @replies))
+      # (client (@message -> (ws local 5000) -> @replies)
       #   up)
       #
       # ;; Frame N+3
@@ -2950,77 +2950,74 @@ module Ww::Rack
       #   ("First message"
       #    "Second message"
       #    "Third message"))
-      # (ws (client (@message -> (local 5000) -> @replies))
+      # (client (@message -> (ws local 5000) -> @replies)
       #   up)
       # ```
       #
       # ### Format
       #
-      # Things work exactly the same as in the server overload. You can specify
-      # a format other than `format: none`, e.g., `format: ml` or `format: json`,
-      # and the client node will (de)serialize terms appropriately behind the scenes.
+      # Things work exactly the same as in `rack.server`. You can specify a format
+      # other than `format: none`, e.g., `format: ml` or `format: json`, and the client
+      # node will (de)serialize terms appropriately behind the scenes.
       #
       # ```wwml
+      # ;; Frame 0 (seed)
+      #
       # (queue (@message @messages) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
       # (queue (@reply @replies) ())
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml))
-      # ```
+      # (client (@message -> (ws local 5000) -> @replies format: ml))
       #
-      # This circuit evolves as follows (the same caveats about order/arrangement aplly
-      # as in the examples above):
-      #
-      # ```wwml
       # ;; Frame N
       #
       # (queue (@message @messages) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
       # (queue (@reply @replies) ())
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       #
       # ;; Frame N+1
       #
       # (queue (@message @messages) (100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
       # (queue (@reply @replies) ())
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       #
       # ;; Frame N+2
       #
       # (queue (@message @messages) (≈1.23 false (+ 1 2 x: 100 y: 200)))
       # (queue (@reply @replies) (foo))
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       #
       # ;; Frame N+3
       #
       # (queue (@message @messages) (false (+ 1 2 x: 100 y: 200)))
       # (queue (@reply @replies) (foo 100))
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       #
       # ;; Frame N+3
       #
       # (queue (@message @messages) ((+ 1 2 x: 100 y: 200)))
       # (queue (@reply @replies) (foo 100 ≈1.23))
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       #
       # ;; Frame N+4
       #
       # (queue (@message @messages) ())
       # (queue (@reply @replies) (foo 100 ≈1.23 false))
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       #
       # ;; Frame N+5
       #
       # (queue (@message @messages) ())
       # (queue (@reply @replies) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
-      # (ws (client (@message -> (local 5000) -> @replies) format: ml)
+      # (client (@message -> (ws local 5000) -> @replies format: ml)
       #   up)
       # ```
-      matchpi %{[ws [client (@message_ -> _ -> @reply_)] _?]} do
-        D7.gnd(node, message, reply)
+      matchpi %{[client [@outgoing_ -> _ -> @ingoing_] _?]} do
+        D7.gnd(node, outgoing, ingoing)
       end
 
       # |@ rack.schema

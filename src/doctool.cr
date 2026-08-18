@@ -179,7 +179,7 @@ module Doctool::Page
       end
 
       query(compositions, query)
-    when /^\/([\w\/<=>+*°\-]+)$/
+    when /^\/([\w\/<=>+*°\-\[\]]+)$/
       query = $1.split('/', remove_empty: true)
       overview(compositions, query, $1)
     else

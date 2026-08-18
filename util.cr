@@ -1013,6 +1013,10 @@ class Pf::MapBox(K, V)
     @map.includes?(k)
   end
 
+  def has_key?(k : K) : Bool
+    @map.includes?(k)
+  end
+
   def each(&)
     @map.each { |k, v| yield k, v }
   end
@@ -1077,6 +1081,14 @@ class Pf::BidiMapBox(K, V)
     @map.value_for(k)
   end
 
+  def has_key?(k : K) : Bool
+    @map.has_key_for?(k)
+  end
+
+  def has_key?(v : V) : Bool
+    @map.has_value_for?(v)
+  end
+
   def key_for?(v : V) : K?
     @map.key_for?(v)
   end
@@ -1095,6 +1107,10 @@ class Pf::BidiMapBox(K, V)
 
   def dissoc_by_value(v : V)
     copy_with(map: @map.dissoc_by_value(v))
+  end
+
+  def size
+    @map.size
   end
 end
 
@@ -4900,3 +4916,57 @@ class ::Pf::Kit::HybridArray(T, N)
     to_unsafe_readonly_slice!
   end
 end
+
+class HTTP::NodelayServer < HTTP::Server
+  private def handle_client(io : IO)
+    if io.is_a?(TCPSocket)
+      # Disable the Nagle's algorithm. This is especially useful for WebSockets.
+      io.tcp_nodelay = true
+    end
+    super
+  end
+end
+
+class HTTP::WebSocket
+  class Protocol
+    def nagle=(value : Bool) : Bool
+      if socket = @io.as?(TCPSocket)
+        socket.tcp_nodelay = !value
+      end
+      value
+    end
+  end
+
+  # Controls whether the Nagle's algorithm is enabled on the underlying TCPSocket,
+  # if possible.
+  def nagle=(value : Bool) : Bool
+    @ws.nagle = value
+  end
+end
+
+class AtomicQueue(T)
+  def initialize(@alert : ->)
+    @queue = Deque(T).new
+    @lock = Sync::Mutex.new
+  end
+
+  def empty? : Bool
+    @lock.synchronize { @queue.empty? }
+  end
+
+  def <<(object : T) : self
+    @lock.synchronize { @queue << object }
+    @alert.call
+    self
+  end
+
+  def swap : Deque(T)
+    @lock.synchronize do
+      queue0 = @queue
+      queue1 = Deque(T).new
+      @queue = queue1
+      queue0
+    end
+  end
+end
+
