@@ -77,4 +77,9 @@ require "./testtool/assertions"
 # Command-line interface.
 require "./testtool/main"
 
-Testtool.main(ARGV)
+ok = Testtool.main(ARGV)
+if ok
+  exit 0
+else
+  exit 1
+end

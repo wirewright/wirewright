@@ -196,7 +196,7 @@ module Testtool
 
   # Constructs `AssertionAssets` based on *conf* and contents of the index
   # file, *index*. May not run the block in case of an error.
-  def assets(conf : ArgConf, index : Term::Dict, & : AssertionAssets ->) : Nil
+  def assets(conf : ArgConf, index : Term::Dict, & : AssertionAssets -> Bool) : Bool
     server = HTTP::Server.new([HTTP::StaticFileHandler.new((conf.tests_path / "public").to_s, fallthrough: false, directory_listing: false)])
 
     server_ctx = Fiber::ExecutionContext::Isolated.new("testtool public/ server") do
@@ -220,17 +220,17 @@ module Testtool
           if conf.assets
             unless mu_codex = mu_codex?(index)
               err("Microfold codex query or rem not recognized or undefined, aborting")
-              return
+              return false
             end
 
             unless editR = editR?(index, base: conf.tests_path)
               err("editR codex not recognized or undefined, aborting")
-              return
+              return false
             end
 
             unless uiR = uiR?(index, dw, base: conf.tests_path)
               err("uiR codex not recognized or undefined, aborting")
-              return
+              return false
             end
           end
 
@@ -244,12 +244,12 @@ module Testtool
       if conf.assets
         unless mu_codex = mu_codex?(index)
           err("Microfold codex query or rem not recognized or undefined, aborting")
-          return
+          return false
         end
 
         unless editR = editR?(index, base: conf.tests_path)
           err("editR codex not recognized or undefined, aborting")
-          return
+          return false
         end
       end
 
@@ -265,19 +265,23 @@ module Testtool
   end
 
   # **Entrypoint of testtool.** Returns when the testtool finishes.
-  def main(argv : Array(String)) : Nil
+  def main(argv : Array(String)) : Bool
+    chan = Channel(Bool).new
+
     ctx = Fiber::ExecutionContext::Isolated.new("Testtool", spawn_context: MT) do
-      main(argparse(argv))
+      ok = main(argparse(argv))
 
       # Let other fibers (esp. the logging fiber) finish before we exit. I'm
       # not sure if there's a better way to do this.
       Fiber.yield
+
+      chan << ok
     end
 
-    ctx.wait
+    chan.receive
   end
 
-  def main(conf : ArgConf) : Nil
+  def main(conf : ArgConf) : Bool
     banner
 
     log("Reading #{conf.index_path}")
@@ -292,11 +296,11 @@ module Testtool
       index = index.as_d
     rescue e : File::Error
       err(e.message || "???")
-      return
+      return false
     rescue e : ML::SyntaxError
       err("Syntax error in #{conf.index_path}")
       dump(e.humanize)
-      return
+      return false
     end
 
     outline = outline(conf, index, indexsrc)
@@ -306,15 +310,19 @@ module Testtool
     end
   end
 
-  def main(argp : ArgErr) : Nil
+  def main(argp : ArgErr) : Bool
     err(argp.detail)
+
+    false
   end
 
-  def main(argp : ArgHelp) : Nil
+  def main(argp : ArgHelp) : Bool
     help
+
+    true
   end
 
-  def main(assets : AssertionAssets, conf : ArgConf, outline : Array(Topic)) : Nil
+  def main(assets : AssertionAssets, conf : ArgConf, outline : Array(Topic)) : Bool
     log("Looking for assertions")
     tests, comparisons = assertions(outline)
     log("Found #{tests.size + comparisons.size} assertion(s): #{tests.size} test(s), #{comparisons.size} comparison(s)")
@@ -406,6 +414,8 @@ module Testtool
       display(Status.new(successes, failures, mmt))
       hr
     end
+
+    failures.zero?
   end
 
   def outline(conf : ArgConf, index : Term::Dict, indexsrc : ML::SrcMap) : Array(Topic)

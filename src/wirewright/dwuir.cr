@@ -98,7 +98,7 @@ module Ww::DwUIR
   # is stopped and the channel is closed when this function returns.
   #
   # NOTE: You transfer ownership of *ctx* to this function until it returns.
-  def serve(ctx : Viewer::Context, & : Channel(Request) ->) : Nil
+  def serve(ctx : Viewer::Context, & : Channel(Request) -> _)
     dw = Channel(Request).new
     worker = WaitGroup.new(1)
 
