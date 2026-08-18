@@ -43,7 +43,8 @@ module Ww::Rack::Parser
 
   defrecord StepContext,
     rulesets : Set(Term),
-    errors : Set(Task),
+    errors0 : Set(Task),
+    errors1 : Set(Task),
     tasks : D7::TaskBoard::Rdv(Automaton::Epoch, Task, Result)
 
   def step(state : State, & : Propose -> T) : T forall T
@@ -51,9 +52,9 @@ module Ww::Rack::Parser
     seen_errors = Set(Task).new
 
     result = state.tasks.rdv do |tasks_rdv|
-      ctx = StepContext.new(seen_rulesets, seen_errors, tasks_rdv)
+      ctx = StepContext.new(seen_rulesets, state.errors, seen_errors, tasks_rdv)
       propose = Propose.new do |hg, proposals|
-        propose(state, ctx, hg, proposals)
+        propose(ctx, hg, proposals)
       end
       yield propose
     end
@@ -97,7 +98,7 @@ module Ww::Rack::Parser
     error : D7::AbsEdge,
     ruleset : Term
 
-  private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
+  private def propose(ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :parser) do |node|
       variant = nil
 
@@ -126,7 +127,7 @@ module Ww::Rack::Parser
       # Mark ruleset as seen so its grammar is kept alive (if present).
       ctx.rulesets << variant.ruleset
 
-      step(state, ctx, hg, node, variant)
+      step(ctx, hg, node, variant)
     end
   end
 
@@ -139,7 +140,7 @@ module Ww::Rack::Parser
     Source.new(cell.node, value)
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : Transfer) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : Transfer) : D7::Patch?
     # For human-comprehensible  behavior, we only support a single source. If
     # there are many candidates we're "confused". We could handle many candidates
     # but the behavior would likely be unintuitive.
@@ -160,8 +161,8 @@ module Ww::Rack::Parser
     # Instead of rescheduling the task over and over in case of an error,
     # when we're clogged, simply remember the task is an error and wait
     # until the input cell is unclogged.
-    if task.in?(state.errors)
-      ctx.errors << task
+    if task.in?(ctx.errors0)
+      ctx.errors1 << task
       return
     end
 
@@ -176,12 +177,12 @@ module Ww::Rack::Parser
       )
     in ParseKit::Err
       # If there's a parse error and it has nowhere to go we clog the input.
-      ctx.errors << task
+      ctx.errors1 << task
       nil
     end
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : TransferError) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : TransferError) : D7::Patch?
     return unless source = source?(hg, variant.input)
 
     # Find empty target cell(s).
@@ -224,7 +225,7 @@ module Ww::Rack::Parser
     end
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : View) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : View) : D7::Patch?
     source = source?(hg, variant.input)
 
     # Find empty target cell(s).
@@ -256,7 +257,7 @@ module Ww::Rack::Parser
     end
   end
 
-  private def step(state : State, ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : ViewError) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : ViewError) : D7::Patch?
     return unless source = source?(hg, variant.input)
 
     # Find empty target cell(s).
