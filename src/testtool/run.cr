@@ -116,7 +116,7 @@ module Testtool
     end
 
     # Teardown by passing empty circuit.
-    automaton.next(Term.of)
+    automaton.blocking_next(Term.of)
   end
 
   defrecord AlloyTest, vars : Term::Dict, template : Term, expansion : Term

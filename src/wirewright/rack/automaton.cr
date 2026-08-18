@@ -20,7 +20,7 @@ end
 # end
 #
 # # Teardown: show an empty circuit to the automaton.
-# automaton.next(Term.of)
+# automaton.blocking_next(Term.of)
 # ```
 #
 # Low-level usage:
@@ -48,7 +48,7 @@ end
 # end
 #
 # # Teardown: show an empty circuit to the automaton.
-# automaton.next(Term.of)
+# automaton.blocking_next(Term.of)
 # ```
 class Ww::Rack::Automaton
   # Actions returned by `next`.
