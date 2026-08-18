@@ -234,9 +234,9 @@ module Ww::D7
     patches(objects)
   end
 
-  # Performs *subframe fusion*.
+  # Performs *frame fusion*.
   #
-  # *Subframe fusion* is a fancy way of saying "If the next frame has all
+  # *Frame fusion* is a fancy way of saying "If the next frame has all
   # changes of the current one, then we don't need to show the current one
   # to the user; they'll see the changes in the next frame anyway". In other
   # words, if the next frame *subsumes* the current one, the current one is skipped.
@@ -244,79 +244,82 @@ module Ww::D7
   # Calls *fn* with frames to show to the user.
   #
   # This method may yield duplicate consecutive frames, and it is the caller's
-  # responsibility to filter them out. We do not filter here because the caller
-  # is likely to filter at frame-level anyway, so there is no need to do
-  # the work on subframe-level.
+  # responsibility to filter them out.
   #
-  # *ancestor* is the last frame seen by the user. Usually this would be the last
+  # *pred* is the last frame seen by the user. Usually this would be the last
   # frame produced by this method. Otherwise it would be the very first circuit,
   # which the caller itself should show to the user as the first frame.
-  def fuse(parser : Parser, ancestor : Term, subframes : Slice(Term), &fn : Term ->) : Nil
-    if subframes.empty?
-      fn.call(ancestor)
+  def fuse(parser : Parser, pred : Term, frames : Indexable(Term), &fn : Term ->) : Nil
+    if frames.empty?
+      fn.call(pred)
       return
     end
 
-    ancestor_nodes = fuse_map(parser, ancestor)
-    fuse(parser, ancestor, ancestor_nodes, subframes, &fn)
-  end
-
-  private def fuse(parser : Parser, ancestor : Term, ancestor_nodes : Hash(NodeAddr, Term), subframes : Slice(Term), &fn : Term ->) : Nil
-    if subframes.empty? # Base case
-      fn.call(ancestor)
+    if frame = frames.single?
+      fn.call(frame)
       return
     end
 
-    # Notice that this is an iterator.
-    assessments = subframes.each.map do |subframe|
-      nodes = fuse_map(parser, subframe)
+    assert frames.size >= 2
 
-      {subframe: subframe,
-       nodes:    nodes,
-       changes:  fuse_changeset(ancestor_nodes, nodes)}
-    end
+    index = 0
+    frame = frames[index]
 
-    acc = Set(NodeAddr).new
+    behind = fuse_map(parser, pred)
+    current = fuse_map(parser, frame)
 
-    assessments.each_with_index do |assessment, index|
-      if acc.intersects?(assessment[:changes]) # This one is not disjoint wrt. acc, cut!
-        assert index > 0
-
-        fn.call(subframes[index - 1])
-
-        # This leaves a hole for assessment[:subframe], which is now the new
-        # ancestor. In case there are no more subframes past it, it is emitted
-        # (see the base case below). If there are more subframes, they are either
-        # accumulated, or if there is a cut immediately, the line above will emit
-        # assessment[:subframe].
-
-        return fuse(parser, assessment[:subframe], assessment[:nodes], subframes + index + 1, &fn)
+    loop do
+      unless succ = frames[index + 1]?
+        fn.call(frame)
+        break
       end
 
-      # Changes are disjoint wrt. acc.
-      acc.concat(assessment[:changes])
-    end
+      ahead = fuse_map(parser, succ)
+      behind_vs_current = fuse_changeset(behind, current)
+      behind_vs_ahead = fuse_changeset(behind, ahead)
 
-    fn.call(subframes.last)
+      begin
+        # Skip current frame if all its changes are also present in the next frame.
+        next if behind_vs_current.subset_of?(behind_vs_ahead)
+
+        fn.call(frame)
+      ensure
+        frame = succ
+        index += 1
+
+        behind = current
+        current = ahead
+      end
+    end
   end
 
-  private def fuse_changeset(pred, succ) : Set(NodeAddr)
-    changed = Set(NodeAddr).new
+  # :nodoc:
+  alias FuseChange = FuseUpdated | FuseRemoved
+
+  # :nodoc:
+  defrecord FuseUpdated, addr : NodeAddr, node : Term
+  # :nodoc:
+  defrecord FuseRemoved, addr : NodeAddr
+
+  # TODO: If we use ParseTrees instead of Hash(NodeAddr, Term)s, we'll be able
+  # to skip a lot of work!
+  private def fuse_changeset(pred : Hash(NodeAddr, Term), succ : Hash(NodeAddr, Term)) : Set(FuseChange)
+    changes = Set(FuseChange).new
 
     pred.each do |addr, node|
       next if succ.has_key?(addr)
 
-      changed << addr # Removed
+      changes << FuseRemoved.new(addr)
     end
 
     succ.each do |addr, node|
       ancestor_node = pred[addr]?
       next if ancestor_node == node
 
-      changed << addr # Added or updated
+      changes << FuseUpdated.new(addr, node)
     end
 
-    changed
+    changes
   end
 
   private def fuse_map(parser : Parser, circuit : Term)

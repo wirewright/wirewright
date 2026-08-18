@@ -182,14 +182,16 @@ module Ww::D7
           in Gnd   then addr_patch[addr]? || flat.node
           end
         end
-        substeps << circuit
 
-        tree = parser.parse(circuit)
+        unless substeps.last == circuit
+          substeps << circuit
+          tree = parser.parse(circuit)
+        end
       end
 
       hg = Hypergraph.new(tree, level + 1)
 
-      # No nodes in hypergraph => No nodes found at *level* => We're done.
+      # No nodes found at the next *level* => We're done.
       break if hg.bottom?
     end
 

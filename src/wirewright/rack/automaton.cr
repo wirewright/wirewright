@@ -234,7 +234,7 @@ class Ww::Rack::Automaton
 
     pass do
       input = subframes.last
-      subframes.concat(Tspace.step(@tspace_state, @parser, subframes.last, prepass))
+      subframes.concat(Tspace.step(@tspace_state, @parser, input, prepass))
       output = subframes.last
       unless input == output
         frames << output
@@ -296,11 +296,42 @@ class Ww::Rack::Automaton
       step(subframes, frames, circuit, prepass, library)
     end
 
-    fused = Pf::Kit.stack_array(Term, 8)
-
     # Commit.
     circuit0 = circuit
     circuit = frames.last
+
+    buffer = Pf::Kit.stack_array(Term, 8)
+
+    # Deduplicate *subframes*. Deduplication => less work for `D7.fuse`, which
+    # is quite expensive.
+    pass do
+      next unless @display_mask.subframe?
+
+      subframes.each do |frame|
+        next if buffer.last? == frame
+
+        buffer << frame
+      end
+
+      subframes.clear
+      subframes.concat(buffer)
+      buffer.clear
+    end
+
+    # Deduplicate *frames* in a similar way.
+    pass do
+      next unless @display_mask.frame?
+
+      frames.each do |frame|
+        next if buffer.last? == frame
+
+        buffer << frame
+      end
+
+      frames.clear
+      frames.concat(buffer)
+      buffer.clear
+    end
 
     # Fuse subframes.
     pass do
@@ -308,19 +339,16 @@ class Ww::Rack::Automaton
 
       seen = circuit0
 
-      D7.fuse(@fuse_parser, seen, subframes.to_readonly_slice) do |subframe|
+      D7.fuse(@fuse_parser, seen, subframes) do |subframe|
         next if seen == subframe
 
-        fused << subframe
+        buffer << subframe
         seen = subframe
       end
 
-      fused.each do |content|
-        @display << DisplaySubframe.new(content)
-      end
+      buffer.each { |content| @display << DisplaySubframe.new(content) }
+      buffer.clear
     end
-
-    fused.clear
 
     # Fuse frames.
     pass do
@@ -328,16 +356,15 @@ class Ww::Rack::Automaton
 
       seen = circuit0
 
-      D7.fuse(@fuse_parser, seen, frames.to_readonly_slice) do |frame|
+      D7.fuse(@fuse_parser, seen, frames) do |frame|
         next if seen == frame
 
-        fused << frame
+        buffer << frame
         seen = frame
       end
 
-      fused.each do |content|
-        @display << DisplayFrame.new(content)
-      end
+      buffer.each { |content| @display << DisplayFrame.new(content) }
+      buffer.clear
     end
 
     if item = @display.shift?

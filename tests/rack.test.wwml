@@ -3570,13 +3570,10 @@
       ⟨& (cell @expr (+ 2 2))
          (sensor _ 1)⟩)
     (frame pattern: true
-      ⟨& (cell @expr (+ 2 2))
-         (sensor _ 2)⟩)
-    (frame pattern: true
       ⟨& (cell @expr (+ 3 2))
          (sensor _ 2)⟩)
     (frame pattern: true
-      ⟨& (cell @expr (+ 3 2))
+      ⟨& (cell @expr (+ 4 2))
          (sensor _ 3)⟩)))
     ;; ...
 
@@ -4358,12 +4355,6 @@
       ⟨& (node @x)
          (discard @x)
          (slot (Foo))
-         (slot (Bar) (delay 94 bar))⟩)
-
-    (frame pattern: true
-      ⟨& (node @x)
-         (discard @x)
-         (slot (Foo))
          (slot (Bar) (delay 93 bar))⟩))
     ;; ...
 
@@ -4390,19 +4381,14 @@
          (slot (Bar) (delay 99 bar))⟩)
 
     (frame pattern: true
-      ⟨& (node @rule (Foo) => (cell @count 1))
-         (slot (Foo) (cell @count 1))
-         (slot (Bar) (delay 99 bar))⟩)
-
-    (frame pattern: true
       ⟨& (node @rule (Foo) => (cell @count 2))
          (slot (Foo) (cell @count 1))
          (slot (Bar) (delay 98 bar))⟩)
 
     (frame pattern: true
-      ⟨& (node @rule (Foo) => (cell @count 2))
+      ⟨& (node @rule (Foo) => (cell @count 3))
          (slot (Foo) (cell @count 2))
-         (slot (Bar) (delay 98 bar))⟩))
+         (slot (Bar) (delay 97 bar))⟩))
     ;;; ...
 
   ;; Slots can be constructed & are instantiated dynamically.
@@ -4454,16 +4440,6 @@
       (slot (Foo 2))
       (slot (Bar "John")))
     (frame
-      (delay 3
-        (node @rule (Foo n_) => ^n))
-      (delay 5
-        (discard @rule))
-      (Bar name_) => ^"Kaixo ⸢name⸣"
-      (slot (Foo 0))
-      (slot (Foo 1))
-      (slot (Foo 2))
-      (slot (Bar "John") "Kaixo John"))
-    (frame
       (delay 2
         (node @rule (Foo n_) => ^n))
       (delay 4
@@ -4491,15 +4467,6 @@
       (slot (Foo 0))
       (slot (Foo 1))
       (slot (Foo 2))
-      (slot (Bar "John") "Kaixo John"))
-    (frame
-      (node @rule (Foo n_) => ^n)
-      (delay 2
-        (discard @rule))
-      (Bar name_) => ^"Kaixo ⸢name⸣"
-      (slot (Foo 0) 0)
-      (slot (Foo 1) 1)
-      (slot (Foo 2) 2)
       (slot (Bar "John") "Kaixo John"))
     (frame
       (node @rule (Foo n_) => ^n)
@@ -4565,22 +4532,10 @@
       (slot (Foo 3))
       (slot (Bar) (delay 99 qux)))
     (frame/tail
-      (slot (Foo 0))
-      (slot (Foo 1) "Kaixo")
-      (slot (Foo 2))
-      (slot (Foo 3))
-      (slot (Bar) (delay 99 qux)))
-    (frame/tail
       ;; (Foo 2) => ...
       (slot (Foo 0))
       (slot (Foo 1) "Kaixo")
       (slot (Foo 2))
-      (slot (Foo 3))
-      (slot (Bar) (delay 98 qux)))
-    (frame/tail
-      (slot (Foo 0))
-      (slot (Foo 1))
-      (slot (Foo 2) "Kaixo")
       (slot (Foo 3))
       (slot (Bar) (delay 98 qux)))
     (frame/tail
@@ -4591,23 +4546,11 @@
       (slot (Foo 3))
       (slot (Bar) (delay 97 qux)))
     (frame/tail
-      (slot (Foo 0))
-      (slot (Foo 1))
-      (slot (Foo 2))
-      (slot (Foo 3) "Kaixo")
-      (slot (Bar) (delay 97 qux)))
-    (frame/tail
       ;; (Foo 0) => ...
       (slot (Foo 0))
       (slot (Foo 1))
       (slot (Foo 2))
       (slot (Foo 3) "Kaixo")
-      (slot (Bar) (delay 96 qux)))
-    (frame/tail
-      (slot (Foo 0) "Kaixo")
-      (slot (Foo 1))
-      (slot (Foo 2))
-      (slot (Foo 3))
       (slot (Bar) (delay 96 qux))))
     ;; ...
 
