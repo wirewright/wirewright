@@ -58,10 +58,9 @@ module InteractiveRack
       abort "syntax error"
     end
 
+    display_mask = Rack::Automaton::DisplayMask::Frame
     if show_subframes
-      display_mask = Rack::Automaton::DisplayMask::Subframe
-    else
-      display_mask = Rack::Automaton::DisplayMask::Frame
+      display_mask |= Rack::Automaton::DisplayMask::Subframe
     end
 
     automaton = Rack::Automaton.new(measure: detailed, display_mask: display_mask)
@@ -71,7 +70,9 @@ module InteractiveRack
     subframe_count = 1u64
 
     if detailed
-      puts ";; Seed"
+      puts
+      puts ";; Frame 0 (seed)"
+      puts
     end
 
     puts ML.display(seed, maxwidth: 80)
@@ -88,7 +89,9 @@ module InteractiveRack
         next unless show_subframes
 
         if detailed
-          puts ";; Subframe #{subframe_count} of frame #{frame_count}"
+          puts
+          puts ";; Frame #{frame_count}.#{subframe_count}"
+          puts
         end
 
         puts ML.display(action.content, maxwidth: 80)
@@ -99,6 +102,12 @@ module InteractiveRack
 
         subframe_count += 1
       in Rack::Automaton::DisplayFrame
+        if show_subframes
+          subframe_count = 1u64
+          frame_count += 1
+          next
+        end
+
         if detailed
           puts ";; Frame #{frame_count}"
         end
@@ -113,7 +122,6 @@ module InteractiveRack
           gets
         end
 
-        subframe_count = 1
         frame_count += 1
       in Rack::Automaton::End
         break
