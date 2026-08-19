@@ -20,12 +20,12 @@ module Ww::Rack::Accord
     state.harmony.deadline?
   end
 
-  defrecord StepContext, world : Harmony::World, goals : Set(Harmony::Goal)
+  defrecord StepContext, world : Harmony::FactSet, goals : Harmony::GoalSet
 
   def step(state : State, & : Propose -> T) : T forall T
     state.harmony.observe
 
-    goals = Set(Harmony::Goal).new
+    goals = Harmony::GoalSet.new
 
     result = state.schemas.epoch do
       ctx = StepContext.new(state.harmony.world, goals)

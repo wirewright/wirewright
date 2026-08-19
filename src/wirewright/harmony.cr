@@ -46,46 +46,64 @@ class Ww::Harmony
 
   defrecord UnixClientDefn, path : NormalPath, key : Term
 
-  alias Fact = RunningServer | BrokenServer | RunningPeer | RunningClient |
-               BrokenClient | IngoingMessage | IngoingReceiveConfirmation |
-               RemoteReceiveConfirmation
-
-  defrecord RunningServer, defn : ServerDefn, server_id : ServerId
-  defrecord BrokenServer, defn : ServerDefn, detail : String
-
-  defrecord RunningPeer, server_id : ServerId, peer_id : PeerId
-
-  defrecord RunningClient, defn : ClientDefn, client_id : ClientId
-  defrecord BrokenClient, defn : ClientDefn, detail : String
-
-  defrecord IngoingMessage,
-    endpoint_id : EndpointId,
-    seq : UInt64,
-    payload : Bytes
-
-  defrecord RemoteReceiveConfirmation,
-    endpoint_id : EndpointId,
-    payload : Bytes
-
   alias Goal = ActionableGoal | KeepaliveGoal
 
   alias ActionableGoal = Server | Client | IngoingReceiveConfirmation | OutgoingMessage
 
-  defrecord Server, defn : ServerDefn
-  defrecord Client, defn : ClientDefn
+  defcase Server, defn : ServerDefn
+  defcase Client, defn : ClientDefn
 
-  defrecord IngoingReceiveConfirmation, endpoint_id : EndpointId, seq : UInt64
-  defrecord OutgoingMessage, endpoint_id : EndpointId, payload : Bytes
+  defcase IngoingReceiveConfirmation, endpoint_id : EndpointId, seq : UInt64
+  defcase OutgoingMessage, endpoint_id : EndpointId, payload : Bytes
 
   alias KeepaliveGoal = PeerKeepalive | IngoingMessageKeepalive
 
-  # A peer is a token representing the callers desire to keep a link
-  # between a peer and a server open. Harmony does not "garbage collect"
-  # peer links in any way; it is the callers responsibility to remove Peers
-  # whose RunningServers or RunningPeers no longer exist.
-  defrecord PeerKeepalive, peer_id : PeerId
+  # Represents the caller's desire to keep a link between a peer and a server open.
+  # Harmony does not "garbage collect" peer links in any way; it is the caller's
+  # responsibility to remove PeerKeepalive goals whose RunningPeers no longer exist.
+  defcase PeerKeepalive, peer_id : PeerId
 
-  defrecord IngoingMessageKeepalive, endpoint_id : EndpointId, seq : UInt64
+  defcase IngoingMessageKeepalive, endpoint_id : EndpointId, seq : UInt64
+
+  {% begin %}
+    # :nodoc:
+    alias GoalClass = Union({{Goal.union_types.map(&.class).splat}})
+  {% end %}
+
+  alias GoalFeature = ServerDefn | ClientDefn | EndpointId | UInt64 | Bytes | GoalClass
+
+  alias GoalSet = IndexedSet(Goal, GoalFeature)
+
+  alias Fact = RunningServer | BrokenServer | RunningPeer | RunningClient |
+               BrokenClient | IngoingMessage | IngoingReceiveConfirmation |
+               RemoteReceiveConfirmation
+
+  defcase RunningServer, defn : ServerDefn, server_id : ServerId
+  defcase BrokenServer, defn : ServerDefn, detail : String
+
+  defcase RunningPeer, server_id : ServerId, peer_id : PeerId
+
+  defcase RunningClient, defn : ClientDefn, client_id : ClientId
+  defcase BrokenClient, defn : ClientDefn, detail : String
+
+  defcase IngoingMessage,
+    endpoint_id : EndpointId,
+    seq : UInt64,
+    payload : Bytes
+
+  defcase RemoteReceiveConfirmation,
+    endpoint_id : EndpointId,
+    payload : Bytes
+
+  {% begin %}
+    # :nodoc:
+    alias FactClass = Union({{Fact.union_types.map(&.class).splat}})
+  {% end %}
+
+  alias FactFeature = ServerDefn | ClientDefn | ServerId | EndpointId | UInt64 |
+                      String | Bytes | FactClass
+
+  alias FactSet = IndexedSet(Fact, FactFeature)
 
   alias Action = StartServer | StopServer | DropPeer | AcknowledgeMessage |
                  SendMessage | StartClient | StopClient | ForgetFact
@@ -149,13 +167,13 @@ class Ww::Harmony
     generation : UInt64,
     copying: true
 
-  getter world : World
-  getter goals : Set(Goal)
+  getter world : FactSet
+  getter goals : GoalSet
 
   def initialize(@alert : ->)
     @observations = AtomicQueue(Observation).new(@alert)
-    @world = World.new
-    @goals = Set(Goal).new
+    @world = FactSet.new
+    @goals = GoalSet.new
     @actions = Set(Action).new
     @backoff = {} of Action => Backoff
     @registry = Registry.new
@@ -174,7 +192,7 @@ class Ww::Harmony
   end
 
   # Replaces the current set of *goals*.
-  def submit(@goals : Set(Goal)) : Nil
+  def submit(@goals : GoalSet) : Nil
     Log.trace { "submit() goals: #{@goals.pretty_inspect}" }
   end
 
@@ -251,7 +269,7 @@ class Ww::Harmony
   end
 
   # Yields actions needed to drive *world* toward a state desired by *goals*.
-  def self.plan(world : World, goals : Set(Goal), & : Action ->) : Nil
+  def self.plan(world : FactSet, goals : GoalSet, & : Action ->) : Nil
     goals.each do |goal|
       next unless goal.is_a?(ActionableGoal)
       next if satisfied?(goal, world)
@@ -351,7 +369,7 @@ class Ww::Harmony
     ctx.observations << FactForgotten.new(action.fact)
   end
 
-  defrecord ApplyContext, world : World, registry : Registry
+  defrecord ApplyContext, world : FactSet, registry : Registry
 
   {% if flag?(:docs) %}
     # Modifies the world according to an *observation*.
@@ -361,7 +379,7 @@ class Ww::Harmony
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ServerStarted) : Nil
-    ctx.world.reject!(BrokenServer, observation.defn)
+    ctx.world.delete_all(BrokenServer, observation.defn)
     ctx.world.add(RunningServer.new(observation.defn, observation.server_id))
     ctx.registry[observation.server_id] = observation.queue
   end
@@ -393,7 +411,7 @@ class Ww::Harmony
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : PeerDisconnected | PeerCrashed) : Nil
     ctx.world.delete(RunningPeer.new(observation.server_id, observation.peer_id))
-    ctx.world.reject!(IngoingMessage, observation.peer_id)
+    ctx.world.delete_all(IngoingMessage, observation.peer_id)
     ctx.registry.delete(observation.peer_id)
   end
 
@@ -419,7 +437,7 @@ class Ww::Harmony
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ClientStarted) : Nil
-    ctx.world.reject!(BrokenClient, observation.defn)
+    ctx.world.delete_all(BrokenClient, observation.defn)
     ctx.world.add(RunningClient.new(observation.defn, observation.client_id))
     ctx.registry[observation.client_id] = observation.queue
   end
@@ -432,13 +450,13 @@ class Ww::Harmony
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ClientStopped) : Nil
     ctx.world.delete(RunningClient.new(observation.defn, observation.client_id))
-    ctx.world.reject!(IngoingMessage, observation.client_id)
+    ctx.world.delete_all(IngoingMessage, observation.client_id)
     ctx.registry.delete(observation.client_id)
   end
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ClientCrashed) : Nil
-    ctx.world.reject!(IngoingMessage, observation.client_id)
+    ctx.world.delete_all(IngoingMessage, observation.client_id)
     ctx.world.delete(RunningClient.new(observation.defn, observation.client_id))
     ctx.world.add(BrokenClient.new(observation.defn, observation.detail))
     ctx.registry.delete(observation.client_id)
@@ -454,7 +472,7 @@ class Ww::Harmony
   end
 
   # Returns `true` if *goal* is satisfied in (by) the given *world*.
-  def self.satisfied?(goal : ActionableGoal, world : World) : Bool
+  def self.satisfied?(goal : ActionableGoal, world : FactSet) : Bool
     case goal
     in Server
       # A server goal is satisfied by a running server. A broken server will
@@ -475,7 +493,7 @@ class Ww::Harmony
 
   # Returns `true` if *fact* is wanted by one or more goals from the given
   # set of *goals*.
-  def self.wanted?(fact : Fact, goals : Set(Goal)) : Bool
+  def self.wanted?(fact : Fact, goals : GoalSet) : Bool
     case fact
     in RunningServer, BrokenServer
       Server.new(fact.defn).in?(goals)
@@ -496,9 +514,7 @@ class Ww::Harmony
     in RemoteReceiveConfirmation
       # A send confirmation is needed while there's a matching outgoing message
       # that needs one.
-      goals.any? do |goal|
-        goal.is_a?(OutgoingMessage) && {fact.endpoint_id, fact.payload} == {goal.endpoint_id, goal.payload}
-      end
+      goals.any?(OutgoingMessage, fact.endpoint_id, fact.payload)
     end
   end
 
@@ -506,7 +522,7 @@ class Ww::Harmony
   # present. Other facts are "ground truths": they have no dependencies. This
   # function returns `true` when *fact* is either a ground truth, or all of its
   # dependencies are present in *world*.
-  def self.supported?(fact : Fact, world : World) : Bool
+  def self.supported?(fact : Fact, world : FactSet) : Bool
     case fact
     in RunningServer, BrokenServer, RunningClient, BrokenClient
       true # ground truth
@@ -589,7 +605,7 @@ class Ww::Harmony
 
   # Returns `true` if there are signs of *action* having been completed in *world*
   # (successfully or unsuccessfully).
-  def self.completed?(action : Action, world : World) : Bool
+  def self.completed?(action : Action, world : FactSet) : Bool
     case action
     in StartServer
       world.any?(RunningServer, action.defn) || world.any?(BrokenServer, action.defn)
@@ -903,5 +919,5 @@ class Ww::Harmony
   end
 end
 
-require "./harmony/world"
+require "./harmony/indexed_set"
 require "./harmony/registry"
