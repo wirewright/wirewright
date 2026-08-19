@@ -53,7 +53,7 @@ module Ww::Scenery
     end
   end
 
-  # Builds a tree of `RecognizedNode`s based on *document*. Returns the root query node.
+  # Builds a tree of `RecognizedNode`s based on *document*. Returns the root of the tree.
   #
   # - If the document is not a dict, this is simply `Inert`.
   # - If it is a dict, its items are put in a `z-stack`.
