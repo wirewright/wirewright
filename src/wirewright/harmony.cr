@@ -21,18 +21,10 @@
 class Ww::Harmony
   Log = ::Log.for(self)
 
-  annotation PrimaryKey
-  end
-
   defrecord PeerId, repr : UUID
   defrecord ServerId, repr : UUID
   defrecord ClientId, repr : UUID
 
-  # The most important purpose of `EndpointId` as an alias is for `PrimaryKey`
-  # compatibility. Passing the union as-is with the `|` shorthand doesn't work,
-  # because it is interpreted as a call rather than a type-side thing; so macro-
-  # side resolve doesn't work for it. And spelling Union(...) out is quite tiresome
-  # when we can just have an alias, which is useful anyway.
   alias EndpointId = PeerId | ClientId
 
   alias ServerDefn = TcpServerDefn | WsServerDefn | UnixServerDefn
@@ -58,28 +50,19 @@ class Ww::Harmony
                BrokenClient | IngoingMessage | IngoingReceiveConfirmation |
                RemoteReceiveConfirmation
 
-  @[PrimaryKey(server_id : ServerId)]
   defrecord RunningServer, defn : ServerDefn, server_id : ServerId
-
-  @[PrimaryKey(defn : ServerDefn)]
   defrecord BrokenServer, defn : ServerDefn, detail : String
 
-  @[PrimaryKey(peer_id : PeerId)]
   defrecord RunningPeer, server_id : ServerId, peer_id : PeerId
 
-  @[PrimaryKey(client_id : ClientId)]
   defrecord RunningClient, defn : ClientDefn, client_id : ClientId
-
-  @[PrimaryKey(defn : ClientDefn)]
   defrecord BrokenClient, defn : ClientDefn, detail : String
 
-  @[PrimaryKey(endpoint_id : EndpointId)]
   defrecord IngoingMessage,
     endpoint_id : EndpointId,
     seq : UInt64,
     payload : Bytes
 
-  @[PrimaryKey(endpoint_id : EndpointId)]
   defrecord RemoteReceiveConfirmation,
     endpoint_id : EndpointId,
     payload : Bytes
@@ -91,7 +74,6 @@ class Ww::Harmony
   defrecord Server, defn : ServerDefn
   defrecord Client, defn : ClientDefn
 
-  @[PrimaryKey(endpoint_id : EndpointId)]
   defrecord IngoingReceiveConfirmation, endpoint_id : EndpointId, seq : UInt64
   defrecord OutgoingMessage, endpoint_id : EndpointId, payload : Bytes
 
@@ -379,7 +361,7 @@ class Ww::Harmony
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ServerStarted) : Nil
-    ctx.world.reject!(BrokenServer, observation.defn) { true }
+    ctx.world.reject!(BrokenServer, observation.defn)
     ctx.world.add(RunningServer.new(observation.defn, observation.server_id))
     ctx.registry[observation.server_id] = observation.queue
   end
@@ -411,7 +393,7 @@ class Ww::Harmony
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : PeerDisconnected | PeerCrashed) : Nil
     ctx.world.delete(RunningPeer.new(observation.server_id, observation.peer_id))
-    ctx.world.reject!(IngoingMessage, observation.peer_id) { true }
+    ctx.world.reject!(IngoingMessage, observation.peer_id)
     ctx.registry.delete(observation.peer_id)
   end
 
@@ -437,7 +419,7 @@ class Ww::Harmony
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ClientStarted) : Nil
-    ctx.world.reject!(BrokenClient, observation.defn) { true }
+    ctx.world.reject!(BrokenClient, observation.defn)
     ctx.world.add(RunningClient.new(observation.defn, observation.client_id))
     ctx.registry[observation.client_id] = observation.queue
   end
@@ -450,13 +432,13 @@ class Ww::Harmony
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ClientStopped) : Nil
     ctx.world.delete(RunningClient.new(observation.defn, observation.client_id))
-    ctx.world.reject!(IngoingMessage, observation.client_id) { true }
+    ctx.world.reject!(IngoingMessage, observation.client_id)
     ctx.registry.delete(observation.client_id)
   end
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ClientCrashed) : Nil
-    ctx.world.reject!(IngoingMessage, observation.client_id) { true }
+    ctx.world.reject!(IngoingMessage, observation.client_id)
     ctx.world.delete(RunningClient.new(observation.defn, observation.client_id))
     ctx.world.add(BrokenClient.new(observation.defn, observation.detail))
     ctx.registry.delete(observation.client_id)
@@ -478,18 +460,16 @@ class Ww::Harmony
       # A server goal is satisfied by a running server. A broken server will
       # cause it to retry. This relation is asymmetric; a broken server is
       # wanted while a Server goal exists.
-      world.any?(RunningServer) { |fact| fact.defn == goal.defn }
+      world.any?(RunningServer, goal.defn)
     in Client
       # Ditto.
-      world.any?(RunningClient) { |fact| fact.defn == goal.defn }
+      world.any?(RunningClient, goal.defn)
     in IngoingReceiveConfirmation
       world.includes?(goal)
     in OutgoingMessage
       # An outgoing message is satisfied when the other side confirms it received
       # the message.
-      world.any?(RemoteReceiveConfirmation, goal.endpoint_id) do |fact|
-        fact.payload == goal.payload
-      end
+      world.any?(RemoteReceiveConfirmation, goal.endpoint_id, goal.payload)
     end
   end
 
@@ -531,12 +511,12 @@ class Ww::Harmony
     in RunningServer, BrokenServer, RunningClient, BrokenClient
       true # ground truth
     in RunningPeer
-      world.any?(RunningServer, fact.server_id) { true }
+      world.any?(RunningServer, fact.server_id)
     in IngoingMessage, IngoingReceiveConfirmation, RemoteReceiveConfirmation
       # These ones want their endpoint to be running.
       case ept = fact.endpoint_id
-      in PeerId   then world.any?(RunningPeer, ept) { true }
-      in ClientId then world.any?(RunningClient, ept) { true }
+      in PeerId   then world.any?(RunningPeer, ept)
+      in ClientId then world.any?(RunningClient, ept)
       end
     end
   end
@@ -612,19 +592,15 @@ class Ww::Harmony
   def self.completed?(action : Action, world : World) : Bool
     case action
     in StartServer
-      world.any?(RunningServer) { |fact| fact.defn == action.defn } ||
-        world.any?(BrokenServer, action.defn) { true }
+      world.any?(RunningServer, action.defn) || world.any?(BrokenServer, action.defn)
     in StopServer
-      !(world.any?(RunningServer) { |fact| fact.defn == action.defn } ||
-        world.any?(BrokenServer, action.defn) { true })
+      !(world.any?(RunningServer, action.defn) || world.any?(BrokenServer, action.defn))
     in StartClient
-      world.any?(RunningClient) { |fact| fact.defn == action.defn } ||
-        world.any?(BrokenClient, action.defn) { true }
+      world.any?(RunningClient, action.defn) || world.any?(BrokenClient, action.defn)
     in StopClient
-      !(world.any?(RunningClient) { |fact| fact.defn == action.defn } ||
-        world.any?(BrokenClient, action.defn) { true })
+      !(world.any?(RunningClient, action.defn) || world.any?(BrokenClient, action.defn))
     in DropPeer
-      world.any?(RunningPeer, action.peer_id) { true }
+      world.any?(RunningPeer, action.peer_id)
     in AcknowledgeMessage
       world.includes?(IngoingReceiveConfirmation.new(action.endpoint_id, action.seq))
     in SendMessage

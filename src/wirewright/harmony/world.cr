@@ -1,270 +1,218 @@
-class Ww::Harmony
-  # FIXME: We need to index by all (or most) fields rather than just one primary
-  # key field. Moreover, this class is horrendously implemented. Is there a way to
-  # improve this? And combine it with World?
-  class KeyedFactSet
-    include Enumerable(Fact)
+class ::Ww::Harmony
+  alias World = FactSet
 
-    {% begin %}
-      {%
-        tables = {} of ::NoReturn => ::NoReturn
-
-        Fact.union_types.each_with_index do |type, index|
-          next unless ann = type.annotation(PrimaryKey)
-          next unless field = ann[0]
-
-          tables[type.symbolize] = {name: "table#{index}".id, key: field.var.id, key_type: field.type}
-        end
-      %}
-
-      # :nodoc:
-      TABLES = {{tables}}
-
-      {% for fact_type, table in tables %}
-        @{{table[:name]}} : Hash({{table[:key_type]}}, Set({{fact_type.id}}))?
-      {% end %}
-    {% end %}
-
-    @unkeyed : Set(Fact)?
-
-    def size : Int32
-      size = @unkeyed.try(&.size) || 0
-      {% for _, table in TABLES %}
-        size += @{{table[:name]}}.try(&.size) || 0
-      {% end %}
-      size
-    end
-
-    def includes?(fact : Fact) : Bool
-      {% for fact_type, table in TABLES %}
-        if fact.is_a?({{fact_type.id}})
-          return false unless buckets = @{{table[:name]}}
-          return false unless bucket = buckets[fact.{{table[:key]}}]?
-          return bucket.includes?(fact)
-        end
-      {% end %}
-
-      @unkeyed.try(&.includes?(fact)) || false
-    end
-
-    def each(& : Fact ->) : Nil
-      {% for _, table in TABLES %}
-        if buckets = @{{table[:name]}}
-          buckets.each do |_, bucket|
-            bucket.each { |fact| yield fact.as(Fact) }
-          end
-        end
-      {% end %}
-
-      @unkeyed.try do |facts|
-        facts.each { |fact| yield fact }
-      end
-    end
-
-    def each(cls : T.class, & : T ->) : Nil forall T
-      {% begin %}
-        {% table = TABLES[T.symbolize] %}
-
-        return false unless buckets = @{{table[:name]}}
-
-        buckets.each do |_, bucket|
-          bucket.each { |fact| yield fact }
-        end
-      {% end %}
-    end
-
-    def each(cls : T.class, key : K, & : T ->) : Nil forall T, K
-      {% begin %}
-        {% table = TABLES[T.symbolize] %}
-
-        {% unless K <= table[:key_type].resolve %}
-          {% K.raise "invalid key type #{K}, expected #{table[:key_type]}" %}
-        {% end %}
-
-        return unless buckets = @{{table[:name]}}
-        return unless bucket = buckets[key]?
-
-        bucket.each { |fact| yield fact }
-      {% end %}
-    end
-
-    def any?(cls : T.class, & : T -> Bool) : Bool forall T
-      each(cls) do |fact|
-        return true if yield fact
-      end
-
-      false
-    end
-
-    def any?(cls : T.class, key : K, & : T -> Bool) : Bool forall T, K
-      each(cls, key) do |fact|
-        return true if yield fact
-      end
-
-      false
-    end
-
-    def reject!(cls : T.class, key : K, & : T -> Bool) : Nil forall T, K
-      {% begin %}
-        {% table = TABLES[T.symbolize] %}
-
-        {% unless K <= table[:key_type].resolve %}
-          {% K.raise "invalid key type #{K}, expected #{table[:key_type]}" %}
-        {% end %}
-
-        return false unless buckets = @{{table[:name]}}
-        return false unless bucket = buckets[key]?
-
-        bucket.reject! { |fact| yield fact.as(T) }
-        if bucket.empty?
-          buckets.delete(key)
-        end
-      {% end %}
-    end
-
-    def add?(fact : Fact) : Bool
-      {% for fact_type, table in TABLES %}
-        pass do
-          next unless fact.is_a?({{fact_type.id}})
-          buckets = @{{table[:name]}} ||= {} of {{table[:key_type]}} => Set({{fact_type.id}})
-          bucket = buckets.put_if_absent(fact.{{table[:key]}}) { Set({{fact_type.id}}).new }
-          return bucket.add?(fact)
-        end
-      {% end %}
-
-      facts = @unkeyed ||= Set(Fact).new
-      facts.add?(fact)
-    end
-
-    def delete(fact : Fact) : Bool
-      {% for fact_type, table in TABLES %}
-        pass do
-          next unless fact.is_a?({{fact_type.id}})
-          return false unless buckets = @{{table[:name]}}
-          return false unless bucket = buckets[fact.{{table[:key]}}]?
-          return false unless bucket.delete(fact)
-
-          if bucket.empty?
-            buckets.delete(fact.{{table[:key]}})
-          end
-
-          return true
-        end
-      {% end %}
-
-      @unkeyed.try(&.delete(fact)) || false
-    end
-
-    def pretty_print(pp)
-      pp.list("KeyedFactSet[", self, "]")
-    end
-  end
-
-  class World
-    include Enumerable(Fact)
-
+  class FactSet
     {% begin %}
       # :nodoc:
       alias FactClass = Union({{Fact.union_types.map(&.class).splat}})
     {% end %}
 
+    alias Feature = ServerDefn | ClientDefn | ServerId | PeerId | ClientId |
+                    EndpointId | UInt64 | String | Bytes | FactClass
+
+    # We store a fact just once on the heap, and then we manipulate a reference
+    # to it.
+    class FactRef
+      getter fact : Fact
+
+      def initialize(@fact)
+      end
+
+      def ==(other : Fact) : Bool
+        @fact == other
+      end
+
+      def_equals_and_hash @fact
+    end
+
+    defrecord FeatureId, repr : UInt64
+
     def initialize
-      @facts = {} of FactClass => KeyedFactSet
+      @seq = 0u64
       @version = 0u64
+      @facts = Set(FactRef).new
+      @index = {} of FeatureId => Set(FactRef)
+      @features = {} of Feature => FeatureId
+    end
+
+    def empty? : Bool
+      size.zero?
+    end
+
+    def size : Int32
+      @facts.size
+    end
+
+    def includes?(fact : Fact) : Bool
+      @facts.includes?(fact)
     end
 
     def version : UInt64
       @version
     end
 
-    def includes?(fact : Fact) : Bool
-      return false unless bucket = @facts[fact.class]?
-      return false unless bucket.includes?(fact)
-
-      true
+    def each(& : Fact ->) : Nil
+      @facts.each { |fact_ref| yield fact_ref.fact }
     end
 
-    def each(& : Fact ->) : Nil
-      @facts.each do |_, bucket|
-        bucket.each { |fact| yield fact }
+    def each_with_index(& : Fact, Int32 ->) : Nil
+      @facts.each_with_index do |fact_ref, index|
+        yield fact_ref.fact, index
       end
     end
 
     def each(cls : T.class, & : T ->) : Nil forall T
-      {% unless T < Fact %}
-        {% T.raise "expected a Fact class, not #{T}" %}
-      {% end %}
-
-      return unless bucket = @facts[cls]?
-
-      bucket.each do |fact|
-        yield fact.as(T)
-      end
+      each(cls, Tuple.new) { |fact| yield fact }
     end
 
-    def each(cls : T.class, key, & : T ->) : Nil forall T
-      {% unless T < Fact %}
-        {% T.raise "expected a Fact class, not #{T}" %}
-      {% end %}
+    def each(cls : T.class, *hints : Feature, & : T ->) : Nil forall T
+      each(cls, hints) { |fact| yield fact }
+    end
 
-      return unless bucket = @facts[cls]?
+    def each(cls : T.class, hints : Tuple() | Enumerable(Feature), & : T ->) : Nil forall T
+      candidate_sets = Pf::Kit.stack_array(Set(FactRef), 8)
 
-      bucket.each(cls, key) do |fact|
-        yield fact.as(T)
+      pass do
+        return unless feature_id = @features[cls]?
+
+        candidate_sets << @index[feature_id]
       end
+
+      hints.each do |feature|
+        return unless feature_id = @features[feature]?
+
+        candidate_sets << @index[feature_id]
+      end
+
+      return false if candidate_sets.empty?
+
+      candidate_sets.sort_by!(&.size)
+
+      smallest = candidate_sets[0].dup
+      (1...candidate_sets.size).each do |index|
+        candidate_set = candidate_sets[index]
+        smallest.select! { |fact_ref| fact_ref.in?(candidate_set) }
+      end
+
+      smallest.each { |fact_ref| yield fact_ref.fact.as(T) }
     end
 
     def any?(cls : T.class, *args, & : T -> Bool) : Bool forall T
-      {% unless T < Fact %}
-        {% T.raise "expected a Fact class, not #{T}" %}
+      each(cls, *args) do |fact|
+        return true if yield fact
+      end
+
+      false
+    end
+
+    def any?(*args) : Bool
+      any?(*args) { true }
+    end
+
+    def add(fact : T) : Bool forall T
+      {% unless T <= Fact %}
+        {% T.raise "argument must be a member of Fact, but #{T} is not" %}
       {% end %}
 
-      return false unless bucket = @facts[cls]?
-      return false unless bucket.any?(cls, *args) { |fact| yield fact.as(T) }
+      if fact.in?(@facts)
+        return false
+      end
+
+      ref = FactRef.new(fact)
+
+      @facts << ref
+
+      features = Pf::Kit.stack_array(FeatureId, 8)
+
+      pass do
+        feature = @features.put_if_absent(fact.class) do
+          @seq, _ = @seq + 1, FeatureId.new(@seq)
+        end
+        features << feature
+      end
+
+      {% for ivar in T.instance_vars %}
+        pass do
+          feature = @features.put_if_absent(fact.@{{ivar}}) do
+            @seq, _ = @seq + 1, FeatureId.new(@seq)
+          end
+          features << feature
+        end
+      {% end %}
+
+      features.each do |feature|
+        refs = @index.put_if_absent(feature) { Set(FactRef).new }
+        refs << ref
+      end
+
+      @version += 1
 
       true
     end
 
-    def add(fact : Fact) : Nil
-      bucket = @facts.put_if_absent(fact.class) { KeyedFactSet.new }
-      if bucket.add?(fact) # added
-        @version += 1
-      end
+    def <<(fact) : FactSet
+      add(fact)
+      self
     end
 
-    def delete(fact : Fact) : Nil
-      return unless bucket = @facts[fact.class]?
-      return unless bucket.delete(fact) # removed
-
-      if bucket.size.zero? # empty
-        @facts.delete(fact.class)
-      end
-
-      @version += 1
-    end
-
-    def reject!(cls : T.class, key, & : T -> Bool) : Nil forall T
-      {% unless T < Fact %}
-        {% T.raise "expected a Fact class, not #{T}" %}
+    def delete(fact : T) : Bool forall T
+      {% unless T <= Fact %}
+        {% T.raise "expected a Fact argument, not #{T}" %}
       {% end %}
 
-      return unless bucket = @facts[cls]?
+      return false unless @facts.delete(fact)
 
-      size0 = bucket.size
-      bucket.reject!(cls, key) { |fact| yield fact }
-      size1 = bucket.size
+      @version += 1
 
-      if size1.zero? # empty
-        @facts.delete(cls)
+      pass(fact.class) do |feature|
+        feature_id = @features[feature]
+
+        refs = @index[feature_id]
+        assert refs.delete(fact)
+        next unless refs.empty?
+
+        assert @index.delete(feature_id)
+        assert @features.delete(feature)
       end
 
-      if size0 > size1 # removed
-        @version += 1
+      {% for ivar in T.instance_vars %}
+        pass(fact.@{{ivar}}) do |feature|
+          feature_id = @features[feature]
+
+          refs = @index[feature_id]
+          assert refs.delete(fact)
+          next unless refs.empty?
+
+          assert @index.delete(feature_id)
+          assert @features.delete(feature)
+        end
+      {% end %}
+
+      true
+    end
+
+    def reject!(*args, &) : Nil
+      matches = Pf::Kit.stack_array(Fact)
+
+      each(*args) do |fact|
+        next unless yield fact
+
+        matches << fact
       end
+
+      matches.each do |fact|
+        delete(fact)
+      end
+    end
+
+    def reject!(*args) : Nil
+      reject!(*args) { true }
     end
 
     def pretty_print(pp)
-      pp.list("World[", self, "]")
+      pp.list("FactSet{", self, "}")
     end
+
+    def_equals_and_hash @facts
   end
 end
