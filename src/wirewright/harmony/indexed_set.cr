@@ -229,6 +229,15 @@ class Ww::Harmony
       pp.list("IndexedSet{", self, "}")
     end
 
+    def inspect(io)
+      io << "IndexedSet{"
+      each_with_index do |element, index|
+        io << ", " if index > 0
+        element.inspect(io)
+      end
+      io << "}"
+    end
+
     def_equals_and_hash @elements
   end
 end

@@ -983,6 +983,11 @@ class Ww::Harmony
     abstract def on_message_lost(payload : Term::Blob) : Nil
     abstract def on_message_handled(msgid : MsgId) : Nil
 
+    abstract def on_receive_ready : Nil
+    abstract def on_receive_busy : Nil
+    abstract def on_informed_ready : Nil
+    abstract def on_informed_busy : Nil
+
     @seq = 0u64
     @pending = {} of MsgId => Term::Blob
 
