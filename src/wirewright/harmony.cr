@@ -71,9 +71,9 @@ class Ww::Harmony
     tx : Transmission,
     brief: true
 
-  alias Transmission = HandshakeTransmission | DirectTransmission
+  alias Transmission = PortalTransmission | DirectTransmission
 
-  defrecord HandshakeTransmission, brief: true
+  defrecord PortalTransmission, brief: true
   defrecord DirectTransmission, brief: true
 
   alias Goal = ActionableGoal | KeepaliveGoal
@@ -1014,7 +1014,7 @@ class Ww::Harmony
     end
 
     # The socket started.
-    def handle(tx : HandshakeTransmission, command : SocketRxStarted) : HandleFlow
+    def handle(tx : PortalTransmission, command : SocketRxStarted) : HandleFlow
       HandleContinue.new
     end
 
@@ -1030,7 +1030,7 @@ class Ww::Harmony
     end
 
     # They sent us something.
-    def handle(tx : HandshakeTransmission, command : SocketRxReceived) : HandleFlow
+    def handle(tx : PortalTransmission, command : SocketRxReceived) : HandleFlow
       begin
         frame = Portal.deserialize(command.payload.to_slice)
       rescue e : Portal::Error
@@ -1067,7 +1067,7 @@ class Ww::Harmony
     end
 
     # We want to send something.
-    def handle(tx : HandshakeTransmission, command : SocketSend) : HandleFlow
+    def handle(tx : PortalTransmission, command : SocketSend) : HandleFlow
       msgid = MsgId.new(@seq)
       @seq += 1
 
@@ -1105,7 +1105,7 @@ class Ww::Harmony
     end
 
     # We want to confirm the receipt of their message.
-    def handle(tx : HandshakeTransmission, command : SocketAccept) : HandleFlow
+    def handle(tx : PortalTransmission, command : SocketAccept) : HandleFlow
       frame = Portal::Accept.new(command.msgid)
       unless stream? { |io| Portal.serialize(io, frame) }
         return HandleAbort.new("ACCEPT not sent")
@@ -1131,7 +1131,7 @@ class Ww::Harmony
     end
 
     # :ditto:
-    def handle(tx : HandshakeTransmission, command : SocketInformReady) : HandleFlow
+    def handle(tx : PortalTransmission, command : SocketInformReady) : HandleFlow
       frame = Portal::Ready.new
       unless stream? { |io| Portal.serialize(io, frame) }
         return HandleAbort.new("READY not sent")
@@ -1150,7 +1150,7 @@ class Ww::Harmony
     end
 
     # :ditto:
-    def handle(tx : HandshakeTransmission, command : SocketInformBusy) : HandleFlow
+    def handle(tx : PortalTransmission, command : SocketInformBusy) : HandleFlow
       frame = Portal::Busy.new
       unless stream? { |io| Portal.serialize(io, frame) }
         return HandleAbort.new("BUSY not sent")

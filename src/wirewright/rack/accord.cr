@@ -98,11 +98,99 @@ module Ww::Rack::Accord
   end
 
   private def transmission?(term : Term) : Harmony::Transmission?
+    # |@ rack.[network].transmission
+    #
+    # |@summary
+    # The available modes of transmission.
+    #
+    # |@block
+    # *transmission* determines how individual payloads are transmitted over
+    # the selected transport (WebSockets, TCP, etc.)
     Term.case(term) do
-      matchpi %{handshake} do
-        Harmony::HandshakeTransmission.new
+      # |@ rack.[network].transmission
+      #
+      # |@pattern
+      # portal
+      #
+      # |@block
+      # Uses the internal Portal protocol to transmit the payload.
+      #
+      # Transmission with `portal` is more reliable than `direct` transmission,
+      # and interacts well with the semantics of Rack.
+      #
+      # For example, a client's outgoing message cell is not emptied until the message
+      # crosses over to the other side, which provides a natural kind of backpressure;
+      # nor are messages sent until the other side tells its ingoing message cell
+      # is empty.
+      #
+      # The main drawback of `transmission: portal` is that it places more load on
+      # the network, involving round-trips and so on.
+      #
+      # ### Portal
+      #
+      # The Portal protocol supports the following messages:
+      #
+      # - `DATA <msgid> <payload bytes...>`: Alice sends *payload* to Bob,
+      #    with Alice's message id `<msgid>` of choice. `<msgid>` is 1-16
+      #    hex digits (a 64-bit unsigned integer written in hex).
+      # - `ACCEPT <msgid>`: Bob confirms that he received Alice's payload
+      #    with the given *msgid*. Alice is free to remove *msgid* on her side.
+      # - `READY`: Bob sends this to Alice to signal that his "mailbox" is empty;
+      #   he is ready to receive the next message, if any.
+      # - `BUSY`: Bob sends this to Alice to signal that his "mailbox" is full;
+      #   he cannot receive any messages yet.
+      #
+      # Due to the way the protocol is designed and implemented right now (and I doubt
+      # huge improvements to the current behavior are possible...), `READY` and `BUSY`
+      # are *advisory* on the protocol level. Moreover, they can be sent by either party
+      # at any point in time.
+      #
+      # The protocol places no demands on the order of messages, nor on the state or
+      # statefulness of senders, receivers, or both.
+      #
+      # However, `rack.server` and `rack.client` in particular demand readiness of the other party
+      # before they send and, in turn, report their own readiness.
+      #
+      # An important point is races. Races are definitely possible with this protocol.
+      # Let's say Bob sends READY to Alice, which triggers Alice to start sending her
+      # DATA to Bob; simultaneously, Bob changes his mind and sends BUSY. We observe
+      # the two messages passing each other in the wire. Alice finishes sending DATA
+      # and receives Bob's BUSY; Bob finishes sending BUSY and receives Alice's DATA.
+      #
+      # The above *advisory* label covers the case described here. DATA will be buffered
+      # and processed normally as in `transmission: direct`; but it will be shown to Bob
+      # only when he is ready, just as he sends the READY message to Alice.
+      #
+      # In theory, this could create a persistent backlog of one message, but I'm not sure
+      # about that. Moreover, such a mode gets rid of the guarantee that "absent in my
+      # outgoing cell" means "present in their ingoing cell". Importantly, however, all
+      # this is only true when you explicitly write into the ingoing cell. If Portal has
+      # full control over the cell, and you only look at it or clear it (e.g. by moving
+      # the message it contains elsewhere, or by literally clearing it), then I'd expect
+      # no races of the kind I described. In other words, as far as I understand, it is
+      # possible to "break" this protocol (to an extent), but only if you actively interfere
+      # with its normal functioning. One possible fix could be to use some sort of a "token",
+      # a "microphone" the parties pass between each other to speak. But I'm not sure.
+      matchpi %{portal} do
+        Harmony::PortalTransmission.new
       end
 
+      # |@ rack.[network].transmission
+      #
+      # |@pattern
+      # direct
+      #
+      # |@block
+      # Direct passthrough of the payload to the underlying transport.
+      #
+      # - No application-level backpressure (senders do not care about receivers).
+      # - Message sends are confirmed locally (senders do not care about acknowledgement
+      #   or feedback about the message they sent from receivers).
+      #
+      # More importantly, with direct transmission, there is a window of time when the message
+      # is neither on the sender's side nor on the receiver's side -- it is "in the wire". If
+      # anything happens to the connection while a message is traveling in the wire, the message
+      # is lost. So you wouldn't want to e.g. transfer money between peers with `transmission: direct`.
       matchpi %{direct} do
         Harmony::DirectTransmission.new
       end
@@ -120,11 +208,13 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (ws local port←(%number u16))
+      # (ws local port←(%number u16) ⍊ transmission_⋮ direct)
       #
       # |@block
       # A plain WebSocket server at 127.0.0.1:*port*. If there is an existing HTTP
       # server at *port* (within the same circuit!), extends it with WebSocket support.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(ws local port←(%number u16) ⍊ transmission_⋮ direct)} do
         Harmony::WsServerDefn.new("127.0.0.1", port, transmission?(transmission) || return)
       end
@@ -132,11 +222,13 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (ws public port←(%number u16))
+      # (ws public port←(%number u16) ⍊ transmission_⋮ direct)
       #
       # |@block
       # A plain WebSocket server at 0.0.0.0:*port*. If there is an existing HTTP
       # server at *port* (in the same circuit!), extends it with WebSocket support.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(ws public port←(%number u16) ⍊ transmission_⋮ direct)} do
         Harmony::WsServerDefn.new("0.0.0.0", port, transmission?(transmission) || return)
       end
@@ -144,11 +236,13 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (ws host_string port←(%number u16))
+      # (ws host_string port←(%number u16) ⍊ transmission_⋮ direct)
       #
       # |@block
       # A plain WebSocket server at *host*:*port*. If there is an existing HTTP server
       # at *port* (in the same circuit!), extends it with WebSocket support.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(ws host_string port←(%number u16) ⍊ transmission_⋮ direct)}, host: String do
         Harmony::WsServerDefn.new(host, port, transmission?(transmission) || return)
       end
@@ -156,10 +250,12 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (tcp local port←(%number u16))
+      # (tcp local port←(%number u16) ⍊ transmission_⋮ direct)
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 127.0.0.1:*port*.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(tcp local port←(%number u16) ⍊ transmission_⋮ direct)} do
         Harmony::TcpServerDefn.new("127.0.0.1", port, transmission?(transmission) || return)
       end
@@ -167,10 +263,12 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (tcp public port←(%number u16))
+      # (tcp public port←(%number u16) ⍊ transmission_⋮ direct)
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 0.0.0.0:*port*.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(tcp public port←(%number u16) ⍊ transmission_⋮ direct)} do
         Harmony::TcpServerDefn.new("0.0.0.0", port, transmission?(transmission) || return)
       end
@@ -178,10 +276,12 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (tcp host_string port←(%number u16))
+      # (tcp host_string port←(%number u16) ⍊ transmission_⋮ direct)
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 0.0.0.0:*port*.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(tcp host_string port←(%number u16) ⍊ transmission_⋮ direct)}, host: String do
         Harmony::TcpServerDefn.new(host, port, transmission?(transmission) || return)
       end
@@ -189,10 +289,12 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (unix path_string)
+      # (unix path_string ⍊ transmission_⋮ direct)
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
+      #
+      # See `rack.[network].transmission` to learn more about *transmission*.
       matchpiT %{(unix path_string ⍊ transmission_⋮ direct)}, path: NormalPath do
         Harmony::UnixServerDefn.new(path, transmission?(transmission) || return)
       end

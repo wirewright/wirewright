@@ -601,17 +601,17 @@
   (frame/tail fast-forward: true
     (cell @in 10)))
 
-;; WebSocket counter with transmission: handshake
+;; WebSocket counter with transmission: portal
 (rack
   (frame
-    (server (@pool (ws local 9813 transmission: handshake) format: ml)
+    (server (@pool (ws local 9813 transmission: portal) format: ml)
       (backsys
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
     (circuit (pool @pool))
 
-    (client (@in -> (ws local 9813 transmission: handshake) -> @out format: ml))
+    (client (@in -> (ws local 9813 transmission: portal) -> @out format: ml))
     (feed @out @in)
     (cell @out)
     (cell @in 0))
@@ -621,17 +621,17 @@
   (frame/tail fast-forward: true
     (cell @in 10)))
 
-;; TCP counter with transmission: handshake
+;; TCP counter with transmission: portal
 (rack
   (frame
-    (server (@pool (tcp local 9813 transmission: handshake) format: ml)
+    (server (@pool (tcp local 9813 transmission: portal) format: ml)
       (backsys
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
     (circuit (pool @pool))
 
-    (client (@in -> (tcp local 9813 transmission: handshake) -> @out format: ml))
+    (client (@in -> (tcp local 9813 transmission: portal) -> @out format: ml))
     (feed @out @in)
     (cell @out)
     (cell @in 0))
@@ -641,7 +641,7 @@
   (frame/tail fast-forward: true
     (cell @in 10)))
 
-;; Unix socket counter with transmission: handshake
+;; Unix socket counter with transmission: portal
 (rack
   (frame
     (cell @fs-in (delete file if exists "/tmp/wirewright-unix.sock"))
@@ -649,14 +649,14 @@
     (fs @fs-in @fs-out)
 
     (guard (@fs-out [ok _])
-      (server (@pool (unix "/tmp/wirewright-unix.sock" transmission: handshake) format: ml)
+      (server (@pool (unix "/tmp/wirewright-unix.sock" transmission: portal) format: ml)
         (backsys
           {¦ in: (±M _*) out: (_* `>M)}
             <> {(M): (), >M: ^(+ M 1)})))
 
     (circuit (pool @pool))
 
-    (client (@in -> (unix "/tmp/wirewright-unix.sock" transmission: handshake) -> @out format: ml))
+    (client (@in -> (unix "/tmp/wirewright-unix.sock" transmission: portal) -> @out format: ml))
     (feed @out @in)
     (cell @out)
     (cell @in 0))
