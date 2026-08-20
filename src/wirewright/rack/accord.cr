@@ -71,10 +71,8 @@ module Ww::Rack::Accord
 
     hg.propose(proposals, :client) do |node|
       Term.case(node.term) do
-        # - Allow the circuit to use an errorless `dn` to disable the socket.
-        # - Use `closed` instead of simply `dn` to avoid confusing server-side
-        #   closure (`closed`) with client-side closure (`dn`).
-        matchpi %{[client [@_ -> _ -> @_] (%any dn closed)]} { }
+        # Allow the circuit to use an errorless `dn` to disable the socket.
+        matchpi %{[client [@_ -> _ -> @_] dn]} { }
         matchpi %{[client [@_ -> _ -> @_] (dn _string)]} { }
 
         matchpi(<<-WWML) do
@@ -99,6 +97,20 @@ module Ww::Rack::Accord
     end
   end
 
+  private def transmission?(term : Term) : Harmony::Transmission?
+    Term.case(term) do
+      matchpi %{handshake} do
+        Harmony::HandshakeTransmission.new
+      end
+
+      matchpi %{direct} do
+        Harmony::DirectTransmission.new
+      end
+
+      otherwise { }
+    end
+  end
+
   private def server_transport?(term : Term) : Harmony::ServerDefn?
     # |@ rack.server.transport
     #
@@ -113,8 +125,8 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket server at 127.0.0.1:*port*. If there is an existing HTTP
       # server at *port* (within the same circuit!), extends it with WebSocket support.
-      matchpiT %{(ws local port←(%number u16))} do
-        Harmony::WsServerDefn.new("127.0.0.1", port)
+      matchpiT %{(ws local port←(%number u16) ⍊ transmission_⋮ direct)} do
+        Harmony::WsServerDefn.new("127.0.0.1", port, transmission?(transmission) || return)
       end
 
       # |@ rack.server.transport
@@ -125,8 +137,8 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket server at 0.0.0.0:*port*. If there is an existing HTTP
       # server at *port* (in the same circuit!), extends it with WebSocket support.
-      matchpiT %{(ws public port←(%number u16))} do
-        Harmony::WsServerDefn.new("0.0.0.0", port)
+      matchpiT %{(ws public port←(%number u16) ⍊ transmission_⋮ direct)} do
+        Harmony::WsServerDefn.new("0.0.0.0", port, transmission?(transmission) || return)
       end
 
       # |@ rack.server.transport
@@ -137,8 +149,8 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket server at *host*:*port*. If there is an existing HTTP server
       # at *port* (in the same circuit!), extends it with WebSocket support.
-      matchpiT %{(ws host_string port←(%number u16))}, host: String do
-        Harmony::WsServerDefn.new(host, port)
+      matchpiT %{(ws host_string port←(%number u16) ⍊ transmission_⋮ direct)}, host: String do
+        Harmony::WsServerDefn.new(host, port, transmission?(transmission) || return)
       end
 
       # |@ rack.server.transport
@@ -148,8 +160,8 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 127.0.0.1:*port*.
-      matchpiT %{(tcp local port←(%number u16))} do
-        Harmony::TcpServerDefn.new("127.0.0.1", port)
+      matchpiT %{(tcp local port←(%number u16) ⍊ transmission_⋮ direct)} do
+        Harmony::TcpServerDefn.new("127.0.0.1", port, transmission?(transmission) || return)
       end
 
       # |@ rack.server.transport
@@ -159,8 +171,8 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 0.0.0.0:*port*.
-      matchpiT %{(tcp public port←(%number u16))} do
-        Harmony::TcpServerDefn.new("0.0.0.0", port)
+      matchpiT %{(tcp public port←(%number u16) ⍊ transmission_⋮ direct)} do
+        Harmony::TcpServerDefn.new("0.0.0.0", port, transmission?(transmission) || return)
       end
 
       # |@ rack.server.transport
@@ -170,8 +182,8 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 0.0.0.0:*port*.
-      matchpiT %{(tcp host_string port←(%number u16))}, host: String do
-        Harmony::TcpServerDefn.new(host, port)
+      matchpiT %{(tcp host_string port←(%number u16) ⍊ transmission_⋮ direct)}, host: String do
+        Harmony::TcpServerDefn.new(host, port, transmission?(transmission) || return)
       end
 
       # |@ rack.server.transport
@@ -181,8 +193,8 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
-      matchpiT %{(unix path_string)}, path: NormalPath do
-        Harmony::UnixServerDefn.new(path)
+      matchpiT %{(unix path_string ⍊ transmission_⋮ direct)}, path: NormalPath do
+        Harmony::UnixServerDefn.new(path, transmission?(transmission) || return)
       end
 
       otherwise { }
@@ -258,8 +270,10 @@ module Ww::Rack::Accord
       # connection (TLS) if *secure* is `true`.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpiT %{(ws local port←(%number u16) ⍊ key_⋮ master path⋮ "" secure⋮ false)}, path: String do
-        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure.true?)
+      matchpiT %{(ws local port←(%number u16) ⍊ key_⋮ master path⋮ "" secure⋮ false transmission_⋮ direct)}, path: String do
+        return unless tx = transmission?(transmission)
+
+        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure.true?, tx)
       end
 
       # |@ rack.client.transport
@@ -272,8 +286,10 @@ module Ww::Rack::Accord
       # connection (TLS) if *secure* is `true`.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpiT %{(ws public port←(%number u16) ⍊ key_⋮ master path⋮ "" secure⋮ false)}, path: String do
-        Harmony::WsClientDefn.new("0.0.0.0", port, path, key, secure.true?)
+      matchpiT %{(ws public port←(%number u16) ⍊ key_⋮ master path⋮ "" secure⋮ false transmission_⋮ direct)}, path: String do
+        return unless tx = transmission?(transmission)
+
+        Harmony::WsClientDefn.new("0.0.0.0", port, path, key, secure.true?, tx)
       end
 
       # |@ rack.client.transport
@@ -286,8 +302,10 @@ module Ww::Rack::Accord
       # connection (TLS) if *secure* is `true`.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpiT %{(ws host_string port←(%number u16) ⍊ key_⋮ master path⋮ "" secure⋮ false)}, host: String, path: String do
-        Harmony::WsClientDefn.new(host, port, path, key, secure.true?)
+      matchpiT %{(ws host_string port←(%number u16) ⍊ key_⋮ master path⋮ "" secure⋮ false transmission_⋮ direct)}, host: String, path: String do
+        return unless tx = transmission?(transmission)
+
+        Harmony::WsClientDefn.new(host, port, path, key, secure.true?, tx)
       end
 
       # |@ rack.client.transport
@@ -299,8 +317,10 @@ module Ww::Rack::Accord
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 127.0.0.1:*port*.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpiT %{(tcp local port←(%number u16) ⍊ key_⋮ master)} do
-        Harmony::TcpClientDefn.new("127.0.0.1", port, key)
+      matchpiT %{(tcp local port←(%number u16) ⍊ key_⋮ master transmission_⋮ direct)} do
+        return unless tx = transmission?(transmission)
+
+        Harmony::TcpClientDefn.new("127.0.0.1", port, key, tx)
       end
 
       # |@ rack.client.transport
@@ -312,8 +332,10 @@ module Ww::Rack::Accord
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at 0.0.0.0:*port*.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpiT %{(tcp public port←(%number u16) ⍊ key_⋮ master)} do
-        Harmony::TcpClientDefn.new("0.0.0.0", port, key)
+      matchpiT %{(tcp public port←(%number u16) ⍊ key_⋮ master transmission_⋮ direct)} do
+        return unless tx = transmission?(transmission)
+
+        Harmony::TcpClientDefn.new("0.0.0.0", port, key, tx)
       end
 
       # |@ rack.client.transport
@@ -325,8 +347,10 @@ module Ww::Rack::Accord
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpiT %{(tcp host_string port←(%number u16) ⍊ key_⋮ master)}, host: String do
-        Harmony::TcpClientDefn.new(host, port, key)
+      matchpiT %{(tcp host_string port←(%number u16) ⍊ key_⋮ master transmission_⋮ direct)}, host: String do
+        return unless tx = transmission?(transmission)
+
+        Harmony::TcpClientDefn.new(host, port, key, tx)
       end
 
       # |@ rack.client.transport
@@ -338,8 +362,10 @@ module Ww::Rack::Accord
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
       #
       # See `rack.client.transport.key` to learn more about *key*.
-      matchpi %{(unix path_string ⍊ key_⋮ master)}, path: NormalPath do
-        Harmony::UnixClientDefn.new(path, key)
+      matchpi %{(unix path_string ⍊ key_⋮ master transmission_⋮ direct)}, path: NormalPath do
+        return unless tx = transmission?(transmission)
+
+        Harmony::UnixClientDefn.new(path, key, tx)
       end
 
       otherwise { }
@@ -379,19 +405,24 @@ module Ww::Rack::Accord
     status = Term.of(:pending)
     incarnation = nil
 
-    ctx.world.each(Harmony::RunningServer) do |fact|
-      next unless fact.defn == server.defn
+    pass do
+      ctx.world.each(Harmony::RunningServer, server.defn) do |fact|
+        status = Term.of(:up)
+        incarnation = fact.server_id
+        break
+      end
 
-      status = Term.of(:up)
-      incarnation = fact.server_id
-      break
-    end
+      next if incarnation
 
-    if incarnation.nil?
-      ctx.world.each(Harmony::BrokenServer) do |fact|
-        next unless fact.defn == server.defn
-
+      ctx.world.each(Harmony::PendingServer, server.defn) do |fact|
         status = Term.of(:pending, fact.detail)
+        break
+      end
+
+      next if incarnation
+
+      ctx.world.each(Harmony::BrokenServer, server.defn) do |fact|
+        status = Term.of(:dn, fact.detail)
         break
       end
     end
@@ -438,6 +469,10 @@ module Ww::Rack::Accord
       ctx.goals.add(Harmony::PeerKeepalive.new(id))
     else
       skip << id
+    end
+
+    if inbox
+      ctx.goals.add(Harmony::MessageSlot.new(id))
     end
 
     # Process an inbound message.
@@ -488,19 +523,24 @@ module Ww::Rack::Accord
     status = Term.of(:pending)
     incarnation = nil
 
-    ctx.world.each(Harmony::RunningClient) do |fact|
-      next unless fact.defn == client.defn
+    pass do
+      ctx.world.each(Harmony::RunningClient, client.defn) do |fact|
+        incarnation = fact.client_id
+        status = Term.of(:up)
+        break
+      end
 
-      incarnation = fact.client_id
-      status = Term.of(:up)
-      break
-    end
+      next if incarnation
 
-    if incarnation.nil?
-      ctx.world.each(Harmony::BrokenClient) do |fact|
-        next unless fact.defn == client.defn
-
+      ctx.world.each(Harmony::PendingClient, client.defn) do |fact|
         status = Term.of(:pending, fact.detail)
+        break
+      end
+
+      next if incarnation
+
+      ctx.world.each(Harmony::BrokenClient, client.defn) do |fact|
+        status = Term.of(:dn, fact.detail)
         break
       end
     end
@@ -536,9 +576,13 @@ module Ww::Rack::Accord
     target_patch = nil
     pass do
       next unless incarnation
-      next unless ingoing = mark?(ctx, incarnation)
       next unless target = Rack.cell?(hg, client.ingoing)
       next unless target.value?.nil?
+
+      unless ingoing = mark?(ctx, incarnation)
+        ctx.goals.add(Harmony::MessageSlot.new(incarnation))
+        next
+      end
 
       case reply = receive?(ctx, ingoing, client.format, client.format_policy)
       in Nil
@@ -656,9 +700,9 @@ module Ww::Rack::Accord
     ingoing = nil
 
     ctx.world.each(Harmony::IngoingMessage, endpoint_id) do |fact|
-      ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.seq)
+      ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
 
-      if ingoing.nil? || fact.seq < ingoing.seq
+      if ingoing.nil? || fact.msgid.repr < ingoing.msgid.repr
         ingoing = fact
       end
     end
@@ -673,7 +717,7 @@ module Ww::Rack::Accord
   # for the endpoint of interest were `mark?`ed first, and *ingoing* is the minimum seq
   # such **marked** message.
   private def receive?(ctx : StepContext, ingoing : Harmony::IngoingMessage, format : Format::Any, format_policy : Format::Policy) : Received | Aborted | Nil
-    confirmation = Harmony::IngoingReceiveConfirmation.new(ingoing.endpoint_id, ingoing.seq)
+    confirmation = Harmony::IngoingReceiveConfirmation.new(ingoing.endpoint_id, ingoing.msgid)
 
     # Initiate confirmation. If confirmation is a fact, this means it's complete.
     unless ctx.world.includes?(confirmation)
@@ -682,7 +726,7 @@ module Ww::Rack::Accord
     end
 
     # Now that we've handled the message, we don't want to keep it alive.
-    ctx.goals.delete(Harmony::IngoingMessageKeepalive.new(ingoing.endpoint_id, ingoing.seq))
+    ctx.goals.delete(Harmony::IngoingMessageKeepalive.new(ingoing.endpoint_id, ingoing.msgid))
 
     # When the world contains *confirmation*, this means we've completed reception
     # of the message.

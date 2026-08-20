@@ -189,28 +189,30 @@ module Ww::Rack::Format
     end
   end
 
-  def encode?(format : None, term : Term) : Bytes?
+  def encode?(format : None, term : Term) : Term::Blob?
     if str = term.as_s?
-      return str.to(String).to_slice
+      return Term::Blob.new(str.to(String))
     end
 
-    ML.compact(term).to_slice
+    Term::Blob.build { |io| ML.compact(io, term) }
   end
 
   # TODO: TermJSONSchema should probably do the same checks on terms, handling
   # the emit side as well.
-  def encode?(format : TermJSON | TermJSONSchema, term : Term) : Bytes?
-    JSON.build do |json|
-      encode(format, json, term)
-    end.to_slice
+  def encode?(format : TermJSON | TermJSONSchema, term : Term) : Term::Blob?
+    Term::Blob.build do |io|
+      JSON.build(io) { |json| encode(format, json, term) }
+    end
   end
 
-  def encode?(format : TermML, term : Term) : Bytes?
-    ML.compact(term).to_slice
+  def encode?(format : TermML, term : Term) : Term::Blob?
+    Term::Blob.build { |io| ML.compact(io, term) }
   end
 
-  def encode?(format : TermPrettyML, term : Term) : Bytes?
-    ML.display(term, maxwidth: 80).to_slice
+  def encode?(format : TermPrettyML, term : Term) : Term::Blob?
+    Term::Blob.build do |io|
+      ML.display(io, term, maxwidth: 80)
+    end
   end
 
   def encode(format, json : JSON::Builder, term : Term) : Nil
@@ -274,11 +276,12 @@ module Ww::Rack::Format
     end
   end
 
-  def decode?(format : Any, message : Bytes) : Term?
-    string = String.new(message)
-    return unless string.valid_encoding?
+  def decode?(format : Any, message : Term::Blob) : Term?
+    return unless message.classif.utf8?
 
-    decode?(format, string)
+    # FIXME: Converting it to_string here seems fairly expensive. It's a perfectly
+    # avoidable allocation.
+    decode?(format, message.to_string)
   end
 
   def decode?(format : None, message : String) : Term?

@@ -154,9 +154,10 @@ module Ww
 
     # Constructs a blob from the given *string*.
     def self.new(string : String) : Blob
-      build(capacity: string.bytesize.to_u64, classify: true) do |io|
-        io.write(string.to_slice)
-      end
+      digester = DIGEST_ALGORITHM.new
+      digester.update(string)
+
+      Term::Blob.new(string.bytesize.to_u64, string.to_unsafe, digester, classif: nil)
     end
 
     # :nodoc:

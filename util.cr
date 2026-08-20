@@ -1,4 +1,4 @@
-macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false, smart = false)
+macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false, smart = false, brief = false)
   struct {{name.id}}
     {% for dep in includes %}
       include {{dep}}
@@ -56,13 +56,53 @@ macro defrecord(name, *properties, includes = [] of ::NoReturn, copying = false,
                        }})
       end
     {% end %}
+
+    {% if brief %}
+      def inspect(io) : Nil
+        {% verbatim do %}
+          io << {{@type.name.id.split("::").last}} << '('
+          {% for ivar, i in @type.instance_vars %}
+            {% if i > 0 %}
+              io << ", "
+            {% end %}
+            io << "@{{ivar.id}}="
+            @{{ivar.id}}.inspect(io)
+          {% end %}
+          io << ')'
+        {% end %}
+      end
+
+      def pretty_print(pp) : Nil
+        {% verbatim do %}
+          {% if @type.overrides?(Struct, "inspect") %}
+            pp.text inspect
+          {% else %}
+            prefix = "#{{{@type.name.id.split("::").last}}}("
+            pp.surround(prefix, ")", left_break: "", right_break: nil) do
+              {% for ivar, i in @type.instance_vars.map(&.name).sort %}
+                {% if i > 0 %}
+                  pp.comma
+                {% end %}
+                pp.group do
+                  pp.text "@{{ivar.id}}="
+                  pp.nest do
+                    pp.breakable ""
+                    @{{ivar.id}}.pretty_print(pp)
+                  end
+                end
+              {% end %}
+            end
+          {% end %}
+        {% end %}
+      end
+    {% end %}
   end
 end
 
 annotation DefcaseField
 end
 
-macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, &)
+macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, brief = false, &)
   {% unless equality == :value || equality == :ref %}
     {% raise "equality must be :value or :ref"%}
   {% end %}
@@ -165,6 +205,37 @@ macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash 
         hash.hash(hasher)
       end
     {% end %}
+
+    # {% if brief %}
+    #   def pretty_print(pp) : Nil
+    #     {% if @type.overrides?(Reference, "inspect") %}
+    #       pp.text inspect
+    #     {% else %}
+    #       prefix = "#<#{{{@type.name.id.split("::").stringify}}}:0x#{object_id.to_s(16)}"
+    #       executed = exec_recursive(:pretty_print) do
+    #         pp.surround(prefix, ">", left_break: nil, right_break: nil) do
+    #           {% for ivar, i in @type.instance_vars.map(&.name).sort %}
+    #             {% if i == 0 %}
+    #               pp.breakable
+    #             {% else %}
+    #               pp.comma
+    #             {% end %}
+    #             pp.group do
+    #               pp.text "@{{ivar.id}}="
+    #               pp.nest do
+    #                 pp.breakable ""
+    #                 @{{ivar.id}}.pretty_print(pp)
+    #               end
+    #             end
+    #           {% end %}
+    #         end
+    #       end
+    #       unless executed
+    #         pp.text "#{prefix} ...>"
+    #       end
+    #     {% end %}
+    #   end
+    # {% end %}
 
     {{yield}}
   end
@@ -2709,7 +2780,13 @@ class BlockingSlot(T)
   end
 end
 
+module IQueue(T)
+  abstract def <<(object : T)
+end
+
 class BlockingQueue(T)
+  include IQueue(T)
+
   def initialize
     @queue = Deque(T).new
     @mutex = Sync::Mutex.new
@@ -2740,7 +2817,6 @@ class BlockingQueue(T)
 
   def <<(object : T) : self
     enqueue(object)
-
     self
   end
 
@@ -2760,6 +2836,12 @@ class BlockingQueue(T)
     @mutex.synchronize do
       @queue.shift?
     end
+  end
+
+  def inspect(io)
+    io << "#<BlockingQueue:0x"
+    object_id.to_s(io, base: 16)
+    io << " ...>"
   end
 end
 
@@ -4945,6 +5027,8 @@ class HTTP::WebSocket
 end
 
 class AtomicQueue(T)
+  include IQueue(T)
+
   def initialize(@alert : ->)
     @queue = Deque(T).new
     @lock = Sync::Mutex.new

@@ -600,3 +600,68 @@
   ;; "significant" number.
   (frame/tail fast-forward: true
     (cell @in 10)))
+
+;; WebSocket counter with transmission: handshake
+(rack
+  (frame
+    (server (@pool (ws local 9813 transmission: handshake) format: ml)
+      (backsys
+        {¦ in: (±M _*) out: (_* `>M)}
+          <> {(M): (), >M: ^(+ M 1)}))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (ws local 9813 transmission: handshake) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; TCP counter with transmission: handshake
+(rack
+  (frame
+    (server (@pool (tcp local 9813 transmission: handshake) format: ml)
+      (backsys
+        {¦ in: (±M _*) out: (_* `>M)}
+          <> {(M): (), >M: ^(+ M 1)}))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (tcp local 9813 transmission: handshake) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; Unix socket counter with transmission: handshake
+(rack
+  (frame
+    (cell @fs-in (delete file if exists "/tmp/wirewright-unix.sock"))
+    (cell @fs-out)
+    (fs @fs-in @fs-out)
+
+    (guard (@fs-out [ok _])
+      (server (@pool (unix "/tmp/wirewright-unix.sock" transmission: handshake) format: ml)
+        (backsys
+          {¦ in: (±M _*) out: (_* `>M)}
+            <> {(M): (), >M: ^(+ M 1)})))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (unix "/tmp/wirewright-unix.sock" transmission: handshake) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))

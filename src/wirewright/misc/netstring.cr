@@ -17,12 +17,12 @@ module Ww
     class DecodeError < Exception
     end
 
-    # Encodes *payload* using the netstring format and writes the encoded version
+    # Encodes *interpretation* using the netstring format and writes the encoded version
     # to *io*.
     #
     # Raises `EncodeError` if an encoding error occurred, e.g. the string is too long.
-    def self.encode(io : IO, payload : Bytes) : Nil
-      bytesize = payload.size
+    def self.encode(io : IO, interpretation : Bytes) : Nil
+      bytesize = interpretation.size
 
       if bytesize > MAX_BYTESIZE
         raise EncodeError.new
@@ -31,62 +31,83 @@ module Ww
       bytesize.to_s(io, base: 10)
 
       io << ':'
-      io.write(payload)
+      io.write(interpretation)
       io << ','
     end
 
-    def self.encode(io : IO, payload : String) : Nil
-      encode(io, payload.to_slice)
+    # :ditto:
+    def self.encode(io : IO, interpretation : String) : Nil
+      encode(io, interpretation.to_slice)
+    end
+
+    # :ditto:
+    def self.encode(io : IO, interpretation : Term::Blob) : Nil
+      encode(io, interpretation.to_slice)
     end
 
     # Decodes a string from *io*. Returns `nil` if encountered EOF while decoding.
     # Raises `DecodeError` in case of an invalid encoding.
-    def self.decode?(io : IO, cls : Bytes.class) : Bytes?
+    def self.decode?(io : IO, cls : Bytes.class, *, timeout : Time::Span? = nil) : Bytes?
       return unless chr = io.read_char # non-EOF
 
       unless '0' <= chr <= '9'
         raise DecodeError.new
       end
 
-      bytesize = chr - '0'
+      # Now that we have the first digit, enable timeout on reads.
+      prev_timeout = io.read_timeout
+      io.read_timeout = timeout
 
-      while true
-        if bytesize > MAX_BYTESIZE
-          raise DecodeError.new
+      begin
+        bytesize = chr - '0'
+
+        while true
+          if bytesize > MAX_BYTESIZE
+            raise DecodeError.new
+          end
+
+          return unless chr = io.read_char # non-EOF
+
+          if '0' <= chr <= '9'
+            bytesize = bytesize * 10u32 + (chr - '0')
+          elsif chr == ':'
+            break
+          else
+            raise DecodeError.new
+          end
+        end
+
+        begin
+          interpretation = Bytes.new(bytesize)
+
+          io.read(interpretation)
+        rescue IO::EOFError
+          return
         end
 
         return unless chr = io.read_char # non-EOF
 
-        if '0' <= chr <= '9'
-          bytesize = bytesize * 10u32 + (chr - '0')
-        elsif chr == ':'
-          break
-        else
+        unless chr == ','
           raise DecodeError.new
         end
+      ensure
+        io.read_timeout = prev_timeout
       end
 
-      begin
-        payload = Bytes.new(bytesize)
-
-        io.read(payload)
-      rescue IO::EOFError
-        return
-      end
-
-      return unless chr = io.read_char # non-EOF
-
-      unless chr == ','
-        raise DecodeError.new
-      end
-
-      payload
+      interpretation
     end
 
-    def self.decode?(io : IO, cls : String.class) : String?
-      return unless data = decode?(io, Bytes)
+    def self.decode?(io : IO, cls : String.class, **kwargs) : String?
+      return unless data = decode?(io, Bytes, **kwargs)
 
       String.new(data)
+    end
+
+    def self.decode?(io : IO, cls : Term::Blob.class, **kwargs) : Term::Blob?
+      return unless data = decode?(io, Bytes, **kwargs)
+
+      data = Slice.new(data.to_unsafe, data.size, read_only: true)
+      Term::Blob.new(data)
     end
   end
 end
