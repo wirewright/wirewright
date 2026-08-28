@@ -320,7 +320,7 @@ module Ww::Term::Case
   #
   # You should increase this if the matcher array overflows. There's no good
   # way to do this automatically in Crystal (none that I can think of that is).
-  MATCHERS_CAPACITY = 256
+  MATCHERS_CAPACITY = 512
 
   # :nodoc:
   #
