@@ -55,9 +55,13 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-misc rack-fs))
 
-(test "rack/net.test.wwml"
+(test "rack/socket.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-misc rack-net))
+  tags: (d7 delta7 rack rack-misc rack-socket))
+
+(test "rack/http.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-misc rack-http))
 
 (test "rack/db.test.wwml"
   color: (oklch 0.7 0.1 violet)

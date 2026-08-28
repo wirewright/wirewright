@@ -206,36 +206,52 @@ macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash 
       end
     {% end %}
 
-    # {% if brief %}
-    #   def pretty_print(pp) : Nil
-    #     {% if @type.overrides?(Reference, "inspect") %}
-    #       pp.text inspect
-    #     {% else %}
-    #       prefix = "#<#{{{@type.name.id.split("::").stringify}}}:0x#{object_id.to_s(16)}"
-    #       executed = exec_recursive(:pretty_print) do
-    #         pp.surround(prefix, ">", left_break: nil, right_break: nil) do
-    #           {% for ivar, i in @type.instance_vars.map(&.name).sort %}
-    #             {% if i == 0 %}
-    #               pp.breakable
-    #             {% else %}
-    #               pp.comma
-    #             {% end %}
-    #             pp.group do
-    #               pp.text "@{{ivar.id}}="
-    #               pp.nest do
-    #                 pp.breakable ""
-    #                 @{{ivar.id}}.pretty_print(pp)
-    #               end
-    #             end
-    #           {% end %}
-    #         end
-    #       end
-    #       unless executed
-    #         pp.text "#{prefix} ...>"
-    #       end
-    #     {% end %}
-    #   end
-    # {% end %}
+    {% if brief %}
+      def inspect(io) : Nil
+        {% verbatim do %}
+          io << {{@type.name.id.split("::").last}} << '('
+          {% for ivar, i in @type.instance_vars %}
+            {% if i > 0 %}
+              io << ", "
+            {% end %}
+            io << "@{{ivar.id}}="
+            @{{ivar.id}}.inspect(io)
+          {% end %}
+          io << ')'
+        {% end %}
+      end
+
+      def pretty_print(pp) : Nil
+        {% verbatim do %}
+          {% if @type.overrides?(Reference, "inspect") %}
+            pp.text inspect
+          {% else %}
+            prefix = "#<#{{{@type.name.id.split("::").last.id}}}"
+            executed = exec_recursive(:pretty_print) do
+              pp.surround(prefix, ">", left_break: nil, right_break: nil) do
+                {% for ivar, i in @type.instance_vars.map(&.name).sort %}
+                  {% if i == 0 %}
+                    pp.breakable
+                  {% else %}
+                    pp.comma
+                  {% end %}
+                  pp.group do
+                    pp.text "@{{ivar.id}}="
+                    pp.nest do
+                      pp.breakable ""
+                      @{{ivar.id}}.pretty_print(pp)
+                    end
+                  end
+                {% end %}
+              end
+            end
+            unless executed
+              pp.text "#{prefix} ...>"
+            end
+          {% end %}
+        {% end %}
+      end
+    {% end %}
 
     {{yield}}
   end
@@ -1032,6 +1048,18 @@ struct Char
   def vspace? : Bool
     ord.in?(0x0a, 0x0b, 0x0c, 0x0d, 0x85, 0x2028, 0x2029)
   end
+
+  # Reference: https://www.w3.org/Protocols/HTTP/1.0/draft-ietf-http-v10-spec-01.html
+  #
+  # ```text
+  # tspecials := "(" | ")" | "<" | ">" | "@"
+  #            | "," | ";" | ":" | "\" | <">
+  #            | "/" | "[" | "]" | "?" | "="
+  #            | " " | "\t"
+  # ```
+  def tspecial? : Bool
+    in?('(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/','[', ']', '?', '=', ' ', '\t')
+  end
 end
 
 class String
@@ -1618,8 +1646,6 @@ end
 
 struct Time::Span
   def humanize(io)
-    nanos = total_nanoseconds
-
     if self < 1.nanosecond
       io << total_nanoseconds.round(2) << "ns"
       return
@@ -2787,7 +2813,12 @@ end
 class BlockingQueue(T)
   include IQueue(T)
 
+  @@ids = Atomic(UInt64).new(0u64)
+
+  getter seq_id : UInt64
+
   def initialize
+    @seq_id = @@ids.add(1, :relaxed)
     @queue = Deque(T).new
     @mutex = Sync::Mutex.new
     @cv = Sync::ConditionVariable.new(@mutex)
@@ -2795,6 +2826,10 @@ class BlockingQueue(T)
 
   def present? : Bool
     @mutex.synchronize { @queue.present? }
+  end
+
+  def last? : T?
+    @mutex.synchronize { @queue.last? }
   end
 
   def interject(*objects : T) : Nil
@@ -5051,6 +5086,61 @@ class AtomicQueue(T)
       @queue = queue1
       queue0
     end
+  end
+end
+
+# An immutable changelog for a set.
+struct Set::Changelog(Element)
+  include Enumerable(Added(Element) | Removed(Element))
+
+  defrecord Added(Element), element : Element
+  defrecord Removed(Element), element : Element
+
+  struct Added
+    def inspect(io)
+      io << "Added("
+      element.inspect(io)
+      io << ")"
+    end
+  end
+
+  struct Removed
+    def inspect(io)
+      io << "Removed("
+      element.inspect(io)
+      io << ")"
+    end
+  end
+
+  def initialize(@log : Slice(Added(Element) | Removed(Element)))
+  end
+
+  def self.empty : Changelog(Element)
+    new(Slice(Added(Element) | Removed(Element)).empty)
+  end
+
+  def each(& : Added(Element) | Removed(Element) ->) : Nil
+    @log.each { |change| yield change }
+  end
+
+  # :nodoc:
+  def after_added(element : Element) : Changelog(Element)
+    Changelog.new(@log.append(Added(Element).new(element)))
+  end
+
+  # :nodoc:
+  def after_removed(element : Element) : Changelog(Element)
+    Changelog.new(@log.append(Removed(Element).new(element)))
+  end
+
+  def inspect(io)
+    io << "Changelog["
+    join(io, ", ", &.inspect(io))
+    io << "]"
+  end
+
+  def pretty_print(pp)
+    pp.list("Changelog[", self, "]")
   end
 end
 

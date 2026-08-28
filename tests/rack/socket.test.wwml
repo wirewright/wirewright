@@ -1,0 +1,1846 @@
+;; Basic echo example
+(rack
+  (frame
+    ;; A basic echo server
+    (module {}
+      (server (@pool (ws local 9813))
+        (backsys
+          {¦ in: (msg_ _*) out: (_* `>msg)}
+            <> {(msg): (), >msg: ^msg}))
+      (circuit (pool @pool)))
+    ;; A client
+    (module {}
+      (queue (@msg @msgs) ("Kaixo" "mundua"))
+      (client (@msg -> (ws local 9813) -> @replies))
+      (queue (@reply @replies) ())))
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (client (@msg -> (ws local 9813) -> @replies) up)
+      (queue (@reply @replies) ("Kaixo" "mundua")))))
+
+;; Chat example
+(rack
+  (frame
+    ;; A basic chat server
+    (module {}
+      (server (@pool (ws local 9813))
+        (frag @rx (sensor (queue chat _string)))
+        (frag @tx (appearance chat))
+        (frag @user)
+        (frag @peers (sensor (journal users _string)))
+        (backsys
+          {¦ -user_ out: (_* `>msg)}
+            <> {user: pending, >msg: "Please enter your nickname."}
+          {¦ in: (nick_string _*) user_: pending}
+            <> {(nick): (), user: (appearance users ^(chomp nick))}
+          {¦ peers: (sensor _ event←(appeared nick_string) _*) out: (_* `>msg)}
+            <> {(event): (), >msg: ^"[⸢nick⸣ joined the chat]"}
+          {¦ peers: (sensor _ event←(disappeared nick_string) _*) out: (_* `>msg)}
+            <> {(event): (), >msg: ^"[⸢nick⸣ left the chat]"}
+          {¦ in: (msg_string _*) user: (_ _ nick_string) tx: (appearance _ `>msg)}
+            <> {(msg): (), >msg: ^"⸢nick⸣: ⸢msg⸣"}
+          {¦ out: (_* `>msgs) user: (_ _ _string) rx: (sensor _ msgs_string+)}
+            <> {(>msgs): ^msgs, (msgs): ()}))
+      (circuit (pool @pool)))
+
+    ;; Alice client
+    (module {}
+      (cell @state)
+      (queue (@msg @msgs) ())
+      (frag @socket
+        (client (@msg -> (ws local 9813 key: alice) -> @replies)))
+      (queue (@reply @replies) ())
+      (backsys
+        {¦ reply_} <> {(reply): ()}
+        {¦ reply: "Please enter your nickname." -msgs_}
+          <> {msgs: "alice"}
+        {¦ reply: "[bob joined the chat]" -msgs_ -state_}
+          <> {msgs: "hi bob", state: greeted}
+        {¦ reply: "bob: ack alice" -msgs_ -state_}
+          <> {msgs: "hi bob", state: greeted}
+        {¦ reply: "bob: hi alice" -msgs_}
+          <> {msgs: "how are you doing?"}
+        {¦ reply: "bob: I'm doing fine" -msgs_}
+          <> {msgs: "bye then"}
+        {¦ reply: "bob: yeah, bye" socket: (client _ status←up)}
+          <> {status: dn}))
+
+    ;; Bob client
+    (module {}
+      (queue (@msg @msgs) ())
+      (client (@msg -> (ws local 9813 key: bob) -> @replies))
+      (queue (@reply @replies) ())
+      (backsys
+        {¦ reply_} <> {(reply): ()}
+        {¦ reply: "Please enter your nickname." -msgs_}
+          <> {msgs: "bob"}
+        {¦ reply: "[alice joined the chat]" -msgs_}
+          <> {msgs: "ack alice"}
+        {¦ reply: "alice: hi bob" -msgs_}
+          <> {msgs: "hi alice"}
+        {¦ reply: "alice: how are you doing?" -msgs_}
+          <> {msgs: "I'm doing fine"}
+        {¦ reply: "alice: bye then" -msgs_}
+          <> {msgs: "yeah, bye"}))
+
+    ;; An observer we use for testing purposes.
+    (module {:@history}
+      (frag @chat
+        (sensor (many chat _string)))
+      (frag @users
+        (sensor (journal users _string)))
+      (backsys
+        {¦ history: (_* `entry) chat: (sensor _ msgs_+) users: (sensor _)}
+          <> {entry: (concurrent ^*msgs), (msgs): ()}
+        {¦ history: (_* `entry) chat: (sensor _) users: (sensor _ events_+)}
+          <> {entry: (concurrent ^*events), (events): ()}
+        {¦ history: (_* `entry) chat: (sensor _ msgs_+) users: (sensor _ events_+)}
+          <> {entry: (concurrent ^*msgs ^*events), (msgs): (), (events): ()}))
+
+    (cell @history ()))
+
+  ;; NOTE: It is rather hard to design a simple protocol which would have
+  ;; one single order with the setup we have here. So the order of the first
+  ;; few messages (greetings) is arbitrary (and some things / greetings may
+  ;; even coincide or be duplicated, i.e., Alice and Bob saying hi to each
+  ;; other simultaneously, or doing so multiple times before everything settles).
+  ;; After the greetings, though, the order is stable (at least I hope so...)
+  ;; It's a very interesting problem but I'm not sure I have the time to ponder
+  ;; on it for long, so we'll just live with the arbitrary order in the first
+  ;; few entries...
+  (frame pattern: true fast-forward: true
+    (_*
+     (cell @history
+       ((%group
+          (%all
+            ⟪(appeared "alice")⟫
+            ⟪(appeared "bob")⟫
+            (%any° ⟪"bob: hi alice"⟫ ⟪"alice: hi bob"⟫))
+          _*)
+        (concurrent "alice: how are you doing?")
+        (concurrent "bob: I'm doing fine")
+        (concurrent "alice: bye then")
+        (concurrent "bob: yeah, bye")
+        (concurrent (disappeared "alice")))))))
+
+;; JSON server echo
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813) format: json format-policy: discard)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@msg @msgs)
+        (⎡100⎤
+         ⎡"hello"⎤
+         ⎡{"x": 100, "y": 200}⎤
+         ⎡invalid message⎤
+         ⎡[1, {"type": "cat", "name": "Smokey"}, 2]⎤))
+      (queue (@reply @replies) ())
+      (client (@msg -> (ws local 9813) -> @replies))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (queue (@reply @replies)
+        (⎡100⎤
+         ⎡"hello"⎤
+         ⎡{"x":100,"y":200}⎤
+         ;; invalid message was discarded
+         ⎡[1,{"name":"Smokey","type":"cat"},2]⎤))
+      (client (@msg -> (ws local 9813) -> @replies) up))))
+
+;; ML server echo
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813) format: ml format-policy: discard)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@msg @msgs)
+        (⎡100⎤
+         ⎡hello⎤
+         ⎡(+ 1 2)⎤
+         ⎡{x: 100, y: 200}⎤
+         ⎡invalid message⎤
+         ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
+      (queue (@reply @replies) ())
+      (client (@msg -> (ws local 9813) -> @replies))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (queue (@reply @replies)
+        (⎡100⎤
+         ⎡hello⎤
+         ⎡(+ 1 2)⎤
+         ⎡{x: 100 y: 200}⎤
+         ;; invalid message was discarded
+         ⎡(1 {name: "Smokey" type: cat} 2 x: 100 y: 200)⎤))
+      (client (@msg -> (ws local 9813) -> @replies) up))))
+
+;; PrettyML server echo
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813) format: prettyml format-policy: discard)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@msg @msgs)
+        (⎡100⎤
+         ⎡hello⎤
+         ⎡(+ 1 2)⎤
+         ⎡{x: 100, y: 200}⎤
+         ⎡invalid message⎤
+         ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
+      (queue (@reply @replies) ())
+      (client (@msg -> (ws local 9813) -> @replies))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@msg @msgs) ())
+      (queue (@reply @replies)
+        ("100\n"
+         "hello\n"
+         "(+ 1 2)\n"
+         "{x: 100, y: 200}\n"
+         ;; invalid message was discarded
+         "(1 {name: \"Smokey\", type: cat} 2 x: 100 y: 200)\n"))
+      (client (@msg -> (ws local 9813) -> @replies) up))))
+
+;; Arithmetic demo, format-policy: wrap
+(rack
+  (frame
+    (module {}
+      (schema (@schema json)
+        expr => _number
+        expr => (seq + (ref expr) (ref expr))
+        expr => (seq - (ref expr) (ref expr))
+        expr => (seq * (ref expr) (ref expr))
+        expr => (seq / (ref expr) (ref expr)))
+
+      (server (@pool (ws local 9813)
+            format: (json @schema expr)
+            format-policy: wrap)
+        (cell @expr)
+        (cell @value)
+        (backsys
+          {¦ in: (M←(ok expr_) _*) -expr: >expr}
+            <> {(M): (), >expr: ^expr}
+          ;; NOTE: we use -expr to make sure there's no reordering; there's actually
+          ;; a few ticks of delay between expr and value feeding to out so errors can
+          ;; be handled in the meantime; we don't want that in tests though...
+          {¦ in: (M←(err _string) _*) -expr out: (_* `>reply)}
+            <> {(M): (), >reply: ^M}
+          {¦ value_ out: (_* `>reply)}
+            <> {(value): (), >reply: (ok ^value)})
+        (rewriter (@expr -> (ascR (rulesetR)) -> @value)
+          (+ ±a ±b) => ^(+ a b)
+          (- ±a ±b) => ^(- a b)
+          (* ±a ±b) => ^(* a b)
+          (/ ±a ±b) => ^(/ a b)))
+
+      (circuit (pool @pool)))
+
+    (module {}
+      (queue (@expr @exprs)
+        (⎡100⎤
+         ⎡["+", 100, 200]⎤
+         ⎡["+", 1, ["*", 2, 3]]⎤
+         ⎡["-", ["/", 1.23, 3], 5]⎤
+         ⎡["+", ["*", 2, 3], 1]⎤
+         ⎡invalid message⎤))
+      (queue (@value @values) ())
+      (client (@expr -> (ws local 9813) -> @values))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@expr @exprs) ())
+      (queue (@value @values)
+        (⎡["ok",100]⎤
+         ⎡["ok",300]⎤
+         ⎡["ok",7]⎤
+         ⎡["ok",-4.59]⎤
+         ⎡["ok",7]⎤
+         ⎡["err","invalid message"]⎤))
+      (client (@expr -> (ws local 9813) -> @values) up))))
+
+;; Server format-policy: abort
+(rack
+  (frame
+    (server (@pool (ws local 9813) format: ml format-policy: abort))
+    (circuit (pool @pool))
+
+    (cell @in "") ;; send empty message (invalid)
+    (cell @out)
+    (client (@in -> (ws local 9813) -> @out)))
+
+  (frame/tail fast-forward: true
+    (server (@pool (ws local 9813) up format: ml format-policy: abort))
+    (circuit (pool @pool))
+
+    (cell @in)
+    (cell @out)
+    (client (@in -> (ws local 9813) -> @out)
+      (dn "connection closed by the other side"))))
+
+;; Client format: ml
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@message @messages)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n"))
+      (client (@message -> (ws local 9813) -> @replies format: ml))
+      (queue (@reply @replies) ())))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@message @messages) ())
+      (client (@message -> (ws local 9813) -> @replies format: ml) up)
+      (queue (@reply @replies)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n")))))
+
+;; Client format: prettyml
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@message @messages)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n"))
+      (client (@message -> (ws local 9813) -> @replies format: prettyml))
+      (queue (@reply @replies) ())))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@message @messages) ())
+      (client (@message -> (ws local 9813) -> @replies format: prettyml) up)
+      (queue (@reply @replies)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n")))))
+
+;; Client format: json
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (module {}
+      (queue (@message @messages)
+        (100
+         (+ 1 2)
+         (+ 1 2 x: 100 y: 200)
+         "hello world\n"))
+      (client (@message -> (ws local 9813) -> @replies format: json))
+      (queue (@reply @replies) ())))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (queue (@message @messages) ())
+      (client (@message -> (ws local 9813) -> @replies format: json) up)
+      (queue (@reply @replies)
+        (100
+         ("+" 1 2)
+         ;; Since there's no schema, this is the best format: json can do!
+         {"0": "+", "1": 1, "2": 2, "x": 100, "y": 200}
+         "hello world\n")))))
+
+;; Client format: json schema
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; Client
+    (schema (@schema json)
+      expr => _number
+      expr => (seq + (ref expr) (ref expr)))
+
+    (client (@message -> (ws local 9813) -> @replies format: (json @schema expr)))
+    (queue (@message @messages)
+      (100
+       (+ 1 2)
+       (+ (+ 1 2) 3)
+       (+ 1 (+ 2 3))
+       (+ (+ 1 2) (+ 2 3))
+       (+ 1)
+       "invalid"
+       (+ 1.23 4.56)))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (queue (@message @messages) ())
+    (queue (@reply @replies)
+      (100
+       (+ 1 2)
+       (+ (+ 1 2) 3)
+       (+ 1 (+ 2 3))
+       (+ (+ 1 2) (+ 2 3))
+       ;; (+ 1) discarded
+       ;; "invalid" discarded
+       (+ ≈1.23 ≈4.56)))))
+
+;; Client format-policy: abort (simple)
+(rack
+  (frame
+    (server (@pool (ws local 9813))
+      (backsys
+        {¦ in: (msg←"break" _*) out: (_* `reply)}
+          <> {(msg): (), reply: ""})) ;; send empty message (invalid)
+    (circuit (pool @pool))
+
+    (cell @in break)
+    (cell @out)
+    (client (@in -> (ws local 9813) -> @out format: ml format-policy: abort)))
+
+  (frame/tail fast-forward: true
+    (server (@pool (ws local 9813) up)
+      (backsys
+        {¦ in: (msg←"break" _*) out: (_* `reply)}
+          <> {(msg): (), reply: ""})) ;; send empty message (invalid)
+    (circuit (pool @pool))
+
+    (cell @in)
+    (cell @out)
+    (client (@in -> (ws local 9813) -> @out format: ml format-policy: abort)
+      (dn "invalid message"))))
+
+;; Client format-policy: abort
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813))
+        (cell @script ("(+ 1 2)" "(+ 1 error"))
+        (feed (@script front) (@out back)))
+      (circuit (pool @pool)))
+
+    (cell @message)
+    (client (@message -> (ws local 9813) -> @replies format: ml format-policy: abort))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (cell @message)
+    (client (@message -> (ws local 9813) -> @replies format: ml format-policy: abort)
+      (dn "invalid message")) ;; connection was dropped on the client-side
+    (queue (@reply @replies) ((+ 1 2)))))
+
+;; Client format-policy: wrap
+(rack
+  (frame
+    ;; Server
+    (module {}
+      (server (@pool (ws local 9813))
+        (cell @script ("(+ 1 2)" "(+ 1 error"))
+        (feed (@script front) (@out back)))
+      (circuit (pool @pool)))
+
+    (cell @message)
+    (client (@message -> (ws local 9813) -> @replies format: ml format-policy: wrap))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (cell @message)
+    (client (@message -> (ws local 9813) -> @replies format: ml format-policy: wrap)
+      up)
+    (queue (@reply @replies)
+      ((ok (+ 1 2))
+       (err "invalid message")))))
+
+;; Client-Server exchange using terms
+(rack
+  (frame
+    (module {}
+      (server (@pool (ws local 9813) format: ml)
+        (backsys
+          {¦ in: (msg_ _*)}
+            <> {(msg): ()}
+          {¦ in: (n←(%number 0 <= _ < 5) _*) out: (_* `>n)}
+            <> {>n: ^(+ n 1)}
+          {¦ in: (5 _*) out: (_* `>reply)}
+            <> {>reply: done}))
+
+      (circuit (pool @pool)))
+
+    (backsys
+      {¦ reply_ log: (_* `>reply)}
+        <> {(reply): (), >reply: ^reply}
+      {¦ ±reply -messages_}
+        <> {messages: ^reply}
+      {¦ reply: done socket_}
+        <> {(socket): ()})
+
+    (cell @log ())
+    (queue (@message @messages) (0))
+    (frag @socket
+      (client (@message -> (ws local 9813) -> @replies format: ml)))
+    (queue (@reply @replies) ()))
+
+  ;; Wait until it counts up to `done`.
+  (frame/tail fast-forward: true
+    (cell @log (1 2 3 4 5))
+    (queue (@message @messages) ())
+    (frag @socket
+      (client (@message -> (ws local 9813) -> @replies format: ml)
+        up))
+    (queue (@reply @replies) (done)))
+
+  ;; Socket is removed in response to `done`:
+  (frame/tail
+    (cell @log (1 2 3 4 5 done))
+    (queue (@message @messages) ())
+    (frag @socket)
+    (queue (@reply @replies) ()))
+
+  ;; Make sure the server responds properly by cleaning up the connection.
+  (frame/tail fast-forward: true
+    (module {}
+      (server (@pool (ws local 9813) up format: ml) ;; < server is up
+        (backsys
+          {¦ in: (msg_ _*)}
+            <> {(msg): ()}
+          {¦ in: (n←(%number 0 <= _ < 5) _*) out: (_* `>n)}
+            <> {>n: ^(+ n 1)}
+          {¦ in: (5 _*) out: (_* `>reply)}
+            <> {>reply: done}))
+
+      (circuit (pool @pool))) ;; < pool is empty -- client disconnected
+
+    (backsys
+      {¦ reply_ log: (_* `>reply)}
+        <> {(reply): (), >reply: ^reply}
+      {¦ ±reply -messages_}
+        <> {messages: ^reply}
+      {¦ reply: done socket_}
+        <> {(socket): ()})
+
+    (cell @log (1 2 3 4 5 done))
+    (queue (@message @messages) ())
+    (frag @socket)
+    (queue (@reply @replies) ())))
+
+;; From docs: websocket client with format: ml.
+(rack
+  (frame
+    (server (@pool (ws local 9813))
+      (feed (@in front) (@out back)))
+    (circuit (pool @pool))
+    (queue (@message @messages) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
+    (queue (@reply @replies) ())
+    (client (@message -> (ws local 9813) -> @replies format: ml)))
+
+  (frame/tail fast-forward: true
+    (queue (@message @messages) ())
+    (queue (@reply @replies) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
+    (client (@message -> (ws local 9813) -> @replies format: ml)
+      up)))
+
+;; WebSocket counter
+(rack
+  (frame
+    (server (@pool (ws local 9813) format: ml)
+      (backsys
+        {¦ in: (±M _*) out: (_* `>M)}
+          <> {(M): (), >M: ^(+ M 1)}))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (ws local 9813) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; TCP counter
+(rack
+  (frame
+    (server (@pool (tcp local 9813) format: ml)
+      (backsys
+        {¦ in: (±M _*) out: (_* `>M)}
+          <> {(M): (), >M: ^(+ M 1)}))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (tcp local 9813) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; Unix socket counter
+(rack
+  (frame
+    (cell @fs-in (delete file if exists "/tmp/wirewright-unix.sock"))
+    (cell @fs-out)
+    (fs @fs-in @fs-out)
+
+    (guard (@fs-out [ok _])
+      (server (@pool (unix "/tmp/wirewright-unix.sock") format: ml)
+        (backsys
+          {¦ in: (±M _*) out: (_* `>M)}
+            <> {(M): (), >M: ^(+ M 1)})))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (unix "/tmp/wirewright-unix.sock") -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; WebSocket counter with transmission: portal
+(rack
+  (frame
+    (server (@pool (ws local 9813 transmission: portal) format: ml)
+      (backsys
+        {¦ in: (±M _*) out: (_* `>M)}
+          <> {(M): (), >M: ^(+ M 1)}))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (ws local 9813 transmission: portal) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; TCP counter with transmission: portal
+(rack
+  (frame
+    (server (@pool (tcp local 9813 transmission: portal) format: ml)
+      (backsys
+        {¦ in: (±M _*) out: (_* `>M)}
+          <> {(M): (), >M: ^(+ M 1)}))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (tcp local 9813 transmission: portal) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; Unix socket counter with transmission: portal
+(rack
+  (frame
+    (cell @fs-in (delete file if exists "/tmp/wirewright-unix.sock"))
+    (cell @fs-out)
+    (fs @fs-in @fs-out)
+
+    (guard (@fs-out [ok _])
+      (server (@pool (unix "/tmp/wirewright-unix.sock" transmission: portal) format: ml)
+        (backsys
+          {¦ in: (±M _*) out: (_* `>M)}
+            <> {(M): (), >M: ^(+ M 1)})))
+
+    (circuit (pool @pool))
+
+    (client (@in -> (unix "/tmp/wirewright-unix.sock" transmission: portal) -> @out format: ml))
+    (feed @out @in)
+    (cell @out)
+    (cell @in 0))
+
+  ;; It will count indefinitely, of course. Just make sure it can count to some
+  ;; "significant" number.
+  (frame/tail fast-forward: true
+    (cell @in 10)))
+
+;; Connection in closed when both queues are removed
+(rack
+  (frame
+    (server (@pool (ws local 9813))
+      (backsys
+        {¦ in: (msg_ _*) out_: (_* `>msg)}
+          <> {(msg): (), >msg: ^msg}
+        {¦ in_: ("bye" _*) out_}
+          <> {(in): (), (out): ()}))
+
+    ;; We must wait for the answer, orelse it's possible for us to quit
+    ;; with "Hello World" still travelling over the wire!
+    (cell @sent-bye)
+    (backsys
+      {¦ -msg_ reply -sent-bye_}
+        <> {msg: "bye", sent-bye: true})
+
+    (circuit (pool @pool))
+
+    (cell @msg "Hello World")
+    (queue (@reply @replies) ())
+    (client (@msg -> (ws local 9813) -> @replies)))
+
+  (frame/tail fast-forward: true
+    (cell @msg "bye")
+    (queue (@reply @replies) ("Hello World"))
+    (client (@msg -> (ws local 9813) -> @replies) up))
+
+  (frame/tail fast-forward: true
+    (circuit (pool @pool))
+    (cell @msg)
+    (queue (@reply @replies) ("Hello World"))
+    (client (@msg -> (ws local 9813) -> @replies)
+      (dn "connection closed by the other side"))))
+
+;; Connection is closed when the corresponding client device is removed
+(rack
+  (frame
+    (backsys @pool
+      ⟨D←⟨(cell @remove-me true)⟩⟩°
+        <> {(D): ()})
+
+    (server (@pool (ws local 9813))
+      (cell @remove-me)
+      (backsys
+        {¦ in: (msg←(%not "bye") _*) out_: (_* `>msg)}
+          <> {(msg): (), >msg: ^msg}
+        {¦ in: (msg←"bye" _*) -remove-me_}
+          <> {(msg): (), remove-me: true}))
+
+    ;; We must wait for the answer, orelse it's possible for us to quit
+    ;; with "Hello World" still travelling over the wire!
+    (cell @sent-bye)
+    (backsys
+      {¦ -msg_ reply -sent-bye_}
+        <> {msg: "bye", sent-bye: true})
+
+    (circuit (pool @pool))
+
+    (cell @msg "Hello World")
+    (queue (@reply @replies) ())
+    (client (@msg -> (ws local 9813) -> @replies)))
+
+  (frame/tail fast-forward: true
+    (circuit (pool @pool))
+
+    (cell @msg)
+    (queue (@reply @replies) ("Hello World"))
+    (client (@msg -> (ws local 9813) -> @replies)
+      (dn "connection closed by the other side"))))
+
+;; Connection is closed when the client is removed.
+(rack
+  (frame
+    (server (@pool (ws local 9813))
+      (feed (@in front) (@out back)))
+
+    (circuit (pool @pool))
+
+    (cell @in "Hi!")
+    (cell @out)
+    (guard (@out)
+      (client (@in -> (ws local 9813) -> @out))))
+
+  (frame/tail fast-forward: true
+    (circuit (pool @pool))
+
+    (cell @in)
+    (cell @out "Hi!")
+    (guard (@out)
+      (client (@in -> (ws local 9813) -> @out)
+        ;; The client was caught and frozen in the up state.
+        up))))
+
+;; Client connection is closed by replacing `up` with `dn`.
+(rack
+  (frame
+    (server (@pool (ws local 9813))
+      (feed (@in front) (@out back)))
+
+    (backsys
+      {¦ out client: (client _ state←up)}
+        <> {state: dn})
+
+    (circuit (pool @pool))
+
+    (cell @in "Hi!")
+    (cell @out)
+    (frag @client
+      (client (@in -> (ws local 9813) -> @out))))
+
+  (frame/tail fast-forward: true
+    (circuit (pool @pool))
+
+    (cell @in)
+    (cell @out "Hi!")
+    (frag @client
+      (client (@in -> (ws local 9813) -> @out) dn))))
+
+;; Multiple servers and clients in the same world
+(rack
+  (frame
+    (module {}
+      (server (@pool (ws local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (ws local 9814))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (ws local 9815))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (cell @in "0")
+      (cell @out)
+      (guard (@out)
+        (client (@in -> (ws local 9813) -> @out))))
+
+    (module {}
+      (cell @in "1")
+      (cell @out)
+      (guard (@out)
+        (client (@in -> (ws local 9814) -> @out))))
+
+    (module {}
+      (cell @in "2")
+      (cell @out)
+      (guard (@out)
+        (client (@in -> (ws local 9815) -> @out)))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (server (@pool (ws local 9813) up)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (ws local 9814) up)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (ws local 9815) up)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (cell @in)
+      (cell @out "0")
+      (guard (@out)
+        ;; Frozen in the up state
+        (client (@in -> (ws local 9813) -> @out) up)))
+
+    (module {}
+      (cell @in)
+      (cell @out "1")
+      (guard (@out)
+        (client (@in -> (ws local 9814) -> @out) up)))
+
+    (module {}
+      (cell @in)
+      (cell @out "2")
+      (guard (@out)
+        (client (@in -> (ws local 9815) -> @out) up)))))
+
+;; Multiple servers and clients in the same world, of different kinds.
+;; Test input, output queue rename.
+(rack
+  (frame
+    (module {}
+      (server (@pool (ws local 9813) in: @queries out: @replies)
+        (feed (@queries front) (@replies back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9814 transmission: portal) in: @queries out: @replies)
+        (feed (@queries front) (@replies back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (unix "/tmp/wirewright-unix.sock") in: @queries out: @replies format: ml)
+        (feed (@queries front) (@replies back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (cell @in "0")
+      (cell @out)
+      (guard (@out)
+        (client (@in -> (ws local 9813) -> @out))))
+
+    (module {}
+      (cell @in "Hello World")
+      (cell @out)
+      (guard (@out)
+        (client (@in -> (tcp local 9814 transmission: portal) -> @out))))
+
+    (module {}
+      (cell @in (+ 1 2 x: 100 y: 200))
+      (cell @out)
+      (guard (@out)
+        (client (@in -> (unix "/tmp/wirewright-unix.sock") -> @out format: ml)))))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (server (@pool (ws local 9813) up in: @queries out: @replies)
+        (feed (@queries front) (@replies back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9814 transmission: portal) up in: @queries out: @replies)
+        (feed (@queries front) (@replies back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (unix "/tmp/wirewright-unix.sock") up in: @queries out: @replies format: ml)
+        (feed (@queries front) (@replies back)))
+      (circuit (pool @pool)))
+
+    (module {}
+      (cell @in)
+      (cell @out "0")
+      (guard (@out)
+        ;; Frozen in the up state
+        (client (@in -> (ws local 9813) -> @out) up)))
+
+    (module {}
+      (cell @in)
+      (cell @out "Hello World")
+      (guard (@out)
+        (client (@in -> (tcp local 9814 transmission: portal) -> @out)
+          up)))
+
+    (module {}
+      (cell @in)
+      (cell @out (+ 1 2 x: 100 y: 200))
+      (guard (@out)
+        (client (@in -> (unix "/tmp/wirewright-unix.sock") -> @out format: ml)
+          up)))))
+
+;; Flow a value through several servers
+(rack
+  (frame
+    (module {}
+      (server (@pool (tcp local 9813) format: ml)
+        (backsys
+          {¦ in: (msg←{¦ signatures_dict⋮ (_* `>sign)} _*) out: (_* `>msg)}
+            <> {>sign: alice, (msg): (), >msg: ^(up msg)}))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9814) format: ml)
+        (backsys
+          {¦ in: (msg←{¦ signatures_dict⋮ (_* `>sign)} _*) out: (_* `>msg)}
+            <> {>sign: bob, (msg): (), >msg: ^(up msg)}))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9815) format: ml)
+        (backsys
+          {¦ in: (msg←{¦ signatures_dict⋮ (_* `>sign)} _*) out: (_* `>msg)}
+            <> {>sign: charlie, (msg): (), >msg: ^(up msg)}))
+      (circuit (pool @pool)))
+
+    (cell @a (+ 1 2))
+    (cell @b)
+    (cell @c)
+    (cell @d)
+    (client (@a -> (tcp local 9813) -> @b format: ml))
+    (client (@b -> (tcp local 9814) -> @c format: ml))
+    (client (@c -> (tcp local 9815) -> @d format: ml)))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b (+ 1 2 signatures: (alice)))
+    (cell @c)
+    (cell @d)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up)
+    (client (@c -> (tcp local 9815) -> @d format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b)
+    (cell @c (+ 1 2 signatures: (alice bob)))
+    (cell @d)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up)
+    (client (@c -> (tcp local 9815) -> @d format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b)
+    (cell @c)
+    (cell @d (+ 1 2 signatures: (alice bob charlie)))
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up)
+    (client (@c -> (tcp local 9815) -> @d format: ml) up)))
+
+;; Create a loop through two servers, increment a number
+(rack
+  (frame
+    (module {}
+      (server (@pool (tcp local 9813) format: ml)
+        (backsys
+          {¦ in: (±n _*) out: (_* `>n)}
+            <> {(n): (), >n: ^(+ n 1)}))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9814) format: ml)
+        (backsys
+          {¦ in: (n_ _*) out: (_* `>n)}
+            <> {(n): (), >n: (done ^n)}
+          {¦ in: (n←(%number _ < 10) _*) out: (_* `>n)}
+            <> {(n): (), >n: ^n}))
+      (circuit (pool @pool)))
+
+    (backsys {¦ ±c -a_} <> {(c): (), a: ^c})
+
+    (cell @a 0)
+    (cell @b)
+    (cell @c)
+    (client (@a -> (tcp local 9813) -> @b format: ml))
+    (client (@b -> (tcp local 9814) -> @c format: ml)))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b 1)
+    (cell @c)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b)
+    (cell @c 1)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a 1)
+    (cell @b)
+    (cell @c)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b 2)
+    (cell @c)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b)
+    (cell @c 2)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  ;; ...
+
+  (frame/tail fast-forward: true
+    (cell @a 9)
+    (cell @b)
+    (cell @c)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b 10)
+    (cell @c)
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (cell @b)
+    (cell @c (done 10))
+    (client (@a -> (tcp local 9813) -> @b format: ml) up)
+    (client (@b -> (tcp local 9814) -> @c format: ml) up)))
+
+;; Changing port on the same client to "dial" to a different server
+(rack
+  (frame
+    (module {}
+      (server (@pool (tcp local 9813) format: ml)
+        (backsys
+          {¦ in: (±n _*) out: (_* `>n)}
+            <> {(n): (), >n: ^(+ n 1)}))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9814) format: ml)
+        (backsys
+          {¦ in: (±n _*) out: (_* `>n)}
+            <> {(n): (), >n: ^(+ n 1)}))
+      (circuit (pool @pool)))
+
+    (module {}
+      (server (@pool (tcp local 9815) format: ml)
+        (backsys
+          {¦ in: (±n _*) out: (_* `>n)}
+            <> {(n): (), >n: ^(+ n 1)}))
+      (circuit (pool @pool)))
+
+    (backsys
+      {¦ ±in client: (client [_ -> (tcp local `>port) -> _])}
+        <> {>port: ^in}
+      {¦ -in_ ±out client: (client [_ -> (tcp local port_) -> _] up)}
+        <> {in: ^out, (out): (), port: ^out})
+
+    (cell @in 9813)
+    (cell @out)
+    (frag @client
+      (client (@in -> (tcp local) -> @out format: ml))))
+
+  (frame/tail fast-forward: true
+    (cell @in)
+    (cell @out 9814)
+    (frag @client
+      (client (@in -> (tcp local 9813) -> @out format: ml)
+        up)))
+
+  (frame/tail fast-forward: true
+    (cell @in 9814)
+    (cell @out)
+    (frag @client
+      (client (@in -> (tcp local 9814) -> @out format: ml)
+        up)))
+
+  (frame/tail fast-forward: true
+    (cell @in)
+    (cell @out 9815)
+    (frag @client
+      (client (@in -> (tcp local 9814) -> @out format: ml)
+        up)))
+
+  (frame/tail fast-forward: true
+    (cell @in 9815)
+    (cell @out)
+    (frag @client
+      (client (@in -> (tcp local 9815) -> @out format: ml)
+        up)))
+
+  (frame/tail fast-forward: true
+    (cell @in)
+    (cell @out 9816)
+    (frag @client
+      (client (@in -> (tcp local 9815) -> @out format: ml)
+        up)))
+
+  (frame/tail fast-forward: true
+    (cell @in 9816)
+    (cell @out)
+    (frag @client
+      (client (@in -> (tcp local 9816) -> @out format: ml)
+        up)))
+
+  ;; Make sure all servers lost the connection. We have to use pattern: true
+  ;; here because the error message in `pending` can be basically anything --
+  ;; i.e. it's platform-dependent.
+  (frame pattern: true fast-forward: true
+    ((%literal
+       (module {}
+         (server (@pool (tcp local 9813) up format: ml)
+           (backsys
+             {¦ in: (±n _*) out: (_* `>n)}
+               <> {(n): (), >n: ^(+ n 1)}))
+         (circuit (pool @pool))))
+
+     (%literal
+       (module {}
+         (server (@pool (tcp local 9814) up format: ml)
+           (backsys
+             {¦ in: (±n _*) out: (_* `>n)}
+               <> {(n): (), >n: ^(+ n 1)}))
+         (circuit (pool @pool))))
+
+     (%literal
+       (module {}
+         (server (@pool (tcp local 9815) up format: ml)
+           (backsys
+             {¦ in: (±n _*) out: (_* `>n)}
+               <> {(n): (), >n: ^(+ n 1)}))
+         (circuit (pool @pool))))
+
+     _*
+
+     (cell @in 9816)
+     (cell @out)
+     (frag @client
+       (client (@in -> (tcp local 9816) -> @out format: ml)
+         (pending _string))))))
+
+;; Server-side store example using surfaces
+(rack
+  (frame
+    (module {:@store}
+      (frag @sensor
+        (sensor (queue commands command_)))
+      (frag @report)
+      (part (@sensor @command) (sensor _ command_ _*))
+      (backsys
+        {¦ command_} <> {(command): ()}
+        {¦ command_: (tspace_ _) ⋮report}
+          <> {(command): (), report: (appearance ^tspace (err "invalid command"))}
+        {¦ command_: (tspace_ (get k_)) store: (%value k v_) ⋮report}
+          <> {(command): (), report: (appearance ^tspace (ok ^v))}
+        {¦ command_: (tspace_ (post k_ v'_)) store: (%-value k v) ⋮report}
+          <> {(command): (), v: ^v', report: (appearance ^tspace ok)}
+        {¦ command_: (tspace_ (put k_ v'_)) store: (%value k v_) ⋮report}
+          <> {(command): (), v: ^v', report: (appearance ^tspace ok)}
+        {¦ command_: (tspace_ (del k_)) store: (%value k v_) ⋮report}
+          <> {(command): (), (v): (), report: (appearance ^tspace ok)}))
+
+  (cell @store {})
+
+  (server (@pool (ws local 9813) format: ml)
+    ;; Remember that @id, @in, and @out are "shadow-inserted" by `server` for
+    ;; each device!
+    (frag @sensor)
+    (frag @appearance)
+    (backsys
+      ;; Initialize the sensor which we'll use to receive reports.
+      {¦ id_ -sensor_}
+        <> {sensor: (sensor (queue ^id _))}
+      ;; Relay commands through an appearance. Require the sensor to be initialized!
+      {¦ id_ in: (command_ _*) sensor ⋮appearance}
+        <> {(command): (), appearance: (appearance commands (^id ^command))}
+      ;; Relay reports.
+      {¦ out: (_* `>report) sensor: (sensor _ report_ _*)}
+        <> {>report: ^report, (report): ()}))
+
+  (circuit (pool @pool))
+
+  (circuit @clients
+    ;; Alice
+    (device role: alice
+      (cell @in)
+      (cell @out)
+      (client (@in -> (ws local 9813 key: alice) -> @out format: ml)))
+
+    ;; Bob
+    (device role: bob
+      (cell @in)
+      (cell @out)
+      (client (@in -> (ws local 9813 key: bob) -> @out format: ml))))
+
+  (backsys
+    {¦ line_: (role_ command_)
+       clients: ⟨(device (cell @in `>command) (cell @out) (client _ up) ⍊ role_)⟩}
+      <> {(line): (), >command: ^command}
+    {¦ line_: (?expect role_ expectation_)
+       clients: ⟨(device (cell @in) (cell @out expectation_) (client _ up) ⍊ role_)⟩}
+      <> {(line): (), (expectation): ()}
+    {¦ line_: (?expect store store_) store_}
+      <> {(line): ()})
+
+  (part (@script @line) (line_ _*))
+
+  (cell @script
+    ((alice (post x 100))
+     (?expect alice ok)
+     (?expect store {x: 100})
+
+     (alice (get x))
+     (?expect alice (ok 100))
+
+     (bob (get x))
+     (?expect bob (ok 100))
+
+     (bob (post x "Hello"))
+     (?expect bob (err "invalid command"))
+
+     (bob (put x "Hello"))
+     (?expect bob ok)
+
+     (?expect store {x: "Hello"})
+
+     (bob (post y 200))
+     (?expect bob ok)
+
+     (alice (get y))
+     (?expect alice (ok 200))
+
+     (alice (get z))
+     (?expect alice (err "invalid command"))
+
+     (?expect store {x: "Hello", y: 200})
+
+     (alice (del y))
+     (?expect alice ok)
+
+     (bob (get y))
+     (?expect bob (err "invalid command"))
+
+     (?expect store {x: "Hello"}))))
+
+  (frame/tail fast-forward: true
+    (cell @script ())))
+
+;; Distributed store
+(rack
+  (frame
+    (server (@pool (ws local 9813) format: ml)
+      (frag @sensor
+        (sensor (view store (_ _))))
+      (circuit @appearances)
+      (backsys
+        ;; Fallback.
+        {¦ in: (M_ _*) out: (_* `reply)}
+          <> {(M): (), reply: (err "invalid command")}
+        ;; GET retrieves a value.
+        {¦ in: (M←(get k_) _*) out: (_* `reply) sensor: (sensor _ (%group ⟨(k_ v_)⟩ _*))}
+          <> {(M): (), reply: (ok ^v)}
+        ;; POST publishes a value...
+        {¦ in: (M←(post k_ v_) _*) out: (_* `reply) appearances_dict⋮ (_* `>appearance)}
+          <> {(M): (), reply: ok, >appearance: (appearance store (^k ^v))}
+        ;; ... but only if it is globally absent.
+        {¦ in: (M←(post k_ _) _*) out: (_* `reply) sensor: (sensor _ (%group ⟨(k_ _)⟩ _*))}
+          <> {(M): (), reply: (err "invalid command")}
+        ;; PUT changes the value of an entry *this client* ows.
+        {¦ in: (M←(put k_ v'_) _*) out: (_* `reply) appearances: ⟨(appearance store (k_ v_))⟩}
+          <> {(M): (), reply: ok, v: ^v'}
+        ;; DEL removes an entry *this client* owns.
+        {¦ in: (M←(del k_) _*) out: (_* `reply) appearances: ⟨A←(appearance store (k_ _))⟩}
+          <> {(M): (), reply: ok, (A): ()}))
+
+    (circuit (pool @pool))
+
+    (circuit @clients
+      ;; Alice
+      (device role: alice
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: alice) -> @out format: ml)))
+
+      ;; Bob
+      (device role: bob
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: bob) -> @out format: ml))))
+
+    (backsys
+      {¦ line_: (role_ command_)
+         clients: ⟨(device (cell @in `>command) (cell @out) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), >command: ^command}
+      {¦ line_: (?expect role_ expectation_)
+         clients: ⟨(device (cell @in) (cell @out expectation_) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), (expectation): ()}
+      {¦ line_: (!expel role_)
+         pool_dict
+         clients: ⟨(device (cell @in) (cell @out) (client _ state←up) ⍊ role_)⟩}
+        <> {line: (!wait ^(size pool)), state: dn}
+      {¦ line_: (!wait (%number _ > (var n))) pool: (%pipe size n_)}
+        <> {(line): ()})
+
+    (part (@script @line) (line_ _*))
+
+    (cell @script
+      ((alice (post x 100))
+       (?expect alice ok)
+
+       (alice (post x "Hello"))
+       (?expect alice (err "invalid command"))
+
+       (bob (get x))
+       (?expect bob (ok 100))
+
+       (bob (get y))
+       (?expect bob (err "invalid command"))
+
+       (bob (post y 200))
+       (?expect bob ok)
+
+       (alice (get y))
+       (?expect alice (ok 200))
+
+       (alice (post y "hello"))
+       (?expect alice (err "invalid command"))
+
+       (alice (put y "hello"))
+       (?expect alice (err "invalid command"))
+
+       (alice (put x "hello"))
+       (?expect alice ok)
+
+       (bob (get x))
+       (?expect bob (ok "hello"))
+
+       (alice (put z 300))
+       (?expect alice (err "invalid command"))
+
+       (alice (post z (+ 1 2 precision: 3)))
+       (?expect alice ok)
+
+       (bob (get z))
+       (?expect bob (ok (+ 1 2 precision: 3)))
+
+       (bob (del z))
+       (?expect bob (err "invalid command"))
+
+       (alice (del x))
+       (?expect alice ok)
+
+       (alice (del y))
+       (?expect alice (err "invalid command"))
+
+       (alice (get x))
+       (?expect alice (err "invalid command"))
+
+       (bob (get x))
+       (?expect bob (err "invalid command"))
+
+       (alice (get y))
+       (?expect alice (ok 200))
+
+       (bob (get z))
+       (?expect bob (ok (+ 1 2 precision: 3)))
+
+       (alice (post x "Hello World"))
+       (?expect alice ok)
+
+       (bob (get x))
+       (?expect bob (ok "Hello World"))
+
+       (!expel alice)
+
+       ;; Alice's x is lost!
+       (bob (get x))
+       (?expect bob (err "invalid command"))
+
+       ;; Alice's z is lost!
+       (bob (get z))
+       (?expect bob (err "invalid command"))
+
+       ;; Bob can now define x (and y)
+       (bob (post x "Bob's x"))
+       (?expect bob ok)
+
+       (bob (get x))
+       (?expect bob (ok "Bob's x"))
+
+       (bob (del x))
+       (?expect bob ok)
+
+       (bob (del y))
+       (?expect bob ok)
+
+       ;; We've removed everything
+
+       (bob (get x))
+       (?expect bob (err "invalid command"))
+
+       (bob (get y))
+       (?expect bob (err "invalid command"))
+
+       (bob (get z))
+       (?expect bob (err "invalid command")))))
+
+  (frame/tail fast-forward: true
+    (cell @script ())))
+
+;; Communication between peers through a "god-like" observer
+(rack
+  (frame
+    (server (@pool (ws local 9813) format: ml)
+      (cell @name)
+      (backsys
+        {¦ in: (msg_ _*) out: (_* `>msg) -name_}
+          <> {(msg): (), >msg: ok, name: ^msg}))
+
+    (circuit (pool @pool))
+
+    (backsys @pool
+      ⟨& (device (%group ⟨& (cell @in (M←(receiver_ msg_) _*)) (cell @out (_* `>report))⟩ _*))
+         (device (%group ⟨& (cell @name receiver_) (cell @out (_* `>msg))⟩ _*))⟩°
+        <> {(M): (), >report: ok, >msg: ^msg})
+
+    (circuit @clients
+      ;; Alice
+      (device role: alice
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: alice) -> @out format: ml)))
+
+      ;; Bob
+      (device role: bob
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: bob) -> @out format: ml))))
+
+    (backsys
+      {¦ line_: (role_ command_)
+         clients: ⟨(device (cell @in `>command) (cell @out) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), >command: ^command}
+      {¦ line_: (?expect role_ expectation_)
+         clients: ⟨(device (cell @in) (cell @out expectation_) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), (expectation): ()})
+
+    (part (@script @line) (line_ _*))
+
+    (cell @script
+      ((alice "Alice")
+       (?expect alice ok)
+
+       (bob "Bob")
+       (?expect bob ok)
+
+       (alice ("Bob" "Hello Bob!"))
+       (?expect alice ok)
+       (?expect bob "Hello Bob!")
+
+       (alice ("Bob" "Second message"))
+       (?expect alice ok)
+
+       (alice ("Bob" "Third message, checking how it all queues, Bob!"))
+       (?expect alice ok)
+
+       (?expect bob "Second message")
+       (?expect bob "Third message, checking how it all queues, Bob!")
+
+       (bob ("Alice" "Hello Alice!"))
+       (?expect bob ok)
+       (?expect alice "Hello Alice!"))))
+
+  (frame/tail fast-forward: true
+    (cell @script ())))
+
+;; Same servers with different transmissions must conflict (tcp)
+(rack
+  (frame
+    (server (@pool (tcp local 9813 transmission: direct)))
+    (server (@pool (tcp local 9813 transmission: portal)))
+    (circuit (pool @pool)))
+
+  (frame pattern: true fast-forward: true
+    (%any°
+      ((server (@pool (tcp local 9813 transmission: direct) up))
+       (server (@pool (tcp local 9813 transmission: portal) (pending _string)))
+       (circuit (pool @pool)))
+
+      ((server (@pool (tcp local 9813 transmission: direct) (pending _string)))
+       (server (@pool (tcp local 9813 transmission: portal) up))
+       (circuit (pool @pool))))))
+
+;; Same servers with different transmissions must conflict (ws)
+(rack
+  (frame
+    (server (@pool (ws local 9813 transmission: direct)))
+    (server (@pool (ws local 9813 transmission: portal)))
+    (circuit (pool @pool)))
+
+  (frame pattern: true fast-forward: true
+    (%any°
+      ((server (@pool (ws local 9813 transmission: direct) up))
+       (server (@pool (ws local 9813 transmission: portal) (dn "transmission conflict")))
+       (circuit (pool @pool)))
+
+      ((server (@pool (ws local 9813 transmission: direct) (dn "transmission conflict")))
+       (server (@pool (ws local 9813 transmission: portal) up))
+       (circuit (pool @pool))))))
+
+;; Nesting: client inside client device
+(rack
+  (frame
+    (server (@pool (ws local 9814))
+      (client (@request -> (ws local 9813 key: @id) -> @response))
+      (part (@in @request) (request_ _*))
+      ;; TODO: (part (@out @response) (_* `response))
+      (cell @response)
+      (feed @response (@out back)))
+
+    (circuit @clients
+      ;; Alice
+      (device role: alice
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9814 key: alice) -> @out format: ml)))
+
+      ;; Bob
+      (device role: bob
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9814 key: bob) -> @out format: ml))))
+
+    (backsys
+      {¦ line_: (role_ command_)
+         clients: ⟨(device (cell @in `>command) (cell @out) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), >command: ^command}
+      {¦ line_: (?expect role_ expectation_)
+         clients: ⟨(device (cell @in) (cell @out expectation_) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), (expectation): ()}
+      {¦ line_: (!expel role_)
+         pool_dict
+         clients: ⟨(device (cell @in) (cell @out) (client _ state←up) ⍊ role_)⟩}
+        <> {line: (!wait ^(size pool)), state: dn}
+      {¦ line_: (!wait (%number _ > (var n))) pool: (%pipe size n_)}
+        <> {(line): ()})
+
+    (part (@script @line) (line_ _*))
+
+    (module {}
+      (server (@pool (ws local 9813))
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    (circuit (pool @pool))
+
+    (cell @script
+      ((alice "Hello in Alice")
+       (?expect alice "Hello in Alice")
+
+       (bob "Hello in Bob")
+       (?expect bob "Hello in Bob")
+
+       (!expel alice)
+
+       (bob "Hello in Bob")
+       (?expect bob "Hello in Bob")
+
+       (!expel bob))))
+
+  (frame/tail fast-forward: true
+    ;; The auxiliary server should not have any connections as well.
+    (module {}
+      (server (@pool (ws local 9813) up)
+        (feed (@in front) (@out back)))
+      (circuit (pool @pool)))
+
+    ;; The main server should not have any connections.
+    (circuit (pool @pool))
+
+    (cell @script ())))
+
+;; Nesting: server inside client device
+(rack
+  (frame
+    (server (@pool (ws local 9813) format: ml)
+      (cell @role)
+
+      (guard (@role server)
+        (module {}
+          (server (@pool (ws local 9814))
+            (feed (@in front) (@out back)))
+          (circuit (pool @pool))))
+
+      (guard (@role client)
+        (cell @client-in)
+        (cell @client-out)
+        (client (@client-in -> (ws local 9814 key: @id breakable: false) -> @client-out)))
+
+      (backsys
+        {¦ in: (M←(role r_) _*) out: (_* `reply) ⋮role}
+          <> {(M): (), reply: ok, role: ^r}
+        {¦ in: (M←(send msg_) _*) out: (_* `reply) -client-in_}
+          <> {(M): (), reply: ok, client-in: ^msg}
+        {¦ in: (M←receive _*) out: (_* `reply) client-out_}
+          <> {(M): (), reply: (ok ^client-out), (client-out): ()}))
+
+    (circuit (pool @pool))
+
+    (circuit @clients
+      ;; Alice
+      (device role: alice
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: alice breakable: false) -> @out format: ml)))
+
+      ;; Bob
+      (device role: bob
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: bob breakable: false) -> @out format: ml)))
+
+      ;; Charlie
+      (device role: charlie
+        (cell @in)
+        (cell @out)
+        (client (@in -> (ws local 9813 key: charlie breakable: false) -> @out format: ml))))
+
+    (backsys
+      {¦ line_: (role_ command_)
+         clients: ⟨(device (cell @in `>command) (cell @out) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), >command: ^command}
+      {¦ line_: (?expect role_ expectation_)
+         clients: ⟨(device (cell @in) (cell @out expectation_) (client _ up) ⍊ role_)⟩}
+        <> {(line): (), (expectation): ()}
+      {¦ line_: (!expel role_)
+         pool_dict
+         clients: ⟨(device (cell @in) (cell @out) (client _ state←up) ⍊ role_)⟩}
+        <> {line: (!wait ^(size pool)), state: dn}
+      {¦ line_: (!wait (%number _ > (var n))) pool: (%pipe size n_)}
+        <> {(line): ()})
+
+    (part (@script @line) (line_ _*))
+
+    (cell @script
+      ((alice (role server))
+       (?expect alice ok)
+
+       (bob (role client))
+       (?expect bob ok)
+
+       (bob (send "Kaixo"))
+       (?expect bob ok)
+
+       (bob receive)
+       (?expect bob (ok "Kaixo"))
+
+       (charlie (role client))
+       (?expect charlie ok)
+
+       (charlie (send "Hello"))
+       (?expect charlie ok)
+
+       (charlie (send "World"))
+       (?expect charlie ok)
+
+       (charlie receive)
+       (?expect charlie (ok "Hello"))
+
+       (charlie receive)
+       (?expect charlie (ok "World"))
+
+       ;; Lose our server!
+       (!expel alice)
+
+       ;; Change the role of Bob. He is now the server!
+       (bob (role server))
+       (?expect bob ok)
+
+       ;; Only Charlie remains. He should still be able to send messages -- thanks
+       ;; to retries after he lost connection with Alice.
+       (charlie (send "Hi again"))
+       (?expect charlie ok)
+
+       (charlie receive)
+       (?expect charlie (ok "Hi again")))))
+
+  (frame/tail fast-forward: true
+    (cell @script ())))
+
+;; Duplicated server is noop with the same pool
+(rack
+  (frame
+    (server (@pool (ws local 9813))
+      (feed (@in front) (@out back)))
+    (server (@pool (ws local 9813))
+      (feed (@in front) (@out back)))
+
+    (circuit (pool @pool))
+
+    (cell @in "Kaixo mundua")
+    (cell @out)
+    (guard (@out)
+      (client (@in -> (ws local 9813) -> @out))))
+
+  (frame/tail fast-forward: true
+    (circuit (pool @pool))
+
+    (cell @in)
+    (cell @out "Kaixo mundua")
+    (guard (@out)
+      (client (@in -> (ws local 9813) -> @out) up))))
+
+;; Duplicated server with a different pool is an exact replica
+(rack
+  (frame
+    (server (@pool0 (ws local 9813))
+      (feed (@in front) (@out back)))
+    (server (@pool1 (ws local 9813))
+      (feed (@in front) (@out back)))
+
+    (circuit (pool @pool0))
+    (circuit (pool @pool1))
+
+    (cell @in "Kaixo mundua")
+    (cell @out)
+    (discard @out)
+    (client (@in -> (ws local 9813) -> @out)))
+
+  (frame pattern: true fast-forward: true
+    (_*
+
+     (circuit (pool @pool0)
+       (device
+         (%group ⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩ _*)))
+
+     (circuit (pool @pool1)
+       (device
+         (%group ⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩ _*)))
+
+     (cell @in)
+     (cell @out)
+     (discard @out)
+     (client (@in -> (ws local 9813) -> @out) up)))
+
+  (frame/tail fast-forward: true
+    (cell @in)
+    (cell @out "Kaixo mundua")
+    (discard @out)
+    (client (@in -> (ws local 9813) -> @out) up))
+
+  (frame/tail fast-forward: true
+    (cell @in)
+    (cell @out)
+    (discard @out)
+    (client (@in -> (ws local 9813) -> @out) up)))

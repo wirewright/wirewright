@@ -5,9 +5,10 @@ class Ww::Harmony
   class IndexedSet(Element, Feature)
     defrecord FeatureId, repr : UInt64
 
+    @changelog : Set::Changelog(Element)?
+
     def initialize
       @seq = 0u64
-      @version = 0u64
       @elements = Set(Element).new
       @index = {} of FeatureId => Set(Element)
       @features = {} of Feature => FeatureId
@@ -28,10 +29,19 @@ class Ww::Harmony
       @elements.includes?(element)
     end
 
-    # Returns the version of this set. The version is incremented after each mutation
-    # of the set.
-    def version : UInt64
-      @version
+    def transaction(& : ->) : Set::Changelog
+      # Save the old changelog on the stack.
+      changelog0 = @changelog
+
+      begin
+        @changelog = Set::Changelog(Element).empty
+        yield
+        changelog1 = @changelog
+        changelog1.not_nil!
+      ensure
+        # Restore the old changelog.
+        @changelog = changelog0
+      end
     end
 
     # Yields each element in this set.
@@ -48,18 +58,18 @@ class Ww::Harmony
 
     # Yields each element of type T.
     def each(cls : T.class, & : T ->) : Nil forall T
-      each(cls, Tuple.new) { |element| yield element }
+      each(cls, NamedTuple.new) { |element| yield element }
     end
 
     # Yields each element of type T, whose instance variables include all
     # of *hints*.
-    def each(cls : T.class, *hints : Feature, & : T ->) : Nil forall T
+    def each(cls : T.class, **hints : Feature, & : T ->) : Nil forall T
       each(cls, hints) { |element| yield element }
     end
 
     # Yields each element of type T, whose instance variables include all
     # of *hints*.
-    def each(cls : T.class, hints : Tuple() | Enumerable(Feature), & : T ->) : Nil forall T
+    def each(cls : T.class, hints : NamedTuple, & : T ->) : Nil forall T
       membersets = Pf::Kit.stack_array(Set(Element), 8)
 
       pass do
@@ -68,7 +78,7 @@ class Ww::Harmony
         membersets << @index[feature_id]
       end
 
-      hints.each do |feature|
+      hints.each do |_, feature|
         return unless feature_id = @features[feature]?
 
         membersets << @index[feature_id]
@@ -90,7 +100,36 @@ class Ww::Harmony
         smallest.select!(&.in?(memberset))
       end
 
-      smallest.each { |element| yield element.as(T) }
+      smallest.each do |element|
+        element = element.as(T)
+        matches = true
+
+        hints.each do |ivar, feature|
+          next if IndexedSet.match?(element, ivar, feature)
+
+          matches = false
+          break
+        end
+
+        next unless matches
+
+        yield element
+      end
+    end
+
+    def self.match?(element : Element, ivar : Symbol, feature : Feature) : Bool forall Element, Feature
+      {% begin %}
+        case ivar
+        {% for ivar in Element.instance_vars %}
+        when {{ivar.symbolize}}
+          assert element.@{{ivar}}.is_a?(Feature), "type mismatch for @#{ivar}, expected #{Feature}"
+
+          element.@{{ivar}} == feature
+        {% end %}
+        else
+          raise KeyError.new("#{Element} has no ivar @#{ivar}")
+        end
+      {% end %}
     end
 
     # Returns `true` if the block is `true` for any element in this set.
@@ -99,14 +138,14 @@ class Ww::Harmony
     end
 
     # Returns `true` if the block is `true` for any element of type T in this set.
-    def any?(cls : T.class, & : T -> Bool) : Bool forall T
-      any?(cls) { |element| yield element }
-    end
+    # def any?(cls : T.class, & : T -> Bool) : Bool forall T
+    #   any?(cls) { |element| yield element }
+    # end
 
     # Returns `true` if the block is `true` for any element of type T in this set.
     # Only elements whose instance vars contain all of *hints* are considered.
-    def any?(cls : T.class, *hints : Feature, & : T -> Bool) : Bool forall T
-      each(cls, *hints) do |element|
+    def any?(cls : T.class, **hints : Feature, & : T -> Bool) : Bool forall T
+      each(cls, **hints) do |element|
         return true if yield element
       end
 
@@ -115,8 +154,20 @@ class Ww::Harmony
 
     # A shorthand for `any?` that does no further filtering beyond filtering
     # by type and possibly by hints.
-    def any?(*args) : Bool
-      any?(*args) { true }
+    def any?(*args, **kwargs) : Bool
+      any?(*args, **kwargs) { true }
+    end
+
+    def single?(*args, **kwargs)
+      result = nil
+
+      each(*args, **kwargs) do |element|
+        return if result # Not single, multiple values match
+
+        result = element
+      end
+
+      result
     end
 
     # Inserts *element* into this set. Returns `true` if it was inserted, `false` if
@@ -155,7 +206,7 @@ class Ww::Harmony
         usage << element
       end
 
-      @version += 1
+      @changelog = @changelog.try(&.after_added(element))
 
       true
     end
@@ -175,7 +226,7 @@ class Ww::Harmony
 
       return false unless @elements.delete(element)
 
-      @version += 1
+      @changelog = @changelog.try(&.after_removed(element))
 
       pass(element.class) do |feature|
         feature_id = @features[feature]
@@ -206,10 +257,10 @@ class Ww::Harmony
 
     # Removes all matching elements. The arguments *args* and the block are interpreted
     # by `each`.
-    def delete_all(*args, &) : Nil
+    def delete_all(*args, **kwargs, &) : Nil
       matches = Pf::Kit.stack_array(Element)
 
-      each(*args) do |element|
+      each(*args, **kwargs) do |element|
         next unless yield element
 
         matches << element
@@ -221,8 +272,8 @@ class Ww::Harmony
     end
 
     # Removes all matching elements. The arguments *args* are interpreted by `each`.
-    def delete_all(*args) : Nil
-      delete_all(*args) { true }
+    def delete_all(*args, **kwargs) : Nil
+      delete_all(*args, **kwargs) { true }
     end
 
     def pretty_print(pp)

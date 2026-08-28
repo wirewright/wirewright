@@ -60,6 +60,31 @@ module Ww
       builder.to_blob(classif)
     end
 
+    def self.simplify(blob : Blob) : Str | Blob
+      classif = blob.classif?
+      if (classif.nil? || (classif.plain? && classif.utf8?)) && blob.utf8?
+        return Term[blob.to_string]
+      end
+
+      blob
+    end
+
+    def self.unsimplify(blob : Blob) : Blob
+      blob
+    end
+
+    CLASSIF_PLAINTEXT = Term::Blob::Classif.of(MIME::MediaType.parse("text/plain;charset=UTF-8"))
+
+    def self.unsimplify(string : Str) : Blob
+      unsimplify(string.to(String))
+    end
+
+    def self.unsimplify(string : String) : Blob
+      blob = Term::Blob.new(string)
+      blob.classify!(CLASSIF_PLAINTEXT)
+      blob
+    end
+
     # The minimum capacity for blobs, used in methods like `build`. Blobs are
     # down-sized if possible once their real size is known; before that point,
     # however, allocations are at least of `MIN_CAPACITY` (bytes).
@@ -186,6 +211,15 @@ module Ww
       @size
     end
 
+    # Returns `true` if this blob contains no bytes.
+    def empty? : Bool
+      ubytesize64.zero?
+    end
+
+    def classif? : Classif?
+      @classif.get(:acquire)
+    end
+
     # Returns the classification of this blob.
     #
     # NOTE: The classification is computed on-demand unless it was explicitly provided
@@ -213,6 +247,15 @@ module Ww
     # Blobs are compared lexicographically like Crystal slices. See `Slice#<=>`.
     def <=>(other : Blob) : Int32
       bytes <=> other.bytes
+    end
+
+    # Returns `true` if the content of this blob is valid UTF-8.
+    def utf8? : Bool
+      ::Unicode.valid?(to_slice)
+    end
+
+    def to_io : IO
+      IO::Memory.new(to_slice)
     end
 
     def inspect(io)
@@ -260,9 +303,9 @@ module Ww
     end
 
     # :nodoc:
-    MEDIA_CHARSET_UTF8 = Term["UTF-8"]
+    MEDIA_CHARSET_UTF8 = "UTF-8"
     # :nodoc:
-    MEDIA_CHARSET_ASCII = Term["US-ASCII"]
+    MEDIA_CHARSET_ASCII = "US-ASCII"
 
     # Returns `true` if the content of this blob is encoded using UTF-8
     # (or US-ASCII, which is a subset of UTF-8).
@@ -272,9 +315,29 @@ module Ww
     def utf8? : Bool
       return false unless charset = media_params[:charset]?
       return false unless charset = charset.as_s?
-      return false unless charset.upcase.in?(MEDIA_CHARSET_UTF8, MEDIA_CHARSET_ASCII)
 
-      true
+      charset = charset.to(String)
+
+      charset.compare(MEDIA_CHARSET_UTF8, case_insensitive: true) == 0 ||
+        charset.compare(MEDIA_CHARSET_ASCII, case_insensitive: true) == 0
+    end
+
+    def plain? : Bool
+      media_type == Term["text/plain"]
+    end
+
+    def to_s(io)
+      io << media_type.to(String)
+      return if media_params.empty?
+
+      io << ';'
+
+      media_params.each_entry do |key, value|
+        assert key.type.symbol?
+        assert value.type.string?
+
+        io << key.to(String) << '=' << value.to(String)
+      end
     end
   end
 end

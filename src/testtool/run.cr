@@ -46,6 +46,8 @@ module Testtool
       end
 
       matchpi %{(frame/tail content_* ¦ () fast-forward)} do
+        # puts ML.display(actual, maxwidth: 80)
+
         if actual.items.ends_with?(content.items)
           return RackComparisonResult::Match
         end
@@ -58,6 +60,8 @@ module Testtool
       end
 
       matchpi %{(frame pattern_ ¦ () pattern fast-forward)} do
+        # puts ML.display(actual, maxwidth: 80)
+
         if M1.probe?(pattern, actual)
           return RackComparisonResult::Match
         end

@@ -3,7 +3,8 @@ module Ww::Rack::Format
   extend self
 
   # TODO: limits, limits, limits!!
-  alias Any = None | TermJSON | TermJSONSchema | TermML | TermPrettyML
+  alias Any = None | Some
+  alias Some = TermJSON | TermJSONSchema | TermML | TermPrettyML
 
   defrecord None
   defrecord TermJSON
@@ -189,11 +190,27 @@ module Ww::Rack::Format
     end
   end
 
+  def content_type?(format : None) : String?
+  end
+
+  def content_type?(format : TermJSON | TermJSONSchema) : String?
+    "application/json"
+  end
+
+  def content_type?(format : TermML | TermPrettyML) : String?
+    "application/x-wwml"
+  end
+
   def encode?(format : None, term : Term) : Term::Blob?
+    if blob = term.as_blob?
+      return blob
+    end
+
     if str = term.as_s?
       return Term::Blob.new(str.to(String))
     end
 
+    # Fallback: stringify using ML.compact.
     Term::Blob.build { |io| ML.compact(io, term) }
   end
 
@@ -276,16 +293,24 @@ module Ww::Rack::Format
     end
   end
 
-  def decode?(format : Any, message : Term::Blob) : Term?
-    return unless message.classif.utf8?
+  def decode?(format : None, message : Term::Blob) : Term?
+    Term.of(Term::Blob.simplify(message))
+  end
+
+  def decode?(format : None, message : Term::Str) : Term?
+    Term.of(message)
+  end
+
+  def decode?(format : Some, message : Term::Blob) : Term?
+    return unless message.utf8?
 
     # FIXME: Converting it to_string here seems fairly expensive. It's a perfectly
     # avoidable allocation.
     decode?(format, message.to_string)
   end
 
-  def decode?(format : None, message : String) : Term?
-    Term.of(message)
+  def decode?(format : Some, message : Term::Str) : Term?
+    decode?(format, message.to(String))
   end
 
   def decode?(format : TermJSON, message : String) : Term?

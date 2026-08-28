@@ -44,6 +44,7 @@ module Ww::Rack
 
   def cell?(hg : D7::Hypergraph, input : D7::AbsEdge) : Cell?
     candidates = Pf::Kit.stack_array(Cell, 1)
+
     hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
       # Since cell has only one edge, `memberof:` above already covers
       # the edge check.
@@ -53,6 +54,19 @@ module Ww::Rack
         end
 
         matchpi %{[cell @_]} do
+          candidates << Cell.new(node, value: nil)
+        end
+      end
+    end
+
+    hg.each_node_with_head(Term.of(:pool), memberof: {input}) do |node|
+      # Ditto
+      Term.case(node.term) do
+        matchpi %{[pool @_ value_]} do
+          candidates << Cell.new(node, value)
+        end
+
+        matchpi %{[pool @_]} do
           candidates << Cell.new(node, value: nil)
         end
       end
