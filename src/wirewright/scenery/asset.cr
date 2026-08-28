@@ -237,8 +237,10 @@ module Ww::Scenery
 
     # :nodoc:
     def parse(query : FontQuery, blob : Term::Blob) : Outcome::Accepted(Font?)
+      classif = Term::Blob.classif(blob)
+
       response = pass do
-        next unless blob.classif.media_type.in?(MEDIA_TYPES_FONT)
+        next unless classif.media_type.in?(MEDIA_TYPES_FONT)
 
         ft = @@ft ||= begin
           status = FreeType.init_freetype(out library)
@@ -257,7 +259,7 @@ module Ww::Scenery
 
       unless response
         return Outcome.ok_despite(nil.as(Font?), <<-MSG)
-        unrecognized or malformed font with media type #{blob.classif.media_type.to(String)}; \
+        unrecognized or malformed font with media type #{classif.media_type.to(String)}; \
         expected one of: #{MEDIA_TYPES_FONT.join(", ", &.to(String))}
         MSG
       end
@@ -276,8 +278,10 @@ module Ww::Scenery
 
     # :nodoc:
     def parse(query : ImageQuery, blob : Term::Blob) : Outcome::Accepted(PvgRasterImage?)
+      classif = Term::Blob.classif(blob)
+
       response = pass do
-        next unless blob.classif.media_type.in?(MEDIA_TYPES_RASTER)
+        next unless classif.media_type.in?(MEDIA_TYPES_RASTER)
         next unless surface = PlutoVG.surface_load_from_image_data(blob.bytes, blob.bytes.size)
 
         PvgRasterImage.new(surface, blob.digest)
@@ -285,7 +289,7 @@ module Ww::Scenery
 
       unless response
         return Outcome.ok_despite(nil.as(PvgRasterImage?), <<-SVG)
-         unrecognized or malformed image with media type #{blob.classif.media_type.to(String)}; \
+         unrecognized or malformed image with media type #{classif.media_type.to(String)}; \
          expected one of #{MEDIA_TYPES_RASTER.join(", ", &.to(String))}
          SVG
       end
@@ -317,15 +321,17 @@ module Ww::Scenery
 
     # :nodoc:
     def parse(query : SvgQuery, blob : Term::Blob) : Outcome::Accepted(PvgSvgImage?)
+      classif = Term::Blob.classif(blob)
+
       response = pass do
-        next unless blob.classif.media_type.in?(MEDIA_TYPES_SVG)
+        next unless classif.media_type.in?(MEDIA_TYPES_SVG)
 
         svg?(blob)
       end
 
       unless response
         return Outcome.ok_despite(nil.as(PvgSvgImage?), <<-SVG)
-        unrecognized or malformed SVG with media type #{blob.classif.media_type.to(String)}; \
+        unrecognized or malformed SVG with media type #{classif.media_type.to(String)}; \
         expected one of #{MEDIA_TYPES_SVG.join(", ", &.to(String))}"
         SVG
       end

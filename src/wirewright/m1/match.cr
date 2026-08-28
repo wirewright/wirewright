@@ -1329,8 +1329,7 @@ module Ww::M1
   # (%mime "text/plain" {charset: "UTF-8"})  (%mime "image/png" _)
   def match(ctx, op : Op::Mime, matchee : Tzip, plan)
     return Fb[] unless blob = matchee.term.as_blob?
-
-    classif = blob.classif
+    return Fb[] unless classif = blob.classif?
 
     media_type = Tzip.new(Term.of(classif.media_type), Log.none)
     media_params = Tzip.new(Term.of(classif.media_params), Log.none)

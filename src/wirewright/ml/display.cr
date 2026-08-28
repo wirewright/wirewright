@@ -229,7 +229,11 @@ module Ww::ML::Formatter
 
         continue if width < 80
 
-        pp.text("⟬… #{blob.ubytesize64.humanize_bytes} / #{blob.digest.trim(4).hexstring} …⟭")
+        if classif = blob.classif?
+          pp.text("⟬… #{blob.ubytesize64.humanize_bytes} / #{blob.digest.trim(4).hexstring} ⁑ #{classif} …⟭")
+        else
+          pp.text("⟬… #{blob.ubytesize64.humanize_bytes} / #{blob.digest.trim(4).hexstring} …⟭")
+        end
       end
 
       otherwise do
@@ -350,6 +354,10 @@ module Ww::ML
 
       io.write_byte(to_hex(digit0))
       io.write_byte(to_hex(digit1))
+    end
+
+    if classif = term.classif?
+      io << " ⁑ " << classif
     end
 
     io << '⟭'

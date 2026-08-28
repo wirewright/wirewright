@@ -5094,7 +5094,6 @@ struct Set::Changelog(Element)
   defrecord Added(Element), element : Element
   defrecord Removed(Element), element : Element
 
-
   include Enumerable(Added(Element) | Removed(Element))
 
   struct Added
@@ -5145,3 +5144,8 @@ struct Set::Changelog(Element)
   end
 end
 
+struct MIME::MediaType
+ def self.parse(string : String, &block : String -> NoReturn)
+   parse_impl(string) { |err| yield err }
+ end
+end

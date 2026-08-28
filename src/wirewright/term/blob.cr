@@ -1,18 +1,20 @@
 module Ww
   # Blobs represent opaque binary data.
   #
-  # Blobs are very much like strings except strings are used for plaintext data,
-  # and their design and optimizations bias strongly toward UTF-8. Blobs, on
-  # the other hand, are simply vectors of bytes, with no presuppositions about
-  # their content.
+  # Blob terms are similar to string terms. The difference is that strings are
+  # used for plaintext data. Their design and optimizations bias strongly toward
+  # UTF-8. Moreover, strings are required to be valid UTF-8.
   #
-  # We hash blobs on construction using a cryptographic hash function (see `DIGEST_ALGORITHM`),
-  # because having such a hash is very useful in practice; so the small added
-  # overhead of computing a hash is justified. For example, equality and hashcode
-  # become O(1) for arbitrary blobs.
+  # Blobs, on the other hand, are simply vectors of bytes (with an optional
+  # media type), with no presuppositions about their content.
   #
-  # We use `UInt64`s instead of `Int32` for size and capacity because, unlike
-  # most other types, ~4 GiB is something one can easily imagine with blobs.
+  # We hash blobs on construction using a cryptographic hash function (see `DIGEST_ALGORITHM`).
+  # Having such a hash is very useful in practice, so the small added overhead of
+  # computing a hash is justified. For example, equality and hashcode become O(1)
+  # for arbitrary blobs.
+  #
+  # We use `UInt64`s instead of `Int32` for size and capacity, because unlike
+  # most other types, ~4 GiB is something one can readily imagine with blobs.
   #
   # Reference: https://github.com/crystal-lang/crystal/blob/master/src/string.cr
   @[Term::Assoc(TermType::Blob, :unsafe_as_blob)]
@@ -32,21 +34,28 @@ module Ww
     # The hash is computed by `DIGEST_ALGORITHM`.
     getter digest : Bytes
 
+    # Returns the *classification* of this blob -- its media type.
+    #
+    # See `Classif` to learn more.
+    getter? classif : Classif?
+
     @size : UInt64
-    @classif : Atomic(Classif?)
     @mem : UInt8*
 
     # :nodoc:
-    def initialize(@size, @mem, digester, classif = nil)
+    def initialize(@size, @mem, digester : ::Digest, @classif)
       @digest = digester.final
-      @classif = Atomic(Classif?).new(classif)
+    end
+
+    # :nodoc:
+    def initialize(@size, @mem, @digest, @classif)
     end
 
     # Constructs a blob with the given byte *slice*.
     #
     # WARNING: If *slice* is read-only, the underlying pointer is reused; otherwise,
     # *slice* is copied.
-    def self.new(slice : Bytes, *, classif : Classif? = nil) : Blob
+    def self.new(slice : Bytes, classif : Classif? = nil) : Blob
       if slice.read_only?
         digester = DIGEST_ALGORITHM.new
         digester.update(slice)
@@ -58,6 +67,41 @@ module Ww
       builder = stack_alloc Builder.new(capacity)
       builder.write(slice)
       builder.to_blob(classif)
+    end
+
+    # Yields a builder object to incrementally construct a blob.
+    #
+    # WARNING: The builder must not outlive the block, because it is allocated on
+    # the stack. If it does, that's UB.
+    def self.build(*, capacity : UInt64 = MIN_CAPACITY, classif : Classif? = nil, & : Builder ->) : Blob
+      builder = stack_alloc Builder.new(capacity)
+      yield builder
+      builder.to_blob(classif)
+    end
+
+    # Constructs a blob from the given *string*.
+    def self.new(string : String, classif : Classif? = nil) : Blob
+      digester = DIGEST_ALGORITHM.new
+      digester.update(string)
+      Term::Blob.new(string.bytesize.to_u64, string.to_unsafe, digester, classif)
+    end
+
+    def self.refine(blob : Blob, classif : Classif?) : Blob
+      new(blob.@size, blob.@mem, blob.@digest, classif)
+    end
+
+    def self.classify(blob : Blob) : Blob
+      refine(blob, classif: classif(blob))
+    end
+
+    def self.unclassify(blob : Blob) : Blob
+      refine(blob, classif: nil)
+    end
+
+    # Returns the classification of *blob* (`Blob#classif?`), or determines it
+    # using `PantoMIME`.
+    def self.classif(blob : Blob) : Classif
+      blob.classif? || Classif.of(blob.to_slice, blob.digest)
     end
 
     def self.simplify(blob : Blob) : Str | Blob
@@ -80,9 +124,7 @@ module Ww
     end
 
     def self.unsimplify(string : String) : Blob
-      blob = Term::Blob.new(string)
-      blob.classify!(CLASSIF_PLAINTEXT)
-      blob
+      Term::Blob.new(string, CLASSIF_PLAINTEXT)
     end
 
     # The minimum capacity for blobs, used in methods like `build`. Blobs are
@@ -139,50 +181,11 @@ module Ww
       end
 
       # :nodoc:
-      def to_unclassified_blob : Blob
+      def to_blob(classif : Classif?) : Blob
         shrink_to_fit
 
-        Blob.new(@size, @mem, @digester)
+        Blob.new(@size, @mem, @digester, classif)
       end
-
-      # :nodoc:
-      def to_blob(classif : Classif? = nil) : Blob
-        instance = to_unclassified_blob
-        if classif
-          instance.classify!(classif)
-        end
-        instance
-      end
-
-      # :nodoc:
-      def to_classif_blob : Blob
-        instance = to_unclassified_blob
-        instance.classify!(classif: nil)
-        instance
-      end
-    end
-
-    # Yields a builder object to incrementally construct a blob.
-    #
-    # WARNING: The builder must not outlive the block, because it is allocated on
-    # the stack. If it does, that's UB.
-    def self.build(*, capacity : UInt64 = MIN_CAPACITY, classify : Bool = false, & : Builder ->) : Blob
-      builder = stack_alloc Builder.new(capacity)
-      yield builder
-
-      if classify
-        builder.to_classif_blob
-      else
-        builder.to_blob
-      end
-    end
-
-    # Constructs a blob from the given *string*.
-    def self.new(string : String) : Blob
-      digester = DIGEST_ALGORITHM.new
-      digester.update(string)
-
-      Term::Blob.new(string.bytesize.to_u64, string.to_unsafe, digester, classif: nil)
     end
 
     # :nodoc:
@@ -216,34 +219,6 @@ module Ww
       ubytesize64.zero?
     end
 
-    def classif? : Classif?
-      @classif.get(:acquire)
-    end
-
-    # Returns the classification of this blob.
-    #
-    # NOTE: The classification is computed on-demand unless it was explicitly provided
-    # by the constructors of this object. We use our own, in-house `PantoMIME` to classify
-    # the bytes. `PantoMIME` could be expensive. The classification is cached thereafter.
-    # Constructors which do expensive stuff anyway (e.g. `PathService`, when reading a file)
-    # usually precompute `Classif` as well, so that clients never have to go through this
-    # expense. Worst-case analysis, however, must account for a missing `Classif`.
-    @[Dncast]
-    def classif
-      if classif = @classif.get(:acquire)
-        return classif
-      end
-
-      classify!(classif: nil)
-    end
-
-    # :nodoc:
-    #
-    # WARNING: Only call this if the blob wasn't published yet!
-    def classify!(classif : Classif?) : Classif
-      @classif.set(classif || Classif.of(bytes), :release)
-    end
-
     # Blobs are compared lexicographically like Crystal slices. See `Slice#<=>`.
     def <=>(other : Blob) : Int32
       bytes <=> other.bytes
@@ -270,10 +245,12 @@ module Ww
     #
     # Non-cryptographic hash for use primarily by `Term.hashcode`.
     def hashrepr : UInt64
+      # NOTE: different classifs for the same blob will collide, but we consider it a rare
+      # enough thing not to worry. Equality will discriminate everything properly.
       digest.unsafe_slice_of(UInt64)[0]
     end
 
-    def_equals digest
+    def_equals @digest, @classif
   end
 
   class Term::Blob::Classif
@@ -285,21 +262,55 @@ module Ww
     def initialize(@media_type, @type, @subtype, @media_params)
     end
 
-    # Constructs a classification object for *slice*.
-    def self.of(slice : Bytes) : Classif?
+    # Classifies the given *slice* using `PantoMIME`.
+    def self.of(slice : Bytes) : Classif
       of(PantoMIME.detect(slice))
     end
 
-    # Constructs a classification object based on a known *mime* type. We normally
-    # do this for HTTP responses which can tell us their MIME.
-    def self.of(mime : MIME::MediaType) : Classif?
+    @@cache = SyncLRU(Bytes, Classif).new(64)
+
+    # Classifies the given *slice* using `PantoMIME`.
+    #
+    # *digest* is assumed to be the digest of *slice*. It is used for
+    # caching detection.
+    def self.of(slice : Bytes, digest : Bytes) : Classif
+      @@cache.put_if_absent(digest) do
+        of(PantoMIME.detect(slice))
+      end
+    end
+
+    # :nodoc:
+    CASE_INSENSITIVE_VALUE_KEYS = Set{"charset"}
+
+    # Constructs a classification object based on a known *mime* type.
+    def self.of(mime : MIME::MediaType) : Classif
+      # [RFC 2045](https://datatracker.ietf.org/doc/rfc2045/):
+      # > All media type values, subtype values, and parameter names as defined
+      # > are case-insensitive.  However, parameter values are case-sensitive
+      # > unless otherwise specified for the specific parameter.
+      #
+      # Where things are case-insensitive, we normalize them to lowercase.
+
+      media_full_type = Term[mime.media_type.downcase]
+      media_type = Term[mime.type.downcase]
+      media_subtype = Term[mime.sub_type.try(&.downcase)]
+
       media_params = Term::Dict.build do |commit|
         mime.each_parameter do |key, value|
+          key = key.downcase
+          if key.in?(CASE_INSENSITIVE_VALUE_KEYS)
+            value = value.downcase
+          end
+
           commit.with(Term::Sym.new(key), Term.of(value))
         end
       end
 
-      new(Term[mime.media_type], Term[mime.type], Term[mime.sub_type], media_params)
+      new(media_full_type, media_type, media_subtype, media_params)
+    end
+
+    # Nil passthrough shorthand.
+    def self.of(object : Nil) : Nil
     end
 
     # :nodoc:
@@ -339,5 +350,7 @@ module Ww
         io << key.to(String) << '=' << value.to(String)
       end
     end
+
+    def_equals_and_hash @media_type, @media_params
   end
 end

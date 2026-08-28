@@ -625,11 +625,14 @@ module Ww::ML
         return revert
       end
 
-      # ⟬⏏dead beef⟭
+      classif = nil
+      classif_auto = false
+
       text, blob = view_and_object do
-        Term::Blob.build(classify: true) do |io|
+        Term::Blob.build do |io|
           buffer = Pf::Kit.stack_array(Char, 2)
 
+          # ⟬⏏dead beef⟭
           loop do
             case
             when ahead == '⟭'
@@ -657,13 +660,67 @@ module Ww::ML
               end
 
               forward
+            when past?('⁑')
+              # ⟬dead beef ⁑⏏ text/html⟭
+              skip(&.hspace?)
+              # ⟬dead beef ⁑ ⏏text/html⟭
+
+              if past?('?')
+                # ⟬dead beef ⁑ ?⏏⟭
+                # ⟬dead beef ⁑ ?⏏   ⟭
+                skip(&.hspace?)
+                # ⟬dead beef ⁑ ?⏏⟭
+                # ⟬dead beef ⁑ ?   ⏏⟭
+
+                classif_auto = true
+              else
+                media_type_view = view do
+                  skip?(limit: 64) { |rune| rune != '⟭' }
+                end
+                # ⟬dead beef ⁑ text/html⏏⟭
+
+                # TODO: the errors provided by `MediaType.parse` are rather poorly structured,
+                # we'll need to write our own parser with a proper union return type. E.g.:
+                #
+                #   invalid media type: Invalid '/' at 13 (scratch:1:15)
+                #
+                # is raised for:
+                #
+                #   application//
+                #
+                # Which is quite a strange error message, isn't it?
+                media_type = MIME::MediaType.parse(media_type_view.to_s) do |message|
+                  raise "invalid media type: #{message}", media_type_view
+                end
+
+                classif = Term::Blob::Classif.of(media_type)
+              end
+
+              unless past?('⟭')
+                raise "expected `⟭` to end the blob (note: maximum media type length is 64 characters)", ahead1.before_begin
+              end
+
+              # ⟬dead beef ⁑ text/html⟭⏏
+              # ⟬dead beef ⁑ ?⟭⏏
+              break
             else
-              raise "expected hex digit(s) or `⟭` to end the blob"
+              raise "expected hex digit(s), `⁑`, or `⟭` to end the blob"
             end
           end
 
           assert buffer.empty?
         end
+      end
+
+      # They can't both be present, the syntax doesn't allow it.
+      assert !(classif && classif_auto)
+
+      if classif
+        blob = Term::Blob.refine(blob, classif)
+      end
+
+      if classif_auto
+        blob = Term::Blob.classify(blob)
       end
 
       ready(Lexeme::Datum.new(:blob, Term.of(blob), text))
@@ -890,7 +947,6 @@ module Ww::ML
         return nows(":") { token(:colon_left) }
       when past?('¦')  then return token(:broken_bar)
       when past?('⍊')  then return token(:bar_underscore)
-      when past?('⁑')  then return token(:double_asterisk)
       when past?('{')  then return lcurly
       when past?('}')  then return token(:rcurly)
       when past?('[')  then return token(:lbracket)

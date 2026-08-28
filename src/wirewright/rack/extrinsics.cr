@@ -260,7 +260,7 @@ module Ww::Rack::Extrinsics
   # FIXME: This isn't a good idea. We must let the user choose to interpret
   # blobs this way if UTF-8.
   private def transcribe(object blob : Term::Blob) : Term
-    if blob.classif.utf8?
+    if blob.utf8?
       return Term.of(blob.to_string)
     end
 

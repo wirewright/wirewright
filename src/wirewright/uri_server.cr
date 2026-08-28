@@ -105,16 +105,12 @@ module Ww
             case response.status
             when .ok?
               # HTTP 200: Make a blob from the response body, and we're done.
-              content = Term::Blob.build(classify: false) do |dst|
-                IO.copy(response.body_io, dst)
-              end
-
+              #
               # If the server tells us the MIME type, use that, otherwise, we'll try to
               # guess it on our end.
-              if mime_type = response.mime_type
-                classif = Term::Blob::Classif.of(mime_type)
+              content = Term::Blob.build(classif: Term::Blob::Classif.of(response.mime_type)) do |dst|
+                IO.copy(response.body_io, dst)
               end
-              content.classify!(classif)
 
               supply = Present.new(content)
             when .redirection?

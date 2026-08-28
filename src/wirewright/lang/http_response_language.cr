@@ -558,17 +558,14 @@ module Ww::HttpResponseLanguage
 
     body = nil # Missing
     pass do
+      classif = Term::Blob::Classif.of(response.mime_type)
+
       if src = response.body_io?
-        body = Term::Blob.build { |dst| IO.copy(src, dst) }
+        body = Term::Blob.build(classif: classif) { |dst| IO.copy(src, dst) }
       elsif src = response.body?
-        body = Term::Blob.new(src)
+        body = Term::Blob.new(src, classif)
       else
         next # Missing body
-      end
-
-      if mime_type = response.mime_type
-        classif = Term::Blob::Classif.of(mime_type)
-        body.classify!(classif)
       end
 
       # Another way to have a missing body.
@@ -578,7 +575,7 @@ module Ww::HttpResponseLanguage
       end
 
       # If body is text/plain;charset=UTF-8, emit it as a string.
-      if classif.nil? || (classif.plain? && classif.utf8?)
+      if (classif.nil? || (classif.plain? && classif.utf8?)) && body.utf8?
         body = Term.of(body.to_string.scrub)
       end
 

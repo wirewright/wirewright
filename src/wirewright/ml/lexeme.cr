@@ -92,7 +92,6 @@ module Ww::ML
         ArrowRight
         ArrowUp
         ArrowDn
-        DoubleAsterisk
         BarUnderscore
         SupLeft
         SupPlusLeft

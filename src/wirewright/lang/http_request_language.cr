@@ -528,6 +528,11 @@ module Ww::HttpRequestLanguage
     Term.matchpi?(term, %{(file filename_string content←(%any° _blob _string) ¦ headersQ_)}) do |content|
       headers = decode(headersQ.as_d, HTTP::Headers)
       content = Term::Blob.unsimplify(content.as_blob? || content.as_s)
+
+      if classif = content.classif?
+        headers["Content-Type"] ||= classif.to_s
+      end
+
       MultipartFile.new(content, headers, filename.to(String))
     end
   end
@@ -562,15 +567,15 @@ module Ww::HttpRequestLanguage
         fields = {} of String => Array(MultipartField)
 
         HTTP::FormData.parse(body, boundary) do |part|
-          data = Term::Blob.build do |io|
-            IO.copy(src: part.body, dst: io)
-          end
-
-          pass do
+          classif = pass do
             next unless content_type = part.headers["Content-Type"]?
             next unless content_type = MIME::MediaType.parse?(content_type)
 
-            data.classify!(Term::Blob::Classif.of(content_type))
+            Term::Blob::Classif.of(content_type)
+          end
+
+          data = Term::Blob.build(classif: classif) do |io|
+            IO.copy(src: part.body, dst: io)
           end
 
           if filename = part.filename
@@ -591,13 +596,15 @@ module Ww::HttpRequestLanguage
 
       # Handle other types of bodies.
 
-      blob = Term::Blob.build do |io|
-        IO.copy(src: body, dst: io)
+      classif = pass do
+        next unless content_type
+        next unless media_type = MIME::MediaType.parse?(content_type)
+
+        Term::Blob::Classif.of(media_type)
       end
 
-      if content_type && (media_type = MIME::MediaType.parse?(content_type))
-        classif = Term::Blob::Classif.of(media_type)
-        blob.classify!(classif)
+      blob = Term::Blob.build(classif: classif) do |io|
+        IO.copy(src: body, dst: io)
       end
 
       content = Term::Blob.simplify(blob)

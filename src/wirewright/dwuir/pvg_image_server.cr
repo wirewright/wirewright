@@ -127,7 +127,9 @@ module Ww::DwUIR
                .bmp, .gif, .ppm, or .svg)"
             )
 
-            case blob.classif.media_type
+            classif = Term::Blob.classif(blob)
+
+            case classif.media_type
             when .in?(MEDIA_TYPES_PNG),
                  .in?(MEDIA_TYPES_JPEG),
                  .in?(MEDIA_TYPES_BMP),

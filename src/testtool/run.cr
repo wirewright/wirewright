@@ -3,6 +3,7 @@ module Testtool
                AlloySheetTest |
                MicrofoldTest |
                MLeq |
+               MLneq |
                MLpos |
                MLneg |
                BackmapEq |
@@ -353,6 +354,7 @@ module Testtool
   end
 
   defrecord MLeq, sources : Array(String), entity : MLentity
+  defrecord MLneq, sources : Array(String), entity : MLentity
   defrecord MLpos, sources : Array(String), pattern : Term, entity : MLentity
   defrecord MLneg, source : String, detail : String, entity : MLentity
 
@@ -368,10 +370,31 @@ module Testtool
       nil
     end
 
-    (1...subjects.size).each do |index|
-      next if subjects[0] == subjects[index] # ok
+    reference = subjects[0]
+    subjects.each(within: 1..) do |other|
+      next if reference == other # ok
 
-      complaints << complaint("Terms are not equal", expected: subjects[index], got: subjects[0])
+      complaints << complaint("Terms are not equal", expected: reference, got: other)
+    end
+  end
+
+  def run(test : MLneq, assets, stat, complaints) : Nil
+    subjects = test.sources.compact_map do |source|
+      case test.entity
+      in .term?     then measure(stat) { ML.term(source) }
+      in .document? then measure(stat) { ML.document(source) }
+      end
+    rescue e : ML::SyntaxError
+      complaints << complaint("Syntax error in one of subjects", error: e)
+
+      nil
+    end
+
+    reference = subjects[0]
+    subjects.each(within: 1..) do |other|
+      next unless reference == other
+
+      complaints << complaint("Terms are equal", lhs: reference, rhs: other)
     end
   end
 

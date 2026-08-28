@@ -491,6 +491,25 @@ module Testtool
             annotated(assertions(test), decl, srcmap)
           end
 
+          # |@ testtool.ml.!=
+          #
+          # |@pattern
+          # (!= sources_string+)
+          #
+          # |@block
+          # Use `!=` to check for term or document source **in**equivalence.
+          matchpi %{({{prefix.id}}!= _*)} do
+            continue unless decl.itemsize >= 2
+
+            rest = decl.items.move(1)
+            continue unless rest.all?(&.type.string?)
+
+            sources = rest.map(&.to(String))
+            test = MLneq.new(sources, entity: {{entity}})
+
+            annotated(assertions(test), decl, srcmap)
+          end
+
           # |@ testtool.ml.+
           #
           # |@pattern
@@ -616,7 +635,9 @@ module Testtool
           return annotated(assertions(Failure.new("could not load #{resource}: #{e.message}")), decl, srcmap)
         end
 
-        case type = blob.classif.media_type
+        classif = Term::Blob.classif(blob)
+
+        case type = classif.media_type
         when Term["application/json"]
           begin
             matchee = Term.of(JSON.parse(blob.to_string))

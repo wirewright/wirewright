@@ -268,7 +268,7 @@ module Ww
                   Log.info { "reading file at #{path}" }
 
                   content = File.open(path.unwrap, "rb") do |src|
-                    Term::Blob.build(classify: true) do |dst|
+                    blob = Term::Blob.build do |dst|
                       loop do
                         blksize = src.read(buffer)
                         break if blksize.zero?
@@ -280,6 +280,7 @@ module Ww
                         end
                       end
                     end
+                    Term::Blob.classify(blob)
                   end
 
                   # Yes, sadly, I think this is the best we can do, and even this will let stuff
@@ -685,7 +686,7 @@ module Ww
       Text
 
       def present(blob : Term::Blob)
-        if text? || (auto? && blob.classif.utf8?)
+        if text? || (auto? && blob.utf8?)
           return Term.of(String.new(blob.bytes))
         end
 
