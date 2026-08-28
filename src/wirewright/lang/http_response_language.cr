@@ -430,6 +430,7 @@ module Ww::HttpResponseLanguage
     end
   end
 
+  # Reference: https://github.com/crystal-lang/crystal/blob/57cf7da5094db6c5d3c058c6d054a757b5ced19e/src/mime/media_type.cr#L447
   private def parse_filename_rfc2231?(seln : Pf::StringSeln) : String?
     charset, quote, seln = seln.partition('\'')
     return if quote.empty?
@@ -437,29 +438,38 @@ module Ww::HttpResponseLanguage
     language, quote, seln = seln.partition('\'')
     return if quote.empty?
 
-    String.build do |io|
-      while chr = seln.first_char?
-        # q⏏ux %⏏
-        seln = seln.rest
+    io = IO::Memory.new
+    io.set_encoding(charset.to_s.downcase)
 
-        unless chr == '%'
-          io << chr
-          next
-        end
+    while chr = seln.first_char?
+      # q⏏ux %⏏
+      seln = seln.rest
 
-        _, hexdigits, seln = seln.skip_thru_seq(limit: 2, &.hexdigit?)
-        return if hexdigits.empty?
-        # %20⏏
-
-        octet = 0u8
-        hexdigits.each do |hexdigit|
-          octet <<= 4
-          octet |= hexdigit
-        end
-
-        io.write_byte(octet)
+      unless chr == '%'
+        # q⏏ux
+        io << chr
+        next
       end
+
+      # %⏏
+
+      return if seln.empty?
+
+      digit0, seln = seln.first_and_rest
+      digit0 = digit0.chr.hexdigit?
+      return if digit0.nil?
+
+      digit1, seln = seln.first_and_rest
+      digit1 = digit1.chr.hexdigit?
+      return if digit1.nil?
+
+      # %20⏏
+      octet = (digit0.to_u8 << 4) | digit1.to_u8
+      io.write_byte(octet)
     end
+
+    io.rewind
+    io.gets_to_end
   end
 
   # Input is e.g. UTF-8''hello%20world
