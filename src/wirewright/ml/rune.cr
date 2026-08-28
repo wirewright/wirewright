@@ -1,9 +1,16 @@
 module Ww::ML
-  # Represents a WwML-specific classification of a Unicode character.
+  # Represents the categorization of an individual Unicode character.
   #
-  # Classification of characters is useful to relieve the lexeme reader of extra
-  # unnecessary work; as it is likely going to attempt to look at the same character
-  # many times but within different contexts.
+  # Simple characters such as `'` do not need categorization (they are put
+  # into the category `Category::Other`). We primarily do categorization
+  # when there is an alternation that we'd rather avoid. For example, to
+  # tell whether a Unicode character is a symbolic character, you'd need
+  # a rather large alternation (character set). Instead of testing against
+  # this set at lex-time, we precompute a table of *runes*, each rune therefore
+  # representing a precomputed categorization of a character.
+  #
+  # We categorize into a set of "base" categories (see `Category` constants)
+  # and then OR them to obtain more complex categories (see `Category` methods).
   struct Rune
     # Lists the available character categories.
     enum Category : UInt8
@@ -125,7 +132,7 @@ module Ww::ML
       end
     end
 
-    # Classifies *chr* and returns the resulting rune.
+    # Categorizes *chr* and returns the resulting rune.
     def self.new(chr : Char) : Rune
       unless chr.ord <= 0xd7ff
         return new(:other, chr)
@@ -146,7 +153,7 @@ module Ww::ML
       Category.new((@kernel & 0xff).to_u8)
     end
 
-    # Returns the byte size of the underlying char.
+    # Returns the byte size of the underlying character.
     @[AlwaysInline]
     def bytesize : Int32
       chr.bytesize
@@ -157,8 +164,7 @@ module Ww::ML
       chr.in?('0'..'9') || chr.in?('A'..'F') || chr.in?('a'..'f')
     end
 
-    # Returns `true` if this rune's `chr` is equal to *other*. Returns
-    # `false` otherwise.
+    # Returns `true` if this rune's character is equal to *other*.
     def ==(other : Char) : Bool
       chr == other
     end
