@@ -198,6 +198,11 @@ module MuSoma
             D7.parent(node.as_d, 2u32...node.itemsize.to_u32)
           end
 
+          # :ditto:
+          matchpi %{[server [@_ _ _?] _*]} do
+            D7.parent(node.as_d, 2u32...node.uitemsize)
+          end
+
           otherwise do
             feature
           end
