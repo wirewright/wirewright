@@ -79,8 +79,7 @@ module Ww
 
         begin
           interpretation = Bytes.new(bytesize)
-
-          io.read(interpretation)
+          io.read_fully(interpretation)
         rescue IO::EOFError
           return
         end
