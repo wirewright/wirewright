@@ -626,3 +626,26 @@
   (ni= (set ((a) 1 b 2 2 3 (c) c) (x_symbol)) {+ a c})
   (ni= (set ((x y z) 1 b 2 2 3 (foo bar) c) ⟨_symbol⟩°) {+ (x y z) (foo bar)})
   (ni= (set ((x y z) 1 b 2 2 3 (foo bar) c) ⟨x_symbol⟩°) {+ x y z foo bar}))
+
+;; classify
+(group
+  (ni= (classify ⟬fe ed be ef⟭) ⟬fe ed be ef ⁑ application/octet-stream⟭)
+  (ni= (classify ⟬fe ed be ef ⁑ text/plain⟭) ⟬fe ed be ef ⁑ text/plain⟭)
+  (ni=
+    (classify
+      ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00
+       00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
+       2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc⟭)
+    ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00
+     00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
+     2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭))
+
+;; unclassify
+(group
+  (ni= (unclassify ⟬fe ed be ef ⁑ application/octet-stream⟭) ⟬fe ed be ef⟭)
+  (ni=
+    (classify (unclassify ⟬fe ed be ef ⁑ text/plain⟭))
+    ⟬fe ed be ef ⁑ application/octet-stream⟭)
+  (ni=
+    (-> ⟬fe ed be ef ⁑ text/plain⟭ (unclassify _) (classify _))
+    ⟬fe ed be ef ⁑ application/octet-stream⟭))

@@ -1982,6 +1982,59 @@ module Ww::Nitrene
         end
       end
 
+      # |@ nitrene.classify
+      #
+      # |@pattern
+      # (classify arg_blob)
+      #
+      # |@block
+      # If *arg* does not have a media type set, guesses the media type using
+      # PantoMIME. Returns the classified copy of *arg*.
+      #
+      # NOTE: To avoid any misunderstanding, this doesn't copy the underlying bytes;
+      # blobs are immutable so this is never needed. Only metadata is copied.
+      #
+      # |@example
+      # ```wwml
+      # (classify ⟬fe ed be ef⟭) ;; => ⟬fe ed be ef ⁑ application/octet-stream⟭
+      # ```
+      #
+      # `classify` preserves an existing media type, even if it is wrong:
+      #
+      # ```wwml
+      # (classify ⟬fe ed be ef ⁑ text/plain⟭) ;; => ⟬fe ed be ef ⁑ text/plain⟭
+      # ```
+      matchpiT %{(classify arg_blob)} do
+        Term.of(Term::Blob.classify(arg))
+      end
+
+      # |@ nitrene.unclassify
+      #
+      # |@pattern
+      # (unclassify arg_blob)
+      #
+      # |@block
+      # Strips the media type from *arg* if it has one.
+      #
+      # |@example
+      # ```wwml
+      # (unclassify ⟬fe ed be ef ⁑ application/octet-stream⟭) ;; => ⟬fe ed be ef⟭
+      # ```
+      #
+      # You can use `unclassify` in combination with `classify` to force a guessed media
+      # type instead of using the one provided with the blob:
+      #
+      # ```wwml
+      # (classify (unclassify ⟬fe ed be ef ⁑ text/plain⟭))
+      # ;; => ⟬fe ed be ef ⁑ application/octet-stream⟭
+      #
+      # ;; The above can be rewritten more neatly as:
+      # (-> ⟬fe ed be ef ⁑ text/plain⟭ (unclassify _) (classify _))
+      # ```
+      matchpiT %{(unclassify arg_blob)} do
+        Term.of(Term::Blob.unclassify(arg))
+      end
+
       otherwise { Inert.new }
     end
   end
