@@ -5091,10 +5091,11 @@ end
 
 # An immutable changelog for a set.
 struct Set::Changelog(Element)
-  include Enumerable(Added(Element) | Removed(Element))
-
   defrecord Added(Element), element : Element
   defrecord Removed(Element), element : Element
+
+
+  include Enumerable(Added(Element) | Removed(Element))
 
   struct Added
     def inspect(io)
