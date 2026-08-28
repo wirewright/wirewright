@@ -32,9 +32,9 @@ class Ww::Harmony
     def transaction(& : ->) : Set::Changelog
       # Save the old changelog on the stack.
       changelog0 = @changelog
+      @changelog = Set::Changelog(Element).empty
 
       begin
-        @changelog = Set::Changelog(Element).empty
         yield
         changelog1 = @changelog
         changelog1.not_nil!
@@ -70,21 +70,16 @@ class Ww::Harmony
     # Yields each element of type T, whose instance variables include all
     # of *hints*.
     def each(cls : T.class, hints : NamedTuple, & : T ->) : Nil forall T
+      return unless feature_id = @features[cls]?
+
       membersets = Pf::Kit.stack_array(Set(Element), 8)
-
-      pass do
-        return unless feature_id = @features[cls]?
-
-        membersets << @index[feature_id]
-      end
+      membersets << @index[feature_id]
 
       hints.each do |_, feature|
         return unless feature_id = @features[feature]?
 
         membersets << @index[feature_id]
       end
-
-      return false if membersets.empty?
 
       membersets.sort_by!(&.size)
 
@@ -93,6 +88,7 @@ class Ww::Harmony
       membersets.each(within: 1..) do |memberset|
         unless copied # Perform immutable intersection.
           smallest &= memberset
+          copied = true
           next
         end
 
@@ -102,8 +98,8 @@ class Ww::Harmony
 
       smallest.each do |element|
         element = element.as(T)
-        matches = true
 
+        matches = true
         hints.each do |ivar, feature|
           next if IndexedSet.match?(element, ivar, feature)
 
