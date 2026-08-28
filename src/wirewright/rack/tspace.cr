@@ -419,7 +419,7 @@ module Ww::Rack::Tspace
         MultiSensor.new(tspace, pattern)
       end
 
-      matchpi %{[sensor (queue tspace_ pattern_)]} do
+      matchpi %{[sensor (queue tspace_ pattern_) _*]} do
         QueueSensor.new(tspace, pattern)
       end
 
