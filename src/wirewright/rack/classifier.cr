@@ -515,6 +515,58 @@ module Ww::Rack
 
       # |@ rack.guard
       #
+      # |@summary
+      # Conditional activation of children based on a cell.
+
+      # |@ rack.guard
+      #
+      # |@pattern
+      # [guard (@edge_) children_*]
+      #
+      # |@key edge rack.edge
+      # The edge to search for cells at. The guard node will only attempt a match
+      # if there is exactly one cell at *edge*. The node is "confused" by many cells
+      # (even if some or all of them match).
+      #
+      # |@key children rack
+      # Child nodes to activate or deactivate. They are *not* isolated in any way.
+      # If they are active, it's as if the guard did not exist.
+      #
+      # |@block
+      # Activates *children* only if the cell at *edge* is empty.
+      #
+      # |@example
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (queue (@x @xs) (1 2 3))
+      # (queue (@y @ys) ())
+      # (guard (@y) (feed @x @ys))
+      #
+      # ;; Frame 1
+      #
+      # (queue (@x @xs) (2 3))
+      # (queue (@y @ys) (1))
+      # (guard (@y) (feed @x @ys))
+      # ```
+      #
+      # In Frame 1, the cell `@y` is nonempty, so the `guard` does not activate feed, and
+      # xs stop flowing into ys. The circuit has reached quiescence.
+      matchpi %{[guard (@edge_) _*]} do
+        D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr|
+          ann = GuardAnnotation.new(addr)
+          next false if hg.annotated_with?(ann) # cycle
+
+          hg.annotate(ann) do
+            dep = Rack.cell?(hg, hg.resolve(addr, edge))
+            dep.nil? || dep.value?.nil?
+          end
+        end
+      end
+
+      # |@ rack.guard
+      #
       # |@pattern
       # [guard (@edge_ pattern_) children_*]
       #
@@ -529,10 +581,7 @@ module Ww::Rack
       #
       # |@key children rack
       # Child nodes to activate or deactivate. They are *not* isolated in any way.
-      # If they are active, it's as if the guard does not exist.
-      #
-      # |@summary
-      # Conditional activation of children based on a cell.
+      # If they are active, it's as if the guard did not exist.
       #
       # |@block
       # Activates or deactivates *children* based on whether the cell at *edge*

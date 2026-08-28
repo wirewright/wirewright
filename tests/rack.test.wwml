@@ -6668,6 +6668,18 @@
         x←false <> {x: true})))
     ;; ...
 
+  ;; Empty cell guard (from docs)
+  (rack
+    (frame
+      (queue (@x @xs) (1 2 3))
+      (queue (@y @ys) ())
+      (guard (@y) (feed @x @ys)))
+    (frame
+      (queue (@x @xs) (2 3))
+      (queue (@y @ys) (1))
+      (guard (@y) (feed @x @ys)))
+    end)
+
   ;; Counter
   (rack
     (frame
