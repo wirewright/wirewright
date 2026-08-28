@@ -354,7 +354,7 @@ module Ww::D7
 
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = D7.follow?(self, @tree, edge.module)
+      return unless row = D7.follow?(@tree, edge.module)
 
       addr = edge.module
       id_zero, origin = row
@@ -394,7 +394,7 @@ module Ww::D7
     def each_member(edge : AbsEdge, *, heads : Indexable(Term) = Slice(Term).empty, &fn : Node ->) : Nil
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = D7.follow?(self, @tree, edge.module)
+      return unless row = D7.follow?(@tree, edge.module)
 
       # Then we conduct a search in the subtree reached this way.
       addr = edge.module

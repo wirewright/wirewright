@@ -269,7 +269,7 @@ module MuSoma
         end
 
         matchpi %{[figure _*]} do
-          _, tree = D7.follow(base_hg, base_hg.@tree, addr)
+          _, tree = D7.follow(base_hg.@tree, addr)
           rep, _ = MuSoma.distill(µ, base_hg, addr, tree, sites: Slice(Term).empty, site_zero: 0u32)
           Term.of(:figure, rep)
         end

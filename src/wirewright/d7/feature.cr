@@ -633,9 +633,10 @@ module Ww::D7
     end
   end
 
-  def follow?(hg : Hypergraph, tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}?
-    id_zero = NodeId.new(0)
+  def follow?(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}?
+    hg = Hypergraph.new(tree, 0u32) # ?!
     prefix = NodeAddr.empty
+    id_zero = NodeId.new(0)
 
     addr.each do |index|
       loop do
@@ -673,8 +674,8 @@ module Ww::D7
     {id_zero, tree}
   end
 
-  def follow(hg : Hypergraph, tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}
-    follow?(hg, tree, addr) || raise KeyError.new
+  def follow(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}
+    follow?(tree, addr) || raise KeyError.new
   end
 
   # `ParseTree`s are usually rewritten; we call that *repair*, and represent
