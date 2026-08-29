@@ -135,17 +135,17 @@ module Ww::DwUIR
                  .in?(MEDIA_TYPES_BMP),
                  .in?(MEDIA_TYPES_GIF),
                  .in?(MEDIA_TYPES_PPM)
-              if surface = PlutoVG.surface_load_from_image_data(blob.bytes, blob.bytes.size)
+              if surface = PlutoVG.surface_load_from_image_data(blob.to_slice, blob.ubytesize64)
                 response = PvgRasterImage.new(surface)
               end
             when .in?(MEDIA_TYPES_SVG)
-              if document = PlutoSVG.document_load_from_data(blob.bytes, blob.bytes.size, 0, 0, nil, nil)
+              if document = PlutoSVG.document_load_from_data(blob.to_slice, blob.ubytesize64, 0, 0, nil, nil)
                 size = Point[0, 0]
                 if PlutoSVG.document_extents(document, nil, out extents)
                   size = Point[extents.w, extents.h]
                 end
 
-                response = PvgSvgImage.new(blob.bytes, size)
+                response = PvgSvgImage.new(blob.to_slice, size)
               end
             end
 

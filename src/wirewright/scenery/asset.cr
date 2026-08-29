@@ -251,7 +251,7 @@ module Ww::Scenery
         end
 
         ttcindex = 0
-        status = FreeType.new_memory_face(ft, blob.bytes, blob.bytes.size, ttcindex, out ft_face)
+        status = FreeType.new_memory_face(ft, blob.to_slice, blob.ubytesize64, ttcindex, out ft_face)
         next unless status.zero?
 
         Font.new(ft_face, blob.digest)
@@ -282,7 +282,7 @@ module Ww::Scenery
 
       response = pass do
         next unless classif.media_type.in?(MEDIA_TYPES_RASTER)
-        next unless surface = PlutoVG.surface_load_from_image_data(blob.bytes, blob.bytes.size)
+        next unless surface = PlutoVG.surface_load_from_image_data(blob.to_slice, blob.ubytesize64)
 
         PvgRasterImage.new(surface, blob.digest)
       end
@@ -303,14 +303,14 @@ module Ww::Scenery
     # Constructs a `PvgSvgImage` asset from an in-memory *blob*. Returns `nil` if
     # *blob* is not a valid (supported) SVG image.
     def svg?(blob : Term::Blob) : PvgSvgImage?
-      return unless document = PlutoSVG.document_load_from_data(blob.bytes, blob.bytes.size, 0, 0, nil, nil)
+      return unless document = PlutoSVG.document_load_from_data(blob.to_slice, blob.ubytesize64, 0, 0, nil, nil)
 
       size = Point[0, 0]
       if PlutoSVG.document_extents(document, nil, out extents)
         size = Point[extents.w, extents.h]
       end
 
-      PvgSvgImage.new(blob.bytes, size, blob.digest)
+      PvgSvgImage.new(blob.to_slice, size, blob.digest)
     end
 
     # Same as `svg?`, but raises `ArgumentError` instead of returning `nil` if *blob* is
@@ -345,7 +345,7 @@ module Ww::Scenery
         map = {} of String => Char
         lineno = 1
 
-        io = IO::Memory.new(blob.bytes)
+        io = blob.to_io
         io.each_line do |line|
           parts = line.split(' ', limit: 2, remove_empty: true)
           unless parts.size == 2

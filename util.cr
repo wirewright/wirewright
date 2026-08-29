@@ -1618,6 +1618,7 @@ struct Slice(T)
   def in_chunks_of(*, size_lte chunk_size : Int32, & : Slice(T) ->) : Nil
     if size <= chunk_size
       yield self
+      return
     end
 
     chunk_count, remainder_count = size.divmod(chunk_size)
@@ -4091,7 +4092,23 @@ struct ::Pf::StringSeln
       continuation_count &+= continuation_count(blk)
     end
 
-    bytes.size &- continuation_count
+    size = bytes.size - continuation_count
+    assert size >= 0
+
+    size
+  end
+
+  def self.unsafe_gte?(bytes : Bytes, size : Int32) : Bool
+    # NOTE: Max continuation count is *bytes* bytesize which is in Int32 bounds.
+    continuation_count = 0
+    bytes.in_chunks_of(size_lte: 8) do |blk|
+      continuation_count &+= continuation_count(blk)
+      if continuation_count >= size
+        return true
+      end
+    end
+
+    false
   end
 end
 
@@ -4113,9 +4130,9 @@ struct ::Pf::StringSeln
   def initialize(@trunk : String, @byte_start : UInt32, @byte_end : UInt32, @flags : SelnFlags = SelnFlags::None)
     # We call this a lot, sometimes per character, so checking this every time
     # is quite expensive.
-    # {% if flag?(:safe) %}
+    {% if flag?(:safe) %}
       assert @byte_start <= @byte_end <= @trunk.bytesize
-    # {% end %}
+    {% end %}
   end
 
   # Constructs a string selection from the given *string*.
@@ -5145,7 +5162,7 @@ struct Set::Changelog(Element)
 end
 
 struct MIME::MediaType
- def self.parse(string : String, &block : String -> NoReturn)
-   parse_impl(string) { |err| yield err }
- end
+  def self.parse(string : String, &block : String -> NoReturn)
+    parse_impl(string) { |err| yield err }
+  end
 end

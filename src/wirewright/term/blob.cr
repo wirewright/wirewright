@@ -200,13 +200,7 @@ module Ww
 
     # Unconditionally converts this blob to a Crystal string.
     def to_string : String
-      String.new(bytes)
-    end
-
-    # :ditto:
-    @[Dncast]
-    def bytes : Bytes
-      to_slice
+      String.new(to_slice)
     end
 
     # Returns the bytesize of this Blob as a `UInt64`.
@@ -221,7 +215,7 @@ module Ww
 
     # Blobs are compared lexicographically like Crystal slices. See `Slice#<=>`.
     def <=>(other : Blob) : Int32
-      bytes <=> other.bytes
+      to_slice <=> other.to_slice
     end
 
     # Returns `true` if the content of this blob is valid UTF-8.

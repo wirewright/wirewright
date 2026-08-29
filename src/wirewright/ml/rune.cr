@@ -159,9 +159,10 @@ module Ww::ML
       chr.bytesize
     end
 
-    # Returns `true` if this rune is a hexadecimal digit.
-    def hexdigit? : Bool
-      chr.in?('0'..'9') || chr.in?('A'..'F') || chr.in?('a'..'f')
+    # If this rune is a hexadecimal digit, returns the value of that digit.
+    # Otherwise, returns `nil.`
+    def hexdigit? : Int32?
+      chr.hexdigit?
     end
 
     # Returns `true` if this rune's character is equal to *other*.

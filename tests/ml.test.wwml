@@ -1099,7 +1099,7 @@
 ;; Blob
 (ml
   (+ ⎡⟬⟭⎤ _blob)
-  (- ⎡⟬d⏏⟭⎤ ⎡missing digits in blob⎤)
+  (- ⎡⟬d⏏⟭⎤ ⎡a byte must consist of two hexdigits⎤)
   (= ⎡⟬de⟭⎤ ⎡⟬d e⟭⎤)
   (+ ⎡⟬de ad be ef⟭⎤ _blob)
   (= ⎡⟬d e a d b e e f⟭⎤
@@ -1127,10 +1127,138 @@
        00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
        2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭⎤)
   (= ⎡⟬de ad be ef ⁑ ?⟭⎤ ⎡⟬de ad be ef ⁑ application/octet-stream⟭⎤)
+
+  ;; UTF-8 fragment
+  (= ⎡⟬‸‸⟭⎤ ⎡⟬⟭⎤)
+  (= ⎡⟬be ‸‸ ef⟭⎤ ⎡⟬be ef⟭⎤)
+  (= ⎡⟬‸PNG‸ de ad be ef ⁑ image/png⟭⎤
+     ⎡⟬50 ‸NG‸ de ad be ef ⁑ image/png⟭⎤
+     ⎡⟬50 4E ‸G‸ de ad be ef ⁑ image/png⟭⎤
+     ⎡⟬50 4E 47 de ad be ef ⁑ image/png⟭⎤)
+  (= ⎡⟬de ad be ef ‸PNG‸ ⁑ image/png⟭⎤
+     ⎡⟬de ad be ef 50 ‸NG‸ ⁑ image/png⟭⎤
+     ⎡⟬de ad be ef 50 4E ‸G‸ ⁑ image/png⟭⎤
+     ⎡⟬de ad be ef 50 4E 47 ⁑ image/png⟭⎤)
+  (= ⎡⟬‸<h1>Hello World</h1>‸ ⁑ text/html⟭⎤
+     ⎡⟬3c ‸h1>Hello World</h1‸ 3e ⁑ text/html⟭⎤
+     ⎡⟬3c 68 31 ‸>Hello World</h1‸ 3e ⁑ text/html⟭⎤
+     ⎡⟬3c 68 31 ‸>Hello World</‸ 68 31 3e ⁑ text/html⟭⎤)
+
+  ;; Escape
+  (= ⎡⟬ab \a cd⟭⎤ ⎡⟬ab 07 cd⟭⎤)
+  (= ⎡⟬ab \b cd⟭⎤ ⎡⟬ab 08 cd⟭⎤)
+  (= ⎡⟬ab \e cd⟭⎤ ⎡⟬ab 1B cd⟭⎤)
+  (= ⎡⟬ab \t cd⟭⎤ ⎡⟬ab 09 cd⟭⎤)
+  (= ⎡⟬ab \n cd⟭⎤ ⎡⟬ab 0a cd⟭⎤)
+  (= ⎡⟬ab \f cd⟭⎤ ⎡⟬ab 0c cd⟭⎤)
+  (= ⎡⟬ab \r cd⟭⎤ ⎡⟬ab 0d cd⟭⎤)
+  (= ⎡⟬‸Hello‸ 20 38⟭⎤ ⎡⟬ab 0d cd⟭⎤)
+
+  ;; Escape with embeds
+  (= ⎡⟬‸Hello‸ \n ‸World!‸⟭⎤
+     ⎡
+       ⟬‸Hello
+         World!‸⟭⎤)
+
+  ;; Newline handling, indent
+  (= ⎡
+      ⟬‸<html>
+          <head>
+            <title>Hello World</title>
+          </head>
+          <body>
+            <h1>Kaixo mundua</h1>
+          </body>
+        </html>‸ ⁑ text/html⟭⎤
+      ⎡⟬‸<html>‸ \n
+        ‸  <head>‸ \n
+        ‸    <title>Hello World</title>‸ \n
+        ‸  </head>‸ \n
+        ‸  <body>‸ \n
+        ‸    <h1>Kaixo mundua</h1>‸ \n
+        ‸  </body>‸ \n
+        ‸</html>‸ ⁑ text/html⟭⎤)
+
+  (= ⎡
+      {name: x,
+       body:
+         ⟬‸<html>
+             <head>
+               <title>Hello World</title>
+             </head>
+             <body>
+               <h1>Kaixo mundua</h1>
+             </body>
+           </html>‸⟭}⎤
+     ⎡{body: ⟬‸<html>‸ \n ‸  <head>‸ \n ‸    <title>Hello World</title>‸ \n ‸  </head>‸ \n
+               ‸  <body>‸ \n ‸    <h1>Kaixo mundua</h1>‸ \n ‸  </body>‸ \n ‸</html>‸⟭
+       name: x}⎤)
+
+  ;; Blank lines
+  (= ⎡
+      ⟬‸<html>
+          <head>
+            <title>Hello World</title>
+          </head>
+
+          <body>
+            <h1>Kaixo mundua</h1>
+          </body>
+        </html>‸ ⁑ text/html⟭⎤
+      ⎡⟬‸<html>‸ \n
+        ‸  <head>‸ \n
+        ‸    <title>Hello World</title>‸ \n
+        ‸  </head>‸ \n
+        \n
+        ‸  <body>‸ \n
+        ‸    <h1>Kaixo mundua</h1>‸ \n
+        ‸  </body>‸ \n
+        ‸</html>‸ ⁑ text/html⟭⎤)
+
+  ;; Blob diagram
+  (= ⎡
+      ┌┤ text/html
+      │ hello world
+      └┤⎤
+     ⎡⟬‸hello world‸ \n ⁑ text/html⟭⎤)
+
+  (= ⎡
+      ┌┤ text/html
+      │ <html>
+      │ <head>
+      │   <title>Hello World</title>
+      │ </head>
+      │ <body>
+      │   <h1>Hello World</h1>
+      │ </body>
+      └┤⎤
+     ⎡⟬‸<html>‸ \n ‸<head>‸ \n ‸  <title>Hello World</title>‸ \n ‸</head>‸ \n
+       ‸<body>‸ \n ‸  <h1>Hello World</h1>‸ \n ‸</body>‸ \n ⁑ text/html⟭⎤)
+
+  (= ⎡
+      {type: article,
+       name: "Article 1",
+       body:
+        ╭┤ text/html
+        │ <html>
+        │ <head>
+        │   <title>Hello World</title>
+        │ </head>
+        │
+        │ <body>
+        │   <h1>Hello World</h1>
+        │ </body>
+        ╰┤}⎤
+     ⎡{type: article,
+       name: "Article 1",
+       body: ⟬‸<html>‸ \n ‸<head>‸ \n ‸  <title>Hello World</title>‸ \n ‸</head>‸ \n \n
+              ‸<body>‸ \n ‸  <h1>Hello World</h1>‸ \n ‸</body>‸ \n ⁑ text/html⟭}⎤)
+
+  ;; Errors
   (- ⎡⟬dead⏏⎤ ⎡expected hex digit(s), `⁑`, or `⟭` to end the blob⎤)
   (- ⎡⟬⏏q⏏ux⟭⎤ ⎡expected hex digit(s), `⁑`, or `⟭` to end the blob⎤)
   (- ⎡⟬de ⏏q⏏ux⟭⎤ ⎡expected hex digit(s), `⁑`, or `⟭` to end the blob⎤)
-  (- ⎡⟬d⏏q⏏ead⟭⎤ ⎡expected hex digit(s), `⁑`, or `⟭` to end the blob⎤)
+  (- ⎡⟬d⏏qead⟭⎤ ⎡a byte must consist of two hexdigits⎤)
   (- ⎡⟬dead⏏q⏏⟭⎤ ⎡expected hex digit(s), `⁑`, or `⟭` to end the blob⎤)
   (- ⎡⟬deadbeef ⁑⏏⟭⎤ ⎡invalid media type⎤)
   (- ⎡⟬deadbeef ⁑ ⏏application//⏏⟭⎤ ⎡invalid media type⎤)

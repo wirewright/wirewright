@@ -399,7 +399,7 @@ module Ww
       tmp_path = tmp_file.path
 
       begin
-        tmp_file.write(fact.content.bytes)
+        IO.copy(src: fact.content.to_io, dst: tmp_file)
         tmp_file.fsync
       ensure
         tmp_file.close

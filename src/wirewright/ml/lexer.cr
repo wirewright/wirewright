@@ -46,7 +46,7 @@ module Ww::ML
       end
 
       # NOTE: simdutf saves a millisecond or two on the corpus here, and some
-      # allocations; but I don't think they're worth the dependency on stdc++
+      # allocations; but I don't think that's worth the dependency on stdc++
       runes = [] of Rune
 
       source.each_char_with_index do |chr, index|
@@ -98,6 +98,10 @@ module Ww::ML
     # Returns a view of the character behind the cursor (of BOI if none).
     private def behind1 : StringView
       boi? ? boi : subview(byte_start: @byte_index - behind.bytesize, byte_end: @byte_index)
+    end
+
+    private def prior : StringView
+      subview(byte_start: 0, byte_end: @byte_index - behind.bytesize)
     end
 
     private def unsafe_behind : Rune
@@ -620,107 +624,269 @@ module Ww::ML
       ready(Lexeme::Many.new(lexemes))
     end
 
-    private def blob : TxnResponse
-      unless past?('⟬')
-        return revert
+    private alias BlobMediaType = Term::Blob::Classif | MediaTypeAuto | Nil
+
+    private struct MediaTypeAuto
+    end
+
+    # The block should return `true` to terminate. The rune the block returned `true`
+    # for is not consumed.
+    private def blob_media_type(& : Rune -> Bool) : BlobMediaType
+      skip(&.hspace?)
+
+      case
+      when past?('?')
+        # ⟬dead beef ⁑ ?⏏⟭
+        # ⟬dead beef ⁑ ?⏏   ⟭
+        skip(&.hspace?)
+        # ⟬dead beef ⁑ ?⏏⟭
+        # ⟬dead beef ⁑ ?   ⏏⟭
+
+        MediaTypeAuto.new
+      else
+        media_type_view = view do
+          skip?(limit: 64) { |rune| yield rune }
+        end
+        # ⟬dead beef ⁑ text/html⏏⟭
+
+        # TODO: the errors provided by `MediaType.parse` are rather poorly structured,
+        # we'll need to write our own parser with a proper union return type. E.g.:
+        #
+        #   invalid media type: Invalid '/' at 13 (scratch:1:15)
+        #
+        # is raised for:
+        #
+        #   application//
+        #
+        # Which is quite a strange error message, isn't it?
+        media_type = MIME::MediaType.parse(media_type_view.to_s) do |message|
+          raise "invalid media type: #{message}", media_type_view
+        end
+
+        Term::Blob::Classif.of(media_type)
+      end
+    end
+
+    # ⟬de ⏏‸Hello World‸ ad be ef⟭
+    private def blob_utf8_fragment(io) : Nil
+      unless past?('‸')
+        raise "expected `‸` to begin a UTF-8 fragment in blob", ahead1.before_begin
       end
 
-      classif = nil
-      classif_auto = false
+      _, prefix = prior.rskip_to("\n")
+      x = prefix.size + 1
 
-      text, blob = view_and_object do
-        Term::Blob.build do |io|
-          buffer = Pf::Kit.stack_array(Char, 2)
+      first_line_view = view do
+        skip { |rune| !(rune == '‸' || rune.vspace?) }
+      end
 
+      io << first_line_view
+
+      while past?(&.vspace?)
+        io.puts
+
+        # Lookahead
+        line_view = save do
+          view do
+            skip { |rune| !rune.vspace? }
+          end
+        end
+
+        # Allow blank lines to have any indentation.
+        if line_view.blank?
+          skip { |rune| !rune.vspace? } # Commit
+          next
+        end
+
+        x.times do
+          past?(' ') || raise "expected indentation to match the `‸` above (including whitespace under `‸` itself)"
+        end
+
+        line_view = view do
+          skip { |rune| !(rune == '‸' || rune.vspace?) }
+        end
+
+        io << line_view
+      end
+
+      # ⟬de ‸Hello World⏏‸ ad be ef⟭
+      unless past?('‸')
+        raise "expected `‸` to end the UTF-8 fragment in blob", ahead1.before_begin
+      end
+    end
+
+    # ⟬⏏dead beef⟭
+    private def blob_interior(io) : BlobMediaType
+      loop do
+        case
+        when past?('⟭')
+          # ⟬dead beef⟭⏏
+          break
+        when past?(&.space?)
+          # ⟬dead ⏏beef⟭, i.e., whitespace *between* bytes.
+        when digit0 = ahead.hexdigit?
           # ⟬⏏dead beef⟭
-          loop do
-            case
-            when ahead == '⟭'
-              # ⟬dead beef⏏⟭
-              unless buffer.empty?
-                raise "missing digits in blob: size must be even, use zero to pad (e.g. `⟬ab c⏏⟭` -> `⟬ab c0⟭`)", ahead1.before_begin
-              end
+          forward
+          # ⟬d⏏ead beef⟭
 
-              forward
-              # ⟬dead beef⟭⏏
-              break
-            when past?(&.space?)
-              # ⟬dead ⏏beef⟭
-            when ahead.hexdigit?
-              # ⟬⏏dead beef⟭  ⟬d⏏ead beef⟭  ⟬de⏏ad beef⟭  . . .
-              buffer << ahead.chr
-              if buffer.size == 2
-                # ⟬de⏏ad beef⟭  ⟬dead⏏ beef⟭  ⟬dead be⏏ef⟭  . . .
-                digit0 = buffer.unsafe_fetch(0).to_u8(base: 16)
-                digit1 = buffer.unsafe_fetch(1).to_u8(base: 16)
-                byte = (digit0 << 4) | digit1
-                io.write_byte(byte)
+          skip(&.space?)
 
-                buffer.clear
-              end
+          unless digit1 = ahead.hexdigit?
+            raise "a byte must consist of two hexdigits; use 0 to pad (e.g. `⟬ab c⏏⟭` -> `⟬ab c0⟭`)", ahead1.before_begin
+          end
+          forward
 
-              forward
-            when past?('⁑')
-              # ⟬dead beef ⁑⏏ text/html⟭
-              skip(&.hspace?)
-              # ⟬dead beef ⁑ ⏏text/html⟭
-
-              if past?('?')
-                # ⟬dead beef ⁑ ?⏏⟭
-                # ⟬dead beef ⁑ ?⏏   ⟭
-                skip(&.hspace?)
-                # ⟬dead beef ⁑ ?⏏⟭
-                # ⟬dead beef ⁑ ?   ⏏⟭
-
-                classif_auto = true
-              else
-                media_type_view = view do
-                  skip?(limit: 64) { |rune| rune != '⟭' }
-                end
-                # ⟬dead beef ⁑ text/html⏏⟭
-
-                # TODO: the errors provided by `MediaType.parse` are rather poorly structured,
-                # we'll need to write our own parser with a proper union return type. E.g.:
-                #
-                #   invalid media type: Invalid '/' at 13 (scratch:1:15)
-                #
-                # is raised for:
-                #
-                #   application//
-                #
-                # Which is quite a strange error message, isn't it?
-                media_type = MIME::MediaType.parse(media_type_view.to_s) do |message|
-                  raise "invalid media type: #{message}", media_type_view
-                end
-
-                classif = Term::Blob::Classif.of(media_type)
-              end
-
-              unless past?('⟭')
-                raise "expected `⟭` to end the blob (note: maximum media type length is 64 characters)", ahead1.before_begin
-              end
-
-              # ⟬dead beef ⁑ text/html⟭⏏
-              # ⟬dead beef ⁑ ?⟭⏏
-              break
-            else
-              raise "expected hex digit(s), `⁑`, or `⟭` to end the blob"
-            end
+          # ⟬de⏏ad beef⟭  ⟬dead⏏ beef⟭  . . .
+          byte = (digit0.to_u8 << 4) | digit1.to_u8
+          io.write_byte(byte)
+        when ahead == '‸'
+          # ⟬de ⏏‸Hello World‸ ad be ef⟭
+          blob_utf8_fragment(io)
+          # ⟬de ‸Hello World‸⏏ ad be ef⟭
+        when past?('\\')
+          # ⟬de \⏏n ad be ef⟭
+          case ahead
+          when 'a' then io << '\a'
+          when 'b' then io << '\b'
+          when 'e' then io << '\e'
+          when 't' then io << '\t'
+          when 'n' then io << '\n'
+          when 'f' then io << '\f'
+          when 'r' then io << '\r'
+          else
+            raise "invalid UTF-8 escape sequence in blob, expected one of `abetnfr`"
           end
 
-          assert buffer.empty?
+          forward
+          # ⟬de \n⏏ ad be ef⟭
+        when past?('⁑')
+          # ⟬dead beef ⁑⏏ text/html⟭
+          skip(&.space?)
+          # ⟬dead beef ⁑ ⏏text/html⟭
+
+          media_type = blob_media_type { |rune| rune != '⟭' }
+
+          unless past?('⟭')
+            raise "expected `⟭` to end the blob (note: maximum media type length is 64 characters)", ahead1.before_begin
+          end
+
+          # ⟬dead beef ⁑ text/html⟭⏏
+          # ⟬dead beef ⁑ ?⟭⏏
+          return media_type
+        else
+          raise "expected hex digit(s), `⁑`, or `⟭` to end the blob"
         end
       end
+    end
 
-      # They can't both be present, the syntax doesn't allow it.
-      assert !(classif && classif_auto)
+    private def blob_diagram : Term::Blob
+      _, prefix = prior.rskip_to("\n")
+      x = prefix.size
 
-      if classif
-        blob = Term::Blob.refine(blob, classif)
+      # ╭⏏┤ text/html
+      # ┌⏏┤ text/html
+      # ┌⏏┤
+      unless past?('┤')
+        raise "expected a `┤` character after the blob diagram's top corner"
       end
 
-      if classif_auto
-        blob = Term::Blob.classify(blob)
+      # ╭┤⏏ text/html
+      # ┌┤⏏ text/html
+      # ┌┤⏏
+
+      media_type = nil
+      unless ahead.vspace?
+        media_type = blob_media_type { |rune| !rune.vspace? }
+      end
+
+      # ╭┤ text/html⏏
+      # ┌┤ text/html⏏
+      # ┌┤⏏
+      unless past?(&.vspace?)
+        raise "expected a newline"
+      end
+
+      result = Term::Blob.build do |io|
+        loop do
+          x.times do
+            past?(' ') || raise "expected a whitespace"
+          end
+
+          break if past?('└') || past?('╰')
+
+          unless past?('│')
+            raise "expected a vertical bar `│`"
+          end
+
+          case
+          when past?(' ')
+            line = view do
+              skip { |rune| !rune.vspace? }
+            end
+
+            unless past?(&.vspace?)
+              raise "expected a newline"
+            end
+
+            io.puts(line)
+          when past?(&.vspace?)
+            io.puts
+          else
+            raise "expected a newline or one whitespace followed by content after `│`"
+          end
+        end
+
+        # ╰⏏┤
+        unless past?('┤')
+          raise "expected `┤` to end the blob diagram"
+        end
+        # ╰┤⏏
+      end
+
+      case media_type
+      in Nil
+        # No media type specified
+      in Term::Blob::Classif
+        # Explicit media type
+        result = Term::Blob.refine(result, media_type)
+      in MediaTypeAuto
+        # Guess media type
+        result = Term::Blob.classify(result)
+      end
+
+      result
+    end
+
+    private def blob_literal : Term::Blob
+      media_type = nil
+      result = Term::Blob.build do |io|
+        media_type = blob_interior(io)
+      end
+
+      case media_type
+      in Nil
+        # No media type specified
+      in Term::Blob::Classif
+        # Explicit media type
+        result = Term::Blob.refine(result, media_type)
+      in MediaTypeAuto
+        # Guess media type
+        result = Term::Blob.classify(result)
+      end
+
+      result
+    end
+
+    private def blob : TxnResponse
+      text, blob = view_and_object do
+        case
+        when past?('┌') || past?('╭')
+          blob_diagram
+        when past?('⟬')
+          blob_literal
+        else
+          return revert
+        end
       end
 
       ready(Lexeme::Datum.new(:blob, Term.of(blob), text))

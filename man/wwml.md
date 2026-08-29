@@ -4,27 +4,52 @@
 > There are some inconsistencies with the actual grammar here and there. They
 > remain to be fixed.
 
-*WwML* stands for *Wirewright Main Language*. WwML is a textual representation
+*WwML* *primarily* stands for *Wirewright Main Language*. WwML is a textual representation
 of Wirewright *terms*.
 
-Essentially, WwML is a *theoretical* answer to the questions: "How do I convert
-strings of characters to terms and back? And what kinds of strings can be converted
-to terms?". WwML defines such kinds of strings; and WwML *readers* answer the practical
-question of how to actually do the conversion.
+Terms are abstract objects; they do not really exist. If you allow me to be reckless
+for a moment, I would even call terms Platonic objects. The important thing is that
+terms can be *described*, and their descriptions manipulated.
 
-Different subsystems of Wirewright may have their "presence" in (or "contribution" to)
-WwML in the form of groups of shorthands that expand to that subsystem's preferred
-term representation. Since they all use WwML, they all want a "comfortable way" to express
-their term representations in it. For example, the edge shorthand `@x` represents
-the contribution of Delta7 to WwML. By far, the most major contributor to WwML in this
-sense is the M1 pattern matching engine.
+What exists in your computer's memory when you run Wirewright is the *in-memory
+representation* of terms: a description of a term as a series of machine words,
+bits, and so on. WwML, on the other hand, is a *textual* representation of terms.
+You can use WwML to describe terms with *text*: a one-dimensional string of characters.
 
-The majority of WwML is about *shorthands* -- *conveniences*, *syntactic sugar*. In other
-words, WwML should be thought of as a *system of interacting shorthands* on top of
+As a thought experiment, you can imagine other media to understand what Wirewright
+is. An *audio language* might exist for describing terms: imagine yourself speaking,
+and the machine responding to that by building more and more elaborate terms. Another
+medium is two-dimensional graphics: dragging boxes around, or wiring diagrams, etc.,
+which end up describing the same abstract object -- the same term.
+
+Most if not all subsystems of Wirewright communicate with each other using terms, some
+actively (by literally exchanging terms with each other) or more "stigmergically"
+(by using terms as a kind of "shared workspace" where one subsystem can put things
+that another one can take).
+
+Metaphorically, terms are the "thought-speak" of Wirewright. Some "shapes" or "forms"
+or "patterns of arrangement" of terms are particularly common in practice. WwML contains
+shorthands for many of them. For example, *edges* are very common in Delta7 (D7) and Rack;
+they look like `(edge x)`, `(edge foobar)`, etc. Due to their commonality, WwML has incorporated
+a shorthand for them. For example, `@x` is the same as writing `(edge x)`, and `@foobar`
+is the same as writing `(edge foobar)`. By far, the most major contributor of shorthands
+is the M1 pattern matching engine. This is because almost everything in Wirewright uses
+patterns (and thereby M1) -- many subsystems use them as "sensory organs".
+
+It is important to note that WwML is a way to describe terms, and terms are
+used as "material" for structure and communication in Wirewright. That is, WwML
+is not a *language* in the usual sense -- the same way Python is called a language.
+WwML is a *notation* for objects Wirewright *computes with*.
+
+WwML is primarily about *shorthands* -- *conveniences*, *syntactic sugar*. In other
+words, WwML can be thought of as a *system of interacting shorthands* on top of
 a "basis language" -- S-expressions extended with key-value pairs. In other words, there
 is little "language" or intentional "language design" above S-expressions; only shorthands
 that manage to interact with each other in one way or another, forming larger, emergent
-(in the simplest sense of the word) syntactic complexes.
+(in the simplest sense of the word) "syntactic complexes". That is, when a subsystem
+describes something (call it X) often, X may acquire syntax in WwML. Then these
+syntaxes interact to create WwML-as-a-whole. In other words, WwML is an ecosystem
+of notations and shorthands.
 
 WwML is a rather complicated *constructor* or *(de)serialization* engine for the six
 kinds of terms: dictionary, number, string, symbol, boolean, and blob terms. There is no AST --
@@ -35,10 +60,10 @@ most of the times.
 
 Interestingly, WwML can also be thought of as a "compressed representation" of terms, since
 a term's text representation is usually much more efficient in terms of its byte size than
-the corresponding in-memory term. Something like `(+ 1 2)` takes only a few bytes in ASCII
-but may very well take hundreds of bytes in-memory with all the indexing and control structure
-overhead (I am working actively on reducing the memory footprint of dictionaries specifically,
-but there are limits).
+the corresponding in-memory representation. Something like `(+ 1 2)` takes only a few bytes
+of UTF-8 but may very well take hundreds of bytes in-memory with all the indexing and control
+structure overhead (I am working actively on reducing the memory footprint of dictionaries
+specifically, but there are limits).
 
 > [!NOTE]
 > Character sets are expressed in [Crystal character set notation](https://crystal-lang.org/api/1.16.2/Char.html#in_set%3F%28%2Asets%3AString%29%3ABool-instance-method).
@@ -116,6 +141,13 @@ own complications.
 | `∥`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>\</kbd>              | **no**                               |
 | `⟬`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>[</kbd>              | **no**                               |
 | `⟭`       |                   | <kbd>Compose</kbd> + <kbd>\</kbd> + <kbd>]</kbd>              | **no**                               |
+| `‸`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>^</kbd>              | **no**                               |
+| `╭`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>(</kbd>              | **no**                               |
+| `╰`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>)</kbd>              | **no**                               |
+| `│`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>\|</kbd>             | **no**                               |
+| `┤`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>-</kbd>              | **no**                               |
+| `┌`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>[</kbd>              | **no**                               |
+| `└`       |                   | <kbd>Compose</kbd> + <kbd>_</kbd> + <kbd>]</kbd>              | **no**                               |
 
 ### XCompose
 
@@ -155,6 +187,14 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <backslash> <backslash> : "∥"
 <Multi_key> <backslash> <bracketleft> : "⟬"
 <Multi_key> <backslash> <bracketright> : "⟭"
+<Multi_key> <underscore> <asciicircum> : "‸"
+
+<Multi_key> <b> <parenleft> : "╭"
+<Multi_key> <b> <parenright> : "╰"
+<Multi_key> <b> <bar> : "│"
+<Multi_key> <b> <minus> : "┤"
+<Multi_key> <b> <bracketleft> : "┌"
+<Multi_key> <b> <bracketright> : "└"
 
 # Used sometimes in docs and comments. Not used in WwML.
 <Multi_key> <asciicircum> <asciicircum> : "⏏"
@@ -709,9 +749,9 @@ and their design and optimizations bias strongly toward Unicode (UTF-8). Blobs,
 on the other hand, are simply vectors of bytes, with no presuppositions about
 their content.
 
-Blobs start with `⟬` and end `⟭`. Blobs are written in hexadecimal: between `⟬⟭`s goes
-a sequence of zero or more hexadecimal *digit*s. Whitespace can be used to delimit
-digits into *digit blocks*.
+Blobs start with `⟬` and end with `⟭`. Blobs are written in hexadecimal: between `⟬⟭`s
+goes a sequence of zero or more hexadecimal *digit*s. Whitespace can be used to delimit
+them into *digit blocks*.
 
 ```wwml
 ⟬deadbeef⟭
@@ -772,6 +812,88 @@ what the bytes are, it will say `application/octet-stream`, which means essentia
 ;;  00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
 ;;  2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭
 ```
+
+You can embed UTF-8 bytes in a blob using `‸`:
+
+```wwml
+⟬be ‸Hello World‸ ef ‸Kaixo mundua!‸ ⁑ application/octet-stream⟭
+```
+
+WwML allows the content in `‸` to be multiline. Importantly, in such cases, ML is
+whitespace sensitive. Consider the following:
+
+```wwml
+{name: x,
+ body:
+   ⟬‸<html>
+       <head>
+         <title>Hello World</title>
+       </head>
+       <body>
+         <h1>Kaixo mundua</h1>
+       </body>
+     </html>‸⟭}
+```
+
+For multiline `‸`, WwML requires (and omits) whitespace up to and including
+the column of the opening `‸`. That is, if we visualize what is happening in
+the above:
+
+```text
+{name: x,
+ body:
+   ⟬‸<html>
+    |  <head>
+    |    <title>Hello World</title>
+    |  </head>
+    |  <body>
+    |    <h1>Kaixo mundua</h1>
+    |  </body>
+    |</html>‸⟭}
+```
+
+Whitespace to the left of the `|` is considered part of the source code. Whitespace
+after it is considered part of the blob's `‸`.
+
+To include the common control bytes, you can use ANSI escape sequences:
+
+```wwml
+⟬be \n ef⟭
+```
+
+You **cannot** use escape sequences inside UTF-8 fragments `‸`. Instead, you should
+break the fragment and put an escape, then reopen it if necessary:
+
+```wwml
+⟬‸Hello‸ \n ‸World‸⟭
+```
+
+`‸` itself can be escaped this way, by entering its UTF-8 byte representation `20 38`:
+
+```wwml
+⟬‸Hello‸ 20 38⟭ ;; UTF-8 for "Hello‸"
+```
+
+WwML supports *experimental* syntax for UTF-8-only blobs called the *blob diagram* syntax:
+
+```wwml
+{type: article,
+ name: "Article 1",
+ body:
+  ╭┤ text/html
+  │ <html>
+  │ <head>
+  │   <title>Hello World</title>
+  │ </head>
+  │
+  │ <body>
+  │   <h1>Hello World</h1>
+  │ </body>
+  ╰┤}
+```
+
+You are not required to write the media type after `╭┤`. Just like in normal blobs,
+you can use `?` to make WwML guess the media type from content.
 
 ## Dictionary terms
 

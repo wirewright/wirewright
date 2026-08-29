@@ -344,16 +344,76 @@ module Ww::ML
     io << rbracket
   end
 
+  private enum BlobPrintState
+    Outer
+    Utf8
+  end
+
   # :nodoc:
   def compact(io : IO, term : Term::Blob) : Nil
     io << '⟬'
 
-    term.bytes.join(io, " ") do |byte|
-      digit0 = byte >> 4
-      digit1 = byte & 0xf
+    byte_io = term.to_io
+    segment_count = 0u64
 
-      io.write_byte(to_hex(digit0))
-      io.write_byte(to_hex(digit1))
+    unless term.utf8?
+      byte_io.each_byte do |byte|
+        digit0 = byte >> 4
+        digit1 = byte & 0xf
+
+        io << ' ' if segment_count > 0
+        io.write_byte(to_hex(digit0))
+        io.write_byte(to_hex(digit1))
+
+        segment_count += 1
+      end
+      return
+    end
+
+    state = BlobPrintState::Outer
+
+    byte_io.each_char do |chr|
+      case chr
+      when '\a' then escape_seq = "\\a"
+      when '\b' then escape_seq = "\\b"
+      when '\e' then escape_seq = "\\e"
+      when '\t' then escape_seq = "\\t"
+      when '\n' then escape_seq = "\\n"
+      when '\f' then escape_seq = "\\f"
+      when '\r' then escape_seq = "\\r"
+      when '‸'  then escape_seq = "20 38"
+      end
+
+      if escape_seq
+        case state
+        in .outer?
+        in .utf8?
+          io << "‸ "
+          state = BlobPrintState::Outer
+          segment_count += 1
+        end
+
+        io << escape_seq
+        next
+      end
+
+      case state
+      in .outer?
+        io << ' ' if segment_count > 0
+        io << '‸'
+        state = BlobPrintState::Utf8
+        segment_count += 1
+      in .utf8?
+      end
+
+      io << chr
+    end
+
+    case state
+    in .outer?
+    in .utf8?
+      io << '‸'
+      state = BlobPrintState::Outer
     end
 
     if classif = term.classif?
