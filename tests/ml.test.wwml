@@ -1270,3 +1270,13 @@
 (ml
   (= ⎡(_* ¦ x←_)⎤ ⎡(_* ¦ (%let x _))⎤)
   (= ⎡(¦ x←_)⎤ ⎡(¦ (%let x _))⎤))
+
+;; %group of split shorthand
+(ml
+  (= ⎡…⟨x⟩…⎤ ⎡(%group ⟨x⟩ _*)⎤)
+  (= ⎡…⟨x y z⟩…⎤ ⎡(%group ⟨x y z⟩ _*)⎤)
+  (= ⎡…⟨& x y z⟩…⎤ ⎡(%group ⟨& x y z⟩ _*)⎤)
+  (= ⎡…⟨x y z⟩°…⎤ ⎡(%group ⟨x y z⟩° _*)⎤)
+  (= ⎡…⟨x y z ⍊ a b c⟩°…⎤ ⎡(%group ⟨x y z ⍊ a b c⟩° _*)⎤)
+  (= ⎡(+ …⟨x y z ⍊ a b c⟩°…)⎤ ⎡(+ (%group ⟨x y z ⍊ a b c⟩° _*))⎤)
+  (= ⎡(+ …⟨x y z ⍊ a b c⟩°… …⟨d e f⟩…)⎤ ⎡(+ (%group ⟨x y z ⍊ a b c⟩° _*) (%group ⟨d e f⟩ _*))⎤))

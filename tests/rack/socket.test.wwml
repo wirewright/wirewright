@@ -1348,13 +1348,13 @@
         {¦ in: (M_ _*) out: (_* `reply)}
           <> {(M): (), reply: (err "invalid command")}
         ;; GET retrieves a value.
-        {¦ in: (M←(get k_) _*) out: (_* `reply) sensor: (sensor _ (%group ⟨(k_ v_)⟩ _*))}
+        {¦ in: (M←(get k_) _*) out: (_* `reply) sensor: (sensor _ …⟨(k_ v_)⟩…)}
           <> {(M): (), reply: (ok ^v)}
         ;; POST publishes a value...
         {¦ in: (M←(post k_ v_) _*) out: (_* `reply) appearances_dict⋮ (_* `>appearance)}
           <> {(M): (), reply: ok, >appearance: (appearance store (^k ^v))}
         ;; ... but only if it is globally absent.
-        {¦ in: (M←(post k_ _) _*) out: (_* `reply) sensor: (sensor _ (%group ⟨(k_ _)⟩ _*))}
+        {¦ in: (M←(post k_ _) _*) out: (_* `reply) sensor: (sensor _ …⟨(k_ _)⟩…)}
           <> {(M): (), reply: (err "invalid command")}
         ;; PUT changes the value of an entry *this client* ows.
         {¦ in: (M←(put k_ v'_) _*) out: (_* `reply) appearances: ⟨(appearance store (k_ v_))⟩}
@@ -1510,8 +1510,8 @@
     (circuit (pool @pool))
 
     (backsys @pool
-      ⟨& (device (%group ⟨& (cell @in (M←(receiver_ msg_) _*)) (cell @out (_* `>report))⟩ _*))
-         (device (%group ⟨& (cell @name receiver_) (cell @out (_* `>msg))⟩ _*))⟩°
+      ⟨& (device …⟨& (cell @in (M←(receiver_ msg_) _*)) (cell @out (_* `>report))⟩…)
+         (device …⟨& (cell @name receiver_) (cell @out (_* `>msg))⟩…)⟩°
         <> {(M): (), >report: ok, >msg: ^msg})
 
     (circuit @clients
@@ -1822,11 +1822,11 @@
 
      (circuit (pool @pool0)
        (device
-         (%group ⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩ _*)))
+         …⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩…))
 
      (circuit (pool @pool1)
        (device
-         (%group ⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩ _*)))
+         …⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩…))
 
      (cell @in)
      (cell @out)

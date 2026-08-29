@@ -22,7 +22,8 @@ module Ww::ML
                      Placeholder |
                      PatternLet |
                      LayerIgnoreResidue |
-                     Tuck
+                     Tuck |
+                     GroupSplit
 
     # A special node that marks the location of some child T, usually something
     # like `Expr`. The location itself is encoded in *text*, which is a view of
@@ -178,6 +179,8 @@ module Ww::ML
     alias PlaceholderContainer = DictRule | DictEntryBlock
 
     defcase Tuck, offsets : Array(Int32), arg : Expr
+
+    defcase GroupSplit, arg : Expr
 
     alias HasLocation = Expr | Selector | DictEntry | SplitPart
 

@@ -1119,7 +1119,6 @@ module Ww::ML
       when past?(']')  then return token(:rbracket)
       when past?('⸤')  then return token(:bl_half_bracket)
       when past?('⸥')  then return token(:br_half_bracket)
-      when past?('…')  then return token(:ellipsis)
       when past?('±')  then return nows("±") { token(:plus_minus) }
       when past?('→')  then return nows("→") { token(:arrow_right) }
       when past?('↑')  then return nows("↑") { token(:arrow_up) }
@@ -1127,6 +1126,16 @@ module Ww::ML
       when past?('\'') then return nows("'") { token(:quote) }
       when past?('`')  then return nows("`") { token(:backquote) }
       when past?('≡')  then return nows("≡") { token(:triple_equals) }
+      when past?('…')
+        if ahead == '⟨'
+          return token(:ellipsis_before_langle)
+        end
+
+        if prior.ends_with?('⟩') || prior.ends_with?("⟩°")
+          return token(:ellipsis_after_rangle)
+        end
+
+        return token(:ellipsis)
       when past?('@')
         if past?(':')
           # @:⏏foo

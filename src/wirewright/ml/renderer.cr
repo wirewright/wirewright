@@ -1017,6 +1017,14 @@ module Ww::ML
       memo
     end
 
+    private def render0(ctx : RenderContext, node : Tree::GroupSplit)
+      tsrc(ctx) do |commit|
+        commit << tsrc(ctx, :"%group")
+        commit << render(ctx, node.arg)
+        commit << tsrc(ctx, :"_*")
+      end
+    end
+
     private def render0(ctx : RenderContext, node : Tree::Location(_))
       render(ctx.copy_with(location: node.text), node.child)
     end

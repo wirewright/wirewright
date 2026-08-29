@@ -1853,6 +1853,9 @@ module Ww::M1
       # ;;
       # ;;  (k_ (%group ⟨(entry k_ v_)⟩ _*)) => ^v
       # ;;
+      # ;; Which can be rewritten more compactly as:
+      # ;;
+      # ;;  (k_ …⟨(entry k_ v_)⟩…) => ^v
       # ```
       matchpi %{(%'%all _*)}, cue: :"%all" do
         arms = pattern.items.move(1)

@@ -66,6 +66,8 @@ module Ww::ML
         TripleColonSubPlusRight
         TripleColonRight
         Ellipsis
+        EllipsisBeforeLangle
+        EllipsisAfterRangle
         TripleEquals
         Semicolon
         SemicolonComma

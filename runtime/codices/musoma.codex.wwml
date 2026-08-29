@@ -233,7 +233,6 @@ history-limit: 128
            (atom mass: 64))))
 
 ;; TODO: un-hardcode constants!
-(term ⟬⟭) => (atom "⟬⟭" type: blob)
 (term term_blob)
   => (^let hexwidth: (* (bytesize term) 2) ;; Each byte is two hexdigits
        (^let width: (+ hexwidth (- hexwidth 1)) ;; Also one space between hexdigits
@@ -676,7 +675,7 @@ history-limit: 128
   <> {?mode: content}
 
 ;; These nodes ask their elements and also remember the mode.
-(⸨root,group⸩ (%group ⟨{¦ -?mode_}⟩° _*) ⍊ ?mode: M_ -mode_)
+(⸨root,group⸩ …⟨{¦ -?mode_}⟩°… ⍊ ?mode: M_ -mode_)
   <> {?mode: ^M, mode: ^M, (M): ()}
 
 ;; The `inline` node forces inline mode on its element, then removes itself.
@@ -702,7 +701,7 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
         ((^each (entries as {¦ style: entry-style_})
            ^entry-style))}
 
-(group (%group ⟨{¦ style_}⟩° _*) ⍊ borrowing-styles_ -styles_)
+(group …⟨{¦ style_}⟩°… ⍊ borrowing-styles_ -styles_)
   <> {(style): (), styles: ^borrowing-styles, (borrowing-styles): ()}
 
 ;; Forced multiline groups immediately promote styles to multiline.
@@ -1018,7 +1017,7 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 (head←cat l_ r_)
   <> {head: row}
 
-(⸨row,col⸩ (%group ⟨child←(⸨row,col⸩ subrows_* ⍊ -gap -detail)⟩ _*) ⍊ -gap -detail)
+(⸨row,col⸩ …⟨child←(⸨row,col⸩ subrows_* ⍊ -gap -detail)⟩… ⍊ -gap -detail)
   <> {(child): ^subrows}
 
 

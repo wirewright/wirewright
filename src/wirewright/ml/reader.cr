@@ -1021,6 +1021,20 @@ module Ww::ML
       Tree::Tuck.new(offsets, arg)
     end
 
+    private def group_split
+      unless past?(:ellipsis_before_langle)
+        return refusal("expected `…⟨` to start group split", ahead.text.before_begin)
+      end
+
+      interior = value!(choice(split, all_item), expect: "expected `⟨` or `⟨&`")
+
+      unless past?(:ellipsis_after_rangle)
+        return refusal("expected `⟩…` to end group split", ahead.text.before_begin)
+      end
+
+      Tree::GroupSplit.new(interior)
+    end
+
     private def atom : Tree::Expr | Err
       choice(
         term,
@@ -1028,6 +1042,7 @@ module Ww::ML
         grouping,
         placeholder,
         tuck,
+        group_split,
         refusal("expected a term", ahead.text.before_begin),
       )
     end

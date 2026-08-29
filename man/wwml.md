@@ -1037,6 +1037,12 @@ qoox
 
 ### M1 (pattern matching)
 
+#### Shorthands for `%group`
+
+- `…⟨...⟩…` is the same as writing `(%group ⟨...⟩ _*)`. For example, `…⟨a⟩…` is
+  the same as writing `(%group ⟨a⟩ _*)`; `(k_ …⟨(entry k_ v_)⟩…)` is the same as
+  writing `(k_ (%group ⟨(entry k_ v_)⟩ _*))`.
+
 #### Shorthands for `%let`
 
 - `<name term>←<value term>` is the same as writing `(%let <name term> <value term>)`. **The absence of
