@@ -868,10 +868,10 @@ break the fragment and put an escape, then reopen it if necessary:
 ⟬‸Hello‸ \n ‸World‸⟭
 ```
 
-`‸` itself can be escaped this way, by entering its UTF-8 byte representation `20 38`:
+`‸` itself can be escaped this way, by entering its UTF-8 byte representation `20 e2 80 b8`:
 
 ```wwml
-⟬‸Hello‸ 20 38⟭ ;; UTF-8 for "Hello‸"
+⟬‸Hello‸ 20 e2 80 b8⟭ ;; UTF-8 for "Hello‸"
 ```
 
 WwML supports *experimental* syntax for UTF-8-only blobs called the *blob diagram* syntax:

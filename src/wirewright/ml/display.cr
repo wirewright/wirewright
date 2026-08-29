@@ -354,6 +354,7 @@ module Ww::ML
     io << '⟬'
 
     byte_io = term.to_io
+
     segment_count = 0u64
 
     unless term.utf8?
@@ -383,7 +384,7 @@ module Ww::ML
       when '\n' then escape_seq = "\\n"
       when '\f' then escape_seq = "\\f"
       when '\r' then escape_seq = "\\r"
-      when '‸'  then escape_seq = "20 38"
+      when '‸'  then escape_seq = "20 e2 80 b8"
       end
 
       if escape_seq

@@ -1152,7 +1152,7 @@
   (= ⎡⟬ab \n cd⟭⎤ ⎡⟬ab 0a cd⟭⎤)
   (= ⎡⟬ab \f cd⟭⎤ ⎡⟬ab 0c cd⟭⎤)
   (= ⎡⟬ab \r cd⟭⎤ ⎡⟬ab 0d cd⟭⎤)
-  (= ⎡⟬‸Hello‸ 20 38⟭⎤ ⎡⟬ab 0d cd⟭⎤)
+  (= ⎡⟬‸Hello‸ 20 e2 80 b8⟭⎤ ⎡⟬48 65 6C 6C 6F 20 e2 80 b8⟭⎤)
 
   ;; Escape with embeds
   (= ⎡⟬‸Hello‸ \n ‸World!‸⟭⎤
