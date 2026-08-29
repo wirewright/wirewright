@@ -367,6 +367,8 @@ module Ww::ML
 
         segment_count += 1
       end
+
+      io << '⟭'
       return
     end
 
