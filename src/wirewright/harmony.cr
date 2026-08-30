@@ -51,7 +51,11 @@ class Ww::Harmony
   defrecord HttpServerDefn,
     host : String,
     port : UInt16,
+    security : TlsServerConfig?,
     brief: true
+
+  defrecord TlsClientConfig, verify : Bool
+  defrecord TlsServerConfig, cert : NormalPath, key : NormalPath
 
   alias ClientDefn = SocketClientDefn | HttpClientDefn
 
@@ -70,7 +74,7 @@ class Ww::Harmony
     port : UInt16,
     path : String,
     key : Term,
-    secure : Bool,
+    security : TlsClientConfig?,
     link : Link,
     breakable : Bool,
     brief: true
@@ -86,7 +90,7 @@ class Ww::Harmony
     host : String,
     port : UInt16,
     key : Term,
-    secure : Bool,
+    security : TlsClientConfig?,
     brief: true
 
   alias Link = PortalLink | DirectLink
@@ -1310,7 +1314,21 @@ class Ww::Harmony
 
   def self.client(observations : IQueue, defn : WsClientDefn) : Nil
     begin
-      socket = HTTP::WebSocket.new(defn.host, defn.path, defn.port.to_i, tls: defn.secure ? true : nil)
+      if tls_config = defn.security
+        tls_context = OpenSSL::SSL::Context::Client.new
+        case tls_config.verify
+        in true
+          tls_context.verify_mode = OpenSSL::SSL::VerifyMode::PEER
+        in false
+          tls_context.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+        end
+
+        socket = HTTP::WebSocket.new(defn.host, defn.path, defn.port.to_i, tls: tls_context)
+      else
+        socket = HTTP::WebSocket.new(defn.host, defn.path, defn.port.to_i, tls: nil)
+      end
+
+      # Disable the Nagle's algorithm on the underlying TCP socket.
       socket.nagle = false
     rescue e : IO::Error | OpenSSL::Error
       observations << ClientStartFailed.new(defn, e.message || "i/o error")
@@ -1473,7 +1491,15 @@ class Ww::Harmony
         queue_delegate_handler,
       ])
 
-      server.bind_tcp(defn.host, defn.port.to_i)
+      if tls_config = defn.security
+        # TODO: I'm sure there's a lot more configuration to it than this.
+        context = OpenSSL::SSL::Context::Server.new
+        context.certificate_chain = tls_config.cert.unwrap.to_s
+        context.private_key = tls_config.key.unwrap.to_s
+        server.bind_tls(defn.host, defn.port.to_i, context)
+      else
+        server.bind_tcp(defn.host, defn.port.to_i)
+      end
     rescue e : IO::Error | OpenSSL::Error
       observations << ServerStartFailed.new(defn, e.message || "i/o error")
       return
@@ -1562,9 +1588,21 @@ class Ww::Harmony
   defrecord HttpCancelRequest, request : Term
 
   def self.client(observations : IQueue, defn : HttpClientDefn) : Nil
-    # We'll reuse this one client.
+    # We'll reuse this one client for subsequent requests.
     begin
-      client = HTTP::Client.new(defn.host, defn.port.to_i, defn.secure)
+      if tls_config = defn.security
+        tls_context = OpenSSL::SSL::Context::Client.new
+        case tls_config.verify
+        in true
+          tls_context.verify_mode = OpenSSL::SSL::VerifyMode::PEER
+        in false
+          tls_context.verify_mode = OpenSSL::SSL::VerifyMode::NONE
+        end
+
+        client = HTTP::Client.new(defn.host, defn.port.to_i, tls: tls_context)
+      else
+        client = HTTP::Client.new(defn.host, defn.port.to_i, tls: nil)
+      end
     rescue e : IO::Error | OpenSSL::Error
       observations << ClientStartFailed.new(defn, e.message || "i/o error")
       return

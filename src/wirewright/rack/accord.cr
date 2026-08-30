@@ -307,7 +307,7 @@ module Ww::Rack::Accord
       # _string
       #
       # |@block
-      # A generic host string, e.g., `1.2.3.4` or `example.org`.
+      # A generic host string, e.g., `"1.2.3.4"` or `"example.org"`.
       matchpi %{_string} do
         term.to(String)
       end
@@ -355,10 +355,10 @@ module Ww::Rack::Accord
       # |@pattern
       # (unix path_string ⍊ link_⋮ direct)
       #
+      # |@key link rack.[network].link
+      #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
-      #
-      # See `rack.[network].link` to learn more about *link*.
       matchpiT %{(unix path_string ⍊ link_⋮ direct)}, path: NormalPath do
         Harmony::UnixServerDefn.new(path, link?(link) || return)
       end
@@ -373,7 +373,7 @@ module Ww::Rack::Accord
     # |@summary
     # Transports supported by the client node.
     Term.case(term) do
-      # |@ rack.client.transport.key
+      # |@ rack.client.key
       #
       # |@summary
       # The `key` pair whic all client transports accept.
@@ -466,74 +466,106 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (ws host_ port←(%number u16) ⍊ key_⋮ master path⋮ "" breakable⋮ true)
+      # (ws host_ port←(%number u16) ⍊ key_⋮ master ⋮link path⋮ "" breakable⋮ true)
       #
       # |@key host rack.[network].host
-      # |@key key rack.client.transport.key
+      # |@key key rack.client.key
       # |@key breakable rack.client.transport.breakable
+      # |@key link rack.[network].link
       #
       # |@block
       # A plain WebSocket client at *host*:*port* on *path*.
-      matchpiT %{(ws hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) path⋮ "" link: (%optional direct linkQ_) breakable⋮ true)}, path: String do
+      matchpiT(<<-'WWML', path: String) do
+      (ws hostQ_ port←(%number u16)
+        ⍊ key: (%optional master keyQ_)
+          link: (%optional direct linkQ_)
+          path⋮ ""
+          breakable⋮ true)
+      WWML
         return unless host = host?(hostQ)
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        secure = false
-        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure, link, breakable.true?)
+        security = nil
+        Harmony::WsClientDefn.new(host, port, path, key, security, link, breakable.true?)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (wss host_ port←(%number u16) ⍊ key_⋮ master path⋮ "" breakable⋮ true)
+      # (wss host_ port←(%number u16) ⍊ key_⋮ master path⋮ "" ⋮link breakable⋮ true)
       #
       # |@key host rack.[network].host
-      # |@key key rack.client.transport.key
+      # |@key key rack.client.key
+      # |@key link rack.[network].link
       # |@key breakable rack.client.transport.breakable
+      #
+      # |@key verify
+      # Whether to verify the certificate.
+      # - `true` corresponds to `SSL_VERIFY_PEER`.
+      # - `false` corresponds to `SSL_VERIFY_NONE`.
       #
       # |@block
       # A plain WebSocket client at *host*:*port* on *path*. Establishes a secure
       # connection using TLS.
-      matchpiT %{(wss hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) path⋮ "" link: (%optional direct linkQ_) breakable⋮ true)}, path: String do
+      matchpiT(<<-'WWML', path: String) do
+      (wss hostQ_ port←(%number u16)
+        ⍊ key: (%optional master keyQ_)
+          link: (%optional direct linkQ_)
+          path⋮ ""
+          breakable⋮ true
+          verify⋮ true)
+      WWML
         return unless host = host?(hostQ)
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        secure = true
-        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure, link, breakable.true?)
+        security = Harmony::TlsClientConfig.new(verify.true?)
+        Harmony::WsClientDefn.new(host, port, path, key, security, link, breakable.true?)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (tcp host_ port←(%number u16) ⍊ key_⋮ master breakable⋮ true)
+      # (tcp host_ port←(%number u16) ⍊ key_⋮ master ⋮link breakable⋮ true)
       #
       # |@key host rack.[network].host
-      # |@key key rack.client.transport.key
+      # |@key key rack.client.key
+      # |@key link rack.[network].link
       # |@key breakable rack.client.transport.breakable
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
-      matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_) breakable⋮ true)} do
+      matchpiT(<<-'WWML') do
+      (tcp hostQ_ port←(%number u16)
+        ⍊ key: (%optional master keyQ_)
+          link: (%optional direct linkQ_)
+          breakable⋮ true)
+      WWML
         return unless host = host?(hostQ)
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::TcpClientDefn.new("127.0.0.1", port, key, link, breakable.true?)
+        Harmony::TcpClientDefn.new(host, port, key, link, breakable.true?)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (unix path_string ⍊ key_⋮ master breakable⋮ true)
+      # (unix path_string ⍊ key_⋮ master ⋮link breakable⋮ true)
       #
-      # |@key key rack.client.link.key
+      # |@key key rack.client.key
+      # |@key link rack.[network].link
       # |@key breakable rack.client.transport.breakable
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
-      matchpi %{(unix path_string ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_) breakable⋮ true)}, path: NormalPath do
+      matchpi(<<-'WWML', path: NormalPath) do
+      (unix path_string
+        ⍊ key: (%optional master keyQ_)
+          link: (%optional direct linkQ_)
+          breakable⋮ true)
+      WWML
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
@@ -561,11 +593,6 @@ module Ww::Rack::Accord
       #
       # HTTP responses are represented using the HTTP response language.
       # See `http.response`
-      matchpiT %{(http hostQ_ port←(%number u16))} do
-        return unless host = host?(hostQ)
-
-        Harmony::HttpServerDefn.new(host, port)
-      end
 
       # |@ rack.server.transport
       #
@@ -578,10 +605,63 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket server at *host*:*port*. If there is an existing HTTP server
       # at *port* (within the same circuit!), extends it with WebSocket support.
-      matchpiT %{[ws hostQ_ port←(%number u16)]} do
+
+      matchpiT %{[http hostQ_ port←(%number u16)]}, %{[ws hostQ_ port←(%number u16)]} do
         return unless host = host?(hostQ)
 
-        Harmony::HttpServerDefn.new(host, port)
+        Harmony::HttpServerDefn.new(host, port, security: nil)
+      end
+
+      # |@ rack.server.transport
+      #
+      # |@pattern
+      # (https host_ port←(%number u16) ⍊ cert_string key_string)
+      #
+      # |@key host rack.[network].host
+      #
+      # |@key cert
+      # Path to the file containing the public certificate chain.
+      #
+      # |@key key
+      # Path to the private key file.
+      #
+      # |@block
+      # An HTTPS server at *host*:*port*.
+      #
+      # HTTP requests are represented using the HTTP request language.
+      # See `http.request`.
+      #
+      # HTTP responses are represented using the HTTP response language.
+      # See `http.response`
+
+      # |@ rack.server.transport
+      #
+      # |@pattern
+      # (wss host_ port←(%number u16) ⍊ link_⋮ direct cert_string key_string)
+      #
+      # |@key host rack.[network].host
+      # |@key link rack.[network].link
+      #
+      # |@key cert
+      # Path to the file containing the public certificate chain.
+      #
+      # |@key key
+      # Path to the private key file.
+      #
+      # |@block
+      # A plain WebSocket server at *host*:*port* (using TLS). If there is
+      # an existing HTTPS server at *port* (within the same circuit!), extends
+      # it with WebSocket support.
+
+      matchpiT(
+        %{(https hostQ_ port←(%number u16) ⍊ cert_string key_string)},
+        %{(wss hostQ_ port←(%number u16) ⍊ cert_string key_string)},
+        cert: NormalPath, key: NormalPath,
+      ) do
+        return unless host = host?(hostQ)
+
+        tls_config = Harmony::TlsServerConfig.new(cert, key)
+        Harmony::HttpServerDefn.new(host, port, security: tls_config)
       end
 
       otherwise { }
@@ -594,9 +674,14 @@ module Ww::Rack::Accord
       #
       # |@pattern
       # (http host_ port←(%number u16) ⍊ key_⋮ master)
+      # (http host_ ⍊ key_⋮ master)
       #
       # |@key host rack.[network].host
-      # |@key key rack.[network].transport.key
+      #
+      # |@key port
+      # The port number. If omitted, uses the default HTTP port 8080.
+      #
+      # |@key key rack.client.key
       #
       # |@block
       # Connects to an HTTP server at *host*:*port*.
@@ -606,35 +691,63 @@ module Ww::Rack::Accord
       #
       # HTTP responses are represented using the HTTP response language.
       # See `http.response`
+
       matchpiT %{(http hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_))} do
         return unless host = host?(hostQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::HttpClientDefn.new(host, port, key, secure: false)
+        Harmony::HttpClientDefn.new(host, port, key, security: nil)
+      end
+
+      matchpi %{(http hostQ_ ⍊ key: (%optional master keyQ_))} do
+        return unless host = host?(hostQ)
+        return unless key = key?(hg, addr, keyQ)
+
+        Harmony::HttpClientDefn.new(host, 8080, key, security: nil)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (https host_ port←(%number u16) ⍊ key_⋮ master)
+      # (https host_ port←(%number u16) ⍊ key_⋮ master verify⋮ true)
+      # (https host_ ⍊ key_⋮ master verify⋮ true)
       #
       # |@key host rack.[network].host
-      # |@key key rack.[network].transport.key
+      #
+      # |@key port
+      # The port number. If omitted, uses the default HTTPS port 443.
+      #
+      # |@key key rack.client.key
+      #
+      # |@key verify
+      # Whether to verify the certificate.
+      # - `true` corresponds to `SSL_VERIFY_PEER`.
+      # - `false` corresponds to `SSL_VERIFY_NONE`.
       #
       # |@block
-      # Connects to an HTTP server at *host*:*port*. Establishes a secure
-      # connection using TLS.
+      # Connects to an HTTP server at *host*:*port*. Establishes a secure connection
+      # using TLS.
       #
       # HTTP requests are represented using the HTTP request language.
       # See `http.request`.
       #
       # HTTP responses are represented using the HTTP response language.
       # See `http.response`
-      matchpiT %{(https hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_))} do
+
+      matchpiT %{(https hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) verify⋮ true)} do
         return unless host = host?(hostQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::HttpClientDefn.new(host, port, key, secure: true)
+        tls_config = Harmony::TlsClientConfig.new(verify.true?)
+        Harmony::HttpClientDefn.new(host, port, key, security: tls_config)
+      end
+
+      matchpi %{(https hostQ_ ⍊ key: (%optional master keyQ_) verify⋮ true)} do
+        return unless host = host?(hostQ)
+        return unless key = key?(hg, addr, keyQ)
+
+        tls_config = Harmony::TlsClientConfig.new(verify.true?)
+        Harmony::HttpClientDefn.new(host, 443, key, security: tls_config)
       end
 
       otherwise { }

@@ -594,3 +594,39 @@
 
     (client (@request -> (http local 9813) -> @responses) up)))
 
+;; Default port for HTTP
+(rack
+  (frame
+    (server (@pool (http local 8080))
+      (backsys
+        {¦ request_: [get ("/")] -response_}
+          <> {(request): (), response: (ok "Hello World")}))
+    (circuit (pool @pool))
+    (cell @in (get "/"))
+    (cell @out)
+    (client (@in -> (http local) -> @out)))
+
+  (frame/tail fast-forward: true
+    (circuit (pool @pool))
+    (cell @in)
+    (cell @out (ok "Hello World"))
+    (client (@in -> (http local) -> @out) up)))
+
+;; Very basic HTTPS
+(rack
+  (frame
+    ;; FIXME: the use of relative paths here is very ugly!
+    (server (@pool (https local 9813 key: "./tests/public/openssl.key" cert: "./tests/public/openssl.crt"))
+      (backsys
+        {¦ request_: [get ("/")] -response_}
+          <> {(request): (), response: (ok "Hello World")}))
+    (circuit (pool @pool))
+
+    (cell @in (get "/"))
+    (cell @out)
+    (client (@in -> (https local 9813 verify: false) -> @out)))
+
+  (frame/tail fast-forward: true
+    (cell @in)
+    (cell @out (ok "Hello World"))
+    (client (@in -> (https local 9813 verify: false) -> @out) up)))

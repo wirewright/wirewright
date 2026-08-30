@@ -99,7 +99,10 @@ module Ww
         begin
           Log.debug { "fetch(#{initial_uri}): requesting #{uri}" }
 
-          HTTP::Client.get(uri, headers: HTTP::Headers{"User-Agent" => "Wirewright"}) do |response|
+          tls_context = OpenSSL::SSL::Context::Client.new
+          tls_context.set_default_verify_paths
+
+          HTTP::Client.get(uri, headers: HTTP::Headers{"User-Agent" => "Wirewright"}, tls: tls_context) do |response|
             Log.debug { "fetch(#{initial_uri}): received response on #{uri} with status: #{response.status}" }
 
             case response.status
