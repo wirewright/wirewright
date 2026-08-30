@@ -2,11 +2,13 @@
 module Ww::Rack::Format
   extend self
 
-  # TODO: limits, limits, limits!!
-  alias Any = None | Some
-  alias Some = TermJSON | TermJSONSchema | TermML | TermPrettyML
+  alias Any = Binary | Text
+  alias Text = Plaintext | TermJSON | TermJSONSchema | TermML | TermPrettyML
 
-  defrecord None
+  # TODO: limits, limits, limits!!
+
+  defrecord Binary
+  defrecord Plaintext
   defrecord TermJSON
   defrecord TermJSONSchema, schema : Schema::JSON, top : Term
   defrecord TermML
@@ -26,13 +28,30 @@ module Ww::Rack::Format
       # |@ rack.[network].format
       #
       # |@pattern
-      # none
+      # binary
       #
       # |@block
-      # Allows to communicate using UTF-8 encoded messages (string terms) and
-      # arbitrary byte payloads (blob terms).
-      matchpi %{none} do
-        None.new
+      # Arbitrary binary payloads (blob terms), e.g. `⟬de ad be ef⟭`.
+      #
+      # It is possible to *send* (but not receive) strings with `format: binary`. In
+      # that case, the string's UTF-8 byte representation is sent (and received).
+      # If you want to send *and* receive UTF-8 payloads, consider using `text`.
+      #
+      # NOTE: For protocols that do not support content-type (TCP, UNIX, WebSockets etc.),
+      # the blob's media type will be stripped before the blob is sent.
+      matchpi %{binary} do
+        Binary.new
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # text
+      #
+      # |@block
+      # UTF-8-encoded string payloads, e.g. `"hello world"`.
+      matchpi %{text} do
+        Plaintext.new
       end
 
       # |@ rack.[network].format
@@ -41,8 +60,8 @@ module Ww::Rack::Format
       # json
       #
       # |@block
-      # (De)serializes terms into JSON. This uses a *very* loose mapping of terms to
-      # JSON. This is because terms do not map to JSON exactly, nor the other way.
+      # JSON payloads. (De)serializes terms into JSON. This uses a *very* loose
+      # mapping of terms to JSON. This is because terms do not map to JSON exactly.
       # Without you providing hints during deserialization, the terms you get out of
       # `format: json` can look very ugly.
       #
@@ -54,9 +73,37 @@ module Ww::Rack::Format
       # where we serialize terms into JSON objects properly tagged with types etc.)
       # or `(json @_ _)`, where you can specify a schema to drive the decoding. The latter
       # is the recommended approach since it reduces the attack surface by forcing
-      # you to explicitly specify the kinds of JSON that are accepted.
+      # you to explicitly specify the kinds of JSON to accept.
       matchpi %{json} do
         TermJSON.new
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # (json @edge_ top_)
+      #
+      # |@key edge rack.edge
+      # Tells where to look for the JSON schema node (see `rack.schema`).
+      #
+      # |@key top
+      # Selects a toplevel rule from the JSON schema.
+      #
+      # |@block
+      # Uses a JSON schema to (de)serialize terms. See `rack.schema` for
+      # more info.
+      matchpi %{(json @edge_ top_)} do
+        targets = Pf::Kit.stack_array(Schema::JSON, 1)
+
+        hg.each_member(hg.resolve(node.addr, edge), heads: {Term.of(:schema)}) do |candidate|
+          Term.matchpi?(candidate.term, %{[schema (@_ json) schemaQ_*]}) do
+            targets << schemas.put_if_absent(schemaQ) { Schema::JSON.new(schemaQ) }
+          end
+        end
+
+        continue unless schema = targets.single?
+
+        TermJSONSchema.new(schema, top)
       end
 
       # |@ rack.[network].format
@@ -99,34 +146,6 @@ module Ww::Rack::Format
       # to be fast -- not to parse, nor to pretty print.
       matchpi %{prettyml} do
         TermPrettyML.new
-      end
-
-      # |@ rack.[network].format
-      #
-      # |@pattern
-      # (json @edge_ top_)
-      #
-      # |@key edge rack.edge
-      # Tells where to look for the JSON schema node (see `rack.schema`).
-      #
-      # |@key top
-      # Selects a toplevel rule from the JSON schema.
-      #
-      # |@block
-      # Uses a JSON schema to (de)serialize terms. See `rack.schema` for
-      # more info.
-      matchpi %{(json @edge_ top_)} do
-        targets = Pf::Kit.stack_array(Schema::JSON, 1)
-
-        hg.each_member(hg.resolve(node.addr, edge), heads: {Term.of(:schema)}) do |candidate|
-          Term.matchpi?(candidate.term, %{[schema (@_ json) schemaQ_*]}) do
-            targets << schemas.put_if_absent(schemaQ) { Schema::JSON.new(schemaQ) }
-          end
-        end
-
-        continue unless schema = targets.single?
-
-        TermJSONSchema.new(schema, top)
       end
 
       otherwise { }
@@ -190,7 +209,11 @@ module Ww::Rack::Format
     end
   end
 
-  def content_type?(format : None) : String?
+  def content_type?(format : Binary) : String?
+  end
+
+  def content_type?(format : Plaintext) : String?
+    "text/plain;charset=UTF-8"
   end
 
   def content_type?(format : TermJSON | TermJSONSchema) : String?
@@ -201,21 +224,22 @@ module Ww::Rack::Format
     "application/x-wwml"
   end
 
-  def encode?(format : None, term : Term) : Term::Blob?
-    if blob = term.as_blob?
-      return blob
-    end
+  def encode?(format : Binary, term : Term) : Term::Blob?
+    return unless term = term.as_blob? || term.as_s?
 
-    if str = term.as_s?
-      return Term::Blob.new(str.to(String))
+    case term
+    in Term::Blob then term
+    in Term::Str  then Term::Blob.new(term.to(String), Term::Blob::Classif.plaintext)
     end
-
-    # Fallback: stringify using ML.compact.
-    Term::Blob.build { |io| ML.compact(io, term) }
   end
 
-  # TODO: TermJSONSchema should probably do the same checks on terms, handling
-  # the emit side as well.
+  def encode?(format : Plaintext, term : Term) : Term::Blob?
+    return unless str = term.as_s?
+
+    Term::Blob.new(term.to(String))
+  end
+
+  # TODO: TermJSONSchema should probably validate input terms as well.
   def encode?(format : TermJSON | TermJSONSchema, term : Term) : Term::Blob?
     Term::Blob.build do |io|
       JSON.build(io) { |json| encode(format, json, term) }
@@ -232,39 +256,33 @@ module Ww::Rack::Format
     end
   end
 
-  def encode(format, json : JSON::Builder, term : Term) : Nil
+  private def encode(format, json : JSON::Builder, term : Term) : Nil
     encode(format, json, Term[term])
   end
 
-  def encode(format, json : JSON::Builder, term : Term::Num) : Nil
+  private def encode(format, json : JSON::Builder, term : Term::Num) : Nil
     case repr = term.repr
-    in Int64, Float32
-      json.number(repr)
+    in Int64, Float32 then json.number(repr)
     in BigRational
-      # if format.fractions
-      #   string
-      # else
-      #   to_f64
       json.number(repr.to_f64)
     end
   end
 
-  def encode(format, json : JSON::Builder, term : Term::Str | Term::Sym) : Nil
+  private def encode(format, json : JSON::Builder, term : Term::Str | Term::Sym) : Nil
     json.string(term.to(String))
   end
 
-  def encode(format, json : JSON::Builder, term : Term::Boolean) : Nil
+  private def encode(format, json : JSON::Builder, term : Term::Boolean) : Nil
     json.bool(term.true?)
   end
 
-  def encode(format, json : JSON::Builder, term : Term::Dict) : Nil
+  private def encode(format, json : JSON::Builder, term : Term::Dict) : Nil
     if term.itemsonly?
       json.array do
         term.items.each do |item|
           encode(format, json, item)
         end
       end
-
       return
     end
 
@@ -287,21 +305,17 @@ module Ww::Rack::Format
     end
   end
 
-  def encode(format, json : JSON::Builder, term : Term::Blob) : Nil
+  private def encode(format, json : JSON::Builder, term : Term::Blob) : Nil
     json.string do |io|
       Base64.strict_encode(term, io)
     end
   end
 
-  def decode?(format : None, message : Term::Blob) : Term?
-    Term.of(Term::Blob.simplify(message))
-  end
-
-  def decode?(format : None, message : Term::Str) : Term?
+  def decode?(format : Binary, message : Term::Blob) : Term?
     Term.of(message)
   end
 
-  def decode?(format : Some, message : Term::Blob) : Term?
+  def decode?(format : Text, message : Term::Blob) : Term?
     return unless message.utf8?
 
     # FIXME: Converting it to_string here seems fairly expensive. It's a perfectly
@@ -309,11 +323,11 @@ module Ww::Rack::Format
     decode?(format, message.to_string)
   end
 
-  def decode?(format : Some, message : Term::Str) : Term?
-    decode?(format, message.to(String))
+  private def decode?(format : Plaintext, message : String) : Term?
+    Term.of(message)
   end
 
-  def decode?(format : TermJSON, message : String) : Term?
+  private def decode?(format : TermJSON, message : String) : Term?
     begin
       Schema::JSON.read(message)
     rescue e : JSON::ParseException
@@ -321,7 +335,7 @@ module Ww::Rack::Format
     end
   end
 
-  def decode?(format : TermJSONSchema, message : String) : Term?
+  private def decode?(format : TermJSONSchema, message : String) : Term?
     begin
       Schema::JSON.read(format.schema, format.top, message)
     rescue e : JSON::ParseException
@@ -329,7 +343,7 @@ module Ww::Rack::Format
     end
   end
 
-  def decode?(format : TermML | TermPrettyML, message : String) : Term?
+  private def decode?(format : TermML | TermPrettyML, message : String) : Term?
     begin
       ML.term(message)
     rescue e : ML::SyntaxError

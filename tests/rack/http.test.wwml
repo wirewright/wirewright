@@ -1,7 +1,7 @@
-;; Passthrough format: none
+;; Passthrough format: binary
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: binary)
       (backsys
         {¦ request_: [get ("/") body_] -response_}
           <> {(request): (), response: (ok ^body)}))
@@ -10,7 +10,29 @@
 
     (cell @in (get "/" "Hello World"))
     (cell @out)
-    (client (@in -> (http local 9813) -> @out)))
+    (client (@in -> (http local 9813) -> @out format: binary)))
+
+  (frame/tail fast-forward: true
+    ;; Server must have cleared the pool since the request is done.
+    (circuit (pool @pool))
+
+    (cell @in)
+    (cell @out (ok ⟬‸Hello World‸ ⁑ text/plain⟭))
+    (client (@in -> (http local 9813) -> @out format: binary) up)))
+
+;; Passthrough format: text
+(rack
+  (frame
+    (server (@pool (http local 9813) format: text)
+      (backsys
+        {¦ request_: [get ("/") body_] -response_}
+          <> {(request): (), response: (ok ^body)}))
+
+    (circuit (pool @pool))
+
+    (cell @in (get "/" "Hello World"))
+    (cell @out)
+    (client (@in -> (http local 9813) -> @out format: text)))
 
   (frame/tail fast-forward: true
     ;; Server must have cleared the pool since the request is done.
@@ -18,7 +40,7 @@
 
     (cell @in)
     (cell @out (ok "Hello World"))
-    (client (@in -> (http local 9813) -> @out) up)))
+    (client (@in -> (http local 9813) -> @out format: text) up)))
 
 ;; Passthrough format: json
 (rack
@@ -66,14 +88,14 @@
 (rack
   (frame
     (module {}
-      (server (@pool (http local 9813))
+      (server (@pool (http local 9813) format: text)
         (backsys
           {¦ request: [get ("/")] -response_}
             <> {response: (ok "Hello from server 1!")}))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (http local 9814))
+      (server (@pool (http local 9814) format: text)
         (backsys
           {¦ request: [get ("/")] -response_}
             <> {response: (ok "Hello from server 2!")}))
@@ -82,30 +104,30 @@
     (module {}
       (cell @in (get "/"))
       (cell @out)
-      (client (@in -> (http local 9813) -> @out)))
+      (client (@in -> (http local 9813) -> @out format: text)))
 
     (module {}
       (cell @in (get "/"))
       (cell @out)
-      (client (@in -> (http local 9814) -> @out))))
+      (client (@in -> (http local 9814) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (module {}
       (cell @in)
       (cell @out (ok "Hello from server 1!"))
-      (client (@in -> (http local 9813) -> @out) up))
+      (client (@in -> (http local 9813) -> @out format: text) up))
 
     (module {}
       (cell @in)
       (cell @out (ok "Hello from server 2!"))
-      (client (@in -> (http local 9814) -> @out) up))))
+      (client (@in -> (http local 9814) -> @out format: text) up))))
 
 ;; Multiple clients
 ;; NOTE: This is a nonsensical test but it exposed a bug so I'm keeping it!
 (rack
   (frame
     (module {}
-      (server (@pool (http local 9813))
+      (server (@pool (http local 9813) format: text)
         (backsys
           {¦ request_ -response_}
             <> {response: (err "You hit the wrong page Charlie!")}
@@ -116,40 +138,40 @@
     (module {}
       (cell @in (get ("/" name: "Alice")))
       (cell @out)
-      (client (@in -> (http local 9813 key: alice) -> @out)))
+      (client (@in -> (http local 9813 key: alice) -> @out format: text)))
 
     (module {}
       (cell @in (get ("/" name: "Bob")))
       (cell @out)
-      (client (@in -> (http local 9813 key: bob) -> @out)))
+      (client (@in -> (http local 9813 key: bob) -> @out format: text)))
 
     ;; Charlie is hitting the wrong page
     (module {}
       (cell @in (get "/missing"))
       (cell @out)
-      (client (@in -> (http local 9813 key: charlie) -> @out))))
+      (client (@in -> (http local 9813 key: charlie) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (module {}
       (cell @in)
       (cell @out (err "You hit the wrong page Charlie!"))
-      (client (@in -> (http local 9813 key: alice) -> @out) up))
+      (client (@in -> (http local 9813 key: alice) -> @out format: text) up))
 
     (module {}
       (cell @in)
       (cell @out (err "You hit the wrong page Charlie!"))
-      (client (@in -> (http local 9813 key: bob) -> @out) up))
+      (client (@in -> (http local 9813 key: bob) -> @out format: text) up))
 
     (module {}
       (cell @in)
       (cell @out (err "You hit the wrong page Charlie!"))
-      (client (@in -> (http local 9813 key: charlie) -> @out) up))))
+      (client (@in -> (http local 9813 key: charlie) -> @out format: text) up))))
 
 ;; Multiple clients
 ;; This is the actual test
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: text)
       (backsys
         {¦ request_ -response_}
           <> {response: (err "You hit the wrong page Charlie!")}
@@ -161,17 +183,17 @@
     (module {}
       (cell @in (get ("/" name: "Alice")))
       (cell @out)
-      (client (@in -> (http local 9813 key: alice) -> @out)))
+      (client (@in -> (http local 9813 key: alice) -> @out format: text)))
 
     (module {}
       (cell @in (get ("/" name: "Bob")))
       (cell @out)
-      (client (@in -> (http local 9813 key: bob) -> @out)))
+      (client (@in -> (http local 9813 key: bob) -> @out format: text)))
 
     (module {}
       (cell @in (get "/missing"))
       (cell @out)
-      (client (@in -> (http local 9813 key: charlie) -> @out))))
+      (client (@in -> (http local 9813 key: charlie) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
@@ -179,17 +201,17 @@
     (module {}
       (cell @in)
       (cell @out (ok "Hello, Alice"))
-      (client (@in -> (http local 9813 key: alice) -> @out) up))
+      (client (@in -> (http local 9813 key: alice) -> @out format: text) up))
 
     (module {}
       (cell @in)
       (cell @out (ok "Hello, Bob"))
-      (client (@in -> (http local 9813 key: bob) -> @out) up))
+      (client (@in -> (http local 9813 key: bob) -> @out format: text) up))
 
     (module {}
       (cell @in)
       (cell @out (err "You hit the wrong page Charlie!"))
-      (client (@in -> (http local 9813 key: charlie) -> @out) up))))
+      (client (@in -> (http local 9813 key: charlie) -> @out format: text) up))))
 
 ;; WebSocket and HTTP server in the same world
 (rack
@@ -248,7 +270,7 @@
     (circuit (pool @pool))
 
     (cell @in)
-    (cell @out (ok ⟬3c 70 3e 48 69 21 3c 2f 70 3e ⁑ text/html;charset=utf-8⟭))
+    (cell @out (ok ⟬‸<p>Hi!</p>‸ ⁑ text/html⟭))
     (client (@in -> (http local 9813) -> @out) up)))
 
 ;; Client makes request, server hangs, client quits, server quits. Everything
@@ -275,7 +297,7 @@
 ;; HTTP request
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: text)
       (backsys
         {¦ request_ -response_}
           <> {response: (ok ^\request)}))
@@ -306,8 +328,8 @@
        (post "/user/bob/posts" "Hello World")
        (put "/user/bob/name" "Bob Smith")
        (delete "/user/bob")
-       ;; Blob body
-       (post "/" ⟬de ad be ef⟭)
+       ;; Body
+       (post "/" "Kaixo mundua")
        ;; Cookies
        (get "/" cookies: {SESSION_ID: "deadbeef", "UserName": "alice"})
        ;; Form (URL-encoded)
@@ -326,7 +348,7 @@
           dislikes: ()})
        ;; Complex form (multipart)
        ((post form) "/articles/create"
-         {name: "Lorem ipsum",
+         (name: "Lorem ipsum",
           body:
             (field content-type: "text/html"
               "<p>Lorem ipsum dolor sit amet</p>"),
@@ -335,17 +357,17 @@
             (file "avatar.png"
               ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00
                00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
-               2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭)})))
+               2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭)))))
 
     (queue (@response @responses) ())
-    (client (@request -> (http local 9813) -> @responses))
+    (client (@request -> (http local 9813) -> @responses format: text))
 
     (cell @echoes ()))
 
   (frame/tail fast-forward: true
     (queue (@request @requests) ())
     (queue (@response @responses) ())
-    (client (@request -> (http local 9813) -> @responses) up)
+    (client (@request -> (http local 9813) -> @responses format: text) up)
 
     (cell @echoes
       ;; Basics
@@ -372,7 +394,10 @@
          user-agent: "Wirewright")
        (delete ("/user/bob") host: "127.0.0.1:9813" user-agent: "Wirewright")
        ;; Blob body
-       (post ("/") ⟬de ad be ef⟭ host: "127.0.0.1:9813" user-agent: "Wirewright")
+       (post ("/")
+          "Kaixo mundua"
+         host: "127.0.0.1:9813"
+         user-agent: "Wirewright")
        ;; Cookies
        (get ("/")
          cookies: {SESSION_ID: "deadbeef", UserName: "alice"}
@@ -394,12 +419,13 @@
        ;; Complex form (multipart)
        ((post form) ("/articles/create")
           {multipart: true,
-           name: (field "Lorem ipsum"),
+           name: (field ⟬‸Lorem ipsum‸ ⁑ text/plain⟭),
            body:
              (field
-               ⟬3c 70 3e 4c 6f 72 65 6d 20 69 70 73 75 6d 20 64 6f 6c 6f 72 20
-                73 69 74 20 61 6d 65 74 3c 2f 70 3e ⁑ text/html;charset=utf-8⟭),
-           tags: ((field "programming") (field "computers")),
+               ⟬‸<p>Lorem ipsum dolor sit amet</p>‸ ⁑ text/html⟭),
+           tags:
+             ((field ⟬‸programming‸ ⁑ text/plain⟭)
+              (field ⟬‸computers‸ ⁑ text/plain⟭)),
            avatar:
              (file "avatar.png"
                ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00
@@ -411,9 +437,9 @@
 ;; HTTP response
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: binary)
       (backsys
-        {¦ request: [get ("/") ml_string] -response_}
+        {¦ request: [get ("/") ml_blob] -response_}
           <> {(request): (),
               (response): ((^when ((ml/term ml) (ok term_)) ^term))}))
 
@@ -452,7 +478,7 @@
 
     (cell @request)
     (queue (@response @responses) ())
-    (client (@request -> (http local 9813) -> @responses)))
+    (client (@request -> (http local 9813) -> @responses format: binary)))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
@@ -461,16 +487,16 @@
 
     (queue (@response @responses)
       ((ok)
-       (ok "Hello World")
-       (ok ⟬3c 68 31 3e 48 69 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)
+       (ok ⟬‸Hello World‸ ⁑ text/plain⟭)
+       (ok ⟬‸<h1>Hi</h1>‸ ⁑ text/html⟭)
        (ok ⟬de ad be ef⟭)
        (not-found
-         ⟬3c 68 31 3e 50 61 67 65 20 6e 6f 74 20 66 6f 75 6e 64 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)
-       (ok ⟬3c 68 31 3e 4f 6b 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)
-       ((not-found "Lorem ipsum") "dolor sit amet")
-       ((not-found "Lorem ipsum") "dolor sit amet")
+         ⟬‸<h1>Page not found</h1>‸ ⁑ text/html⟭)
+       (ok ⟬‸<h1>Ok</h1>‸ ⁑ text/html⟭)
+       ((not-found "Lorem ipsum") ⟬‸dolor sit amet‸ ⁑ text/plain⟭)
+       ((not-found "Lorem ipsum") ⟬‸dolor sit amet‸ ⁑ text/plain⟭)
        (ok
-         ⟬3c 70 3e 48 65 6c 6c 6f 20 57 6f 72 6c 64 21 3c 2f 70 3e ⁑ text/html;charset=utf-8⟭
+         ⟬‸<p>Hello World!</p>‸  ⁑ text/html⟭
          cookies:
            ((cookie "name" "Alice" secure: false)
             (cookie "session-id" "1ea962e07b" max_age: (≈1.0 m) secure: false))
@@ -482,8 +508,7 @@
             00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
             2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭))))
 
-    (client (@request -> (http local 9813) -> @responses) up)))
-
+    (client (@request -> (http local 9813) -> @responses format: binary) up)))
 
 ;; Basic routing
 (rack
@@ -518,11 +543,10 @@
   (frame/tail fast-forward: true
     (queue (@request @requests) ())
     (queue (@response @responses)
-      ;; FIXME: use embedded UTF-8 syntax when we have it!!!
-      ((ok ⟬3c 68 31 3e 48 6f 6d 65 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)
-       (ok ⟬3c 68 31 3e 53 65 61 72 63 68 20 71 75 65 72 79 3a 20 61 6c 69 63 65 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)
-       (ok ⟬3c 68 31 3e 41 72 74 69 63 6c 65 20 77 69 74 68 20 69 64 3a 20 30 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)
-       (ok ⟬3c 68 31 3e 4e 6f 74 20 66 6f 75 6e 64 3c 2f 68 31 3e ⁑ text/html;charset=utf-8⟭)))
+      ((ok ⟬‸<h1>Home</h1>‸ ⁑ text/html⟭)
+       (ok ⟬‸<h1>Search query: alice</h1>‸ ⁑ text/html⟭)
+       (ok ⟬‸<h1>Article with id: 0</h1>‸ ⁑ text/html⟭)
+       (ok ⟬‸<h1>Not found</h1>‸ ⁑ text/html⟭)))
     (client (@request -> (http local 9813) -> @responses) up)))
 
 ;; Crude HTML templating with rewriters
@@ -588,45 +612,54 @@
 
     (queue (@request @requests) ())
     (queue (@response @responses)
-      ;; FIXME: Ditto!!!  This is horrendous.
-      ((ok ⟬3c 68 74 6d 6c 3e 3c 68 65 61 64 3e 3c 74 69 74 6c 65 3e 44 65 6d 6f 20 70 61 67 65 3c 2f 74 69 74 6c 65 3e 3c 2f 68 65 61 64 3e 3c 62 6f 64 79 3e 3c 68 31 20 73 74 79 6c 65 3d 22 63 6f 6c 6f 72 3a 20 72 65 64 22 3e 4b 61 69 78 6f 20 6d 75 6e 64 75 61 21 3c 2f 68 31 3e 3c 70 3e 4c 6f 72 65 6d 20 69 70 73 75 6d 20 64 6f 6c 6f 72 20 73 69 74 20 61 6d 65 74 3c 2f 70 3e 3c 2f 62 6f 64 79 3e 3c 2f 68 74 6d 6c 3e ⁑ text/html;charset=utf-8⟭)
-       (not-found ⟬3c 68 74 6d 6c 3e 3c 68 65 61 64 3e 3c 74 69 74 6c 65 3e 4e 6f 74 20 66 6f 75 6e 64 3c 2f 74 69 74 6c 65 3e 3c 2f 68 65 61 64 3e 3c 62 6f 64 79 3e 3c 68 31 3e 4f 6f 70 73 3c 2f 68 31 3e 3c 2f 62 6f 64 79 3e 3c 2f 68 74 6d 6c 3e ⁑ text/html;charset=utf-8⟭)))
+      ((ok ⟬‸<html><head><title>Demo page</title></head><body><h1 style="color: red">Kaixo mundua!</h1><p>Lorem ipsum dolor sit amet</p></body></html>‸ ⁑ text/html⟭)
+       (not-found ⟬‸<html><head><title>Not found</title></head><body><h1>Oops</h1></body></html>‸ ⁑ text/html⟭)))
 
     (client (@request -> (http local 9813) -> @responses) up)))
 
 ;; Default port for HTTP
 (rack
   (frame
-    (server (@pool (http local 8080))
+    (server (@pool (http local 8080) format: text)
       (backsys
         {¦ request_: [get ("/")] -response_}
           <> {(request): (), response: (ok "Hello World")}))
     (circuit (pool @pool))
     (cell @in (get "/"))
     (cell @out)
-    (client (@in -> (http local) -> @out)))
+    (client (@in -> (http local) -> @out format: text)))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
     (cell @in)
     (cell @out (ok "Hello World"))
-    (client (@in -> (http local) -> @out) up)))
+    (client (@in -> (http local) -> @out format: text) up)))
 
 ;; Very basic HTTPS
 (rack
   (frame
-    ;; FIXME: the use of relative paths here is very ugly!
-    (server (@pool (https local 9813 key: "./tests/public/openssl.key" cert: "./tests/public/openssl.crt"))
-      (backsys
-        {¦ request_: [get ("/")] -response_}
-          <> {(request): (), response: (ok "Hello World")}))
+    (frag @server
+      ;; FIXME: the use of relative paths here is very ugly!
+      (server (@pool (https local 9813 key: "./tests/public/openssl.key" cert: "./tests/public/openssl.crt") format: text)
+        (backsys
+          {¦ request_: [get ("/")] -response_}
+            <> {(request): (), response: (ok "Hello World")})))
+
     (circuit (pool @pool))
 
     (cell @in (get "/"))
     (cell @out)
-    (client (@in -> (https local 9813 verify: false) -> @out)))
+    ;; FIXME: For some reason, there's a race here, which is rare (if present) when this
+    ;; test is run alone; but quite frequent when it is run in combination with any
+    ;; other test featuring an http server (e.g. the test above). The client appears to
+    ;; connect to *something* before the server actually starts (server is pending but
+    ;; client is already up!) When the server finally turns up, the client's connection
+    ;; is dropped (Connection refused). I'm not sure what might be the reason for this.
+    (guard (@server (server [@_ _ up] _*))
+      (client (@in -> (https local 9813 verify: false) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (cell @in)
     (cell @out (ok "Hello World"))
-    (client (@in -> (https local 9813 verify: false) -> @out) up)))
+    (guard (@server (server [@_ _ up] _*))
+      (client (@in -> (https local 9813 verify: false) -> @out format: text) up))))

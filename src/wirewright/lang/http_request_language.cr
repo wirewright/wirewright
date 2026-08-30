@@ -479,7 +479,7 @@ module Ww::HttpRequestLanguage
     headers = headers.without(:"content-disposition")
 
     result = headers.transaction do |commit|
-      commit << :field << Term::Blob.simplify(field.data)
+      commit << :field << field.data
     end
 
     Term.of(result)
@@ -499,14 +499,22 @@ module Ww::HttpRequestLanguage
       matchpi %{(field contentQ_ ¦ headersQ_)} do
         next unless content = fieldify?(contentQ)
 
+        classif = Term::Blob::Classif.plaintext
+        blob = Term::Blob.new(content, classif)
         headers = decode(headersQ.as_d, HTTP::Headers)
-        MultipartData.new(Term::Blob.unsimplify(content), headers)
+        headers["Content-Type"] ||= classif.to_s
+
+        MultipartData.new(blob, headers)
       end
 
       otherwise do
         next unless content = fieldify?(term)
 
-        MultipartData.new(Term::Blob.unsimplify(content), HTTP::Headers.new)
+        classif = Term::Blob::Classif.plaintext
+        blob = Term::Blob.new(content, classif)
+        headers = HTTP::Headers{"Content-Type" => classif.to_s}
+
+        MultipartData.new(blob, headers)
       end
     end
   end
@@ -518,7 +526,7 @@ module Ww::HttpRequestLanguage
     headers = headers.without(:"content-disposition")
 
     result = headers.transaction do |commit|
-      commit << :file << field.filename << Term::Blob.simplify(field.data)
+      commit << :file << field.filename << field.data
     end
 
     Term.of(result)
@@ -527,8 +535,7 @@ module Ww::HttpRequestLanguage
   def decode?(term : Term, cls : MultipartFile.class) : MultipartFile?
     Term.matchpi?(term, %{(file filename_string content←(%any° _blob _string) ¦ headersQ_)}) do |content|
       headers = decode(headersQ.as_d, HTTP::Headers)
-      content = Term::Blob.unsimplify(content.as_blob? || content.as_s)
-
+      content = content.as_blob? || Term::Blob.new(content.as_s)
       if classif = content.classif?
         headers["Content-Type"] ||= classif.to_s
       end
@@ -603,11 +610,9 @@ module Ww::HttpRequestLanguage
         Term::Blob::Classif.of(media_type)
       end
 
-      blob = Term::Blob.build(classif: classif) do |io|
+      content = Term::Blob.build(classif: classif) do |io|
         IO.copy(src: body, dst: io)
       end
-
-      content = Term::Blob.simplify(blob)
     end
 
     result = headers.transaction do |commit|

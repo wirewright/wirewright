@@ -86,6 +86,11 @@ module Ww
       Term::Blob.new(string.bytesize.to_u64, string.to_unsafe, digester, classif)
     end
 
+    # Constructs a blob from a string term.
+    def self.new(str : Str, classif : Classif? = Classif.plaintext) : Blob
+      new(str.to(String), classif)
+    end
+
     def self.refine(blob : Blob, classif : Classif?) : Blob
       new(blob.@size, blob.@mem, blob.@digest, classif)
     end
@@ -102,29 +107,6 @@ module Ww
     # using `PantoMIME`.
     def self.classif(blob : Blob) : Classif
       blob.classif? || Classif.of(blob.to_slice, blob.digest)
-    end
-
-    def self.simplify(blob : Blob) : Str | Blob
-      classif = blob.classif?
-      if (classif.nil? || (classif.plain? && classif.utf8?)) && blob.utf8?
-        return Term[blob.to_string]
-      end
-
-      blob
-    end
-
-    def self.unsimplify(blob : Blob) : Blob
-      blob
-    end
-
-    CLASSIF_PLAINTEXT = Term::Blob::Classif.of(MIME::MediaType.parse("text/plain;charset=UTF-8"))
-
-    def self.unsimplify(string : Str) : Blob
-      unsimplify(string.to(String))
-    end
-
-    def self.unsimplify(string : String) : Blob
-      Term::Blob.new(string, CLASSIF_PLAINTEXT)
     end
 
     # The minimum capacity for blobs, used in methods like `build`. Blobs are
@@ -305,6 +287,12 @@ module Ww
 
     # Nil passthrough shorthand.
     def self.of(object : Nil) : Nil
+    end
+
+    PLAINTEXT = of(MIME::MediaType.parse("text/plain;charset=UTF-8"))
+
+    def self.plaintext : Classif
+      PLAINTEXT
     end
 
     # :nodoc:

@@ -3,20 +3,18 @@
   (frame
     ;; A basic echo server
     (module {}
-      (server (@pool (ws local 9813))
-        (backsys
-          {¦ in: (msg_ _*) out: (_* `>msg)}
-            <> {(msg): (), >msg: ^msg}))
+      (server (@pool (ws local 9813) format: text)
+        (feed (@in front) (@out back)))
       (circuit (pool @pool)))
     ;; A client
     (module {}
       (queue (@msg @msgs) ("Kaixo" "mundua"))
-      (client (@msg -> (ws local 9813) -> @replies))
+      (client (@msg -> (ws local 9813) -> @replies format: text))
       (queue (@reply @replies) ())))
   (frame/tail fast-forward: true
     (module {}
       (queue (@msg @msgs) ())
-      (client (@msg -> (ws local 9813) -> @replies) up)
+      (client (@msg -> (ws local 9813) -> @replies format: text) up)
       (queue (@reply @replies) ("Kaixo" "mundua")))))
 
 ;; Chat example
@@ -24,7 +22,7 @@
   (frame
     ;; A basic chat server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: text)
         (frag @rx (sensor (queue chat _string)))
         (frag @tx (appearance chat))
         (frag @user)
@@ -49,7 +47,7 @@
       (cell @state)
       (queue (@msg @msgs) ())
       (frag @socket
-        (client (@msg -> (ws local 9813 key: alice) -> @replies)))
+        (client (@msg -> (ws local 9813 key: alice) -> @replies format: text)))
       (queue (@reply @replies) ())
       (backsys
         {¦ reply_} <> {(reply): ()}
@@ -69,7 +67,7 @@
     ;; Bob client
     (module {}
       (queue (@msg @msgs) ())
-      (client (@msg -> (ws local 9813 key: bob) -> @replies))
+      (client (@msg -> (ws local 9813 key: bob) -> @replies format: text))
       (queue (@reply @replies) ())
       (backsys
         {¦ reply_} <> {(reply): ()}
@@ -142,7 +140,7 @@
          ⎡invalid message⎤
          ⎡[1, {"type": "cat", "name": "Smokey"}, 2]⎤))
       (queue (@reply @replies) ())
-      (client (@msg -> (ws local 9813) -> @replies))))
+      (client (@msg -> (ws local 9813) -> @replies format: text))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -153,7 +151,7 @@
          ⎡{"x":100,"y":200}⎤
          ;; invalid message was discarded
          ⎡[1,{"name":"Smokey","type":"cat"},2]⎤))
-      (client (@msg -> (ws local 9813) -> @replies) up))))
+      (client (@msg -> (ws local 9813) -> @replies format: text) up))))
 
 ;; ML server echo
 (rack
@@ -174,7 +172,7 @@
          ⎡invalid message⎤
          ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
       (queue (@reply @replies) ())
-      (client (@msg -> (ws local 9813) -> @replies))))
+      (client (@msg -> (ws local 9813) -> @replies format: text))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -186,7 +184,7 @@
          ⎡{x: 100 y: 200}⎤
          ;; invalid message was discarded
          ⎡(1 {name: "Smokey" type: cat} 2 x: 100 y: 200)⎤))
-      (client (@msg -> (ws local 9813) -> @replies) up))))
+      (client (@msg -> (ws local 9813) -> @replies format: text) up))))
 
 ;; PrettyML server echo
 (rack
@@ -207,7 +205,7 @@
          ⎡invalid message⎤
          ⎡(1 {type: cat, name: "Smokey"} 2 x: 100 y: 200)⎤))
       (queue (@reply @replies) ())
-      (client (@msg -> (ws local 9813) -> @replies))))
+      (client (@msg -> (ws local 9813) -> @replies format: text))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -219,7 +217,11 @@
          "{x: 100, y: 200}\n"
          ;; invalid message was discarded
          "(1 {name: \"Smokey\", type: cat} 2 x: 100 y: 200)\n"))
-      (client (@msg -> (ws local 9813) -> @replies) up))))
+      (client (@msg -> (ws local 9813) -> @replies format: text) up))))
+
+;; format: none, failure to encode
+
+;; format: text, failure to encode
 
 ;; Arithmetic demo, format-policy: wrap
 (rack
@@ -264,7 +266,7 @@
          ⎡["+", ["*", 2, 3], 1]⎤
          ⎡invalid message⎤))
       (queue (@value @values) ())
-      (client (@expr -> (ws local 9813) -> @values))))
+      (client (@expr -> (ws local 9813) -> @values format: text))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -276,7 +278,7 @@
          ⎡["ok",-4.59]⎤
          ⎡["ok",7]⎤
          ⎡["err","invalid message"]⎤))
-      (client (@expr -> (ws local 9813) -> @values) up))))
+      (client (@expr -> (ws local 9813) -> @values format: text) up))))
 
 ;; Server format-policy: abort
 (rack
@@ -426,7 +428,7 @@
 ;; Client format-policy: abort (simple)
 (rack
   (frame
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (backsys
         {¦ in: (msg←"break" _*) out: (_* `reply)}
           <> {(msg): (), reply: ""})) ;; send empty message (invalid)
@@ -437,7 +439,7 @@
     (client (@in -> (ws local 9813) -> @out format: ml format-policy: abort)))
 
   (frame/tail fast-forward: true
-    (server (@pool (ws local 9813) up)
+    (server (@pool (ws local 9813) up format: text)
       (backsys
         {¦ in: (msg←"break" _*) out: (_* `reply)}
           <> {(msg): (), reply: ""})) ;; send empty message (invalid)
@@ -711,7 +713,7 @@
 ;; Connection in closed when both queues are removed
 (rack
   (frame
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (backsys
         {¦ in: (msg_ _*) out_: (_* `>msg)}
           <> {(msg): (), >msg: ^msg}
@@ -729,18 +731,18 @@
 
     (cell @msg "Hello World")
     (queue (@reply @replies) ())
-    (client (@msg -> (ws local 9813) -> @replies)))
+    (client (@msg -> (ws local 9813) -> @replies format: text)))
 
   (frame/tail fast-forward: true
     (cell @msg "bye")
     (queue (@reply @replies) ("Hello World"))
-    (client (@msg -> (ws local 9813) -> @replies) up))
+    (client (@msg -> (ws local 9813) -> @replies format: text) up))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
     (cell @msg)
     (queue (@reply @replies) ("Hello World"))
-    (client (@msg -> (ws local 9813) -> @replies)
+    (client (@msg -> (ws local 9813) -> @replies format: text)
       (dn "connection closed by the other side"))))
 
 ;; Connection is closed when the corresponding client device is removed
@@ -750,7 +752,7 @@
       ⟨D←⟨(cell @remove-me true)⟩⟩°
         <> {(D): ()})
 
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (cell @remove-me)
       (backsys
         {¦ in: (msg←(%not "bye") _*) out_: (_* `>msg)}
@@ -769,20 +771,20 @@
 
     (cell @msg "Hello World")
     (queue (@reply @replies) ())
-    (client (@msg -> (ws local 9813) -> @replies)))
+    (client (@msg -> (ws local 9813) -> @replies format: text)))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
 
     (cell @msg)
     (queue (@reply @replies) ("Hello World"))
-    (client (@msg -> (ws local 9813) -> @replies)
+    (client (@msg -> (ws local 9813) -> @replies format: text)
       (dn "connection closed by the other side"))))
 
 ;; Connection is closed when the client is removed.
 (rack
   (frame
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
     (circuit (pool @pool))
@@ -790,7 +792,7 @@
     (cell @in "Hi!")
     (cell @out)
     (guard (@out)
-      (client (@in -> (ws local 9813) -> @out))))
+      (client (@in -> (ws local 9813) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
@@ -798,14 +800,14 @@
     (cell @in)
     (cell @out "Hi!")
     (guard (@out)
-      (client (@in -> (ws local 9813) -> @out)
+      (client (@in -> (ws local 9813) -> @out format: text)
         ;; The client was caught and frozen in the up state.
         up))))
 
 ;; Client connection is closed by replacing `up` with `dn`.
 (rack
   (frame
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
     (backsys
@@ -817,7 +819,7 @@
     (cell @in "Hi!")
     (cell @out)
     (frag @client
-      (client (@in -> (ws local 9813) -> @out))))
+      (client (@in -> (ws local 9813) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
@@ -825,23 +827,23 @@
     (cell @in)
     (cell @out "Hi!")
     (frag @client
-      (client (@in -> (ws local 9813) -> @out) dn))))
+      (client (@in -> (ws local 9813) -> @out format: text) dn))))
 
 ;; Multiple servers and clients in the same world
 (rack
   (frame
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: text)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (ws local 9814))
+      (server (@pool (ws local 9814) format: text)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (ws local 9815))
+      (server (@pool (ws local 9815) format: text)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -849,33 +851,33 @@
       (cell @in "0")
       (cell @out)
       (guard (@out)
-        (client (@in -> (ws local 9813) -> @out))))
+        (client (@in -> (ws local 9813) -> @out format: text))))
 
     (module {}
       (cell @in "1")
       (cell @out)
       (guard (@out)
-        (client (@in -> (ws local 9814) -> @out))))
+        (client (@in -> (ws local 9814) -> @out format: text))))
 
     (module {}
       (cell @in "2")
       (cell @out)
       (guard (@out)
-        (client (@in -> (ws local 9815) -> @out)))))
+        (client (@in -> (ws local 9815) -> @out format: text)))))
 
   (frame/tail fast-forward: true
     (module {}
-      (server (@pool (ws local 9813) up)
+      (server (@pool (ws local 9813) up format: text)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (ws local 9814) up)
+      (server (@pool (ws local 9814) up format: text)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (ws local 9815) up)
+      (server (@pool (ws local 9815) up format: text)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -884,31 +886,31 @@
       (cell @out "0")
       (guard (@out)
         ;; Frozen in the up state
-        (client (@in -> (ws local 9813) -> @out) up)))
+        (client (@in -> (ws local 9813) -> @out format: text) up)))
 
     (module {}
       (cell @in)
       (cell @out "1")
       (guard (@out)
-        (client (@in -> (ws local 9814) -> @out) up)))
+        (client (@in -> (ws local 9814) -> @out format: text) up)))
 
     (module {}
       (cell @in)
       (cell @out "2")
       (guard (@out)
-        (client (@in -> (ws local 9815) -> @out) up)))))
+        (client (@in -> (ws local 9815) -> @out format: text) up)))))
 
 ;; Multiple servers and clients in the same world, of different kinds.
 ;; Test input, output queue rename.
 (rack
   (frame
     (module {}
-      (server (@pool (ws local 9813) in: @queries out: @replies)
+      (server (@pool (ws local 9813) in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (tcp local 9814 link: portal) in: @queries out: @replies)
+      (server (@pool (tcp local 9814 link: portal) in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
       (circuit (pool @pool)))
 
@@ -921,13 +923,13 @@
       (cell @in "0")
       (cell @out)
       (guard (@out)
-        (client (@in -> (ws local 9813) -> @out))))
+        (client (@in -> (ws local 9813) -> @out format: text))))
 
     (module {}
       (cell @in "Hello World")
       (cell @out)
       (guard (@out)
-        (client (@in -> (tcp local 9814 link: portal) -> @out))))
+        (client (@in -> (tcp local 9814 link: portal) -> @out format: text))))
 
     (module {}
       (cell @in (+ 1 2 x: 100 y: 200))
@@ -937,12 +939,12 @@
 
   (frame/tail fast-forward: true
     (module {}
-      (server (@pool (ws local 9813) up in: @queries out: @replies)
+      (server (@pool (ws local 9813) up in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (tcp local 9814 link: portal) up in: @queries out: @replies)
+      (server (@pool (tcp local 9814 link: portal) up in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
       (circuit (pool @pool)))
 
@@ -956,13 +958,13 @@
       (cell @out "0")
       (guard (@out)
         ;; Frozen in the up state
-        (client (@in -> (ws local 9813) -> @out) up)))
+        (client (@in -> (ws local 9813) -> @out format: text) up)))
 
     (module {}
       (cell @in)
       (cell @out "Hello World")
       (guard (@out)
-        (client (@in -> (tcp local 9814 link: portal) -> @out)
+        (client (@in -> (tcp local 9814 link: portal) -> @out format: text)
           up)))
 
     (module {}
@@ -1678,14 +1680,14 @@
 
       (guard (@role server)
         (module {}
-          (server (@pool (ws local 9814))
+          (server (@pool (ws local 9814) format: text)
             (feed (@in front) (@out back)))
           (circuit (pool @pool))))
 
       (guard (@role client)
         (cell @client-in)
         (cell @client-out)
-        (client (@client-in -> (ws local 9814 key: @id breakable: false) -> @client-out)))
+        (client (@client-in -> (ws local 9814 key: @id breakable: false) -> @client-out format: text)))
 
       (backsys
         {¦ in: (M←(role r_) _*) out: (_* `reply) ⋮role}
@@ -1781,9 +1783,9 @@
 ;; Duplicated server is noop with the same pool
 (rack
   (frame
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (feed (@in front) (@out back)))
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
     (circuit (pool @pool))
@@ -1791,7 +1793,7 @@
     (cell @in "Kaixo mundua")
     (cell @out)
     (guard (@out)
-      (client (@in -> (ws local 9813) -> @out))))
+      (client (@in -> (ws local 9813) -> @out format: text))))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
@@ -1799,14 +1801,14 @@
     (cell @in)
     (cell @out "Kaixo mundua")
     (guard (@out)
-      (client (@in -> (ws local 9813) -> @out) up))))
+      (client (@in -> (ws local 9813) -> @out format: text) up))))
 
 ;; Duplicated server with a different pool is an exact replica
 (rack
   (frame
-    (server (@pool0 (ws local 9813))
+    (server (@pool0 (ws local 9813) format: text)
       (feed (@in front) (@out back)))
-    (server (@pool1 (ws local 9813))
+    (server (@pool1 (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
     (circuit (pool @pool0))
@@ -1815,7 +1817,7 @@
     (cell @in "Kaixo mundua")
     (cell @out)
     (discard @out)
-    (client (@in -> (ws local 9813) -> @out)))
+    (client (@in -> (ws local 9813) -> @out format: text)))
 
   (frame pattern: true fast-forward: true
     (_*
@@ -1831,16 +1833,16 @@
      (cell @in)
      (cell @out)
      (discard @out)
-     (client (@in -> (ws local 9813) -> @out) up)))
+     (client (@in -> (ws local 9813) -> @out format: text) up)))
 
   (frame/tail fast-forward: true
     (cell @in)
     (cell @out "Kaixo mundua")
     (discard @out)
-    (client (@in -> (ws local 9813) -> @out) up))
+    (client (@in -> (ws local 9813) -> @out format: text) up))
 
   (frame/tail fast-forward: true
     (cell @in)
     (cell @out)
     (discard @out)
-    (client (@in -> (ws local 9813) -> @out) up)))
+    (client (@in -> (ws local 9813) -> @out format: text) up)))

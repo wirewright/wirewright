@@ -1221,6 +1221,14 @@ module Ww::Nitrene
         Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
       end
 
+      matchpiT %{(ml/term ml_blob)} do
+        Term.of(:ok, ML.term(ml.to_string))
+      rescue e : ML::SyntaxError
+        excerpt, line, column = ML::SyntaxError.lookaround(e.text)
+
+        Term.of(:err, detail: e.detail, excerpt: excerpt, line: line, column: column)
+      end
+
       matchpi %{(ml/terms ml_string)} do
         Term.of(:ok, ML.terms(ml.to(String)))
       rescue e : ML::SyntaxError

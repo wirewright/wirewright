@@ -78,7 +78,7 @@ module Ww::Rack::Accord
           (@pool_ transportQ←(ws _* ⍊ link: (%optional direct linkQ_)) _?
             ⍊ in: (%optional @in @input_)
               out: (%optional @out @output_)
-              format: (%optional none formatQ_)
+              format: (%optional binary formatQ_)
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
@@ -97,7 +97,7 @@ module Ww::Rack::Accord
           (@pool_ transportQ_ _?
             ⍊ request: (%optional @request @request_)
               response: (%optional @response @response_)
-              format: (%optional none formatQ_)
+              format: (%optional binary formatQ_)
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
@@ -116,7 +116,7 @@ module Ww::Rack::Accord
           (@pool_ transportQ_ _?
             ⍊ in: (%optional @in @input_)
               out: (%optional @out @output_)
-              format: (%optional none formatQ_)
+              format: (%optional binary formatQ_)
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
@@ -142,7 +142,7 @@ module Ww::Rack::Accord
         matchpi(<<-WWML) do
         [client
           (@outgoing_ -> transportQ_ -> @ingoing_
-            ⍊ format: (%optional none formatQ_)
+            ⍊ format: (%optional binary formatQ_)
               format-policy: (%optional discard policyQ_))
           _?]
         WWML
@@ -1313,8 +1313,8 @@ module Ww::Rack::Accord
 
   private def http_decode?(format : Format::Any, term : Term) : Term?
     Term.case(term) do
-      matchpi %{[_* bodyQ←(%any° _string _blob)]} do
-        return unless body = Format.decode?(format, bodyQ.as_s? || bodyQ.as_blob)
+      matchpi %{[_* bodyQ_blob]} do
+        return unless body = Format.decode?(format, bodyQ.as_blob)
 
         Term.morph(term, {term.itemsize - 1, body})
       end

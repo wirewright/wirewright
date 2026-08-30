@@ -320,7 +320,10 @@ module Ww::HttpResponseLanguage
   def decode?(term : Term, cls : InlineBody.class) : InlineBody?
     return unless content = term.as_s? || term.as_blob?
 
-    InlineBody.new(Term::Blob.unsimplify(content))
+    case content
+    in Term::Blob then InlineBody.new(content)
+    in Term::Str  then InlineBody.new(Term::Blob.new(content))
+    end
   end
 
   defrecord AttachmentBody, filename : String?, content : Term::Blob, smart: true
@@ -558,7 +561,7 @@ module Ww::HttpResponseLanguage
 
     body = nil # Missing
     pass do
-      classif = Term::Blob::Classif.of(response.mime_type)
+      classif = Term::Blob::Classif.of(pp! response.mime_type)
 
       if src = response.body_io?
         body = Term::Blob.build(classif: classif) { |dst| IO.copy(src, dst) }
@@ -572,11 +575,6 @@ module Ww::HttpResponseLanguage
       if body.empty? && classif.nil?
         body = nil
         next
-      end
-
-      # If body is text/plain;charset=UTF-8, emit it as a string.
-      if (classif.nil? || (classif.plain? && classif.utf8?)) && body.utf8?
-        body = Term.of(body.to_string.scrub)
       end
 
       # Process Content-Disposition.
