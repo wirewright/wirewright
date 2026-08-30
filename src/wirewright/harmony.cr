@@ -40,12 +40,12 @@ class Ww::Harmony
   defrecord TcpServerDefn,
     host : String,
     port : UInt16,
-    tx : Transmission,
+    link : Link,
     brief: true
 
   defrecord UnixServerDefn,
     path : NormalPath,
-    tx : Transmission,
+    link : Link,
     brief: true
 
   defrecord HttpServerDefn,
@@ -61,7 +61,7 @@ class Ww::Harmony
     host : String,
     port : UInt16,
     key : Term,
-    tx : Transmission,
+    link : Link,
     breakable : Bool,
     brief: true
 
@@ -71,14 +71,14 @@ class Ww::Harmony
     path : String,
     key : Term,
     secure : Bool,
-    tx : Transmission,
+    link : Link,
     breakable : Bool,
     brief: true
 
   defrecord UnixClientDefn,
     path : NormalPath,
     key : Term,
-    tx : Transmission,
+    link : Link,
     breakable : Bool,
     brief: true
 
@@ -89,10 +89,10 @@ class Ww::Harmony
     secure : Bool,
     brief: true
 
-  alias Transmission = PortalTransmission | DirectTransmission
+  alias Link = PortalLink | DirectLink
 
-  defrecord PortalTransmission, brief: true
-  defrecord DirectTransmission, brief: true
+  defrecord PortalLink, brief: true
+  defrecord DirectLink, brief: true
 
   alias Goal = ActionableGoal | KeepaliveGoal
 
@@ -102,7 +102,7 @@ class Ww::Harmony
   defcase Server, defn : ServerDefn, brief: true
   defcase Client, defn : ClientDefn, brief: true
 
-  defcase WebSocketHandler, server_id : ServerId, tx : Transmission
+  defcase WebSocketHandler, server_id : ServerId, link : Link
 
   defcase IngoingReceiveConfirmation, endpoint_id : EndpointId, msgid : MsgId, brief: true
   defcase OutgoingMessage, endpoint_id : EndpointId, payload : Term::Blob, brief: true
@@ -137,7 +137,7 @@ class Ww::Harmony
   {% end %}
 
   alias GoalFeature = ServerDefn | ClientDefn | ServerId | EndpointId | MsgId | HttpRequestId |
-                      Term | Term::Blob | GoalClass | Transmission
+                      Term | Term::Blob | GoalClass | Link
 
   alias GoalSet = IndexedSet(Goal, GoalFeature)
 
@@ -256,7 +256,7 @@ class Ww::Harmony
   defrecord InformReady, endpoint_id : EndpointId, brief: true
   defrecord InformBusy, endpoint_id : EndpointId, brief: true
 
-  defrecord AddWebSocketHandler, server_id : ServerId, tx : Transmission
+  defrecord AddWebSocketHandler, server_id : ServerId, link : Link
   defrecord RemoveWebSocketHandler, server_id : ServerId
 
   defrecord AcceptMessage, endpoint_id : EndpointId, msgid : MsgId, brief: true
@@ -502,7 +502,7 @@ class Ww::Harmony
   #   pp! world
   #
   #   goals = Harmony::GoalSet.new
-  #   goals << Harmony::Server.new(Harmony::TcpServerDefn.new("127.0.0.1", 5000u16, Harmony::DirectTransmission.new))
+  #   goals << Harmony::Server.new(Harmony::TcpServerDefn.new("127.0.0.1", 5000u16, Harmony::DirectLink.new))
   #
   #   world.each(Harmony::RunningPeer) do |peer|
   #     goals << Harmony::PeerKeepalive.new(peer.peer_id)
@@ -685,7 +685,7 @@ class Ww::Harmony
     queue = ctx.exchange[action.server_id, HttpServerQueue]?
 
     try_enqueue(ctx, action, queue) do
-      HttpAddWebSocketHandler.new(action.tx)
+      HttpAddWebSocketHandler.new(action.link)
     end
   end
 
@@ -1048,7 +1048,7 @@ class Ww::Harmony
     in Server
       StartServer.new(goal.defn)
     in WebSocketHandler
-      AddWebSocketHandler.new(goal.server_id, goal.tx)
+      AddWebSocketHandler.new(goal.server_id, goal.link)
     in Client
       StartClient.new(goal.defn)
     in IngoingReceiveConfirmation
@@ -1210,7 +1210,7 @@ class Ww::Harmony
       observations << SocketServerStarted.new(defn, id, queue)
       while socket = server.accept?
         socket.tcp_nodelay = true # Disable Nagle's algorithm.
-        spawn peer(observations, id, defn.tx, socket)
+        spawn peer(observations, id, defn.link, socket)
       end
       observations << ServerStopped.new(defn, id)
     rescue e : IO::Error
@@ -1243,7 +1243,7 @@ class Ww::Harmony
     spawn do
       observations << SocketServerStarted.new(defn, id, queue)
       while socket = server.accept?
-        spawn peer(observations, id, defn.tx, socket)
+        spawn peer(observations, id, defn.link, socket)
       end
       observations << ServerStopped.new(defn, id)
     rescue e : IO::Error
@@ -1261,7 +1261,7 @@ class Ww::Harmony
     end
   end
 
-  def self.peer(observations : IQueue, server_id : ServerId, tx : Transmission, socket : Socket) : Nil
+  def self.peer(observations : IQueue, server_id : ServerId, link : Link, socket : Socket) : Nil
     id = PeerId.new(UUID.random)
     queue = SocketQueue.new
 
@@ -1269,11 +1269,11 @@ class Ww::Harmony
 
     observations << PeerConnected.new(server_id, id, queue)
 
-    msgloop = PeerLoop.new(observations, server_id, id, tx, queue, socket)
+    msgloop = PeerLoop.new(observations, server_id, id, link, queue, socket)
     msgloop.run
   end
 
-  def self.peer(observations : IQueue, server_id : ServerId, tx : Transmission, socket : HTTP::WebSocket) : Nil
+  def self.peer(observations : IQueue, server_id : ServerId, link : Link, socket : HTTP::WebSocket) : Nil
     id = PeerId.new(UUID.random)
     queue = SocketQueue.new
 
@@ -1281,7 +1281,7 @@ class Ww::Harmony
 
     observations << PeerConnected.new(server_id, id, queue)
 
-    msgloop = PeerLoop.new(observations, server_id, id, tx, queue, socket)
+    msgloop = PeerLoop.new(observations, server_id, id, link, queue, socket)
     msgloop.run
   end
 
@@ -1328,7 +1328,7 @@ class Ww::Harmony
 
     observations << SocketClientStarted.new(defn, id, queue)
 
-    msgloop = ClientLoop.new(observations, defn, id, defn.tx, queue, socket)
+    msgloop = ClientLoop.new(observations, defn, id, defn.link, queue, socket)
     msgloop.run
   end
 
@@ -1391,8 +1391,8 @@ class Ww::Harmony
   # A response with the given *id* must be rejected.
   defrecord HttpReject, request_id : HttpRequestId
 
-  # Asks the HTTP server to add a WebSocket handler with transmission *tx*.
-  defrecord HttpAddWebSocketHandler, tx : Transmission
+  # Asks the HTTP server to add a WebSocket handler with Link *link*.
+  defrecord HttpAddWebSocketHandler, link : Link
 
   # Asks the HTTP server to remove its WebSocket handler.
   defrecord HttpRemoveWebSocketHandler
@@ -1523,9 +1523,9 @@ class Ww::Harmony
           begin
             next if websocket_handler.enabled?
 
-            tx = command.tx
+            link = command.link
             connect = ->(socket : HTTP::WebSocket, ctx : HTTP::Server::Context) do
-              peer(observations, id, tx, socket)
+              peer(observations, id, link, socket)
             end
 
             websocket_handler.enabled = true
@@ -1661,7 +1661,7 @@ class Ww::Harmony
         command = @queue.shift
         Log.debug { "msgloop:0x#{object_id.to_s(base: 16)}: #{command}" }
 
-        case flow = handle(@tx, command)
+        case flow = handle(@link, command)
         in HandleContinue
         in HandleBreak
           break
@@ -1678,12 +1678,12 @@ class Ww::Harmony
     end
 
     # The socket started.
-    def handle(tx : PortalTransmission, command : SocketRxStarted) : HandleFlow
+    def handle(link : PortalLink, command : SocketRxStarted) : HandleFlow
       HandleContinue.new
     end
 
     # :ditto:
-    def handle(tx : DirectTransmission, command : SocketRxStarted) : HandleFlow
+    def handle(link : DirectLink, command : SocketRxStarted) : HandleFlow
       # If we don't do this here nobody would. In nonblocking mode, there is no
       # way to make the other side say, "I'm ready". Instead, we manufacture and
       # send this message locally. Basically, we're saying, "pretend the other
@@ -1694,7 +1694,7 @@ class Ww::Harmony
     end
 
     # They sent us something.
-    def handle(tx : PortalTransmission, command : SocketRxReceived) : HandleFlow
+    def handle(link : PortalLink, command : SocketRxReceived) : HandleFlow
       begin
         frame = Portal.deserialize(command.payload.to_slice)
       rescue e : Portal::Error
@@ -1721,7 +1721,7 @@ class Ww::Harmony
     end
 
     # :ditto:
-    def handle(tx : DirectTransmission, command : SocketRxReceived) : HandleFlow
+    def handle(link : DirectLink, command : SocketRxReceived) : HandleFlow
       msgid = MsgId.new(@seq)
       @seq += 1
 
@@ -1731,7 +1731,7 @@ class Ww::Harmony
     end
 
     # We want to send something.
-    def handle(tx : PortalTransmission, command : SocketSend) : HandleFlow
+    def handle(link : PortalLink, command : SocketSend) : HandleFlow
       msgid = MsgId.new(@seq)
       @seq += 1
 
@@ -1755,7 +1755,7 @@ class Ww::Harmony
     end
 
     # :nodoc:
-    def handle(tx : DirectTransmission, command : SocketSend) : HandleFlow
+    def handle(link : DirectLink, command : SocketSend) : HandleFlow
       unless stream?(&.write(command.payload.to_slice))
         on_message_lost(command.payload)
         return HandleAbort.new("message not sent")
@@ -1769,7 +1769,7 @@ class Ww::Harmony
     end
 
     # We want to confirm the receipt of their message.
-    def handle(tx : PortalTransmission, command : SocketAccept) : HandleFlow
+    def handle(link : PortalLink, command : SocketAccept) : HandleFlow
       frame = Portal::Accept.new(command.msgid)
       unless stream? { |io| Portal.serialize(io, frame) }
         return HandleAbort.new("ACCEPT not sent")
@@ -1781,21 +1781,21 @@ class Ww::Harmony
     end
 
     # :ditto:
-    def handle(tx : DirectTransmission, command : SocketAccept) : HandleFlow
+    def handle(link : DirectLink, command : SocketAccept) : HandleFlow
       on_message_handled(command.msgid)
 
       HandleContinue.new
     end
 
     # We are ready to accept the next message.
-    def handle(tx : DirectTransmission, command : SocketInformReady) : HandleFlow
+    def handle(link : DirectLink, command : SocketInformReady) : HandleFlow
       on_informed_ready
 
       HandleContinue.new
     end
 
     # :ditto:
-    def handle(tx : PortalTransmission, command : SocketInformReady) : HandleFlow
+    def handle(link : PortalLink, command : SocketInformReady) : HandleFlow
       frame = Portal::Ready.new
       unless stream? { |io| Portal.serialize(io, frame) }
         return HandleAbort.new("READY not sent")
@@ -1807,14 +1807,14 @@ class Ww::Harmony
     end
 
     # We are ready to accept the next message.
-    def handle(tx : DirectTransmission, command : SocketInformBusy) : HandleFlow
+    def handle(link : DirectLink, command : SocketInformBusy) : HandleFlow
       on_informed_busy
 
       HandleContinue.new
     end
 
     # :ditto:
-    def handle(tx : PortalTransmission, command : SocketInformBusy) : HandleFlow
+    def handle(link : PortalLink, command : SocketInformBusy) : HandleFlow
       frame = Portal::Busy.new
       unless stream? { |io| Portal.serialize(io, frame) }
         return HandleAbort.new("BUSY not sent")
@@ -1826,14 +1826,14 @@ class Ww::Harmony
     end
 
     # They closed the connection or crashed.
-    def handle(tx : Transmission, command : SocketRxCrashed) : HandleFlow
+    def handle(link : Link, command : SocketRxCrashed) : HandleFlow
       # The socket may not be closed since the crash is not necessarily related
       # to it. Therefore we have to use Abort which closes the socket.
       HandleAbort.new("rx error", command.cause)
     end
 
     # :ditto:
-    def handle(tx : Transmission, command : SocketRxOver) : HandleFlow
+    def handle(link : Link, command : SocketRxOver) : HandleFlow
       on_disconnect(command.detail)
 
       # We know the socket is closed with RxOver so we don't have to close
@@ -1842,7 +1842,7 @@ class Ww::Harmony
     end
 
     # We want to close the connection.
-    def handle(tx : Transmission, command : Close) : HandleFlow
+    def handle(link : Link, command : Close) : HandleFlow
       _ = close?(:normal_closure, "")
 
       # SocketRxCrashed/SocketRxOver will handle actual closure. Here we only
@@ -1906,7 +1906,7 @@ class Ww::Harmony
       @observations : IQueue(Observation),
       @server_id : ServerId,
       @id : PeerId,
-      @tx : Transmission,
+      @link : Link,
       @queue : SocketQueue,
       @socket : HTTP::WebSocket | Socket,
     )
@@ -1960,7 +1960,7 @@ class Ww::Harmony
       @observations : IQueue(Observation),
       @defn : ClientDefn,
       @id : ClientId,
-      @tx : Transmission,
+      @link : Link,
       @queue : SocketQueue,
       @socket : HTTP::WebSocket | Socket,
     )
@@ -2007,7 +2007,7 @@ class Ww::Harmony
     end
   end
 
-  # Portal is a small, simple protocol used in `transmission: blocking`.
+  # Portal is a small, simple protocol used in `link: blocking`.
   module Portal
     extend self
 

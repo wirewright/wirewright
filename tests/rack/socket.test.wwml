@@ -643,17 +643,17 @@
   (frame/tail fast-forward: true
     (cell @in 10)))
 
-;; WebSocket counter with transmission: portal
+;; WebSocket counter with link: portal
 (rack
   (frame
-    (server (@pool (ws local 9813 transmission: portal) format: ml)
+    (server (@pool (ws local 9813 link: portal) format: ml)
       (backsys
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
     (circuit (pool @pool))
 
-    (client (@in -> (ws local 9813 transmission: portal) -> @out format: ml))
+    (client (@in -> (ws local 9813 link: portal) -> @out format: ml))
     (feed @out @in)
     (cell @out)
     (cell @in 0))
@@ -663,17 +663,17 @@
   (frame/tail fast-forward: true
     (cell @in 10)))
 
-;; TCP counter with transmission: portal
+;; TCP counter with link: portal
 (rack
   (frame
-    (server (@pool (tcp local 9813 transmission: portal) format: ml)
+    (server (@pool (tcp local 9813 link: portal) format: ml)
       (backsys
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
     (circuit (pool @pool))
 
-    (client (@in -> (tcp local 9813 transmission: portal) -> @out format: ml))
+    (client (@in -> (tcp local 9813 link: portal) -> @out format: ml))
     (feed @out @in)
     (cell @out)
     (cell @in 0))
@@ -683,7 +683,7 @@
   (frame/tail fast-forward: true
     (cell @in 10)))
 
-;; Unix socket counter with transmission: portal
+;; Unix socket counter with link: portal
 (rack
   (frame
     (cell @fs-in (delete file if exists "/tmp/wirewright-unix.sock"))
@@ -691,14 +691,14 @@
     (fs @fs-in @fs-out)
 
     (guard (@fs-out [ok _])
-      (server (@pool (unix "/tmp/wirewright-unix.sock" transmission: portal) format: ml)
+      (server (@pool (unix "/tmp/wirewright-unix.sock" link: portal) format: ml)
         (backsys
           {¦ in: (±M _*) out: (_* `>M)}
             <> {(M): (), >M: ^(+ M 1)})))
 
     (circuit (pool @pool))
 
-    (client (@in -> (unix "/tmp/wirewright-unix.sock" transmission: portal) -> @out format: ml))
+    (client (@in -> (unix "/tmp/wirewright-unix.sock" link: portal) -> @out format: ml))
     (feed @out @in)
     (cell @out)
     (cell @in 0))
@@ -908,7 +908,7 @@
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (tcp local 9814 transmission: portal) in: @queries out: @replies)
+      (server (@pool (tcp local 9814 link: portal) in: @queries out: @replies)
         (feed (@queries front) (@replies back)))
       (circuit (pool @pool)))
 
@@ -927,7 +927,7 @@
       (cell @in "Hello World")
       (cell @out)
       (guard (@out)
-        (client (@in -> (tcp local 9814 transmission: portal) -> @out))))
+        (client (@in -> (tcp local 9814 link: portal) -> @out))))
 
     (module {}
       (cell @in (+ 1 2 x: 100 y: 200))
@@ -942,7 +942,7 @@
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (tcp local 9814 transmission: portal) up in: @queries out: @replies)
+      (server (@pool (tcp local 9814 link: portal) up in: @queries out: @replies)
         (feed (@queries front) (@replies back)))
       (circuit (pool @pool)))
 
@@ -962,7 +962,7 @@
       (cell @in)
       (cell @out "Hello World")
       (guard (@out)
-        (client (@in -> (tcp local 9814 transmission: portal) -> @out)
+        (client (@in -> (tcp local 9814 link: portal) -> @out)
           up)))
 
     (module {}
@@ -1564,38 +1564,38 @@
   (frame/tail fast-forward: true
     (cell @script ())))
 
-;; Same servers with different transmissions must conflict (tcp)
+;; Same servers with different links must conflict (tcp)
 (rack
   (frame
-    (server (@pool (tcp local 9813 transmission: direct)))
-    (server (@pool (tcp local 9813 transmission: portal)))
+    (server (@pool (tcp local 9813 link: direct)))
+    (server (@pool (tcp local 9813 link: portal)))
     (circuit (pool @pool)))
 
   (frame pattern: true fast-forward: true
     (%any°
-      ((server (@pool (tcp local 9813 transmission: direct) up))
-       (server (@pool (tcp local 9813 transmission: portal) (pending _string)))
+      ((server (@pool (tcp local 9813 link: direct) up))
+       (server (@pool (tcp local 9813 link: portal) (pending _string)))
        (circuit (pool @pool)))
 
-      ((server (@pool (tcp local 9813 transmission: direct) (pending _string)))
-       (server (@pool (tcp local 9813 transmission: portal) up))
+      ((server (@pool (tcp local 9813 link: direct) (pending _string)))
+       (server (@pool (tcp local 9813 link: portal) up))
        (circuit (pool @pool))))))
 
-;; Same servers with different transmissions must conflict (ws)
+;; Same servers with different links must conflict (ws)
 (rack
   (frame
-    (server (@pool (ws local 9813 transmission: direct)))
-    (server (@pool (ws local 9813 transmission: portal)))
+    (server (@pool (ws local 9813 link: direct)))
+    (server (@pool (ws local 9813 link: portal)))
     (circuit (pool @pool)))
 
   (frame pattern: true fast-forward: true
     (%any°
-      ((server (@pool (ws local 9813 transmission: direct) up))
-       (server (@pool (ws local 9813 transmission: portal) (dn "transmission conflict")))
+      ((server (@pool (ws local 9813 link: direct) up))
+       (server (@pool (ws local 9813 link: portal) (dn "link conflict")))
        (circuit (pool @pool)))
 
-      ((server (@pool (ws local 9813 transmission: direct) (dn "transmission conflict")))
-       (server (@pool (ws local 9813 transmission: portal) up))
+      ((server (@pool (ws local 9813 link: direct) (dn "link conflict")))
+       (server (@pool (ws local 9813 link: portal) up))
        (circuit (pool @pool))))))
 
 ;; Nesting: client inside client device

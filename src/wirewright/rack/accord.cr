@@ -75,7 +75,7 @@ module Ww::Rack::Accord
 
         matchpi(<<-WWML) do
         [server
-          (@pool_ transportQ←(ws _* ⍊ transmission_⋮ direct) _?
+          (@pool_ transportQ←(ws _* ⍊ link: (%optional direct linkQ_)) _?
             ⍊ in: (%optional @in @input_)
               out: (%optional @out @output_)
               format: (%optional none formatQ_)
@@ -83,12 +83,12 @@ module Ww::Rack::Accord
           template_*]
         WWML
           continue unless defn = http_server_transport?(transportQ)
-          next unless tx = transmission?(transmission)
+          next unless link = link?(linkQ)
           next unless format = Format.format?(state.schemas, hg, node, formatQ)
           next unless format_policy = Format.policy?(policyQ)
 
           abs_pool = hg.resolve(node.addr, pool)
-          machine = stack_alloc WebSocketServer.new(node, defn, tx, abs_pool, input, output, template.as_d, format, format_policy)
+          machine = stack_alloc WebSocketServer.new(node, defn, link, abs_pool, input, output, template.as_d, format, format_policy)
           step(ctx, hg, machine)
         end
 
@@ -171,17 +171,17 @@ module Ww::Rack::Accord
     end
   end
 
-  private def transmission?(term : Term) : Harmony::Transmission?
-    # |@ rack.[network].transmission
+  private def link?(term : Term) : Harmony::Link?
+    # |@ rack.[network].link
     #
     # |@summary
-    # The available modes of transmission.
+    # The available modes of link.
     #
     # |@block
-    # *transmission* determines how individual payloads are transmitted over
+    # *link* determines how individual payloads are transmitted over
     # the selected transport (WebSockets, TCP, etc.)
     Term.case(term) do
-      # |@ rack.[network].transmission
+      # |@ rack.[network].link
       #
       # |@pattern
       # portal
@@ -189,15 +189,15 @@ module Ww::Rack::Accord
       # |@block
       # Uses the internal Portal protocol to transmit the payload.
       #
-      # Transmission with `portal` is more reliable than `direct` transmission,
-      # and interacts well with the semantics of Rack.
+      # Linking with `portal` is more reliable than with `direct`, and interacts
+      # well with the semantics of Rack.
       #
       # For example, a client's outgoing message cell is not emptied until the message
       # crosses over to the other side, which provides a natural kind of backpressure;
       # nor are messages sent until the other side tells its ingoing message cell
       # is empty.
       #
-      # The main drawback of `transmission: portal` is that it places more load on
+      # The main drawback of `link: portal` is that it places more load on
       # the network, involving round-trips and so on.
       #
       # ### Portal
@@ -232,7 +232,7 @@ module Ww::Rack::Accord
       # and receives Bob's BUSY; Bob finishes sending BUSY and receives Alice's DATA.
       #
       # The above *advisory* label covers the case described here. DATA will be buffered
-      # and processed normally as in `transmission: direct`; but it will be shown to Bob
+      # and processed normally as in `link: direct`; but it will be shown to Bob
       # only when he is ready, just as he sends the READY message to Alice.
       #
       # In theory, this could create a persistent backlog of one message, but I'm not sure
@@ -246,10 +246,10 @@ module Ww::Rack::Accord
       # with its normal functioning. One possible fix could be to use some sort of a "token",
       # a "microphone" the parties pass between each other to speak. But I'm not sure.
       matchpi %{portal} do
-        Harmony::PortalTransmission.new
+        Harmony::PortalLink.new
       end
 
-      # |@ rack.[network].transmission
+      # |@ rack.[network].link
       #
       # |@pattern
       # direct
@@ -261,12 +261,12 @@ module Ww::Rack::Accord
       # - Message sends are confirmed locally (senders do not care about acknowledgement
       #   or feedback about the message they sent from receivers).
       #
-      # More importantly, with direct transmission, there is a window of time when the message
+      # More importantly, with direct link, there is a window of time when the message
       # is neither on the sender's side nor on the receiver's side -- it is "in the wire". If
       # anything happens to the connection while a message is travelling in the wire, the message
-      # is lost. So you wouldn't want to e.g. transfer money between peers with `transmission: direct`.
+      # is lost. So you wouldn't want to e.g. transfer money between peers with `link: direct`.
       matchpi %{direct} do
-        Harmony::DirectTransmission.new
+        Harmony::DirectLink.new
       end
 
       otherwise { }
@@ -337,30 +337,30 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (tcp host_ port←(%number u16) ⍊ transmission_⋮ direct)
+      # (tcp host_ port←(%number u16) ⍊ link_⋮ direct)
       #
       # |@key host rack.[network].host
-      # |@key transmission rack.[network].transmission
+      # |@key link rack.[network].link
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
-      matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ transmission_⋮ direct)} do
+      matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ link_⋮ direct)} do
         return unless host = host?(hostQ)
 
-        Harmony::TcpServerDefn.new(host, port, transmission?(transmission) || return)
+        Harmony::TcpServerDefn.new(host, port, link?(link) || return)
       end
 
       # |@ rack.server.transport
       #
       # |@pattern
-      # (unix path_string ⍊ transmission_⋮ direct)
+      # (unix path_string ⍊ link_⋮ direct)
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
       #
-      # See `rack.[network].transmission` to learn more about *transmission*.
-      matchpiT %{(unix path_string ⍊ transmission_⋮ direct)}, path: NormalPath do
-        Harmony::UnixServerDefn.new(path, transmission?(transmission) || return)
+      # See `rack.[network].link` to learn more about *link*.
+      matchpiT %{(unix path_string ⍊ link_⋮ direct)}, path: NormalPath do
+        Harmony::UnixServerDefn.new(path, link?(link) || return)
       end
 
       otherwise { }
@@ -474,13 +474,13 @@ module Ww::Rack::Accord
       #
       # |@block
       # A plain WebSocket client at *host*:*port* on *path*.
-      matchpiT %{(ws hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) path⋮ "" transmission_⋮ direct breakable⋮ true)}, path: String do
+      matchpiT %{(ws hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) path⋮ "" link: (%optional direct linkQ_) breakable⋮ true)}, path: String do
         return unless host = host?(hostQ)
-        return unless tx = transmission?(transmission)
+        return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
         secure = false
-        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure, tx, breakable.true?)
+        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure, link, breakable.true?)
       end
 
       # |@ rack.client.transport
@@ -495,13 +495,13 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket client at *host*:*port* on *path*. Establishes a secure
       # connection using TLS.
-      matchpiT %{(wss hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) path⋮ "" transmission_⋮ direct breakable⋮ true)}, path: String do
+      matchpiT %{(wss hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) path⋮ "" link: (%optional direct linkQ_) breakable⋮ true)}, path: String do
         return unless host = host?(hostQ)
-        return unless tx = transmission?(transmission)
+        return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
         secure = true
-        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure, tx, breakable.true?)
+        Harmony::WsClientDefn.new("127.0.0.1", port, path, key, secure, link, breakable.true?)
       end
 
       # |@ rack.client.transport
@@ -515,12 +515,12 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
-      matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) transmission_⋮ direct breakable⋮ true)} do
+      matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_) breakable⋮ true)} do
         return unless host = host?(hostQ)
-        return unless tx = transmission?(transmission)
+        return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::TcpClientDefn.new("127.0.0.1", port, key, tx, breakable.true?)
+        Harmony::TcpClientDefn.new("127.0.0.1", port, key, link, breakable.true?)
       end
 
       # |@ rack.client.transport
@@ -528,16 +528,16 @@ module Ww::Rack::Accord
       # |@pattern
       # (unix path_string ⍊ key_⋮ master breakable⋮ true)
       #
-      # |@key key rack.client.transmission.key
+      # |@key key rack.client.link.key
       # |@key breakable rack.client.transport.breakable
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
-      matchpi %{(unix path_string ⍊ key: (%optional master keyQ_) transmission_⋮ direct breakable⋮ true)}, path: NormalPath do
-        return unless tx = transmission?(transmission)
+      matchpi %{(unix path_string ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_) breakable⋮ true)}, path: NormalPath do
+        return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::UnixClientDefn.new(path, key, tx, breakable.true?)
+        Harmony::UnixClientDefn.new(path, key, link, breakable.true?)
       end
 
       otherwise { }
@@ -570,10 +570,10 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (ws host_ port←(%number u16) ⍊ transmission_⋮ direct)
+      # (ws host_ port←(%number u16) ⍊ link_⋮ direct)
       #
       # |@key host rack.[network].host
-      # |@key transmission rack.[network].transmission
+      # |@key link rack.[network].link
       #
       # |@block
       # A plain WebSocket server at *host*:*port*. If there is an existing HTTP server
@@ -674,7 +674,7 @@ module Ww::Rack::Accord
   defcase WebSocketServer,
     node : D7::Node,
     defn : Harmony::HttpServerDefn,
-    tx : Harmony::Transmission,
+    link : Harmony::Link,
     pool : D7::AbsEdge,
     in_edge : Term,
     out_edge : Term,
@@ -768,11 +768,11 @@ module Ww::Rack::Accord
     end
 
     if handler = ctx.goals.single?(Harmony::WebSocketHandler, server_id: incarnation)
-      unless handler.tx == server.tx
-        return D7.patch(server.node, {1, 2, {:dn, "transmission conflict"}})
+      unless handler.link == server.link
+        return D7.patch(server.node, {1, 2, {:dn, "link conflict"}})
       end
     else
-      ctx.goals.add(Harmony::WebSocketHandler.new(incarnation, server.tx))
+      ctx.goals.add(Harmony::WebSocketHandler.new(incarnation, server.link))
     end
 
     step(ctx, hg, server, pool, status, incarnation)

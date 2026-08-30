@@ -202,7 +202,7 @@
       (circuit (pool @pool)))
 
     (module {}
-      (server (@pool (ws local 9813 transmission: portal) format: ml)
+      (server (@pool (ws local 9813 link: portal) format: ml)
         (backsys
           {¦ in: (msg_ _*) out: (_* `>msg)}
             <> {(msg): (), >msg: ^msg}))
@@ -216,7 +216,7 @@
     (module {}
       (cell @in {name: "John Doe", message: "Hello World"})
       (queue (@reply @replies) ())
-      (client (@in -> (ws local 9813 transmission: portal) -> @replies format: ml))))
+      (client (@in -> (ws local 9813 link: portal) -> @replies format: ml))))
 
   (frame/tail fast-forward: true
     (module {}
@@ -227,7 +227,7 @@
     (module {}
       (cell @in)
       (queue (@reply @replies) ({name: "John Doe", message: "Hello World"}))
-      (client (@in -> (ws local 9813 transmission: portal) -> @replies format: ml)
+      (client (@in -> (ws local 9813 link: portal) -> @replies format: ml)
         up))))
 
 ;; HTTP: response doesn't lose content-type
