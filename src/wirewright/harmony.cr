@@ -66,7 +66,7 @@ class Ww::Harmony
     port : UInt16,
     key : Term,
     link : Link,
-    breakable : Bool,
+    renew : Bool,
     brief: true
 
   defrecord WsClientDefn,
@@ -76,14 +76,14 @@ class Ww::Harmony
     key : Term,
     security : TlsClientConfig?,
     link : Link,
-    breakable : Bool,
+    renew : Bool,
     brief: true
 
   defrecord UnixClientDefn,
     path : NormalPath,
     key : Term,
     link : Link,
-    breakable : Bool,
+    renew : Bool,
     brief: true
 
   defrecord HttpClientDefn,
@@ -866,10 +866,10 @@ class Ww::Harmony
       ctx.world.add(BrokenClient.new(defn, observation.detail))
       ctx.exchange.delete(observation.client_id, HttpClientQueue)
     in SocketClientDefn
-      if defn.breakable
-        ctx.world.add(BrokenClient.new(defn, observation.detail))
-      else
+      if defn.renew
         ctx.world.add(PendingClient.new(defn, observation.detail))
+      else
+        ctx.world.add(BrokenClient.new(defn, observation.detail))
       end
       ctx.exchange.delete(observation.client_id, SocketQueue)
     end

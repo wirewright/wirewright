@@ -438,18 +438,18 @@ module Ww::Rack::Accord
       # If there is no cell at the edge, or if the cell is empty, the entire transport
       # is invalidated.
 
-      # |@ rack.client.transport.breakable
+      # |@ rack.client.transport.renew
       #
       # |@summary
-      # The `breakable` pair which all client transports accept.
+      # The `renew` pair which all client transports accept.
       #
       # |@block
-      # If `breakable: false`, uses `(pending _string)` instead of `(dn _string)` when
-      # the connection breaks or closes. `breakable: true` by default.
+      # If `renew: true`, uses `(pending _string)` instead of `(dn _string)` when
+      # the connection breaks or closes. `renew: false` by default.
       #
       # Rack clients attempt to *connect* repeatedly by default, with backoff; but they do
       # not do automatic *re*connects after (or in case) an *established* connection breaks
-      # for some reason. You can explicitly enable reconnects by setting `breakable: false`.
+      # for some reason. You can explicitly enable reconnects by setting `renew: true`.
       #
       # We do not enable reconnects by default because doing so could create state sync bugs and
       # the like -- when the client reconnects faster than you can detect the connection was dropped.
@@ -460,17 +460,17 @@ module Ww::Rack::Accord
       # after all, and we'd like the boundary between to be clearly recongizable.
       #
       # If you protocol or the way you use `client` is stateless, or there's no complex
-      # sync logic, you may actually want reconnects. That's why `breakable: false` exists,
+      # sync logic, you may actually want reconnects. That's why `renew: true` exists,
       # to relieve you of the need to manually reset the client (or via rules).
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (ws host_ port←(%number u16) ⍊ key_⋮ master ⋮link path⋮ "" breakable⋮ true)
+      # (ws host_ port←(%number u16) ⍊ key_⋮ master ⋮link path⋮ "" renew⋮ false)
       #
       # |@key host rack.[network].host
       # |@key key rack.client.key
-      # |@key breakable rack.client.transport.breakable
+      # |@key renew rack.client.transport.renew
       # |@key link rack.[network].link
       #
       # |@block
@@ -480,25 +480,25 @@ module Ww::Rack::Accord
         ⍊ key: (%optional master keyQ_)
           link: (%optional direct linkQ_)
           path⋮ ""
-          breakable⋮ true)
+          renew⋮ false)
       WWML
         return unless host = host?(hostQ)
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
         security = nil
-        Harmony::WsClientDefn.new(host, port, path, key, security, link, breakable.true?)
+        Harmony::WsClientDefn.new(host, port, path, key, security, link, renew.true?)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (wss host_ port←(%number u16) ⍊ key_⋮ master path⋮ "" ⋮link breakable⋮ true)
+      # (wss host_ port←(%number u16) ⍊ key_⋮ master path⋮ "" ⋮link renew⋮ false)
       #
       # |@key host rack.[network].host
       # |@key key rack.client.key
       # |@key link rack.[network].link
-      # |@key breakable rack.client.transport.breakable
+      # |@key renew rack.client.transport.renew
       #
       # |@key verify
       # Whether to verify the certificate.
@@ -513,7 +513,7 @@ module Ww::Rack::Accord
         ⍊ key: (%optional master keyQ_)
           link: (%optional direct linkQ_)
           path⋮ ""
-          breakable⋮ true
+          renew⋮ false
           verify⋮ true)
       WWML
         return unless host = host?(hostQ)
@@ -521,18 +521,18 @@ module Ww::Rack::Accord
         return unless key = key?(hg, addr, keyQ)
 
         security = Harmony::TlsClientConfig.new(verify.true?)
-        Harmony::WsClientDefn.new(host, port, path, key, security, link, breakable.true?)
+        Harmony::WsClientDefn.new(host, port, path, key, security, link, renew.true?)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (tcp host_ port←(%number u16) ⍊ key_⋮ master ⋮link breakable⋮ true)
+      # (tcp host_ port←(%number u16) ⍊ key_⋮ master ⋮link renew⋮ false)
       #
       # |@key host rack.[network].host
       # |@key key rack.client.key
       # |@key link rack.[network].link
-      # |@key breakable rack.client.transport.breakable
+      # |@key renew rack.client.transport.renew
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
@@ -540,23 +540,23 @@ module Ww::Rack::Accord
       (tcp hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
           link: (%optional direct linkQ_)
-          breakable⋮ true)
+          renew⋮ false)
       WWML
         return unless host = host?(hostQ)
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::TcpClientDefn.new(host, port, key, link, breakable.true?)
+        Harmony::TcpClientDefn.new(host, port, key, link, renew.true?)
       end
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (unix path_string ⍊ key_⋮ master ⋮link breakable⋮ true)
+      # (unix path_string ⍊ key_⋮ master ⋮link renew⋮ false)
       #
       # |@key key rack.client.key
       # |@key link rack.[network].link
-      # |@key breakable rack.client.transport.breakable
+      # |@key renew rack.client.transport.renew
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
@@ -564,12 +564,12 @@ module Ww::Rack::Accord
       (unix path_string
         ⍊ key: (%optional master keyQ_)
           link: (%optional direct linkQ_)
-          breakable⋮ true)
+          renew⋮ false)
       WWML
         return unless link = link?(linkQ)
         return unless key = key?(hg, addr, keyQ)
 
-        Harmony::UnixClientDefn.new(path, key, link, breakable.true?)
+        Harmony::UnixClientDefn.new(path, key, link, renew.true?)
       end
 
       otherwise { }

@@ -1687,7 +1687,7 @@
       (guard (@role client)
         (cell @client-in)
         (cell @client-out)
-        (client (@client-in -> (ws local 9814 key: @id breakable: false) -> @client-out format: text)))
+        (client (@client-in -> (ws local 9814 key: @id renew: true) -> @client-out format: text)))
 
       (backsys
         {¦ in: (M←(role r_) _*) out: (_* `reply) ⋮role}
@@ -1704,19 +1704,19 @@
       (device role: alice
         (cell @in)
         (cell @out)
-        (client (@in -> (ws local 9813 key: alice breakable: false) -> @out format: ml)))
+        (client (@in -> (ws local 9813 key: alice renew: true) -> @out format: ml)))
 
       ;; Bob
       (device role: bob
         (cell @in)
         (cell @out)
-        (client (@in -> (ws local 9813 key: bob breakable: false) -> @out format: ml)))
+        (client (@in -> (ws local 9813 key: bob renew: true) -> @out format: ml)))
 
       ;; Charlie
       (device role: charlie
         (cell @in)
         (cell @out)
-        (client (@in -> (ws local 9813 key: charlie breakable: false) -> @out format: ml))))
+        (client (@in -> (ws local 9813 key: charlie renew: true) -> @out format: ml))))
 
     (backsys
       {¦ line_: (role_ command_)
