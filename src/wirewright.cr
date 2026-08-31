@@ -36,7 +36,6 @@ require "./wirewright/resource_server"
 require "./wirewright/ml"
 require "./wirewright/lr"
 
-require "./wirewright/pigment"
 require "./wirewright/lang"
 require "./wirewright/nitrene"
 require "./wirewright/scenery"
