@@ -213,7 +213,7 @@ module Ww::Rack::Rewriter
 
     # Find a single empty output cell.
     return unless output_cell = Rack.cell?(hg, variant.output)
-    return unless output_cell.value?.nil?
+    return unless output_cell.empty?
 
     return unless rewriter = rewriter?(state.rewriters, hg, variant.spec)
     return unless output = output?(tasks, rewriter, input)

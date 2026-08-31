@@ -43,8 +43,14 @@ module Ww::Rack
 
   defrecord Cell, node : D7::Node, value : Term?, smart: true
 
-  def cell?(hg : D7::Hypergraph, input : D7::AbsEdge) : Cell?
-    candidates = Pf::Kit.stack_array(Cell, 1)
+  struct Cell
+    def empty? : Bool
+      @value.nil?
+    end
+  end
+
+  def each_cell(hg : D7::Hypergraph, input : D7::AbsEdge, & : Cell ->) : Nil
+    candidates = Pf::Kit.stack_array(Cell, 4)
 
     hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
       # Since cell has only one edge, `memberof:` above already covers
@@ -71,6 +77,18 @@ module Ww::Rack
           candidates << Cell.new(node, value: nil)
         end
       end
+    end
+
+    candidates.each do |candidate|
+      yield candidate
+    end
+  end
+
+  def cell?(hg : D7::Hypergraph, input : D7::AbsEdge) : Cell?
+    candidates = Pf::Kit.stack_array(Cell, 1)
+
+    each_cell(hg, input) do |cell|
+      candidates << cell
     end
 
     candidates.single?

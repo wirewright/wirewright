@@ -560,7 +560,7 @@ module Ww::Rack
 
           hg.annotate(ann) do
             dep = Rack.cell?(hg, hg.resolve(addr, edge))
-            dep.nil? || dep.value?.nil?
+            dep.nil? || dep.empty?
           end
         end
       end

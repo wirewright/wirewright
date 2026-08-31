@@ -148,10 +148,11 @@ module Ww::Rack::Parser
 
     # Find empty target cell(s).
     targets = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.output}) do |node|
-      Term.matchpi?(node.term, %{[cell @_]}) do
-        targets << node
-      end
+
+    Rack.each_cell(hg, variant.output) do |cell|
+      next unless cell.empty?
+
+      targets << cell.node
     end
 
     return if targets.empty?
@@ -185,22 +186,22 @@ module Ww::Rack::Parser
   private def step(ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : TransferError) : D7::Patch?
     return unless source = source?(hg, variant.input)
 
-    # Find empty target cell(s).
+    # Find empty target and error cell(s).
     targets = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.output}) do |node|
-      Term.matchpi?(node.term, %{[cell @_]}) do
-        targets << node
-      end
+    errors = Pf::Kit.stack_array(D7::Node, 1)
+
+    Rack.each_cell(hg, variant.output) do |cell|
+      next unless cell.empty?
+
+      targets << cell.node
     end
 
     return if targets.empty?
 
-    # Find empty error cell(s).
-    errors = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.error}) do |node|
-      Term.matchpi?(node.term, %{[cell @_]}) do
-        errors << node
-      end
+    Rack.each_cell(hg, variant.error) do |cell|
+      next unless cell.empty?
+
+      errors << cell.node
     end
 
     return if errors.empty?
@@ -230,10 +231,8 @@ module Ww::Rack::Parser
 
     # Find empty target cell(s).
     targets = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.output}) do |node|
-      Term.matchpi?(node.term, %{[cell @_ _?]}) do
-        targets << node
-      end
+    Rack.each_cell(hg, variant.output) do |cell|
+      targets << cell.node
     end
 
     return if targets.empty?
@@ -260,22 +259,18 @@ module Ww::Rack::Parser
   private def step(ctx : StepContext, hg : D7::Hypergraph, node : D7::Node, variant : ViewError) : D7::Patch?
     return unless source = source?(hg, variant.input)
 
-    # Find empty target cell(s).
+    # Find target and error cell(s).
     targets = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.output}) do |node|
-      Term.matchpi?(node.term, %{[cell @_ _?]}) do
-        targets << node
-      end
+    errors = Pf::Kit.stack_array(D7::Node, 1)
+
+    Rack.each_cell(hg, variant.output) do |cell|
+      targets << cell.node
     end
 
     return if targets.empty?
 
-    # Find error cell(s).
-    errors = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.error}) do |node|
-      Term.matchpi?(node.term, %{[cell @_ _?]}) do
-        errors << node
-      end
+    Rack.each_cell(hg, variant.error) do |cell|
+      errors << cell.node
     end
 
     return if errors.empty?

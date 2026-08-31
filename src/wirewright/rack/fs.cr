@@ -282,7 +282,7 @@ module ::Ww::Rack::FS
     return unless requestQ = request_cell.value?
 
     return unless response_cell = Rack.cell?(hg, machine.response)
-    return unless response_cell.value?.nil? # response cell must be empty
+    return unless response_cell.empty? # response cell must be empty
 
     return unless request = request?(requestQ)
 

@@ -1618,7 +1618,7 @@ module Ww::Rack::Accord
         end
       end
 
-      next unless target.value?.nil?
+      next unless target.empty?
 
       if ingoing.nil?
         ctx.goals.add(Harmony::MessageSlot.new(incarnation))
@@ -1660,7 +1660,7 @@ module Ww::Rack::Accord
       next unless request = source.value?
 
       next unless target = Rack.cell?(hg, client.ingoing)
-      next unless target.value?.nil?
+      next unless target.empty?
 
       begin
         next unless request = encode?(client.format, client.format_policy, HttpRequest.new(request))

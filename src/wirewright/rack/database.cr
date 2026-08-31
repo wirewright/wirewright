@@ -126,10 +126,11 @@ module Ww::Rack::Database
 
     # Find empty target cell(s).
     targets = Pf::Kit.stack_array(D7::Node, 1)
-    hg.each_node_with_head(Term.of(:cell), memberof: {variant.response}) do |node|
-      Term.matchpi?(node.term, %{[cell @_]}) do
-        targets << node
-      end
+
+    Rack.each_cell(hg, variant.response) do |cell|
+      next unless cell.empty?
+
+      targets << cell.node
     end
 
     if targets.empty?
