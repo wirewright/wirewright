@@ -7,24 +7,34 @@ module Ww::HttpResponseLanguage
 
   # 2xx
 
-  SYM_OK       = Term.of(:ok)
-  SYM_CREATED  = Term.of(:created)
+  # :nodoc:
+  SYM_OK = Term.of(:ok)
+  # :nodoc:
+  SYM_CREATED = Term.of(:created)
+  # :nodoc:
   SYM_ACCEPTED = Term.of(:accepted)
 
   # 3xx
 
-  SYM_MOVED    = Term.of(:moved)
+  # :nodoc:
+  SYM_MOVED = Term.of(:moved)
+  # :nodoc:
   SYM_REDIRECT = Term.of(:redirect)
 
   # 4xx
 
+  # :nodoc:
   SYM_BAD_REQUEST = Term.of(:"bad-request")
-  SYM_FORBIDDEN   = Term.of(:formatted)
-  SYM_NOT_FOUND   = Term.of(:"not-found")
+  # :nodoc:
+  SYM_FORBIDDEN = Term.of(:forbidden)
+  # :nodoc:
+  SYM_NOT_FOUND = Term.of(:"not-found")
 
   # 5xx
 
-  SYM_ERR         = Term.of(:err)
+  # :nodoc:
+  SYM_ERR = Term.of(:err)
+  # :nodoc:
   SYM_UNAVAILABLE = Term.of(:unavailable)
 
   def status_code?(codename : Term) : Int32?
@@ -70,6 +80,10 @@ module Ww::HttpResponseLanguage
   end
 
   def decode?(term : Term, cls : Status.class) : Status?
+    # |@ http.response.status
+    #
+    # |@summary
+    # HTTP response status code.
     Term.case(term) do
       # |@ http.response.status
       #
@@ -77,7 +91,20 @@ module Ww::HttpResponseLanguage
       # _symbol
       #
       # |@block
-      # Symbolic representations for some common HTTP status codes.
+      # A symbolic representation for the most common HTTP status codes.
+      #
+      # | Symbol        | HTTP status code |
+      # | ------------- | ---------------- |
+      # | `ok`          | 200              |
+      # | `created`     | 201              |
+      # | `accepted`    | 202              |
+      # | `moved`       | 301              |
+      # | `redirect`    | 302              |
+      # | `bad-request` | 400              |
+      # | `forbidden`   | 403              |
+      # | `not-found`   | 404              |
+      # | `err`         | 500              |
+      # | `unavailable` | 503              |
       #
       # |@example
       # ```wwml

@@ -44,7 +44,7 @@ module Ww::HttpRequestLanguage
       # |@block
       # A shorthand for a resource without params.
       #
-      # NOTE: When Wirewright describes an ingoing HTTP requests, it will *never* use
+      # NOTE: When Wirewright describes an ingoing HTTP request, it will *never* use
       # the shorthand form. It will always spell it out. For example, if you hit `/`,
       # it will spell it out as `("/")`. This is done for consistency, so that you
       # don't have to special-case parameter-less resources and potentially
@@ -143,10 +143,10 @@ module Ww::HttpRequestLanguage
   # _dict
   #
   # |@summary
-  # The request cookie dictionary.
+  # A request's cookie dictionary.
   #
   # |@block
-  # The request cookie dictionary contains cookies supplied with the request.
+  # A request's cookie dictionary contains cookies supplied with it.
   #
   # Keys can be strings or symbols. Note that only symbols are used for *ingoing*
   # requests; that is, when Wirewright parses an HTTP request, it converts cookie
@@ -161,10 +161,10 @@ module Ww::HttpRequestLanguage
   # If you were to receive this on the server-side, you'd get:
   #
   # ```wwml
-  # (get "/" cookies: {USERNAME: "Alice"})
+  # (get ("/") cookies: {USERNAME: "Alice"})
   # ```
   #
-  # Note how the string `"USERNAME"` turned into the symbol `USERNAME`.
+  # Notice how the string `"USERNAME"` turned into the symbol `USERNAME`.
 
   # In HTTP requests, a cookie is simply a key-value pair. For some reason, Crystal represents
   # both request and response cookies with the same HTTP::Cookie type, thus, mixing Cookie
@@ -214,14 +214,15 @@ module Ww::HttpRequestLanguage
   #
   # |@block
   # A URL-encoded form is represented by a dictionary with string values.
-  # Additionally, you can use the following types inside Wirewright.
+  # Additionally, you can use the following types when describing forms
+  # inside Wirewright.
   #
   # | Type       | Meaning                                                           |
   # | ---------- | ----------------------------------------------------------------- |
   # | `_number`  | Converts the number to a string. E.g. `42` is sent as `"42"`.     |
   # | `_boolean` | `true` is converted to the string `"on"`, and `false` to `"off"`. |
   #
-  # These types are never produced when parsing an HTTP form, but you are still
+  # These types are never produced when describing an ingoing HTTP form, but you are still
   # allowed to use them as shorthands for the corresponding stringification.
   #
   # Symbol and string keys in the form dict are allowed. Entries with an invalid key,
@@ -328,7 +329,7 @@ module Ww::HttpRequestLanguage
   # Multipart forms are marked with `multipart: true` when Wirewright describes
   # an ingoing HTTP request. Although you are not required to mark forms with
   # `multipart: true` when sending requests from inside Wirewright, you are advised
-  # to do so because otherwise there's an ambiguity between the type of form
+  # to do so because otherwise there's an ambiguity regarding the type of form
   # Wirewright will use.
   #
   # |@example
@@ -650,8 +651,8 @@ module Ww::HttpRequestLanguage
       # (method_symbol resource_ (%plural body min: 0 max: 1) ¦ headers_ cookies⋮ {})
       #
       # |@key method
-      # Sets the HTTP method to use. We spell methods in lowercase, e.g., `get`.
-      # Wirewright converts them to the traditional GET etc. under the hood.
+      # The HTTP method, a symbol. We spell methods in lowercase, e.g., `get`.
+      # Wirewright converts methods to their conventional case under the hood.
       #
       # |@key resource http.request.resource
       # Specifies the relevant parts of the URI.
@@ -677,7 +678,7 @@ module Ww::HttpRequestLanguage
       # (get "/")
       #
       # ;; GET the resource `/people?q=Alice`:
-      # (get ("/" q: "Alice"))
+      # (get ("/people" q: "Alice"))
       #
       # ;; PUT the contents of a post:
       # (put "/posts/post-1"
@@ -729,8 +730,8 @@ module Ww::HttpRequestLanguage
       # ((method_symbol form) resource_ form_ ¦ headers_ cookies_dict)
       #
       # |@key method
-      # Sets the HTTP method to use. We spell methods in lowercase, e.g., `get`.
-      # Wirewright converts them to the traditional GET etc. under the hood.
+      # The HTTP method, a symbol. We spell methods in lowercase, e.g., `get`.
+      # Wirewright converts methods to their conventional case under the hood.
       #
       # |@key resource http.request.resource
       # Specifies the relevant parts of the URI.

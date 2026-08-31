@@ -193,22 +193,22 @@ module Ww::HttpLanguage
   # ```
   #
   # Note that the above example presents headers as a distinct dictionary. Most
-  # often, however, you'd see them in the pairspart of requests (`http.request)
+  # often, however, you'd see them in the pairspart of requests (`http.request`)
   # and responses (`http.response`):
   #
   # ```wwml
   # ;; Example request with headers:
   # (post "/"
-  #   "<p>Hello World</p>"
-  #  content-type: "text/html"
-  #  x-user-likes: ("apples" "bananas")
-  #  x-user-dislikes: ())
+  #    "<p>Hello World</p>"
+  #   content-type: "text/html"
+  #   x-user-dislikes: ()
+  #   x-user-likes: ("apples" "bananas"))
   #
   # ;; Example response with headers:
-  # (ok "<p>Hello World</p>"
-  #   content-type: "text/html"
-  #   x-user-likes: ("apples" "bananas")
-  #   x-user-dislikes: ())
+  # (ok content-type: "text/html"
+  #     x-user-dislikes: ()
+  #     x-user-likes: ("apples" "bananas")
+  #   "<p>Hello World</p>")
   # ```
 
   def encode(headers : HTTP::Headers) : Term
