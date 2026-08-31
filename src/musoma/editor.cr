@@ -199,7 +199,7 @@ module MuSoma
     Term.case(feature.node) do
       # A pool cell is passable. Prevent MuSoma from disabling it while it
       # is edited.
-      matchpi %{[pool @_ _]} do
+      matchpi %{[cell (pool @_) _*]} do
         false
       end
 

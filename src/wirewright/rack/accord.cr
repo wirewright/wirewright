@@ -452,7 +452,7 @@ module Ww::Rack::Accord
       # (server (@pool (tcp local 5000))
       #   (feed (@in front) (@out back)))
       #
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ link_⋮ direct)} do
         return unless host = host?(hostQ)
@@ -479,7 +479,7 @@ module Ww::Rack::Accord
       # (server (@pool (unix "/tmp/example.sock"))
       #   (feed (@in front) (@out back)))
       #
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       matchpiT %{(unix path_string ⍊ link_⋮ direct)}, path: NormalPath do
         Harmony::UnixServerDefn.new(path, link?(link) || return)
@@ -719,7 +719,7 @@ module Ww::Rack::Accord
       #     {¦ request: [get ["/"]] -response_}
       #       <> {response: (ok ⟬‸<h1>Hello World</h1>‸ ⁑ text/html⟭)}))
       #
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       #
       # If we send an unsupported request:
@@ -757,7 +757,7 @@ module Ww::Rack::Accord
       # (server (@pool (ws local 5000))
       #   (feed (@in front) (@out back)))
       #
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
 
       matchpiT %{[http hostQ_ port←(%number u16)]}, %{[ws hostQ_ port←(%number u16)]} do
@@ -823,7 +823,7 @@ module Ww::Rack::Accord
       # (server (@pool (wss local 5000 cert: "path/to/openssl.cert" key: "path/to/openssl.key"))
       #   (feed (@in front) (@out back)))
       #
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
 
       matchpiT(

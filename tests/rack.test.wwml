@@ -7293,30 +7293,30 @@
         {¦ ±state} <> {state: ^(+ state 1)}))
 
     (cell @xs ())
-    (circuit (pool @pool)))
+    (pool @pool))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 100)))
-     (circuit (pool @pool))))
+     (pool @pool)))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 100) (b 200)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (a 101)) (cell @state 1) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 100) (b 200) (c 300)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (a 101)) (cell @state 2) _*)
        (device (cell @x (b 201)) (cell @state 1) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 100) (b 200) (c 300)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (a 101)) (cell @state 3) _*)
        (device (cell @x (b 201)) (cell @state 2) _*)
        (device (cell @x (c 301)) (cell @state 1) _*))))
@@ -7324,7 +7324,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((a 100) (b 200) (c 300)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (a 101)) (cell @state 4) _*)
        (device (cell @x (b 201)) (cell @state 3) _*)
        (device (cell @x (c 301)) (cell @state 2) _*))))
@@ -7332,7 +7332,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((a 100) (b 200) (c 300)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (a 101)) (cell @state 5) _*)
        (device (cell @x (b 201)) (cell @state 4) _*)
        (device (cell @x (c 301)) (cell @state 3) _*))))
@@ -7341,7 +7341,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((b 200) (c 300)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (a 101)) (cell @state 6) _*)
        (device (cell @x (b 201)) (cell @state 5) _*)
        (device (cell @x (c 301)) (cell @state 4) _*))))
@@ -7350,7 +7350,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((b 200) (c 400)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (b 201)) (cell @state 6) _*)
        (device (cell @x (c 301)) (cell @state 5) _*))))
 
@@ -7358,14 +7358,14 @@
   (frame pattern: true
     (_*
      (cell @xs ((foo 234) (c 400)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (b 201)) (cell @state 7) _*)
        (device (cell @x (c 401)) (cell @state 6) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((foo 234) (c 400)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 7) _*)
        (device (cell @x (foo 235)) (cell @state 1) _*))))
 
@@ -7373,7 +7373,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((foo 234) (c 400) (foo 123)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 8) _*)
        (device (cell @x (foo 235)) (cell @state 2) _*))))
 
@@ -7381,28 +7381,28 @@
   (frame pattern: true
     (_*
      (cell @xs ((foo 234) (c 400) (foo 123)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 9) _*))))
 
   ;; Collision is removed
   (frame pattern: true
     (_*
      (cell @xs ((c 400) (foo 123)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 10) _*))))
 
   ;; Supervisor reintroduces foo keyed node
   (frame pattern: true
     (_*
      (cell @xs ((c 400) (foo 123)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 11) _*)
        (device (cell @x (foo 124)) (cell @state 1) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((c 400) (foo 123)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 12) _*)
        (device (cell @x (foo 124)) (cell @state 2) _*))))
 
@@ -7410,39 +7410,39 @@
   (frame pattern: true
     (_*
      (cell @xs)
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (c 401)) (cell @state 13) _*)
        (device (cell @x (foo 124)) (cell @state 3) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs)
-     (circuit (pool @pool))))
+     (pool @pool)))
 
   ;; List is reintroduced
   (frame pattern: true
     (_*
      (cell @xs ((qux 100) (qyx 200)))
-     (circuit (pool @pool))))
+     (pool @pool)))
 
   (frame pattern: true
     (_*
      (cell @xs ((qux 100) (qyx 200)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (qux 101)) (cell @state 1) _*)
        (device (cell @x (qyx 201)) (cell @state 1) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((qux 100) (qyx 200)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (qux 101)) (cell @state 2) _*)
        (device (cell @x (qyx 201)) (cell @state 2) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((qux 100) (qyx 200)))
-     (circuit (pool @pool)
+     (pool @pool
        (device (cell @x (qux 101)) (cell @state 3) _*)
        (device (cell @x (qyx 201)) (cell @state 3) _*)))))
   ;; ...

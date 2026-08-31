@@ -662,6 +662,125 @@ module Ww::Rack
       #
       # |@pattern
       # [device children_*]
+      #
+      # |@key children rack
+      # Zero or more child nodes. *children* are completely isolated from the outside
+      # world (but not from each other) like in `rack.circuit`. All children are
+      # evolved by one time-step *after* the parent circuit has evolved by one time-
+      # step. This way, the parent circuit has time to react to the contents of
+      # *children*, and manipulate them if needed.
+      #
+      # |@summary
+      # An anonymous subcircuit.
+      #
+      # |@block
+      # Devices are *anonymous subcircuits*. They are primarily used to describe
+      # a self-contained unit, which does not speak with the outside world except
+      # through termspaces (`rack.tspace`, `rack.sensor`, `rack.appearance`) or
+      # observation and manipulation (when placed in a `rack.circuit`,
+      # `rack.frag`, etc.).
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 1)
+      # (cell @y)
+      # (feed @x @y)
+      #
+      # (device
+      #   (cell @x 2)
+      #   (cell @y)
+      #   (feed @x @y))
+      #
+      # (device
+      #   (cell @x 3)
+      #   (cell @y)
+      #   (feed @x @y))
+      #
+      # ;; Frame 1
+      #
+      # (cell @x)
+      # (cell @y 1)
+      # (feed @x @y)
+      #
+      # (device
+      #   (cell @x)
+      #   (cell @y 2)
+      #   (feed @x @y))
+      #
+      # (device
+      #   (cell @x)
+      #   (cell @y 3)
+      #   (feed @x @y))
+      # ```
+      #
+      # Note how in the example above, everyone is isolated -- the host circuit and
+      # the two devices all run in their own little "bubbles". The host circuit has
+      # the power to observe the devices and perhaps *entangle* them:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (frag @alice
+      #   (device
+      #     (cell @x 1)
+      #     (cell @y)
+      #     (feed @x @y)))
+      #
+      # (frag @bob
+      #   (device
+      #     (cell @x)
+      #     (cell @y)
+      #     (feed @x @y)))
+      #
+      # (backsys
+      #   {¦ alice: (device _ (cell @_ value_) _)
+      #      bob: (device (cell @_ `>value) _ _)}
+      #     <> {(value): (), >value: ^value})
+      #
+      # ;; Frame 1.1 (omitting the backsystem because it does not change)
+      #
+      # (frag @alice
+      #   (device
+      #     (cell @x)
+      #     (cell @y 1)
+      #     (feed @x @y)))
+      #
+      # (frag @bob
+      #   (device
+      #     (cell @x)
+      #     (cell @y)
+      #     (feed @x @y)))
+      #
+      # ;; Frame 2.1
+      #
+      # (frag @alice
+      #   (device
+      #     (cell @x)
+      #     (cell @y)
+      #     (feed @x @y)))
+      #
+      # (frag @bob
+      #   (device
+      #     (cell @x 1)
+      #     (cell @y)
+      #     (feed @x @y)))
+      #
+      # ;; Frame 2.2
+      #
+      # (frag @alice
+      #   (device
+      #     (cell @x)
+      #     (cell @y)
+      #     (feed @x @y)))
+      #
+      # (frag @bob
+      #   (device
+      #     (cell @x)
+      #     (cell @y 1)
+      #     (feed @x @y)))
+      # ```
       matchpi %{[device _*]} do
         D7.circuit(node.as_d, 1u32...node.uitemsize, D7.inert(node))
       end
@@ -749,15 +868,51 @@ module Ww::Rack
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
       end
 
-      # |@ rack.circuit
+      # |@ rack.pool
       #
       # |@pattern
-      # [circuit (pool @edge_) children_*]
-      matchpi %{[circuit (pool @edge_) children0_*]} do
-        mix0 = Term.of(:pool, edge, children0)
-
+      # [pool @edge_ children_*]
+      #
+      # |@key edge rack.edge
+      # The edge the cell should be a member of.
+      #
+      # |@key children rack
+      # Zero or more child nodes. Most often, for `pool`, the nodes are `rack.device`.
+      # All children are completely isolated from the outside world like in `rack.circuit`.
+      # All children are evolved *after* the parent circuit evolves. This way, the parent
+      # circuit has time to react to the contents of *children*, and manipulate them
+      # if needed.
+      #
+      # |@summary
+      # A pool of devices.
+      #
+      # |@block
+      # The pool node exists primarily to host zero or more `rack.device`s. Semantically,
+      # it is the same as `rack.circuit`. This means you can put anything in a pool -- not
+      # just devices.
+      #
+      # There are a few key differences and things to point out, though:
+      #
+      # - Nodes that expect a pool will only work with a `pool` -- not a `cell` or
+      #   a `circuit`. Examples of such nodes include `rack.supervisor`, `rack.server`.
+      # - MuSoma considers pools as *complete* (the opposite of *incomplete*) even
+      #   when you are editing them. Normally, editing renders a node *incomplete* and
+      #   disables it while you are editing it. Pools are exempt from this rule. If
+      #   the editor is inside a pool, MuSoma will allow the pool (and any devices in
+      #   it) to execute.
+      # - Pools are predominantly *managed* by another *node* (such as `rack.supervisor`,
+      #   `rack.server`), whereas something like `rack.node` or `rack.circuit` or
+      #   `rack.frag` is written by *you*, manually; or maanged by a *rule*.
+      #
+      # |@example
+      # ```wwml
+      # (server (@pool (tcp local 5000)))
+      # (pool @pool)
+      # ```
+      matchpi %{[pool @edge_ children0_*]} do
+        mix0 = Term.of(:cell, {:pool, edge}, children0)
         leaf = D7.mixture(node, mix0) do |mix1|
-          Term.matchpi(mix1, %{(pool @_ children1←[_*])}) do
+          Term.matchpi(mix1, %{(cell _ children1←[_*])}) do
             Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
           end
         end
@@ -766,7 +921,7 @@ module Ww::Rack
       end
 
       # Internal
-      matchpi %{[pool @edge_ _]} do
+      matchpi %{[cell (pool @edge_)]}, %{[cell (pool @edge_) _]} do
         D7.gnd(node, edge)
       end
 
@@ -2286,7 +2441,7 @@ module Ww::Rack
       #                       (appearance paths path_))
       #     (appearance paths)))
       #
-      # (circuit (pool @pool))
+      # (pool @pool)
       #
       # (frag @journal
       #   (sensor (journal paths _string)))
@@ -2609,17 +2764,17 @@ module Ww::Rack
       # ;; Frame 0 (seed)
       #
       # (server (@pool (ws local 5000)))
-      # (circuit (pool @pool))
+      # (pool @pool)
       #
       # ;; Frame 1
       #
       # (server (@pool (ws local 5000) pending))
-      # (circuit (pool @pool))
+      # (pool @pool)
       #
       # ;; Frame 2
       #
       # (server (@pool (ws local 5000) up)) ;; < The server is running!
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       #
       # Now I'm going to connect to it:
@@ -2628,7 +2783,7 @@ module Ww::Rack
       # ;; Frame 3
       #
       # (server (@pool (ws local 5000) up))
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     ;; Your id will differ, they are generated randomly!
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
@@ -2642,7 +2797,7 @@ module Ww::Rack
       # ;; Frame 4
       #
       # (server (@pool (ws local 5000) up))
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
       #     (cell @in ("hello\n"))
@@ -2656,7 +2811,7 @@ module Ww::Rack
       # ;; Frame 5
       #
       # (server (@pool (ws local 5000) up))
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
       #     (cell @in ("hello\n"))
@@ -2673,7 +2828,7 @@ module Ww::Rack
       # ;; Frame 6
       #
       # (server (@pool (ws local 5000) up))
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "77d394f2-9a54-4f58-a5d3-ead50973d4fc")
       #     (cell @in ())
@@ -2693,7 +2848,7 @@ module Ww::Rack
       #   ;; This `feed` takes a message from the *front* of the @in queue,
       #   ;; and puts it at the *back* of the @out queue.
       #   (feed (@in front) (@out back)))
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       #
       # Let's trace its evolution as I connect to it and write `hello`.
@@ -2703,19 +2858,19 @@ module Ww::Rack
       #
       # (server (@pool (ws local 5000) pending)
       #   (feed (@in front) (@out back)))
-      # (circuit (pool @pool))
+      # (pool @pool)
       #
       # ;; Frame 2
       #
       # (server (@pool (ws local 5000) up)
       #   (feed (@in front) (@out back)))
-      # (circuit (pool @pool))
+      # (pool @pool)
       #
       # ;; Frame 3
       # ;; I connect to the server. From now on I'll omit `server` because it does
       # ;; not change.
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ())
@@ -2725,7 +2880,7 @@ module Ww::Rack
       # ;; Frame 4.1
       # ;; I write `hello`.
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ("hello\n"))
@@ -2735,7 +2890,7 @@ module Ww::Rack
       # ;; Frame 4.2
       # ;; The feed node moves my message to the outgoing message queue.
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ())
@@ -2745,7 +2900,7 @@ module Ww::Rack
       # ;; Frame 5
       # ;; The message is picked up by the runtime and sent as a reply.
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ())
@@ -2764,7 +2919,7 @@ module Ww::Rack
       # ```wwml
       # (server (@pool (ws local 5000) format: ml)
       #   (feed (@in front) (@out back)))
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       #
       # Let's see what happens after I connect and send `(+ 1 2)`:
@@ -2775,7 +2930,7 @@ module Ww::Rack
       # ;; Frame N
       # ;; I connected
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ())
@@ -2785,7 +2940,7 @@ module Ww::Rack
       # ;; Frame N+1
       # ;; I sent `(+ 1 2)`. Notice how it has arrived as a term.
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ((+ 1 2)))
@@ -2796,7 +2951,7 @@ module Ww::Rack
       # ;; The feed node moves the term to the outgoing message queue. The outgoing
       # ;; message queue, too, accepts terms now that we're using format: ml.
       #
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ())
@@ -2805,7 +2960,7 @@ module Ww::Rack
       #
       # ;; Frame N+3
       # ;; The runtime consumed the term, encoded it, and sent it over the network.
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ())
@@ -3154,7 +3309,7 @@ module Ww::Rack
       # (cell @xs ((a 1) (b 2) (c 3)))
       # (supervisor (@xs @x (k_ _) - @pool)
       #   (p "Hello World"))
-      # (circuit (pool @pool))
+      # (pool @pool)
       # ```
       #
       # Populates the pool as follows:
@@ -3162,7 +3317,7 @@ module Ww::Rack
       # ```wwml
       # (cell @xs ((a 1) (b 2) (c 3)))
       # (supervisor (@xs @x (k_ _) - @pool))
-      # (circuit (pool @pool)
+      # (pool @pool
       #   (device
       #     (cell @x (a 1))
       #     (p "Hello World"))

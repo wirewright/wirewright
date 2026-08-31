@@ -5,7 +5,7 @@
     (module {}
       (server (@pool (ws local 9813) format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
     ;; A client
     (module {}
       (queue (@msg @msgs) ("Kaixo" "mundua"))
@@ -40,7 +40,7 @@
             <> {(msg): (), >msg: ^"⸢nick⸣: ⸢msg⸣"}
           {¦ out: (_* `>msgs) user: (_ _ _string) rx: (sensor _ msgs_string+)}
             <> {(>msgs): ^msgs, (msgs): ()}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Alice client
     (module {}
@@ -129,7 +129,7 @@
     (module {}
       (server (@pool (ws local 9813) format: json format-policy: discard)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (module {}
@@ -160,7 +160,7 @@
     (module {}
       (server (@pool (ws local 9813) format: ml format-policy: discard)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (module {}
@@ -193,7 +193,7 @@
     (module {}
       (server (@pool (ws local 9813) format: prettyml format-policy: discard)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (module {}
@@ -251,7 +251,7 @@
           (* ±a ±b) => ^(* a b)
           (/ ±a ±b) => ^(/ a b)))
 
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (queue (@expr @exprs)
@@ -280,7 +280,7 @@
 (rack
   (frame
     (server (@pool (ws local 9813) format: ml format-policy: abort))
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in "") ;; send empty message (invalid)
     (cell @out)
@@ -288,7 +288,7 @@
 
   (frame/tail fast-forward: true
     (server (@pool (ws local 9813) up format: ml format-policy: abort))
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out)
@@ -302,7 +302,7 @@
     (module {}
       (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (module {}
@@ -331,7 +331,7 @@
     (module {}
       (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (module {}
@@ -360,7 +360,7 @@
     (module {}
       (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (module {}
@@ -390,7 +390,7 @@
     (module {}
       (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; Client
     (schema (@schema json)
@@ -428,7 +428,7 @@
       (backsys
         {¦ in: (msg←"break" _*) out: (_* `reply)}
           <> {(msg): (), reply: ""})) ;; send empty message (invalid)
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in break)
     (cell @out)
@@ -439,7 +439,7 @@
       (backsys
         {¦ in: (msg←"break" _*) out: (_* `reply)}
           <> {(msg): (), reply: ""})) ;; send empty message (invalid)
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out)
@@ -454,7 +454,7 @@
       (server (@pool (ws local 9813) format: binary)
         (cell @script ("(+ 1 2)" "(+ 1 error"))
         (feed (@script front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (cell @message)
     (client (@message -> (ws local 9813) -> @replies format: ml format-policy: abort))
@@ -478,7 +478,7 @@
       (server (@pool (ws local 9813) format: binary)
         (cell @script ("(+ 1 2)" "(+ 1 error"))
         (feed (@script front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (cell @message)
     (client (@message -> (ws local 9813) -> @replies format: ml format-policy: wrap))
@@ -505,7 +505,7 @@
           {¦ in: (5 _*) out: (_* `>reply)}
             <> {>reply: done}))
 
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (backsys
       {¦ reply_ log: (_* `>reply)}
@@ -549,7 +549,7 @@
           {¦ in: (5 _*) out: (_* `>reply)}
             <> {>reply: done}))
 
-      (circuit (pool @pool))) ;; < pool is empty -- client disconnected
+      (pool @pool)) ;; < pool is empty -- client disconnected
 
     (backsys
       {¦ reply_ log: (_* `>reply)}
@@ -569,7 +569,7 @@
   (frame
     (server (@pool (ws local 9813) format: binary)
       (feed (@in front) (@out back)))
-    (circuit (pool @pool))
+    (pool @pool)
     (queue (@message @messages) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
     (queue (@reply @replies) ())
     (client (@message -> (ws local 9813) -> @replies format: ml)))
@@ -588,7 +588,7 @@
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (client (@in -> (ws local 9813) -> @out format: ml))
     (feed @out @in)
@@ -608,7 +608,7 @@
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (client (@in -> (tcp local 9813) -> @out format: ml))
     (feed @out @in)
@@ -633,7 +633,7 @@
           {¦ in: (±M _*) out: (_* `>M)}
             <> {(M): (), >M: ^(+ M 1)})))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (client (@in -> (unix "/tmp/wirewright-unix.sock") -> @out format: ml))
     (feed @out @in)
@@ -653,7 +653,7 @@
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (client (@in -> (ws local 9813 link: portal) -> @out format: ml))
     (feed @out @in)
@@ -673,7 +673,7 @@
         {¦ in: (±M _*) out: (_* `>M)}
           <> {(M): (), >M: ^(+ M 1)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (client (@in -> (tcp local 9813 link: portal) -> @out format: ml))
     (feed @out @in)
@@ -698,7 +698,7 @@
           {¦ in: (±M _*) out: (_* `>M)}
             <> {(M): (), >M: ^(+ M 1)})))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (client (@in -> (unix "/tmp/wirewright-unix.sock" link: portal) -> @out format: ml))
     (feed @out @in)
@@ -727,7 +727,7 @@
       {¦ -msg_ reply -sent-bye_}
         <> {msg: "bye", sent-bye: true})
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @msg "Hello World")
     (queue (@reply @replies) ())
@@ -739,7 +739,7 @@
     (client (@msg -> (ws local 9813) -> @replies format: text) up))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
     (cell @msg)
     (queue (@reply @replies) ("Hello World"))
     (client (@msg -> (ws local 9813) -> @replies format: text)
@@ -767,14 +767,14 @@
       {¦ -msg_ reply -sent-bye_}
         <> {msg: "bye", sent-bye: true})
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @msg "Hello World")
     (queue (@reply @replies) ())
     (client (@msg -> (ws local 9813) -> @replies format: text)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @msg)
     (queue (@reply @replies) ("Hello World"))
@@ -787,7 +787,7 @@
     (server (@pool (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in "Hi!")
     (cell @out)
@@ -795,7 +795,7 @@
       (client (@in -> (ws local 9813) -> @out format: text))))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out "Hi!")
@@ -814,7 +814,7 @@
       {¦ out client: (client _ state←up)}
         <> {state: dn})
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in "Hi!")
     (cell @out)
@@ -822,7 +822,7 @@
       (client (@in -> (ws local 9813) -> @out format: text))))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out "Hi!")
@@ -835,17 +835,17 @@
     (module {}
       (server (@pool (ws local 9813) format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (ws local 9814) format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (ws local 9815) format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in "0")
@@ -869,17 +869,17 @@
     (module {}
       (server (@pool (ws local 9813) up format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (ws local 9814) up format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (ws local 9815) up format: text)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in)
@@ -907,17 +907,17 @@
     (module {}
       (server (@pool (ws local 9813) in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9814 link: portal) in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (unix "/tmp/wirewright-unix.sock") in: @queries out: @replies format: ml)
         (feed (@queries front) (@replies back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in "0")
@@ -941,17 +941,17 @@
     (module {}
       (server (@pool (ws local 9813) up in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9814 link: portal) up in: @queries out: @replies format: text)
         (feed (@queries front) (@replies back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (unix "/tmp/wirewright-unix.sock") up in: @queries out: @replies format: ml)
         (feed (@queries front) (@replies back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in)
@@ -982,21 +982,21 @@
         (backsys
           {¦ in: (msg←{¦ signatures_dict⋮ (_* `>sign)} _*) out: (_* `>msg)}
             <> {>sign: alice, (msg): (), >msg: ^(up msg)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9814) format: ml)
         (backsys
           {¦ in: (msg←{¦ signatures_dict⋮ (_* `>sign)} _*) out: (_* `>msg)}
             <> {>sign: bob, (msg): (), >msg: ^(up msg)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9815) format: ml)
         (backsys
           {¦ in: (msg←{¦ signatures_dict⋮ (_* `>sign)} _*) out: (_* `>msg)}
             <> {>sign: charlie, (msg): (), >msg: ^(up msg)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (cell @a (+ 1 2))
     (cell @b)
@@ -1041,7 +1041,7 @@
         (backsys
           {¦ in: (±n _*) out: (_* `>n)}
             <> {(n): (), >n: ^(+ n 1)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9814) format: ml)
@@ -1050,7 +1050,7 @@
             <> {(n): (), >n: (done ^n)}
           {¦ in: (n←(%number _ < 10) _*) out: (_* `>n)}
             <> {(n): (), >n: ^n}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (backsys {¦ ±c -a_} <> {(c): (), a: ^c})
 
@@ -1126,21 +1126,21 @@
         (backsys
           {¦ in: (±n _*) out: (_* `>n)}
             <> {(n): (), >n: ^(+ n 1)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9814) format: ml)
         (backsys
           {¦ in: (±n _*) out: (_* `>n)}
             <> {(n): (), >n: ^(+ n 1)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (tcp local 9815) format: ml)
         (backsys
           {¦ in: (±n _*) out: (_* `>n)}
             <> {(n): (), >n: ^(+ n 1)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (backsys
       {¦ ±in client: (client [_ -> (tcp local `>port) -> _])}
@@ -1205,7 +1205,7 @@
            (backsys
              {¦ in: (±n _*) out: (_* `>n)}
                <> {(n): (), >n: ^(+ n 1)}))
-         (circuit (pool @pool))))
+         (pool @pool)))
 
      (%literal
        (module {}
@@ -1213,7 +1213,7 @@
            (backsys
              {¦ in: (±n _*) out: (_* `>n)}
                <> {(n): (), >n: ^(+ n 1)}))
-         (circuit (pool @pool))))
+         (pool @pool)))
 
      (%literal
        (module {}
@@ -1221,7 +1221,7 @@
            (backsys
              {¦ in: (±n _*) out: (_* `>n)}
                <> {(n): (), >n: ^(+ n 1)}))
-         (circuit (pool @pool))))
+         (pool @pool)))
 
      _*
 
@@ -1270,7 +1270,7 @@
       {¦ out: (_* `>report) sensor: (sensor _ report_ _*)}
         <> {>report: ^report, (report): ()}))
 
-  (circuit (pool @pool))
+  (pool @pool)
 
   (circuit @clients
     ;; Alice
@@ -1365,7 +1365,7 @@
         {¦ in: (M←(del k_) _*) out: (_* `reply) appearances: ⟨A←(appearance store (k_ _))⟩}
           <> {(M): (), reply: ok, (A): ()}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (circuit @clients
       ;; Alice
@@ -1509,7 +1509,7 @@
         {¦ in: (msg_ _*) out: (_* `>msg) -name_}
           <> {(msg): (), >msg: ok, name: ^msg}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (backsys @pool
       ⟨& (device …⟨& (cell @in (M←(receiver_ msg_) _*)) (cell @out (_* `>report))⟩…)
@@ -1571,34 +1571,34 @@
   (frame
     (server (@pool (tcp local 9813 link: direct) format: binary))
     (server (@pool (tcp local 9813 link: portal) format: binary))
-    (circuit (pool @pool)))
+    (pool @pool))
 
   (frame pattern: true fast-forward: true
     (%any°
       ((server (@pool (tcp local 9813 link: direct) up format: binary))
        (server (@pool (tcp local 9813 link: portal) (pending _string) format: binary))
-       (circuit (pool @pool)))
+       (pool @pool))
 
       ((server (@pool (tcp local 9813 link: direct) (pending _string) format: binary))
        (server (@pool (tcp local 9813 link: portal) up format: binary))
-       (circuit (pool @pool))))))
+       (pool @pool)))))
 
 ;; Same servers with different links must conflict (ws)
 (rack
   (frame
     (server (@pool (ws local 9813 link: direct) format: binary))
     (server (@pool (ws local 9813 link: portal) format: binary))
-    (circuit (pool @pool)))
+    (pool @pool))
 
   (frame pattern: true fast-forward: true
     (%any°
       ((server (@pool (ws local 9813 link: direct) up format: binary))
        (server (@pool (ws local 9813 link: portal) (dn "conflicting `link:`s for the same host and port") format: binary))
-       (circuit (pool @pool)))
+       (pool @pool))
 
       ((server (@pool (ws local 9813 link: direct) (dn "conflicting `link:`s for the same host and port") format: binary))
        (server (@pool (ws local 9813 link: portal) up format: binary))
-       (circuit (pool @pool))))))
+       (pool @pool)))))
 
 ;; Nesting: client inside client device
 (rack
@@ -1642,9 +1642,9 @@
     (module {}
       (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @script
       ((alice "Hello in Alice")
@@ -1665,10 +1665,10 @@
     (module {}
       (server (@pool (ws local 9813) up format: binary)
         (feed (@in front) (@out back)))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     ;; The main server should not have any connections.
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @script ())))
 
@@ -1682,7 +1682,7 @@
         (module {}
           (server (@pool (ws local 9814) format: text)
             (feed (@in front) (@out back)))
-          (circuit (pool @pool))))
+          (pool @pool)))
 
       (guard (@role client)
         (cell @client-in)
@@ -1697,7 +1697,7 @@
         {¦ in: (M←receive _*) out: (_* `reply) client-out_}
           <> {(M): (), reply: (ok ^client-out), (client-out): ()}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (circuit @clients
       ;; Alice
@@ -1788,7 +1788,7 @@
     (server (@pool (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in "Kaixo mundua")
     (cell @out)
@@ -1796,7 +1796,7 @@
       (client (@in -> (ws local 9813) -> @out format: text))))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out "Kaixo mundua")
@@ -1811,8 +1811,8 @@
     (server (@pool1 (ws local 9813) format: text)
       (feed (@in front) (@out back)))
 
-    (circuit (pool @pool0))
-    (circuit (pool @pool1))
+    (pool @pool0)
+    (pool @pool1)
 
     (cell @in "Kaixo mundua")
     (cell @out)
@@ -1822,11 +1822,11 @@
   (frame pattern: true fast-forward: true
     (_*
 
-     (circuit (pool @pool0)
+     (pool @pool0
        (device
          …⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩…))
 
-     (circuit (pool @pool1)
+     (pool @pool1
        (device
          …⟨& (cell @id id_) (cell @out ("Kaixo mundua"))⟩…))
 

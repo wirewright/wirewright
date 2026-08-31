@@ -63,18 +63,13 @@ module Ww::Rack
         matchpi %{[cell @_]} do
           candidates << Cell.new(node, value: nil)
         end
-      end
-    end
 
-    hg.each_node_with_head(Term.of(:pool), memberof: {input}) do |node|
-      # Ditto
-      Term.case(node.term) do
-        matchpi %{[pool @_ value_]} do
-          candidates << Cell.new(node, value)
+        matchpi %{[cell (pool @_)]} do
+          candidates << Cell.new(node, value: nil)
         end
 
-        matchpi %{[pool @_]} do
-          candidates << Cell.new(node, value: nil)
+        matchpi %{[cell (pool @_) contents_dict]} do
+          candidates << Cell.new(node, contents)
         end
       end
     end
@@ -98,8 +93,9 @@ module Ww::Rack
 
   def pool?(hg : D7::Hypergraph, edge : D7::AbsEdge) : Pool?
     pools = Pf::Kit.stack_array(Pool, 1)
-    hg.each_node_with_head(Term.of(:pool), memberof: {edge}) do |node|
-      Term.matchpiT?(node.term, %{[pool @_ contents_dict]}) do
+
+    hg.each_node_with_head(Term.of(:cell), memberof: {edge}) do |node|
+      Term.matchpiT?(node.term, %{[cell (pool @_) contents_dict]}) do
         pools << Pool.new(node, contents)
       end
     end

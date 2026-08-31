@@ -6,7 +6,7 @@
         {¦ request_: [get ("/") body_] -response_}
           <> {(request): (), response: (ok ^body)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in (get "/" "Hello World"))
     (cell @out)
@@ -14,7 +14,7 @@
 
   (frame/tail fast-forward: true
     ;; Server must have cleared the pool since the request is done.
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out (ok ⟬‸Hello World‸ ⁑ text/plain⟭))
@@ -28,7 +28,7 @@
         {¦ request_: [get ("/") body_] -response_}
           <> {(request): (), response: (ok ^body)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in (get "/" "Hello World"))
     (cell @out)
@@ -36,7 +36,7 @@
 
   (frame/tail fast-forward: true
     ;; Server must have cleared the pool since the request is done.
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out (ok "Hello World"))
@@ -50,14 +50,14 @@
         {¦ request_: [get ("/") body_] -response_}
           <> {(request): (), response: (ok ^body)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in (get "/" {x: 100, y: 200}))
     (cell @out)
     (client (@in -> (http local 9813) -> @out format: json)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out (ok {"x": 100, "y": 200}))
@@ -71,14 +71,14 @@
         {¦ request_: [get ("/") body_] -response_}
           <> {(request): (), response: (ok ^body)}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in (get "/" {x: 100, y: 200}))
     (cell @out)
     (client (@in -> (http local 9813) -> @out format: ml)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out (ok {x: 100, y: 200}))
@@ -92,14 +92,14 @@
         (backsys
           {¦ request: [get ("/")] -response_}
             <> {response: (ok "Hello from server 1!")}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (http local 9814) format: text)
         (backsys
           {¦ request: [get ("/")] -response_}
             <> {response: (ok "Hello from server 2!")}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in (get "/"))
@@ -133,7 +133,7 @@
             <> {response: (err "You hit the wrong page Charlie!")}
           {¦ request: [get ("/")] -response_}
             <> {response: (ok "Hello from server 1!")}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in (get ("/" name: "Alice")))
@@ -178,7 +178,7 @@
         {¦ request: [get ("/" ¦ () name_string)] -response_}
           <> {response: (ok ^"Hello, ⸢name⸣")}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (module {}
       (cell @in (get ("/" name: "Alice")))
@@ -196,7 +196,7 @@
       (client (@in -> (http local 9813 key: charlie) -> @out format: text))))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (module {}
       (cell @in)
@@ -221,14 +221,14 @@
         (backsys
           {¦ request_: [get ("/") body_] -response_}
             <> {(request): (), response: (ok ^body)}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (server (@pool (ws local 9813 link: portal) format: ml)
         (backsys
           {¦ in: (msg_ _*) out: (_* `>msg)}
             <> {(msg): (), >msg: ^msg}))
-      (circuit (pool @pool)))
+      (pool @pool))
 
     (module {}
       (cell @in (get "/" {x: 100, y: 200}))
@@ -260,14 +260,14 @@
         {¦ request_: [get ("/")] -response_}
           <> {(request): (), response: (ok "<p>Hi!</p>" content-type: "text/html")}))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in (get "/"))
     (cell @out)
     (client (@in -> (http local 9813) -> @out format: binary)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in)
     (cell @out (ok ⟬‸<p>Hi!</p>‸ ⁑ text/html⟭))
@@ -278,14 +278,14 @@
 (rack
   (frame
     (server (@pool (http local 9813) request: @in response: @out format: binary))
-    (circuit (pool @pool))
+    (pool @pool)
     (cell @in (get "/"))
     (cell @out)
     (client (@in -> (http local 9813) -> @out format: binary)))
 
   (frame pattern: true fast-forward: true
     ((server (@pool (http local 9813) up request: @in response: @out format: binary))
-     (circuit (pool @pool)
+     (pool @pool
        (device
          (cell @id _string)
          (cell @in (get ("/") host: "127.0.0.1:9813" user-agent: "Wirewright"))
@@ -301,7 +301,7 @@
       (backsys
         {¦ request_ -response_}
           <> {response: (ok ^\request)}))
-    (circuit (pool @pool))
+    (pool @pool)
 
     (backsys
       {¦ response_: [ok body_] echoes: (_* `echo)}
@@ -447,7 +447,7 @@
       {¦ testcases: (testcase_ _*) -request_}
         <> {(testcase): (), request: (get "/" ^(ml/compact testcase))})
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @testcases
       ;; Basics
@@ -481,7 +481,7 @@
     (client (@request -> (http local 9813) -> @responses format: binary)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
     (cell @testcases ())
     (cell @request)
 
@@ -528,7 +528,7 @@
         ("/search" ¦ () q_string) => ^"<h1>Search query: ⸢q⸣</h1>"
         ("/articles" ¦ () id_string) => ^"<h1>Article with id: ⸢id⸣</h1>"))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (queue (@request @requests)
       ((get "/")
@@ -597,7 +597,7 @@
         (finalize fragments←(_string*))
           => ^(join fragments)))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (queue (@request @requests)
       ((get "/")
@@ -608,7 +608,7 @@
     (client (@request -> (http local 9813) -> @responses format: binary)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
 
     (queue (@request @requests) ())
     (queue (@response @responses)
@@ -624,13 +624,13 @@
       (backsys
         {¦ request_: [get ("/")] -response_}
           <> {(request): (), response: (ok "Hello World")}))
-    (circuit (pool @pool))
+    (pool @pool)
     (cell @in (get "/"))
     (cell @out)
     (client (@in -> (http local) -> @out format: text)))
 
   (frame/tail fast-forward: true
-    (circuit (pool @pool))
+    (pool @pool)
     (cell @in)
     (cell @out (ok "Hello World"))
     (client (@in -> (http local) -> @out format: text) up)))
@@ -645,7 +645,7 @@
           {¦ request_: [get ("/")] -response_}
             <> {(request): (), response: (ok "Hello World")})))
 
-    (circuit (pool @pool))
+    (pool @pool)
 
     (cell @in (get "/"))
     (cell @out)

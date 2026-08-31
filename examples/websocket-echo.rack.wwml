@@ -5,6 +5,6 @@
     {¦ in_: (M←"bye\n" _*) out_}
       <> {(in): (), (out): ()}))
 
-(circuit (pool @pool))
+(pool @pool)
 
 ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)

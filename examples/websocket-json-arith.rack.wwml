@@ -21,7 +21,7 @@
     (* ±a ±b) => ^(* a b)
     (/ ±a ±b) => ^(/ a b)))
 
-(circuit (pool @pool))
+(pool @pool)
 
 ;; Example inputs:
 ;; 100
