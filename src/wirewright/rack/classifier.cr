@@ -2483,8 +2483,8 @@ module Ww::Rack
       # [db (@stmt_ -> uri_string -> @response_) status_]
       #
       # |@key stmt rack.edge
-      # The edge used to find the cell containing the SQL statement to execute.
-      # See also: `rack.db.stmt`.
+      # The edge used to find the cell containing the SQL to execute. Its value must
+      # be one of: `rack.db.stmt`, `rack.db.query`.
       #
       # |@key uri
       # The URI to connect to the database. Currently, only the following databases
@@ -2537,7 +2537,7 @@ module Ww::Rack
       # | Status                    | Description                                                                                                              |
       # | ------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
       # | *Missing*                 | The status is indeterminate.                                                                                             |
-      # | `pending`                 | The server is trying to start.                                                                                           |
+      # | `pending`                 | The server is starting.                                                                                                  |
       # | `(pending detail_string)` | The server failed to start, another attempt will be made with backoff (*detail* explains the failure.)                   |
       # | `up`                      | The server is running.                                                                                                   |
       # | `dn`                      | The server is not running and will not restart automatically. To restart, you should remove this status.                 |
@@ -2883,7 +2883,7 @@ module Ww::Rack
       # | Status                    | Description                                                                                                                                                                                                                                                                                             |
       # | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
       # | *Missing*                 | The status is indeterminate.                                                                                                                                                                                                                                                                            |
-      # | `pending`                 | The client is trying to connect.                                                                                                                                                                                                                                                                        |
+      # | `pending`                 | The client is connecting                                                                                                                                                                                                                                                                                |
       # | `(pending detail_string)` | The client failed to connect, another attempt will be made with backoff (*detail* explains the failure.)                                                                                                                                                                                                |
       # | `up`                      | The client is connected.                                                                                                                                                                                                                                                                                |
       # | `dn`                      | The client is not connected and will not reconnect automatically. To reconnect, you should remove this status. This status signifies client-initiated disconnect: if you replace the current `up` status with `dn`, this is the same as calling `close()` on the client-side in traditional languages.  |

@@ -21,10 +21,11 @@
 #
 # Rack circuits can contain *subcircuits* (`rack.circuit`, `rack.node`, `rack.device`, etc.)
 # Evolution (time) always runs *top-down*: host circuits are always *time-stepped*
-# (evolved into the future by one step) **before** subcircuits. The reasoning for
-# this is the same as in simulation. We consider subcircuits to be *embedded* in, and
-# *simulated* by, the host circuit. As the host circuit must run in order for
-# the subcircuit to run, the order of evolution is naturally top-down.
+# (evolved into the future by one step) **before** subcircuits (guest circuits).
+# The reasoning for this is the same as in simulation. We consider guest circuits to
+# be *simulated* by their host circuit. As the host circuit must run in order for
+# a subcircuit to run, the order of evolution is naturally top-down: the simulated
+# time-step of a guest circuit requires the host's time-step.
 #
 # For a start, consider looking at simpler, less "philosophically heavy" nodes such
 # as: `rack.cell`, `rack.feed`, `rack.parser`, `rack.path`.
