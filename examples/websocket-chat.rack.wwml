@@ -1,4 +1,4 @@
-(server (@pool (ws local 5000) format: text)
+(server (@pool (ws local 5000))
   (frag @rx (sensor (many chat _string)))
   (frag @tx (appearance chat))
   (frag @user)

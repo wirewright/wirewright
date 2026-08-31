@@ -1,4 +1,4 @@
-# Rack integration with `Harmony`.
+# Integrates Rack with `Harmony`.
 module Ww::Rack::Accord
   extend self
 
@@ -23,12 +23,15 @@ module Ww::Rack::Accord
     state.harmony.deadline?
   end
 
-  # NOTE: *world* is a logical snapshot of the current world which must be used in
-  # a read-only way by step() overloads. The same is true for *acknowledged*. The set
-  # of *goals*, on the other hand, starts empty and is meant to be populated by them.
+  # :nodoc:
+  #
+  # NOTE: *world* is a logical snapshot of the current world, which must be used in
+  # a read-only way by all step() overloads. The same is true for *acknowledged*.
+  # The set of *goals*, on the other hand, starts empty and is meant to be populated
+  # by the step() overloads.
   defrecord StepContext,
-    world : Harmony::FactSet,
     goals : Harmony::GoalSet,
+    world : Harmony::ReadonlyWorld,
     acknowledged : Set(Harmony::PeerId | Harmony::HttpRequestId)
 
   def step(state : State, & : Propose -> T) : T forall T
@@ -38,7 +41,7 @@ module Ww::Rack::Accord
 
     result = state.schemas.epoch do
       propose = Propose.new do |hg, proposals|
-        ctx = StepContext.new(state.harmony.world, goals, state.acknowledged)
+        ctx = StepContext.new(goals, state.harmony.world, state.acknowledged)
         propose(state, ctx, hg, proposals)
       end
       yield propose
@@ -47,9 +50,9 @@ module Ww::Rack::Accord
     state.harmony.submit(goals)
     state.harmony.reconcile
 
-    # NOTE: Importantly, we update the acknowledged set *after* proposal because it
-    # should actually represent the state of affairs *prior* to proposal
-    # *during* proposal.
+    # NOTE: Importantly, we update the acknowledged set *after* proposal(),
+    # because it should actually represent the state of affairs *before*
+    # proposal(), *during* proposal().
     changelog.each do |change|
       fact = change.element
       case {change, fact}
@@ -70,19 +73,21 @@ module Ww::Rack::Accord
   private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :server) do |node|
       Term.case(node.term) do
-        matchpi %{[server (@_ _ dn) _*]} { }
-        matchpi %{[server (@_ _ (dn _string)) _*]} { }
+        # Skip servers that are currently down.
+        matchpi %{[server [@_ _ dn] _*]} { }
+        matchpi %{[server [@_ _ (dn _string)] _*]} { }
 
         matchpi(<<-WWML) do
         [server
           (@pool_ transportQ←(ws _* ⍊ link: (%optional direct linkQ_)) _?
             ⍊ in: (%optional @in @input_)
               out: (%optional @out @output_)
-              format: (%optional binary formatQ_)
+              format: (%optional text formatQ_)
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
           continue unless defn = http_server_transport?(transportQ)
+
           next unless link = link?(linkQ)
           next unless format = Format.format?(state.schemas, hg, node, formatQ)
           next unless format_policy = Format.policy?(policyQ)
@@ -97,7 +102,7 @@ module Ww::Rack::Accord
           (@pool_ transportQ_ _?
             ⍊ request: (%optional @request @request_)
               response: (%optional @response @response_)
-              format: (%optional binary formatQ_)
+              format: (%optional text formatQ_)
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
@@ -116,11 +121,12 @@ module Ww::Rack::Accord
           (@pool_ transportQ_ _?
             ⍊ in: (%optional @in @input_)
               out: (%optional @out @output_)
-              format: (%optional binary formatQ_)
+              format: (%optional text formatQ_)
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
           continue unless defn = socket_server_transport?(transportQ)
+
           next unless format = Format.format?(state.schemas, hg, node, formatQ)
           next unless format_policy = Format.policy?(policyQ)
 
@@ -135,14 +141,15 @@ module Ww::Rack::Accord
 
     hg.propose(proposals, :client) do |node|
       Term.case(node.term) do
-        # Allow the circuit to use an errorless `dn` to disable the socket.
+        # Allow the circuit to use an errorless `dn` to disable the socket. Also
+        # ignore clients that are currently down for other reasons.
         matchpi %{[client [@_ -> _ -> @_] dn]} { }
         matchpi %{[client [@_ -> _ -> @_] (dn _string)]} { }
 
         matchpi(<<-WWML) do
         [client
           (@outgoing_ -> transportQ_ -> @ingoing_
-            ⍊ format: (%optional binary formatQ_)
+            ⍊ format: (%optional text formatQ_)
               format-policy: (%optional discard policyQ_))
           _?]
         WWML
@@ -316,6 +323,99 @@ module Ww::Rack::Accord
     end
   end
 
+  # |@ rack.client.key
+  #
+  # |@summary
+  # The `key` pair accepted by all client transports.
+  #
+  # |@block
+  # By default, all clients with the same transport (same by value, equal) will
+  # share the same underlying connection, regardless of where they are in
+  # the circuit or how many of them there are.
+  #
+  # This may come as a strange design choice, but the opposite choice -- to make
+  # all client nodes be separate connections -- is also not a very good one.
+  #
+  # If you have, say, a hundred components, and each for some reason wants
+  # access to an HTTP client, instead of doing complex routing, you can just
+  # give each component its own HTTP client node. If they share the same key
+  # (and they do share the same default `master` key if you don't change
+  # it explicitly) -- if they share the same key, then the same connection
+  # will be used for all of them.
+  #
+  # Thus you get the benefit of both decentralization and isolation (no complex
+  # interaction beyond the "membrane") of each component, and centralization
+  # (no needless connection duplication, running out of fds, etc.) Moreover --
+  # you should thank Rack for this -- concurrent access is managed completely
+  # transparently for you.
+  #
+  # |@example
+  # Consider this circuit:
+  #
+  # ```wwml
+  # (module {}
+  #   (cell @in)
+  #   (cell @out)
+  #   (client (@in -> (ws local 5000) -> @out)))
+  #
+  # (module {}
+  #   (cell @in)
+  #   (cell @out)
+  #   (client (@in -> (ws local 5000) -> @out)))
+  # ```
+  #
+  # It can be rewritten more explicitly as:
+  #
+  # ```wwml
+  # (module {}
+  #   (cell @in)
+  #   (cell @out)
+  #   (client (@in -> (ws local 5000 key: master) -> @out)))
+  #
+  # (module {}
+  #   (cell @in)
+  #   (cell @out)
+  #   (client (@in -> (ws local 5000 key: master) -> @out)))
+  # ```
+  #
+  # Notice how both clients share the same key, `master`. Therefore, they are
+  # currently "views" of the same underlying WebSocket. Whenever the WebSocket
+  # receives anything, all `@out` cells of its "views" are going to be populated.
+  #
+  # In order to create a different connection for each client node, you should
+  # set the *key* pair to a suitable key (e.g. a random number or a UUID).
+  #
+  # ```wwml
+  # (module {}
+  #   (cell @in)
+  #   (cell @out)
+  #   (client (@in -> (ws local 5000 key: "Alice's connection") -> @out)))
+  #
+  # (module {}
+  #   (cell @in)
+  #   (cell @out)
+  #   (client (@in -> (ws local 5000 key: "Bob's connection") -> @out)))
+  # ```
+  #
+  # The key can be a `rack.edge`:
+  #
+  # ```wwml
+  # (cell @id "Alice's connection")
+  # (cell @in)
+  # (cell @out)
+  # (client (@in -> (ws local 5000 key: @id) -> @out))
+  # ```
+  #
+  # This is particularly useful when you already have an id in a cell (such as in
+  # client devices of a `rack.server`), or when you can extract one from a cell
+  # (e.g. using the `rack.part` node).
+  #
+  # If there are zero or more than one cells at the edge, or if the cell is empty,
+  # the entire transport is invalidated. The client (and the underlying connection)
+  # are not started until the key is known.
+  #
+  # Changing the key dynamically will make the client "join" and "leave"
+  # different connections.
   private def key?(hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Term?
     unless Term.edge?(term)
       return term
@@ -344,6 +444,16 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
+      #
+      # |@example
+      # Here is how you can create a simple TCP echo server.
+      #
+      # ```wwml
+      # (server (@pool (tcp local 5000))
+      #   (feed (@in front) (@out back)))
+      #
+      # (circuit (pool @pool))
+      # ```
       matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ link_⋮ direct)} do
         return unless host = host?(hostQ)
 
@@ -359,6 +469,18 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
+      #
+      # |@example
+      # Here is how you can create a simple UNIX echo server. Please note that
+      # the file at *path* must not exist. Otherwise, the server will refuse
+      # to start until *path* is absent -- at which point it will start just fine.
+      #
+      # ```wwml
+      # (server (@pool (unix "/tmp/example.sock"))
+      #   (feed (@in front) (@out back)))
+      #
+      # (circuit (pool @pool))
+      # ```
       matchpiT %{(unix path_string ⍊ link_⋮ direct)}, path: NormalPath do
         Harmony::UnixServerDefn.new(path, link?(link) || return)
       end
@@ -373,71 +495,6 @@ module Ww::Rack::Accord
     # |@summary
     # Transports supported by the client node.
     Term.case(term) do
-      # |@ rack.client.key
-      #
-      # |@summary
-      # The `key` pair whic all client transports accept.
-      #
-      # |@block
-      # By default, all clients with equal transport will share the same underlying
-      # connection (regardless of where they are in the circuit or how many of them
-      # there are!)
-      #
-      # ```wwml
-      # (module {}
-      #   (cell @in)
-      #   (cell @out)
-      #   (client (@in -> (ws local 5000) -> @out)))
-      #
-      # (module {}
-      #   (cell @in)
-      #   (cell @out)
-      #   (client (@in -> (ws local 5000) -> @out)))
-      # ```
-      #
-      # This can be rewritten more explicitly as:
-      #
-      # ```wwml
-      # (module {}
-      #   (cell @in)
-      #   (cell @out)
-      #   (client (@in -> (ws local 5000 key: master) -> @out)))
-      #
-      # (module {}
-      #   (cell @in)
-      #   (cell @out)
-      #   (client (@in -> (ws local 5000 key: master) -> @out)))
-      # ```
-      #
-      # Notice how both clients share the same connection, named `master`.
-      #
-      # In order to create distinct connections for each client node, you should set
-      # the *key* pair to a suitable key (e.g. a random number or a UUID).
-      #
-      # ```wwml
-      # (module {}
-      #   (cell @in)
-      #   (cell @out)
-      #   (client (@in -> (ws local 5000 key: "Alice's connection") -> @out)))
-      #
-      # (module {}
-      #   (cell @in)
-      #   (cell @out)
-      #   (client (@in -> (ws local 5000 key: "Bob's connection") -> @out)))
-      # ```
-      #
-      # The key can be a `rack.edge`:
-      #
-      # ```wwml
-      # (cell @id "Alice's connection")
-      # (cell @in)
-      # (cell @out)
-      # (client (@in -> (ws local 5000 key: @id) -> @out))
-      # ```
-      #
-      # If there is no cell at the edge, or if the cell is empty, the entire transport
-      # is invalidated.
-
       # |@ rack.client.transport.renew
       #
       # |@summary
@@ -445,23 +502,29 @@ module Ww::Rack::Accord
       #
       # |@block
       # If `renew: true`, uses `(pending _string)` instead of `(dn _string)` when
-      # the connection breaks or closes. `renew: false` by default.
+      # a previously established connection breaks or closes.
       #
-      # Rack clients attempt to *connect* repeatedly by default, with backoff; but they do
-      # not do automatic *re*connects after (or in case) an *established* connection breaks
-      # for some reason. You can explicitly enable reconnects by setting `renew: true`.
+      # `renew: false` by default.
+      #
+      # Rack clients attempt to *connect* repeatedly, with backoff. However, they do
+      # not attempt automatic *re*connects after (or in case) an *established* connection
+      # breaks. You can enable reconnects in such cases by setting `renew: true`.
       #
       # We do not enable reconnects by default because doing so could create state sync bugs and
-      # the like -- when the client reconnects faster than you can detect the connection was dropped.
-      # That would be your problem, of course, not `client`'s -- it gives you exactly one frame where
-      # the `dn` is there, so you can detect it and pause everything quickly. But if you do not do
-      # that, we would rather give you a reliable way to detect closure at your pace and repair
-      # things, than consume `dn` silently and leave you confused. A new connection is a new connection,
-      # after all, and we'd like the boundary between to be clearly recongizable.
+      # the like -- when the client reconnects faster than you can detect the connection was dropped,
+      # a distant cousin of the ABA problem. It would be your problem, of course, not `client`'s --
+      # it gives you exactly one frame where the `dn` is there, so you can detect it and suspend
+      # everything quickly. But if you do not do that, we would rather give you a reliable way
+      # to detect closure at your own pace and repair things, than consume `dn` silently and
+      # leave you confused. A new connection is a new connection, after all, and we'd like
+      # the boundary in between to be clearly recongizable.
       #
-      # If you protocol or the way you use `client` is stateless, or there's no complex
-      # sync logic, you may actually want reconnects. That's why `renew: true` exists,
-      # to relieve you of the need to manually reset the client (or via rules).
+      # If you protocol or the way you use `client` allows you to, you may actually want
+      # automatic reconnects. That's why `renew: true` exists, to relieve you of the need
+      # to manually reset the client.
+      #
+      # You can still reconnect a broken client by clearing its status, either manually
+      # (by literally deleting it) or through rules.
 
       # |@ rack.client.transport
       #
@@ -470,11 +533,39 @@ module Ww::Rack::Accord
       #
       # |@key host rack.[network].host
       # |@key key rack.client.key
-      # |@key renew rack.client.transport.renew
       # |@key link rack.[network].link
+      # |@key renew rack.client.transport.renew
       #
       # |@block
       # A plain WebSocket client at *host*:*port* on *path*.
+      #
+      # |@example
+      # Here is how you can connect to a WebSocket server running at `127.0.0.1:5000`,
+      # and send it the message `"Kaixo mundua"`.
+      #
+      # ```wwml
+      # (cell @in "Kaixo mundua")
+      # (cell @out)
+      # (client (@in -> (ws local 5000) -> @out))
+      # ```
+      #
+      # If the server is a simple echo server, the above would evolve as follows:
+      #
+      # ```wwml
+      # ;; Frame 1 (assuming the client connected successfully)
+      # ;; The message is travelling over the wire.
+      #
+      # (cell @in)
+      # (cell @out)
+      # (client (@in -> (ws local 5000) -> @out) up)
+      #
+      # ;; Frame 2
+      # ;; The echo has arrived.
+      #
+      # (cell @in)
+      # (cell @out "Kaixo mundua")
+      # (client (@in -> (ws local 5000) -> @out) up)
+      # ```
       matchpiT(<<-'WWML', path: String) do
       (ws hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
@@ -508,6 +599,13 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket client at *host*:*port* on *path*. Establishes a secure
       # connection using TLS.
+      #
+      # |@example
+      # ```wwml
+      # (cell @in "Kaixo mundua")
+      # (cell @out)
+      # (client (@in -> (wss local 5000) -> @out))
+      # ```
       matchpiT(<<-'WWML', path: String) do
       (wss hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
@@ -536,6 +634,13 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over TCP at *host*:*port*.
+      #
+      # |@example
+      # ```wwml
+      # (cell @in "Kaixo mundua")
+      # (cell @out)
+      # (client (@in -> (tcp local 5000) -> @out))
+      # ```
       matchpiT(<<-'WWML') do
       (tcp hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
@@ -560,6 +665,13 @@ module Ww::Rack::Accord
       #
       # |@block
       # [NetStrings](https://cr.yp.to/proto/netstrings.txt) over a Unix socket at *path*.
+      #
+      # |@example
+      # ```wwml
+      # (cell @in "Kaixo mundua")
+      # (cell @out)
+      # (client (@in -> (unix "/tmp/example.sock") -> @out))
+      # ```
       matchpi(<<-'WWML', path: NormalPath) do
       (unix path_string
         ⍊ key: (%optional master keyQ_)
@@ -588,11 +700,43 @@ module Ww::Rack::Accord
       # |@block
       # An HTTP server at *host*:*port*.
       #
-      # HTTP requests are represented using the HTTP request language.
-      # See `http.request`.
+      # HTTP requests use the HTTP request language (see `http.request`).
+      # HTTP responses use the HTTP response language (see `http.response`).
       #
-      # HTTP responses are represented using the HTTP response language.
-      # See `http.response`
+      # |@example
+      # Here's a simple HTTP server that displays `Hello World` on the home page,
+      # and `Not found` on all other pages. It'll refuse all other requests with
+      # status code 400.
+      #
+      #
+      # ```wwml
+      # (server (@pool (http local 5000))
+      #   (backsys
+      #     {¦ -response_}
+      #       <> {response: (bad-request)}
+      #     {¦ request: [get _] -response_}
+      #       <> {response: (not-found ⟬‸<h1 style="color: red">Not found</h1>‸⟭)}
+      #     {¦ request: [get ["/"]] -response_}
+      #       <> {response: (ok ⟬‸<h1>Hello World</h1>‸ ⁑ text/html⟭)}))
+      #
+      # (circuit (pool @pool))
+      # ```
+      #
+      # If we send an unsupported request:
+      #
+      # ```wwml
+      # (cell @in (post "/" "hi"))
+      # (cell @out)
+      # (client (@in -> (http local 5000) -> @out))
+      # ```
+      #
+      # We get the correct response:
+      #
+      # ```wwml
+      # (cell @in)
+      # (cell @out (bad-request))
+      # (client (@in -> (http local 5000) -> @out) up)
+      # ```
 
       # |@ rack.server.transport
       #
@@ -605,6 +749,16 @@ module Ww::Rack::Accord
       # |@block
       # A plain WebSocket server at *host*:*port*. If there is an existing HTTP server
       # at *port* (within the same circuit!), extends it with WebSocket support.
+      #
+      # |@example
+      # Here's how you can create a simple WebSocket echo server.
+      #
+      # ```wwml
+      # (server (@pool (ws local 5000))
+      #   (feed (@in front) (@out back)))
+      #
+      # (circuit (pool @pool))
+      # ```
 
       matchpiT %{[http hostQ_ port←(%number u16)]}, %{[ws hostQ_ port←(%number u16)]} do
         return unless host = host?(hostQ)
@@ -626,13 +780,22 @@ module Ww::Rack::Accord
       # Path to the private key file.
       #
       # |@block
-      # An HTTPS server at *host*:*port*.
+      # An HTTPS server at *host*:*port*. Uses TLS for security.
       #
-      # HTTP requests are represented using the HTTP request language.
-      # See `http.request`.
+      # HTTP requests use the HTTP request language (see `http.request`).
+      # HTTP responses use the HTTP response language (see `http.response`).
       #
-      # HTTP responses are represented using the HTTP response language.
-      # See `http.response`
+      # |@example
+      # HTTPS support... still requires a great deal of improvement (and
+      # understanding on my end), but you should be able to get a server
+      # running with something along the lines of:
+      #
+      # ```wwml
+      # (server (@pool (https local 5000 cert: "path/to/openssl.cert" key: "path/to/openssl.key"))
+      #   (backsys
+      #     {¦ request: [get ["/"]] -response_}
+      #       <> {response: (ok "Hello")}))
+      # ```
 
       # |@ rack.server.transport
       #
@@ -652,6 +815,16 @@ module Ww::Rack::Accord
       # A plain WebSocket server at *host*:*port* (using TLS). If there is
       # an existing HTTPS server at *port* (within the same circuit!), extends
       # it with WebSocket support.
+      #
+      # |@example
+      # Works similar to `https`. Here's a simple echo server:
+      #
+      # ```wwml
+      # (server (@pool (wss local 5000 cert: "path/to/openssl.cert" key: "path/to/openssl.key"))
+      #   (feed (@in front) (@out back)))
+      #
+      # (circuit (pool @pool))
+      # ```
 
       matchpiT(
         %{(https hostQ_ port←(%number u16) ⍊ cert_string key_string)},
@@ -686,11 +859,43 @@ module Ww::Rack::Accord
       # |@block
       # Connects to an HTTP server at *host*:*port*.
       #
-      # HTTP requests are represented using the HTTP request language.
-      # See `http.request`.
+      # HTTP requests use the HTTP request language (see `http.request`). HTTP responses
+      # use the HTTP response language (see `http.response`).
       #
-      # HTTP responses are represented using the HTTP response language.
-      # See `http.response`
+      # |@example
+      # Sending a request to a local server:
+      #
+      # ```wwml
+      # (cell @request (get "/"))
+      # (cell @response)
+      # (client (@request -> (http local 5000) -> @response))
+      # ```
+      #
+      # Sending a request to a remote server:
+      #
+      # ```wwml
+      # (cell @request (get "/"))
+      # (cell @response)
+      # (client (@request -> (http "example.org") -> @response))
+      # ```
+      #
+      # Notice how you can omit the port `8080`.
+      #
+      # You can use `rack.queue` instead of `cell` to queue requests, responses,
+      # or both:
+      #
+      # ```wwml
+      # (queue (@request @requests)
+      #   ((get "/")
+      #    (get "/posts")
+      #    (get "/employees")))
+      #
+      # (queue (@response @responses) ())
+      #
+      # ;; Take a request from the front of the requests queue -- `@request`.
+      # ;; Put the resulting response at the back of the responses queue -- `@responses`.
+      # (client (@request -> (http "example.org" 8080) -> @responses))
+      # ```
 
       matchpiT %{(http hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_))} do
         return unless host = host?(hostQ)
@@ -728,11 +933,17 @@ module Ww::Rack::Accord
       # Connects to an HTTP server at *host*:*port*. Establishes a secure connection
       # using TLS.
       #
-      # HTTP requests are represented using the HTTP request language.
-      # See `http.request`.
+      # HTTP requests use the HTTP request language (see `http.request`). HTTP responses
+      # use the HTTP response language (see `http.response`).
       #
-      # HTTP responses are represented using the HTTP response language.
-      # See `http.response`
+      # |@example
+      # Sending a request to a remote server:
+      #
+      # ```wwml
+      # (cell @request (get "/"))
+      # (cell @response)
+      # (client (@request -> (https "example.org") -> @response))
+      # ```
 
       matchpiT %{(https hostQ_ port←(%number u16) ⍊ key: (%optional master keyQ_) verify⋮ true)} do
         return unless host = host?(hostQ)
@@ -803,7 +1014,39 @@ module Ww::Rack::Accord
     format : Format::Any,
     format_policy : Format::Policy
 
-  def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | HttpServer) : D7::Patch?
+  private def status_and_incarnation(world : Harmony::ReadonlyWorld, defn : Harmony::ServerDefn) : {Term, Harmony::ServerId?}
+    world.each(Harmony::RunningServer, defn: defn) do |fact|
+      return Term.of(:up), fact.server_id
+    end
+
+    world.each(Harmony::PendingServer, defn: defn) do |fact|
+      return Term.of(:pending, fact.detail), nil
+    end
+
+    world.each(Harmony::BrokenServer, defn: defn) do |fact|
+      return Term.of(:dn, fact.detail), nil
+    end
+
+    {Term.of(:pending), nil}
+  end
+
+  private def status_and_incarnation(world : Harmony::ReadonlyWorld, defn : Harmony::ClientDefn) : {Term, Harmony::ClientId?}
+    world.each(Harmony::RunningClient, defn: defn) do |fact|
+      return Term.of(:up), fact.client_id
+    end
+
+    world.each(Harmony::PendingClient, defn: defn) do |fact|
+      return Term.of(:pending, fact.detail), nil
+    end
+
+    world.each(Harmony::BrokenClient, defn: defn) do |fact|
+      return Term.of(:dn, fact.detail), nil
+    end
+
+    {Term.of(:pending), nil}
+  end
+
+  private def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | HttpServer) : D7::Patch?
     # If there's no associated pool, then the server's "machine" is structurally
     # incomplete, so it cannot work -- nor does it *exist*, really.
     unless pool = Rack.pool?(hg, server.pool)
@@ -813,35 +1056,24 @@ module Ww::Rack::Accord
 
     ctx.goals.add(Harmony::Server.new(server.defn))
 
-    status = Term.of(:pending)
-    incarnation = nil
+    status, incarnation = status_and_incarnation(ctx.world, server.defn)
 
-    pass do
-      ctx.world.each(Harmony::RunningServer, defn: server.defn) do |fact|
-        status = Term.of(:up)
-        incarnation = fact.server_id
-        break
-      end
-
-      next if incarnation
-
-      ctx.world.each(Harmony::PendingServer, defn: server.defn) do |fact|
-        status = Term.of(:pending, fact.detail)
-        break
-      end
-
-      next if incarnation
-
-      ctx.world.each(Harmony::BrokenServer, defn: server.defn) do |fact|
-        status = Term.of(:dn, fact.detail)
-        break
-      end
+    # When there's no incarnation, this means the server has disappeared for some reason. Along
+    # with it, assume all its clients have disappeared. Clear the pool and update the status
+    # to inform the circuit.
+    if incarnation.nil?
+      return D7.patches(
+        # (server (@_ _ ⏏) _*)
+        D7.patch(server.node, {1, 2, status}),
+        # (pool @_ ⏏)
+        D7.patch(pool.node, {2, Term[]}),
+      )
     end
 
     step(ctx, hg, server, pool, status, incarnation)
   end
 
-  def step(ctx : StepContext, hg : D7::Hypergraph, server : WebSocketServer) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, server : WebSocketServer) : D7::Patch?
     # If there's no associated pool, then the server's "machine" is structurally
     # incomplete, so it cannot work -- nor does it *exist*, really.
     unless pool = Rack.pool?(hg, server.pool)
@@ -851,160 +1083,389 @@ module Ww::Rack::Accord
 
     ctx.goals.add(Harmony::Server.new(server.defn))
 
-    status = Term.of(:pending)
-    incarnation = nil
+    status, incarnation = status_and_incarnation(ctx.world, server.defn)
 
-    pass do
-      ctx.world.each(Harmony::RunningServer, defn: server.defn) do |fact|
-        status = Term.of(:up)
-        incarnation = fact.server_id
-        break
-      end
-
-      next if incarnation
-
-      ctx.world.each(Harmony::PendingServer, defn: server.defn) do |fact|
-        status = Term.of(:pending, fact.detail)
-        break
-      end
-
-      next if incarnation
-
-      ctx.world.each(Harmony::BrokenServer, defn: server.defn) do |fact|
-        status = Term.of(:dn, fact.detail)
-        break
-      end
+    # Ditto as above: the server disappeared, assume its clients disappeared too.
+    # Clear the pool and update the status to inform the circuit.
+    if incarnation.nil?
+      return D7.patches(
+        # (server (@_ _ ⏏) _*)
+        D7.patch(server.node, {1, 2, status}),
+        # (pool @_ ⏏)
+        D7.patch(pool.node, {2, Term[]}),
+      )
     end
 
-    unless incarnation
-      return D7.patch(server.node, {1, 2, status})
-    end
+    handler = ctx.goals.single?(Harmony::WebSocketHandler, server_id: incarnation)
+    handler ||= Harmony::WebSocketHandler.new(incarnation, server.link)
+    ctx.goals.add(handler)
 
-    if handler = ctx.goals.single?(Harmony::WebSocketHandler, server_id: incarnation)
-      unless handler.link == server.link
-        return D7.patch(server.node, {1, 2, {:dn, "link conflict"}})
-      end
-    else
-      ctx.goals.add(Harmony::WebSocketHandler.new(incarnation, server.link))
+    unless handler.link == server.link
+      return D7.patch(server.node, {1, 2, {:dn, "conflicting `link:`s for the same host and port"}})
     end
 
     step(ctx, hg, server, pool, status, incarnation)
   end
 
-  def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | WebSocketServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, client : SocketClient | HttpClient) : D7::Patch?
+    ctx.goals.add(Harmony::Client.new(client.defn))
+
+    status, incarnation = status_and_incarnation(ctx.world, client.defn)
+    if incarnation.nil?
+      return D7.patch(client.node, {2, status})
+    end
+
+    step(ctx, hg, client, status, incarnation)
+  end
+
+  defrecord DeviceIn, key : UInt32
+  defrecord DeviceOut, key : UInt32, msg : Term?, smart: true
+  defrecord DeviceCell, key : UInt32, value : Term
+
+  # :nodoc:
+  EDGE_ID = Term.of(:edge, :id)
+
+  # Returns the peer id associated with *device*.
+  private def extract?(device : D7::CircuitNode, cls : Harmony::PeerId.class | Harmony::HttpRequestId.class)
+    # NOTE: the id cell is the first cell because we generate it this way. So
+    # O(N) here is effectively O(1).
+    return unless cell = extract?(device, DeviceCell, EDGE_ID)
+    return unless reprQ = cell.value.as_s?
+    return unless repr = UUID.parse?(reprQ.to(String))
+
+    cls.new(repr)
+  end
+
+  private def extract?(device : D7::CircuitNode, cls : DeviceIn.class, edge : Term) : DeviceIn?
+    return unless cell = extract?(device, DeviceCell, edge)
+    return unless _ = cell.value.as_itemsonly_d?
+
+    DeviceIn.new(cell.key)
+  end
+
+  private def extract?(device : D7::CircuitNode, cls : DeviceOut.class, edge : Term) : DeviceOut?
+    return unless cell = extract?(device, DeviceCell, edge)
+    return unless msgs = cell.value.as_itemsonly_d?
+
+    DeviceOut.new(cell.key, msgs.items.first?)
+  end
+
+  private def extract?(device : D7::CircuitNode, cls : DeviceCell.class, edge needle : Term) : DeviceCell?
+    candidates = Pf::Kit.stack_array(DeviceCell, 1)
+
+    device.children.each_with_index(offset: device.feature.range.begin) do |child, index|
+      next unless child.is_a?(D7::GndLeaf)
+
+      node = child.feature.node
+      next unless node = node.as_d?
+      next unless node.itemsize == 3
+
+      head, edge, value = node
+      next unless head == Term.of(:cell)
+      next unless edge == needle
+
+      candidates << DeviceCell.new(index.to_u32, value)
+    end
+
+    candidates.single?
+  end
+
+  private def each_device(devices : D7::CircuitNode, & : D7::CircuitNode, UInt32 ->) : Nil
+    devices.children.zip(0u32...devices.children.size) do |device, device_key|
+      next unless device.is_a?(D7::CircuitNode)
+
+      node : Term::Dict = device.feature.node
+      next unless node.itemsize >= 1
+      next unless node.items.first == Term.of(:device)
+
+      yield device, device_key
+    end
+  end
+
+  alias DeviceChange = DeviceAdded | DeviceRemoved | DeviceModified
+  alias DeviceModified = DeviceReceivedMessage | DeviceReceivedBatch | DeviceSentMessage
+
+  defrecord DeviceAdded, device : Term, brief: true
+  defrecord DeviceRemoved, device_key : UInt32, brief: true
+  defrecord DeviceReceivedMessage, device_key : UInt32, mailbox_key : UInt32, msg : Term, brief: true
+  defrecord DeviceReceivedBatch, device_key : UInt32, mailbox_key : UInt32, batch : Slice(Term), brief: true
+  defrecord DeviceSentMessage, device_key : UInt32, mailbox_key : UInt32, brief: true
+
+  struct DeviceChangeList
+    def initialize
+      @added = [] of DeviceAdded
+      @removed = Set(DeviceRemoved).new
+      @modified = [] of DeviceModified
+    end
+
+    def includes?(cls : DeviceRemoved.class) : Bool
+      @removed.present?
+    end
+
+    def includes?(change : DeviceRemoved) : Bool
+      @removed.includes?(change)
+    end
+
+    def each_added(& : DeviceAdded ->) : Nil
+      @added.each { |change| yield change }
+    end
+
+    def each_modified(& : DeviceModified ->) : Nil
+      @modified.each { |change| yield change }
+    end
+
+    def <<(change : DeviceAdded) : Nil
+      @added << change
+    end
+
+    def <<(change : DeviceRemoved) : Nil
+      @removed << change
+    end
+
+    def <<(change : DeviceModified) : Nil
+      @modified << change
+    end
+  end
+
+  private def apply(pool : Term::Dict, changes : DeviceChangeList) : Term::Dict
+    pool = pool.transaction do |commit|
+      changes.each_modified do |change|
+        # We read the updated device, because different changes can target
+        # the same device.
+        device0 = commit[change.device_key]
+
+        mailbox0 = device0[change.mailbox_key, 2]
+        case change
+        in DeviceReceivedMessage
+          mailbox1 = mailbox0.append(change.msg)
+        in DeviceReceivedBatch
+          mailbox1 = mailbox0.transaction(&.concat(change.batch))
+        in DeviceSentMessage
+          mailbox1 = mailbox0.replace(0...1, Term.rep)
+        end
+
+        device1 = Term.morph(device0, {change.mailbox_key, 2, mailbox1})
+
+        commit.with(change.device_key, device1)
+      end
+
+      changes.each_added do |change|
+        commit << change.device
+      end
+    end
+
+    unless DeviceRemoved.in?(changes)
+      return pool
+    end
+
+    pool.pairspart.transaction do |commit|
+      pool.items.each_with_index do |item, index|
+        change = DeviceRemoved.new(index.to_u32)
+        next if change.in?(changes)
+
+        commit << item
+      end
+    end
+  end
+
+  class FormatAborted < Exception
+    @callstack = CallStack.empty
+  end
+
+  defrecord HttpRequest, term : Term
+  defrecord HttpResponse, term : Term
+
+  private def encode?(format : Format::Any, policy : Format::Policy, msg : Term) : Term::Blob?
+    payload = Format.encode?(format, msg)
+
+    case policy
+    in .discard?
+      payload
+    in .abort?, .wrap? # ?!
+      payload || raise FormatAborted.new
+    end
+  end
+
+  private def decode?(format : Format::Any, policy : Format::Policy, payload : Term::Blob) : Term?
+    term = Format.decode?(format, payload)
+
+    case policy
+    in .discard?
+      term
+    in .abort?
+      term || raise FormatAborted.new
+    in .wrap?
+      if term
+        Term.of(:ok, term)
+      else
+        Term.of(:err, "format decode error")
+      end
+    end
+  end
+
+  private def encode?(format : Format::Any, policy : Format::Policy, request : HttpRequest) : Term?
+    Term.case(request.term) do
+      matchpi %{[_symbol _ body_]} do
+        return unless blob = Format.encode?(format, body)
+
+        Term.morph(request.term, {2, blob})
+      end
+
+      # Keep all other requests as-is.
+      otherwise do
+        request.term
+      end
+    end
+  end
+
+  private def decode?(format : Format::Any, policy : Format::Policy, payload : HttpRequest) : Term?
+    Term.case(payload.term) do
+      matchpiT %{[_symbol _ bodyQ_blob]} do
+        return unless body = Format.decode?(format, bodyQ)
+
+        Term.morph(payload.term, {2, body})
+      end
+
+      # Keep all other requests as-is.
+      otherwise do
+        payload.term
+      end
+    end
+  end
+
+  private def encode?(format : Format::Any, policy : Format::Policy, response : HttpResponse) : Term?
+    Term.case(response.term) do
+      matchpi %{[_ [attachment body_]]} do
+        return unless blob = Format.encode?(format, body)
+
+        Term.morph(response.term, {1, 1, blob})
+      end
+
+      matchpi %{[_ [file _string body_]]} do
+        return unless blob = Format.encode?(format, body)
+
+        Term.morph(response.term, {1, 2, blob})
+      end
+
+      matchpi %{[_ body_]} do
+        return unless blob = Format.encode?(format, body)
+
+        Term.morph(response.term, {1, blob})
+      end
+
+      # Keep all other requests as-is.
+      otherwise do
+        response.term
+      end
+    end
+  end
+
+  private def decode?(format : Format::Any, policy : Format::Policy, payload : HttpResponse) : Term?
+    Term.case(payload.term) do
+      matchpiT %{[_ [attachment bodyQ_blob]]} do
+        return unless body = Format.decode?(format, bodyQ)
+
+        Term.morph(payload.term, {1, 1, body})
+      end
+
+      matchpiT %{[_ [file _string bodyQ_blob]]} do
+        return unless body = Format.decode?(format, bodyQ)
+
+        Term.morph(payload.term, {1, 2, body})
+      end
+
+      matchpiT %{[_ bodyQ_blob]} do
+        return unless body = Format.decode?(format, bodyQ)
+
+        Term.morph(payload.term, {1, body})
+      end
+
+      # Keep all other responses as-is.
+      otherwise do
+        payload.term
+      end
+    end
+  end
+
+  private def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | WebSocketServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
     _, device_tree = D7.follow(hg.@tree, pool.node.addr)
     return unless device_tree.is_a?(D7::CircuitNode)
 
-    status_patch = D7.patch(server.node, {1, 2, status})
+    changes = DeviceChangeList.new
 
-    devices = pool.contents
+    each_device(device_tree) do |device, device_key|
+      next unless peer_id = extract?(device, Harmony::PeerId)
 
-    # Iterate in reverse because we're going to replace() things
-    (0...device_tree.children.size).reverse_each do |device_index|
-      device = device_tree.children[device_index]
-      next unless device.is_a?(D7::CircuitNode)
+      # Detect device disconnects.
+      unless ctx.world.any?(Harmony::RunningPeer, peer_id: peer_id)
+        changes << DeviceRemoved.new(device_key)
+        next
+      end
 
-      # NOTE: *device_index* is a valid key for *devices* because *device_tree* (and its children)
-      # is the parsed version of *devices*.
+      alive = false
 
-      Term.matchpi?(device.feature.node, %{[device _*]}) do
-        # Determine the id of this device. Note that the id cell is the first cell
-        # predominantly (basically always) -- because we generate it this way and
-        # the user has very little ways to change this, so O(N) here is effectively O(1).
-        peer_id = device.children.leftmost? do |child|
-          next unless child.is_a?(D7::GndLeaf)
+      # Process ingoing messages.
+      pass do
+        next unless inbox = extract?(device, DeviceIn, server.in_edge)
 
-          Term.matchpi?(child.feature.node, %{[cell @id reprQ_string]}) do
-            next unless repr = UUID.parse?(reprQ.to(String))
+        alive = true
 
-            Harmony::PeerId.new(repr)
+        # Indicate to the other side that *peer* has spare space for messages.
+        ctx.goals.add(Harmony::MessageSlot.new(peer_id))
+
+        rows = Pf::Kit.stack_array({Harmony::MsgId, Term}, 1)
+
+        ctx.world.each(Harmony::IngoingMessage, endpoint_id: peer_id) do |fact|
+          confirmation = Harmony::IngoingReceiveConfirmation.new(fact.endpoint_id, fact.msgid)
+
+          # Initiate confirmation. If confirmation is a fact, this means it's complete.
+          unless ctx.world.includes?(confirmation)
+            ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
+            ctx.goals << confirmation
+            next
           end
+
+          next unless msg = decode?(server.format, server.format_policy, fact.payload)
+
+          rows << {fact.msgid, msg}
         end
 
-        next unless peer_id
+        # Most often there are no messages.
+        next if rows.empty?
 
-        unless ctx.world.any?(Harmony::RunningPeer, peer_id: peer_id)
-          devices = devices.replace(device_index...device_index + 1, Term.rep)
+        # Sometimes there's just one message.
+        if row = rows.single?
+          _, msg = row
+          changes << DeviceReceivedMessage.new(device_key, inbox.key, msg)
           next
         end
 
-        has_inbox = false
-        has_outbox = false
-
-        # Rendezvous world with message boxes.
-        device.children.each_with_index(offset: device.feature.range.begin) do |child, child_key|
-          next unless child.is_a?(D7::GndLeaf)
-
-          Term.matchpi?(child.feature.node, %{[cell @edge_ msgs←(_*)]}) do
-            case edge
-            when server.in_edge
-              has_inbox = true
-
-              batch = [] of {Harmony::MsgId, Term}
-
-              ctx.world.each(Harmony::IngoingMessage, endpoint_id: peer_id) do |fact|
-                confirmation = Harmony::IngoingReceiveConfirmation.new(fact.endpoint_id, fact.msgid)
-
-                # Initiate confirmation. If confirmation is a fact, this means it's complete.
-                unless ctx.world.includes?(confirmation)
-                  ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
-                  ctx.goals << confirmation
-                  next
-                end
-
-                term = Format.decode?(server.format, fact.payload)
-
-                case server.format_policy
-                in .discard?
-                  next if term.nil?
-                in .abort?
-                  if term.nil?
-                    return status_patch
-                  end
-                in .wrap?
-                  if term
-                    term = Term.of(:ok, term)
-                  else
-                    term = Term.of(:err, "invalid message")
-                  end
-                end
-
-                batch << {fact.msgid, term}
-              end
-
-              batch.unstable_sort_by! { |msgid, _| msgid.repr }
-
-              msgs1 = msgs.transaction do |commit|
-                commit.concat(batch) { |_, payload| payload }
-              end
-
-              devices = Term.morph(devices, {device_index, child_key, 2, msgs1})
-            when server.out_edge
-              has_outbox = true
-
-              next unless msgQ = msgs.items.first?
-              next unless msg = Format.encode?(server.format, msgQ)
-
-              if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(peer_id, msg))
-                msgs1 = msgs.items.move(1)
-                devices = Term.morph(devices, {device_index, child_key, 2, msgs1})
-                next
-              end
-
-              ctx.goals << Harmony::OutgoingMessage.new(peer_id, msg)
-            end
-          end
-        end
-
-        next unless has_inbox || has_outbox
-
-        # Indicate to the other side that *peer* has spare space for messages.
-        if has_inbox
-          ctx.goals.add(Harmony::MessageSlot.new(peer_id))
-        end
-
-        ctx.goals << Harmony::PeerKeepalive.new(peer_id)
+        # Very rarely there are several messages.
+        rows.unstable_sort_by! { |msgid, _| msgid.repr }
+        batch = rows.to_readonly_slice { |(_, msg)| msg }
+        changes << DeviceReceivedBatch.new(device_key, inbox.key, batch)
       end
+
+      # Process outgoing messages.
+      pass do
+        next unless outbox = extract?(device, DeviceOut, server.out_edge)
+
+        alive = true
+        next unless msg = outbox.msg?
+        next unless payload = encode?(server.format, server.format_policy, msg)
+
+        if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(peer_id, payload))
+          changes << DeviceSentMessage.new(device_key, outbox.key)
+          next
+        end
+
+        ctx.goals << Harmony::OutgoingMessage.new(peer_id, payload)
+      end
+
+      next unless alive
+
+      ctx.goals << Harmony::PeerKeepalive.new(peer_id)
+    rescue FormatAborted
     end
 
     ctx.world.each(Harmony::RunningPeer, server_id: incarnation) do |fact|
@@ -1024,79 +1485,59 @@ module Ww::Rack::Accord
         commit << {:cell, server.out_edge, Term[]}
         commit.concat(server.template.items)
       end
-      devices = devices.append(instance)
+
+      changes << DeviceAdded.new(Term.of(instance))
     end
 
     D7.patches(
       # (server (@_ _ ⏏) _*)
-      status_patch,
+      D7.patch(server.node, {1, 2, status}),
       # (pool @_ ⏏)
-      D7.patch(pool.node, {2, devices}),
+      D7.patch(pool.node, {2, apply(pool.contents, changes)}),
     )
   end
 
-  def step(ctx : StepContext, hg : D7::Hypergraph, server : HttpServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
+  private def step(ctx : StepContext, hg : D7::Hypergraph, server : HttpServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
     _, device_tree = D7.follow(hg.@tree, pool.node.addr)
     return unless device_tree.is_a?(D7::CircuitNode)
 
-    devices = pool.contents
+    changes = DeviceChangeList.new
 
-    # Update old connections.
-    # Remove dropped connections.
-    #
-    # Iterate in reverse because we're going to replace() things
-    (0...device_tree.children.size).reverse_each do |device_index|
-      device_node = device_tree.children[device_index]
-      next unless device_node.is_a?(D7::CircuitNode)
+    each_device(device_tree) do |device, device_key|
+      next unless request_id = extract?(device, Harmony::HttpRequestId)
 
-      Term.matchpi?(device_node.feature.node, %{[device _*]}) do
-        request_id = nil
-        response = nil
-
-        device_node.children.each do |child|
-          next unless child.is_a?(D7::GndLeaf)
-
-          Term.case(child.feature.node) do
-            matchpi %{[cell @id reprQ_string]}, reprQ: String do
-              next unless repr = UUID.parse?(reprQ)
-
-              request_id = Harmony::HttpRequestId.new(repr)
-            end
-
-            matchpi %{[cell @edge_ responseQ_]} do
-              next unless edge == server.response_edge
-              next unless response = http_encode_response?(server.format, responseQ)
-
-              # If they do not specify the content type explictily and Format suggests
-              # a content type, use the suggested content type.
-              pass do
-                next unless suggested_content_type = Format.content_type?(server.format)
-                next if responseQ.includes?(:"content-type")
-
-                response = Term.morph(response, {:"content-type", suggested_content_type})
-              end
-            end
-
-            otherwise { }
-          end
-        end
-
-        next unless request_id
-
-        # If this request id doesn't have a corresponding request, this means the request was
-        # handled already and we can remove this device.
-        unless ctx.world.any?(Harmony::HttpServerRequest, server_id: incarnation, request_id: request_id)
-          devices = devices.replace(device_index...device_index + 1, Term.rep)
-          next
-        end
-
-        if response
-          ctx.goals.add(Harmony::HttpServerResponse.new(incarnation, request_id, response))
-          next
-        end
-
-        ctx.goals.add(Harmony::HttpServerRequestKeepalive.new(request_id))
+      # If this request id doesn't have a corresponding request, this means the request was
+      # handled already and we can remove this device.
+      unless ctx.world.any?(Harmony::HttpServerRequest, server_id: incarnation, request_id: request_id)
+        changes << DeviceRemoved.new(device_key)
+        next
       end
+
+      # Wait until a response is available.
+      unless response = extract?(device, DeviceCell, server.response_edge)
+        ctx.goals.add(Harmony::HttpServerRequestKeepalive.new(request_id))
+        next
+      end
+
+      # Discard response if its encoding is invalid. Since we no longer keep the corresponding
+      # request alive, and we're edge-triggered, the request will disappear eventually along
+      # with the device.
+      begin
+        next unless payload = encode?(server.format, server.format_policy, HttpResponse.new(response.value))
+      rescue FormatAborted
+        next
+      end
+
+      # If the response does not specify the content type explictily, and Format
+      # suggests one, use the suggested content type.
+      pass do
+        next unless suggested_content_type = Format.content_type?(server.format)
+        next if payload.includes?(:"content-type")
+
+        payload = Term.morph(payload, {:"content-type", suggested_content_type})
+      end
+
+      ctx.goals.add(Harmony::HttpServerResponse.new(incarnation, request_id, payload))
     end
 
     # Add new connections.
@@ -1104,20 +1545,13 @@ module Ww::Rack::Accord
       # Do not reintroduce requests we've already handled.
       next if fact.request_id.in?(ctx.acknowledged)
 
-      request = http_decode?(server.format, fact.request)
-
-      case server.format_policy
-      in .discard?, .abort?
+      begin
+        next unless request = decode?(server.format, server.format_policy, HttpRequest.new(fact.request))
+      rescue FormatAborted
         # NOTE: Since HTTP is stateless and works one request at a time -- at least
         # conceptually -- discard (drop request) and abort (drop connection) are
         # the same thing.
-        next unless request
-      in .wrap?
-        if request
-          request = Term.of(:ok, request)
-        else
-          request = Term.of(:err, "invalid message")
-        end
+        next
       end
 
       ctx.goals.add(Harmony::HttpServerRequestKeepalive.new(fact.request_id))
@@ -1130,58 +1564,15 @@ module Ww::Rack::Accord
         commit.concat(server.template.items)
       end
 
-      devices = devices.append(instance)
+      changes << DeviceAdded.new(Term.of(instance))
     end
 
     D7.patches(
       # (server (@_ _ ⏏) _*)
       D7.patch(server.node, {1, 2, status}),
       # (pool @_ ⏏)
-      D7.patch(pool.node, {2, devices}),
+      D7.patch(pool.node, {2, apply(pool.contents, changes)}),
     )
-  end
-
-  # When there's no incarnation, this means the server have disappeared for some reason. Along
-  # with it, assume all its clients have disappeared. Clear the pool, and update the status
-  # to inform the user.
-  def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | HttpServer, pool : Pool, status : Term, incarnation : Nil) : D7::Patch?
-    D7.patches(
-      # (server (@_ _ ⏏) _*)
-      D7.patch(server.node, {1, 2, status}),
-      # (pool @_ ⏏)
-      D7.patch(pool.node, {2, Term[]}),
-    )
-  end
-
-  private def step(ctx : StepContext, hg : D7::Hypergraph, client : SocketClient | HttpClient) : D7::Patch?
-    ctx.goals.add(Harmony::Client.new(client.defn))
-
-    status = Term.of(:pending)
-    incarnation = nil
-
-    pass do
-      ctx.world.each(Harmony::RunningClient, defn: client.defn) do |fact|
-        incarnation = fact.client_id
-        status = Term.of(:up)
-        break
-      end
-
-      next if incarnation
-
-      ctx.world.each(Harmony::PendingClient, defn: client.defn) do |fact|
-        status = Term.of(:pending, fact.detail)
-        break
-      end
-
-      next if incarnation
-
-      ctx.world.each(Harmony::BrokenClient, defn: client.defn) do |fact|
-        status = Term.of(:dn, fact.detail)
-        break
-      end
-    end
-
-    step(ctx, hg, client, status, incarnation)
   end
 
   private def step(ctx : StepContext, hg : D7::Hypergraph, client : SocketClient, status : Term, incarnation : Harmony::ClientId) : D7::Patch?
@@ -1244,24 +1635,13 @@ module Ww::Rack::Accord
 
       ctx.goals.delete(Harmony::IngoingMessageKeepalive.new(ingoing.endpoint_id, ingoing.msgid))
 
-      term = Format.decode?(client.format, ingoing.payload)
+      begin
+        next unless msg = decode?(client.format, client.format_policy, ingoing.payload)
 
-      case client.format_policy
-      in .discard?
-        next if term.nil?
-      in .abort?
-        if term.nil?
-          return D7.patch(client.node, {2, {:dn, "invalid message"}})
-        end
-      in .wrap?
-        if term
-          term = Term.of(:ok, term)
-        else
-          term = Term.of(:err, "invalid message")
-        end
+        target_patch = D7.patch(target.node, {2, msg})
+      rescue e : FormatAborted
+        status_patch = D7.patch(client.node, {2, {:dn, e.message || "format decode error"}})
       end
-
-      target_patch = D7.patch(target.node, {2, term})
     end
 
     D7.patches(
@@ -1271,103 +1651,52 @@ module Ww::Rack::Accord
     )
   end
 
-  private def step(ctx : StepContext, hg : D7::Hypergraph, client : SocketClient | HttpClient, status : Term, incarnation : Nil) : D7::Patch?
-    D7.patch(client.node, {2, status})
-  end
-
-  private def http_encode_request?(format : Format::Any, request : Term) : Term?
-    Term.case(request) do
-      matchpi %{[_symbol _ body_]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(request, {2, blob})
-      end
-
-      otherwise { request }
-    end
-  end
-
-  private def http_encode_response?(format : Format::Any, response : Term) : Term?
-    Term.case(response) do
-      matchpi %{[_ [attachment body_]]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(response, {1, 1, blob})
-      end
-
-      matchpi %{[_ [file _string body_]]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(response, {1, 2, blob})
-      end
-
-      matchpi %{[_ body_]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(response, {1, blob})
-      end
-
-      otherwise { response }
-    end
-  end
-
-  private def http_decode?(format : Format::Any, term : Term) : Term?
-    Term.case(term) do
-      matchpi %{[_* bodyQ_blob]} do
-        return unless body = Format.decode?(format, bodyQ.as_blob)
-
-        Term.morph(term, {term.itemsize - 1, body})
-      end
-
-      otherwise { term }
-    end
-  end
-
   private def step(ctx : StepContext, hg : D7::Hypergraph, client : HttpClient, status : Term, incarnation : Harmony::ClientId) : D7::Patch?
-    status_patch = D7.patch(client.node, {2, status})
+    patch = D7.patch(client.node, {2, status})
 
     # If there's no current request, then there's no response to wait or be waiting for.
-    return status_patch unless source = Rack.cell?(hg, client.outgoing)
-    return status_patch unless request = source.value?
+    pass do
+      next unless source = Rack.cell?(hg, client.outgoing)
+      next unless request = source.value?
 
-    return status_patch unless target = Rack.cell?(hg, client.ingoing)
-    return status_patch unless target.value?.nil?
+      next unless target = Rack.cell?(hg, client.ingoing)
+      next unless target.value?.nil?
 
-    return status_patch unless request = http_encode_request?(client.format, request)
-
-    ctx.world.each(Harmony::HttpClientResponse, client_id: incarnation, request: request) do |fact|
-      response = fact.result.response
-
-      case response
-      in Term
-        response = http_decode?(client.format, response)
-
-        case client.format_policy
-        in .discard?
-        in .abort?
-          if response.nil?
-            return D7.patch(client.node, {2, {:dn, "malformed response"}})
-          end
-        in .wrap?
-          if response
-            response = Term.of(:ok, response)
-          else
-            response = Term.of(:err, "malformed response")
-          end
-        end
-
-        return D7.patches(
-          D7.patch(client.node, {2, status}),
-          D7.patch(source.node, {2, nil}),
-          D7.patch(target.node, {2, response}),
-        )
-      in Harmony::HttpResponseError
-        return D7.patch(client.node, {2, {:dn, response.detail}})
+      begin
+        next unless request = encode?(client.format, client.format_policy, HttpRequest.new(request))
+      rescue e : FormatAborted
+        patch = D7.patch(client.node, {2, {:dn, e.message || "format encode error"}})
+        next
       end
+
+      unless fact = ctx.world.single?(Harmony::HttpClientResponse, client_id: incarnation, request: request)
+        ctx.goals.add(Harmony::HttpClientRequest.new(incarnation, request))
+        next
+      end
+
+      payload = fact.result.response
+
+      case payload
+      in Harmony::HttpResponseError
+        patch = D7.patch(client.node, {2, {:dn, payload.detail}})
+        next
+      in Term
+      end
+
+      begin
+        next unless response = decode?(client.format, client.format_policy, HttpResponse.new(payload))
+      rescue e : FormatAborted
+        patch = D7.patch(client.node, {2, {:dn, e.message || "format decode error"}})
+        next
+      end
+
+      patch = D7.patches(
+        D7.patch(client.node, {2, status}),
+        D7.patch(source.node, {2, nil}),
+        D7.patch(target.node, {2, response}),
+      )
     end
 
-    ctx.goals.add(Harmony::HttpClientRequest.new(incarnation, request))
-
-    status_patch
+    patch
   end
 end

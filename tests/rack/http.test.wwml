@@ -255,7 +255,7 @@
 ;; HTTP: response doesn't lose content-type
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: binary)
       (backsys
         {¦ request_: [get ("/")] -response_}
           <> {(request): (), response: (ok "<p>Hi!</p>" content-type: "text/html")}))
@@ -264,27 +264,27 @@
 
     (cell @in (get "/"))
     (cell @out)
-    (client (@in -> (http local 9813) -> @out)))
+    (client (@in -> (http local 9813) -> @out format: binary)))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
 
     (cell @in)
     (cell @out (ok ⟬‸<p>Hi!</p>‸ ⁑ text/html⟭))
-    (client (@in -> (http local 9813) -> @out) up)))
+    (client (@in -> (http local 9813) -> @out format: binary) up)))
 
 ;; Client makes request, server hangs, client quits, server quits. Everything
 ;; must terminate properly. Also test changing request, response cell names.
 (rack
   (frame
-    (server (@pool (http local 9813) request: @in response: @out))
+    (server (@pool (http local 9813) request: @in response: @out format: binary))
     (circuit (pool @pool))
     (cell @in (get "/"))
     (cell @out)
-    (client (@in -> (http local 9813) -> @out)))
+    (client (@in -> (http local 9813) -> @out format: binary)))
 
   (frame pattern: true fast-forward: true
-    ((server (@pool (http local 9813) up request: @in response: @out))
+    ((server (@pool (http local 9813) up request: @in response: @out format: binary))
      (circuit (pool @pool)
        (device
          (cell @id _string)
@@ -292,7 +292,7 @@
          (cell @out)))
      (cell @in (get "/"))
      (cell @out)
-     (client (@in -> (http local 9813) -> @out) up))))
+     (client (@in -> (http local 9813) -> @out format: binary) up))))
 
 ;; HTTP request
 (rack
@@ -513,7 +513,7 @@
 ;; Basic routing
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: binary)
       (backsys
         {¦ request_: [get resource_] -route_}
           <> {(request): (), route: ^resource}
@@ -538,7 +538,7 @@
 
     (queue (@response @responses) ())
 
-    (client (@request -> (http local 9813) -> @responses)))
+    (client (@request -> (http local 9813) -> @responses format: binary)))
 
   (frame/tail fast-forward: true
     (queue (@request @requests) ())
@@ -547,12 +547,12 @@
        (ok ⟬‸<h1>Search query: alice</h1>‸ ⁑ text/html⟭)
        (ok ⟬‸<h1>Article with id: 0</h1>‸ ⁑ text/html⟭)
        (ok ⟬‸<h1>Not found</h1>‸ ⁑ text/html⟭)))
-    (client (@request -> (http local 9813) -> @responses) up)))
+    (client (@request -> (http local 9813) -> @responses format: binary) up)))
 
 ;; Crude HTML templating with rewriters
 (rack
   (frame
-    (server (@pool (http local 9813))
+    (server (@pool (http local 9813) format: binary)
       (backsys
         {¦ request_ -template_ -status_}
           <> {(request): (),
@@ -605,7 +605,7 @@
 
     (queue (@response @responses) ())
 
-    (client (@request -> (http local 9813) -> @responses)))
+    (client (@request -> (http local 9813) -> @responses format: binary)))
 
   (frame/tail fast-forward: true
     (circuit (pool @pool))
@@ -615,7 +615,7 @@
       ((ok ⟬‸<html><head><title>Demo page</title></head><body><h1 style="color: red">Kaixo mundua!</h1><p>Lorem ipsum dolor sit amet</p></body></html>‸ ⁑ text/html⟭)
        (not-found ⟬‸<html><head><title>Not found</title></head><body><h1>Oops</h1></body></html>‸ ⁑ text/html⟭)))
 
-    (client (@request -> (http local 9813) -> @responses) up)))
+    (client (@request -> (http local 9813) -> @responses format: binary) up)))
 
 ;; Default port for HTTP
 (rack
@@ -663,3 +663,7 @@
     (cell @out (ok "Hello World"))
     (guard (@server (server [@_ _ up] _*))
       (client (@in -> (https local 9813 verify: false) -> @out format: text) up))))
+
+;; format-policy: abort, encode
+
+;; format-policy: abort, decode

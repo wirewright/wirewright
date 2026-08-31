@@ -219,10 +219,6 @@
          "(1 {name: \"Smokey\", type: cat} 2 x: 100 y: 200)\n"))
       (client (@msg -> (ws local 9813) -> @replies format: text) up))))
 
-;; format: none, failure to encode
-
-;; format: text, failure to encode
-
 ;; Arithmetic demo, format-policy: wrap
 (rack
   (frame
@@ -277,7 +273,7 @@
          ⎡["ok",7]⎤
          ⎡["ok",-4.59]⎤
          ⎡["ok",7]⎤
-         ⎡["err","invalid message"]⎤))
+         ⎡["err","format decode error"]⎤))
       (client (@expr -> (ws local 9813) -> @values format: text) up))))
 
 ;; Server format-policy: abort
@@ -288,7 +284,7 @@
 
     (cell @in "") ;; send empty message (invalid)
     (cell @out)
-    (client (@in -> (ws local 9813) -> @out)))
+    (client (@in -> (ws local 9813) -> @out format: binary)))
 
   (frame/tail fast-forward: true
     (server (@pool (ws local 9813) up format: ml format-policy: abort))
@@ -296,7 +292,7 @@
 
     (cell @in)
     (cell @out)
-    (client (@in -> (ws local 9813) -> @out)
+    (client (@in -> (ws local 9813) -> @out format: binary)
       (dn "connection closed by the other side"))))
 
 ;; Client format: ml
@@ -304,7 +300,7 @@
   (frame
     ;; Server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -333,7 +329,7 @@
   (frame
     ;; Server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -362,7 +358,7 @@
   (frame
     ;; Server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -392,7 +388,7 @@
   (frame
     ;; Server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -448,14 +444,14 @@
     (cell @in)
     (cell @out)
     (client (@in -> (ws local 9813) -> @out format: ml format-policy: abort)
-      (dn "invalid message"))))
+      (dn "format decode error"))))
 
 ;; Client format-policy: abort
 (rack
   (frame
     ;; Server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (cell @script ("(+ 1 2)" "(+ 1 error"))
         (feed (@script front) (@out back)))
       (circuit (pool @pool)))
@@ -467,15 +463,19 @@
   (frame/tail fast-forward: true
     (cell @message)
     (client (@message -> (ws local 9813) -> @replies format: ml format-policy: abort)
-      (dn "invalid message")) ;; connection was dropped on the client-side
+      (dn "format decode error")) ;; connection was dropped on the client-side
     (queue (@reply @replies) ((+ 1 2)))))
+
+;; format: binary, format-policy: abort, failure to encode
+
+;; format: text, format-policy: abort, failure to encode
 
 ;; Client format-policy: wrap
 (rack
   (frame
     ;; Server
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (cell @script ("(+ 1 2)" "(+ 1 error"))
         (feed (@script front) (@out back)))
       (circuit (pool @pool)))
@@ -490,7 +490,7 @@
       up)
     (queue (@reply @replies)
       ((ok (+ 1 2))
-       (err "invalid message")))))
+       (err "format decode error")))))
 
 ;; Client-Server exchange using terms
 (rack
@@ -567,7 +567,7 @@
 ;; From docs: websocket client with format: ml.
 (rack
   (frame
-    (server (@pool (ws local 9813))
+    (server (@pool (ws local 9813) format: binary)
       (feed (@in front) (@out back)))
     (circuit (pool @pool))
     (queue (@message @messages) (foo 100 ≈1.23 false (+ 1 2 x: 100 y: 200)))
@@ -1569,42 +1569,42 @@
 ;; Same servers with different links must conflict (tcp)
 (rack
   (frame
-    (server (@pool (tcp local 9813 link: direct)))
-    (server (@pool (tcp local 9813 link: portal)))
+    (server (@pool (tcp local 9813 link: direct) format: binary))
+    (server (@pool (tcp local 9813 link: portal) format: binary))
     (circuit (pool @pool)))
 
   (frame pattern: true fast-forward: true
     (%any°
-      ((server (@pool (tcp local 9813 link: direct) up))
-       (server (@pool (tcp local 9813 link: portal) (pending _string)))
+      ((server (@pool (tcp local 9813 link: direct) up format: binary))
+       (server (@pool (tcp local 9813 link: portal) (pending _string) format: binary))
        (circuit (pool @pool)))
 
-      ((server (@pool (tcp local 9813 link: direct) (pending _string)))
-       (server (@pool (tcp local 9813 link: portal) up))
+      ((server (@pool (tcp local 9813 link: direct) (pending _string) format: binary))
+       (server (@pool (tcp local 9813 link: portal) up format: binary))
        (circuit (pool @pool))))))
 
 ;; Same servers with different links must conflict (ws)
 (rack
   (frame
-    (server (@pool (ws local 9813 link: direct)))
-    (server (@pool (ws local 9813 link: portal)))
+    (server (@pool (ws local 9813 link: direct) format: binary))
+    (server (@pool (ws local 9813 link: portal) format: binary))
     (circuit (pool @pool)))
 
   (frame pattern: true fast-forward: true
     (%any°
-      ((server (@pool (ws local 9813 link: direct) up))
-       (server (@pool (ws local 9813 link: portal) (dn "link conflict")))
+      ((server (@pool (ws local 9813 link: direct) up format: binary))
+       (server (@pool (ws local 9813 link: portal) (dn "conflicting `link:`s for the same host and port") format: binary))
        (circuit (pool @pool)))
 
-      ((server (@pool (ws local 9813 link: direct) (dn "link conflict")))
-       (server (@pool (ws local 9813 link: portal) up))
+      ((server (@pool (ws local 9813 link: direct) (dn "conflicting `link:`s for the same host and port") format: binary))
+       (server (@pool (ws local 9813 link: portal) up format: binary))
        (circuit (pool @pool))))))
 
 ;; Nesting: client inside client device
 (rack
   (frame
-    (server (@pool (ws local 9814))
-      (client (@request -> (ws local 9813 key: @id) -> @response))
+    (server (@pool (ws local 9814) format: binary)
+      (client (@request -> (ws local 9813 key: @id) -> @response format: binary))
       (part (@in @request) (request_ _*))
       ;; TODO: (part (@out @response) (_* `response))
       (cell @response)
@@ -1640,7 +1640,7 @@
     (part (@script @line) (line_ _*))
 
     (module {}
-      (server (@pool (ws local 9813))
+      (server (@pool (ws local 9813) format: binary)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 
@@ -1663,7 +1663,7 @@
   (frame/tail fast-forward: true
     ;; The auxiliary server should not have any connections as well.
     (module {}
-      (server (@pool (ws local 9813) up)
+      (server (@pool (ws local 9813) up format: binary)
         (feed (@in front) (@out back)))
       (circuit (pool @pool)))
 

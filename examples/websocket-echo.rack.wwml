@@ -1,4 +1,4 @@
-(server (@pool (ws local 5000) format: text)
+(server (@pool (ws local 5000))
   (backsys
     {¦ in: (M_string _*) out: (_* `>M)}
       <> {(M): (), >M: ^M}
