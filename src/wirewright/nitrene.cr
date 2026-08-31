@@ -1099,6 +1099,7 @@ module Ww::Nitrene
       # ;; Sum odd numbers:
       #
       # (-> (1 2 3 4 5)
+      #   (attn _)
       #   (filter _ (%pipe (mod 2) 1))
       #   (sum _))
       #
