@@ -360,7 +360,9 @@ module Ww::Alloy
       # |@key expr nitrene
       # Expression to match the result of.
       #
-      # |@key branches alloy.branch
+      # |@key branches alloy.case.branch
+      # Zero or more branches. When there are zero branches, the template expression
+      # removes itself.
       #
       # |@block
       # Matches the value of *expr*. Replaces itself with the first branch that
@@ -376,7 +378,7 @@ module Ww::Alloy
         %{(^match expr_ branches_*)},
       ) do
         branch_templates = branches.items.to_compact_readonly_slice do |branch|
-          # |@ alloy.branch
+          # |@ alloy.case.branch
           #
           # |@pattern
           # (when pattern_ body_*)
@@ -414,7 +416,7 @@ module Ww::Alloy
       # |@pattern
       # (^case vars branches_*)
       #
-      # |@key branches alloy.branch
+      # |@key branches alloy.case.branch
       #
       # |@block
       # Matches the variables dict itself. Replaces itself with the first branch
@@ -466,7 +468,7 @@ module Ww::Alloy
       # ;; => 16
       # ```
       #
-      # For more info, see `alloy.branch`.
+      # For more info, see `alloy.case.branch`.
       #
       # `^when` with a source pattern can be useful for constraints:
       #
@@ -475,7 +477,7 @@ module Ww::Alloy
       #        ({title: "A", author: "John Doe"}
       #         {title: "B", author: "Samantha Doe"}
       #         {title: "C", author: "John Doe"})
-      #       search: "John Doe"
+      #       author: "John Doe"
       #   (title-list
       #     (^when ((posts author) (⟨{¦ title_ author_}⟩° author_))
       #       ^title))

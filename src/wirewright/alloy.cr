@@ -9,10 +9,10 @@
 # *Structural templating* is like Lisp's `quote`, `unquote`, `quasiquote`, etc.
 # Alloy can also be compared with something like Handlebars, except Alloy operates
 # on terms rather than strings. Another comparison one could make is to JSX. Basically,
-# Alloy lets you "plug" things into a prepared literal term.
+# Alloy lets you "plug" things into an existing term.
 #
-# The easiest way to access Alloy directly is through Rack, using nodes such
-# as `rack.transfer`, `rack.view`, `rack.extension`.
+# The easiest way to access Alloy is through Rack, using nodes such as `rack.transfer`,
+# `rack.view`, `rack.extension`.
 #
 # |@example
 # Consider the following *template*:
