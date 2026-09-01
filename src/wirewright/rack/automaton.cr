@@ -221,7 +221,7 @@ class Ww::Rack::Automaton
     # it one circuit this tick, and another one the next tick. Or it could be the same, but
     # evolved circuit. The point being, there's no distinction. So we have to "fix" the circuit
     # at the beginning always. Hopefully this will be optimized later, there are ways to do that.
-    subframes << Rack.rig_step(@parser, circuit, prepass).last
+    subframes << Rack.manipulate(@parser, circuit, prepass).last
 
     pass do
       input = subframes.last
@@ -275,8 +275,8 @@ class Ww::Rack::Automaton
       end
     end)
 
-    # Execute rig step again to fix inconsistencies.
-    frames << Rack.rig_step(@parser, subframes.last, prepass).last
+    # Execute manipulate again to fix inconsistencies.
+    frames << Rack.manipulate(@parser, subframes.last, prepass).last
   end
 
   # Advances the automaton by one abstract step by evolving *circuit*. Returns

@@ -267,20 +267,20 @@ module Ww::Rack
     end
   end
 
-  def rig_step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    D7.step(parser, circuit, required_heads: {Term.of(:rig)}) do |hg|
+  def manipulate(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
+    D7.step(parser, circuit, required_heads: {Term.of(:manipulable)}) do |hg|
       prepass.call(hg) do |hg|
-        D7::Regime.merge(hg, proposals: rig_step(hg))
+        D7::Regime.merge(hg, proposals: manipulate(hg))
       end
     end
   end
 
-  def rig_step(hg : D7::Hypergraph) : Indexable(D7::Patch)
-    hg.propose(:rig) do |node|
+  def manipulate(hg : D7::Hypergraph) : Indexable(D7::Patch)
+    hg.propose(:manipulable) do |node|
       Term.case(node.term) do
-        matchpi %{[rig header←(@input_ selector_ -> _*) payload_]} do
+        matchpi %{[manipulable header←(@input_ selector_ -> _*) payload_]} do
           patterns = header.items.move(2)
-          rig_step(hg, node, hg.resolve(node.addr, input), selector, patterns, payload)
+          manipulate(hg, node, hg.resolve(node.addr, input), selector, patterns, payload)
         end
 
         otherwise { }
@@ -288,7 +288,7 @@ module Ww::Rack
     end
   end
 
-  def rig_step(hg : D7::Hypergraph, node : D7::Node, input : D7::AbsEdge, selector : Term, patterns : Indexable(Term), payload : Term) : D7::Patch?
+  def manipulate(hg : D7::Hypergraph, node : D7::Node, input : D7::AbsEdge, selector : Term, patterns : Indexable(Term), payload : Term) : D7::Patch?
     return unless source = Rack.cell?(hg, input)
 
     # If value is present and matches, synthesize a backspec that plugs stuff in.

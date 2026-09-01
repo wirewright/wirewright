@@ -303,7 +303,7 @@ module Ww::Rack
       # [discard @edge_]
       #
       # |@key edge rack.edge
-      # The edge where the node should search for cells to clear.
+      # The edge where the node should search for places to clear.
       #
       # |@block
       # Empties zero or more cells at *edge*.
@@ -356,7 +356,7 @@ module Ww::Rack
       # [discard @edge_ pattern_]
       #
       # |@key edge rack.edge
-      # The edge where the node should search for cells to clear.
+      # The edge where the node should search for places to clear.
       #
       # |@key pattern m1.operator
       # Only cells containing values matching the pattern are emptied.
@@ -524,9 +524,9 @@ module Ww::Rack
       # [guard (@edge_) children_*]
       #
       # |@key edge rack.edge
-      # The edge to search for cells at. The guard node will only attempt a match
-      # if there is exactly one cell at *edge*. The node is "confused" by many cells
-      # (even if some or all of them match).
+      # The edge to search for empty places at. The guard node will only attempt a match
+      # if there is exactly one empty place at *edge*. The node is "confused" by many
+      # places (even if some or all of them are empty).
       #
       # |@key children rack
       # Child nodes to activate or deactivate. They are *not* isolated in any way.
@@ -571,8 +571,8 @@ module Ww::Rack
       # [guard (@edge_ pattern_) children_*]
       #
       # |@key edge rack.edge
-      # The edge to search for cells at. The guard node will only attempt a match
-      # if there is exactly one cell at *edge*. The node is "confused" by many cells
+      # The edge to search for places at. The guard node will only attempt a match
+      # if there is exactly one place at *edge*. The node is "confused" by many places
       # (even if some or all of them match).
       #
       # |@key pattern m1.operator
@@ -666,7 +666,7 @@ module Ww::Rack
       # |@key children rack
       # Zero or more child nodes. *children* are completely isolated from the outside
       # world (but not from each other) like in `rack.circuit`. All children are
-      # evolved by one time-step *after* the parent circuit has evolved by one time-
+      # evolved by one time-step *after* the parent circuit had evolved by one time-
       # step. This way, the parent circuit has time to react to the contents of
       # *children*, and manipulate them if needed.
       #
@@ -676,7 +676,7 @@ module Ww::Rack
       # |@block
       # Devices are *anonymous subcircuits*. They are primarily used to describe
       # a self-contained unit, which does not speak with the outside world except
-      # through termspaces (`rack.tspace`, `rack.sensor`, `rack.appearance`) or
+      # through termspaces (`rack.tspace`, `rack.sensor`, `rack.appearance`), or
       # observation and manipulation (when placed in a `rack.circuit`,
       # `rack.frag`, etc.).
       #
@@ -716,15 +716,17 @@ module Ww::Rack
       # ```
       #
       # Note how in the example above, everyone is isolated -- the host circuit and
-      # the two devices all run in their own little "bubbles". The host circuit has
-      # the power to observe the devices and perhaps *entangle* them:
+      # the two devices all run in their own little "bubbles".
+      #
+      # The host circuit has the power to observe the devices and perhaps
+      # *entangle* them:
       #
       # ```wwml
       # ;; Frame 0 (seed)
       #
       # (frag @alice
       #   (device
-      #     (cell @x 1)
+      #     (cell @x "Look at me")
       #     (cell @y)
       #     (feed @x @y)))
       #
@@ -744,7 +746,7 @@ module Ww::Rack
       # (frag @alice
       #   (device
       #     (cell @x)
-      #     (cell @y 1)
+      #     (cell @y "Look at me")
       #     (feed @x @y)))
       #
       # (frag @bob
@@ -763,7 +765,7 @@ module Ww::Rack
       #
       # (frag @bob
       #   (device
-      #     (cell @x 1)
+      #     (cell @x "Look at me")
       #     (cell @y)
       #     (feed @x @y)))
       #
@@ -778,7 +780,7 @@ module Ww::Rack
       # (frag @bob
       #   (device
       #     (cell @x)
-      #     (cell @y 1)
+      #     (cell @y "Look at me")
       #     (feed @x @y)))
       # ```
       matchpi %{[device _*]} do
@@ -874,7 +876,7 @@ module Ww::Rack
       # [pool @edge_ children_*]
       #
       # |@key edge rack.edge
-      # The edge the cell should be a member of.
+      # The edge the pool should be a member of.
       #
       # |@key children rack
       # Zero or more child nodes. Most often, for `pool`, the nodes are `rack.device`.
@@ -887,9 +889,9 @@ module Ww::Rack
       # A pool of devices.
       #
       # |@block
-      # The pool node exists primarily to host zero or more `rack.device`s. Semantically,
-      # it is the same as `rack.circuit`. This means you can put anything in a pool -- not
-      # just devices.
+      # Designates an executable place in the circuit, primarily to host zero or more
+      # `rack.device`s. Semantically, the `device` node is the same as `rack.circuit`.
+      # This means you can put anything in a pool -- not just devices.
       #
       # There are a few key differences and things to point out, though:
       #
@@ -1015,13 +1017,13 @@ module Ww::Rack
         end
       end
 
-      # |@ rack.frag
+      # |@ rack.manipulator
       #
       # |@pattern
-      # [frag (@edge_ selector_ -> patterns_*) child_]
+      # [manipulator (@edge_ selector_ -> patterns_*) child_]
       #
       # |@key edge rack.edge
-      # The edge where the fragment should search for a source cell.
+      # The edge identifying the source place.
       #
       # |@key selector m1.operator
       # The pattern to use to extract part(s) of the value at *edge*.
@@ -1047,34 +1049,34 @@ module Ww::Rack
       #
       # ;; Bind the value of the middle number to {count: _} in @ys using
       # ;; the fragment node.
-      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+      # (manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {}))
       #
       # ;; Frame 1
       # (cell @xs (1 3 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+      # (manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {count: 3}))
       #
       # ;; Frame 2
       # (cell @xs (1 4 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+      # (manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {count: 4}))
       #
       # ;; Frame 3
       # (cell @xs (1 5 3))
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
-      # (frag (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+      # (manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {count: 5}))
       #
       # ;; ...etc.
       # ```
-      matchpi %{[frag (@edge_ _ -> _*) child0_]} do
-        mix0 = Term.of(:group, Term.morph(node, {0, :rig}), child0)
+      matchpi %{[manipulator (@edge_ _ -> _*) child0_]} do
+        mix0 = Term.of(:group, Term.morph(node, {0, :manipulable}), child0)
 
         D7.mixture(node, mix0) do |mix1|
           Term.case(mix1) do
@@ -1093,8 +1095,8 @@ module Ww::Rack
         end
       end
 
-      # I'm not sure there's a point in exposing this node...
-      matchpi %{[rig (@edge_ _ -> _*) _]} do
+      # Internal
+      matchpi %{[manipulable (@edge_ _ -> _*) _]} do
         D7.gnd(node, edge)
       end
 
@@ -1198,18 +1200,23 @@ module Ww::Rack
 
       # |@ rack.backsys
       #
+      # |@summary
+      # A collection of simultaneous "laws" operating over one or more places.
+
+      # |@ rack.backsys
+      #
       # |@pattern
       # [backsys [backmap pattern_ _] backmaps_*]
       #
       # |@key pattern m1.operator
-      # This key applies to all patterns in backmaps; I'm just highlighting
+      # This key applies to all patterns in backmaps; here, I'm only highlighting
       # the first one. The following patterns are supported:
       #
       #  - `(%'%layer _ side_dict)`: takes pair keys from the *side* dict.
       #  - `_dict`: takes pair keys from the dict.
       #  - Other patterns are ignored.
       #
-      # |@key backmaps
+      # |@key backmaps m1.backmap
       # The other backmaps should have patterns like those described in *pattern*
       # to be able to participate in edge inference.
       #
@@ -1295,10 +1302,10 @@ module Ww::Rack
       # [backsys @target_ backmaps_*]
       #
       # |@key target rack.edge
-      # The edge of the cell whose term should be rewritten.
+      # The edge of the cell whose value should be rewritten.
       #
-      # |@key backmaps
-      # Zero or more *backmaps*.
+      # |@key backmaps m1.backmap
+      # Zero or more backmaps.
       #
       # |@block
       # Rewrites the term at a *target* cell using a backsystem.
@@ -1333,13 +1340,16 @@ module Ww::Rack
       #
       # |@key template
       # The template dict works the same as in `rack.rewriter`: edge entry values are
-      # replaced by the value of the corresponding edge. Edges in the itemspart are
-      # required and cannot be erased by the backmap (this will leave "holes" in
-      # the itemspart which the backsys node doesn't know how to handle). Edges in
-      # the pairspart can be removed, which in turn clears the corresponding cell.
+      # replaced by the value of the cell at the corresponding edge.
       #
-      # |@key backmaps
-      # Zero or more *backmaps*.
+      # Edges in the itemspart are required and cannot be erased by the backmap
+      # (because this would leave "holes" in the itemspart which confuse
+      # the `backsys` node.)
+      #
+      # Edges in the pairspart can be removed, in turn clearing their respective cell.
+      #
+      # |@key backmaps m1.backmap
+      # Zero or more backmaps.
       #
       # |@block
       # Relates terms as described by *template* using a backsystem.
