@@ -664,6 +664,54 @@
     (guard (@server (server [@_ _ up] _*))
       (client (@in -> (https local 9813 verify: false) -> @out format: text) up))))
 
+;; Many identical clients
+(rack
+  (frame
+    (server (@pool (http local 9813))
+      (backsys
+        {¦ request_: [get (path_string)] -response_}
+          <> {response: (ok ^path)}))
+
+    (pool @pool)
+
+    (device
+      (cell @in (get "/"))
+      (cell @out)
+      (client (@in -> (http local 9813) -> @out)))
+
+    (device
+      (cell @in (get "/x"))
+      (cell @out)
+      (client (@in -> (http local 9813) -> @out)))
+
+    (device
+      (cell @in (get "/y"))
+      (cell @out)
+      (client (@in -> (http local 9813) -> @out))))
+
+  (frame/tail fast-forward: true
+    (server (@pool (http local 9813) up)
+      (backsys
+        {¦ request_: [get (path_string)] -response_}
+          <> {response: (ok ^path)}))
+
+    (pool @pool)
+
+    (device
+      (cell @in)
+      (cell @out (ok "/"))
+      (client (@in -> (http local 9813) -> @out) up))
+
+    (device
+      (cell @in)
+      (cell @out (ok "/x"))
+      (client (@in -> (http local 9813) -> @out) up))
+
+    (device
+      (cell @in)
+      (cell @out (ok "/y"))
+      (client (@in -> (http local 9813) -> @out) up))))
+
 ;; format-policy: abort, encode
 
 ;; format-policy: abort, decode

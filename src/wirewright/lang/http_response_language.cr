@@ -588,7 +588,7 @@ module Ww::HttpResponseLanguage
 
     body = nil # Missing
     pass do
-      classif = Term::Blob::Classif.of(pp! response.mime_type)
+      classif = Term::Blob::Classif.of(response.mime_type)
 
       if src = response.body_io?
         body = Term::Blob.build(classif: classif) { |dst| IO.copy(src, dst) }
