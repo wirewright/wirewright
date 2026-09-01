@@ -156,7 +156,7 @@ module Ww
           return Aborted.new("unsupported URI scheme, expected: http, https")
         end
 
-        HTTP::Client.get(target, headers: HTTP::Headers{"User-Agent" => "Wirewright"}) do |response|
+        HTTP::Client.get(target, headers: HTTP::Headers{"User-Agent" => ::Ww::USER_AGENT}) do |response|
           Log.trace { "received response on #{target} with status: #{response.status}" }
 
           # TODO: We have to account for the server's MIME type. The server is, ideally,

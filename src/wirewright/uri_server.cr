@@ -102,7 +102,7 @@ module Ww
           tls_context = OpenSSL::SSL::Context::Client.new
           tls_context.set_default_verify_paths
 
-          HTTP::Client.get(uri, headers: HTTP::Headers{"User-Agent" => "Wirewright"}, tls: tls_context) do |response|
+          HTTP::Client.get(uri, headers: HTTP::Headers{"User-Agent" => ::Ww::USER_AGENT}, tls: tls_context) do |response|
             Log.debug { "fetch(#{initial_uri}): received response on #{uri} with status: #{response.status}" }
 
             case response.status

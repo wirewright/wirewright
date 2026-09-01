@@ -80,6 +80,10 @@ module Ww
 
   VERSION = "0.0.0-iota"
 
+  # The string used for the User-Agent header in requests. This follows the [Wikimedia
+  # User-Agent policy](https://foundation.wikimedia.org/wiki/Policy:Wikimedia_Foundation_User-Agent_Policy).
+  USER_AGENT = "Wirewright/#{VERSION} (https://github.com/wirewright/wirewright)"
+
   # The default execution context used by Wirewright.
   MT = Fiber::ExecutionContext::Parallel.new("Wirewright", maximum: Fiber::ExecutionContext.default_workers_count)
 

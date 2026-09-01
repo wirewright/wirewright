@@ -288,7 +288,7 @@
      (pool @pool
        (device
          (cell @id _string)
-         (cell @in (get ("/") host: "127.0.0.1:9813" user-agent: "Wirewright"))
+         (cell @in [get ("/")])
          (cell @out)))
      (cell @in (get "/"))
      (cell @out)
@@ -307,8 +307,8 @@
       {¦ response_: [ok body_] echoes: (_* `echo)}
         <> {(response): (),
             (echo):
-              ((^when ((ml/term body) (ok term_))
-                 ^term))})
+              ((^when ((ml/term body) (ok (items_* ¦ pairs_ ⋮host ⋮user-agent)))
+                 ^(union items pairs)))})
 
     (queue (@request @requests)
       ;; Basics
@@ -371,68 +371,50 @@
 
     (cell @echoes
       ;; Basics
-      ((get ("/") host: "127.0.0.1:9813" user-agent: "Wirewright")
-       (get ("/") host: "127.0.0.1:9813" user-agent: "Wirewright")
+      ((get ("/"))
+       (get ("/"))
        ;; Params
-       (get ("/" q: "alice") host: "127.0.0.1:9813" user-agent: "Wirewright")
-       (get ("/users" q: "alice") host: "127.0.0.1:9813" user-agent: "Wirewright")
-       (get ("/users" q: "alice" tag: "programming")
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+       (get ("/" q: "alice"))
+       (get ("/users" q: "alice"))
+       (get ("/users" q: "alice" tag: "programming"))
        ;; Omission, many values
-       (get ("/posts" tag: ("computing" "programming" "fun") type: "article")
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+       (get ("/posts" tag: ("computing" "programming" "fun") type: "article"))
        ;; Method
        (post ("/user/bob/posts")
-          "Hello World"
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+         "Hello World")
        (put ("/user/bob/name")
-          "Bob Smith"
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
-       (delete ("/user/bob") host: "127.0.0.1:9813" user-agent: "Wirewright")
+         "Bob Smith")
+       (delete ("/user/bob"))
        ;; Blob body
        (post ("/")
-          "Kaixo mundua"
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+         "Kaixo mundua")
        ;; Cookies
        (get ("/")
-         cookies: {SESSION_ID: "deadbeef", UserName: "alice"}
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+         cookies: {SESSION_ID: "deadbeef", UserName: "alice"})
        ;; Form (URL-encoded)
        ((post form) ("/employees/new")
-          {age: "25", check: "on", name: "John Doe"}
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+         {age: "25", check: "on", name: "John Doe"})
        ;; Form (multipart)
        ((post form) ("/")
-          {age: "25",
-           check: "on",
-           likes: ("Cheese" "Apples" "Carrots"),
-           name: "Jane"}
-         host: "127.0.0.1:9813"
-         user-agent: "Wirewright")
+         {age: "25",
+          check: "on",
+          likes: ("Cheese" "Apples" "Carrots"),
+          name: "Jane"})
        ;; Complex form (multipart)
        ((post form) ("/articles/create")
-          {multipart: true,
-           name: (field ⟬‸Lorem ipsum‸ ⁑ text/plain⟭),
-           body:
-             (field
-               ⟬‸<p>Lorem ipsum dolor sit amet</p>‸ ⁑ text/html⟭),
-           tags:
-             ((field ⟬‸programming‸ ⁑ text/plain⟭)
-              (field ⟬‸computers‸ ⁑ text/plain⟭)),
-           avatar:
-             (file "avatar.png"
-               ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00
-                00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
-                2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭)}
-         host: "127.0.0.1:9813",
-         user-agent: "Wirewright")))))
+         {multipart: true,
+          name: (field ⟬‸Lorem ipsum‸ ⁑ text/plain⟭),
+          body:
+            (field
+              ⟬‸<p>Lorem ipsum dolor sit amet</p>‸ ⁑ text/html⟭),
+          tags:
+            ((field ⟬‸programming‸ ⁑ text/plain⟭)
+             (field ⟬‸computers‸ ⁑ text/plain⟭)),
+          avatar:
+            (file "avatar.png"
+              ⟬89 50 4e 47 0d 0a 1a 0a 00 00 00 0d 49 48 44 52 00 00 00 20 00 00
+               00 19 08 02 00 00 00 df 6d bb c6 00 00 00 01 73 52 47 42 01 d9 c9
+               2c 7f 00 00 00 04 67 41 4d 41 00 00 b1 8f 0b fc ⁑ image/png⟭)})))))
 
 ;; HTTP response
 (rack

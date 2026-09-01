@@ -718,7 +718,7 @@ module Ww::HttpRequestLanguage
           end
         end
 
-        headers["User-Agent"] ||= "Wirewright"
+        headers["User-Agent"] ||= ::Ww::USER_AGENT
 
         uri = URI.new(path: resource.path, query: resource.params)
         HTTP::Request.new(method.to(String).upcase, uri.to_s, headers, body)
@@ -804,7 +804,7 @@ module Ww::HttpRequestLanguage
           end
         end
 
-        headers["User-Agent"] ||= "Wirewright"
+        headers["User-Agent"] ||= ::Ww::USER_AGENT
 
         uri = URI.new(path: resource.path, query: resource.params)
         HTTP::Request.new(method.to(String).upcase, uri.to_s, headers, body.to_io)
