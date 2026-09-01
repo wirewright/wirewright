@@ -1030,13 +1030,16 @@ module Ww::Rack
       #
       # |@key patterns m1.operator
       # A list of alternative patterns to find part(s) of *child* with. The first
-      # matching pattern is used. The fragment node assigns the captures made by
+      # matching pattern is used. The manipulator node assigns the captures made by
       # *selector* to the same-named places identified by the matching pattern.
       #
+      # |@key child rack
+      # The node to manipulate.
+      #
       # |@block
-      # Binds parts of the value at *edge* (determined by *selector*) to part(s)
-      # of a *child* node (determined by the first matching *pattern*) unidirectionally
-      # (*edge* controls *child* but not the other way).
+      # Binds parts of the value at *edge* (extracted by *selector*) to part(s)
+      # of a *child* node (determined by the first matching *pattern*) unidirectionally,
+      # only when *selector* matches. *edge* controls *child* but not the other way.
       #
       # |@example
       # ```wwml
@@ -2705,6 +2708,7 @@ module Ww::Rack
       # | `pending`                 | The server is starting.                                                                                                  |
       # | `(pending detail_string)` | The server failed to start, another attempt will be made with backoff (*detail* explains the failure.)                   |
       # | `up`                      | The server is running.                                                                                                   |
+      # | `(up port←(%number u16))` | Exclusive for servers with an `auto` port (see `rack.[network].port`). The server is running.                            |
       # | `dn`                      | The server is not running and will not restart automatically. To restart, you should remove this status.                 |
       # | `(dn detail_string)`      | The server failed to start with *detail* and will not restart automatically.  To restart, you should remove this status. |
       #

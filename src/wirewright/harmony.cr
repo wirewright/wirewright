@@ -51,6 +51,12 @@ class Ww::Harmony
   alias ServerDefn = SocketServerDefn | HttpServerDefn
   alias ClientDefn = SocketClientDefn | HttpClientDefn
 
+  alias ServerPort = ExclusiveServerPort | SharedServerPort | AutoServerPort
+
+  defrecord ExclusiveServerPort, port : UInt16
+  defrecord SharedServerPort, port : UInt16
+  defrecord AutoServerPort
+
   alias Link = PortalLink | DirectLink
 
   defrecord PortalLink, brief: true
@@ -526,7 +532,7 @@ class Ww::Harmony
   def self.apply(ctx : ApplyContext, observation : SocketServerStarted) : Nil
     ctx.world.delete_all(BrokenServer, defn: observation.defn)
     ctx.world.delete_all(PendingServer, defn: observation.defn)
-    ctx.world.add(RunningServer.new(observation.defn, observation.server_id))
+    ctx.world.add(RunningServer.new(observation.defn, observation.server_id, observation.info))
     ctx.exchange[observation.server_id, SocketServerQueue] = observation.queue
   end
 
@@ -534,13 +540,13 @@ class Ww::Harmony
   def self.apply(ctx : ApplyContext, observation : HttpServerStarted) : Nil
     ctx.world.delete_all(BrokenServer, defn: observation.defn)
     ctx.world.delete_all(PendingServer, defn: observation.defn)
-    ctx.world.add(RunningServer.new(observation.defn, observation.server_id))
+    ctx.world.add(RunningServer.new(observation.defn, observation.server_id, observation.info))
     ctx.exchange[observation.server_id, HttpServerQueue] = observation.queue
   end
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ServerStopped) : Nil
-    ctx.world.delete(RunningServer.new(observation.defn, observation.server_id))
+    ctx.world.delete_all(RunningServer, server_id: observation.server_id)
 
     case observation.defn
     in HttpServerDefn
@@ -557,7 +563,7 @@ class Ww::Harmony
 
   # :nodoc:
   def self.apply(ctx : ApplyContext, observation : ServerCrashed) : Nil
-    ctx.world.delete(RunningServer.new(observation.defn, observation.server_id))
+    ctx.world.delete_all(RunningServer, server_id: observation.server_id)
     ctx.world.add(BrokenServer.new(observation.defn, observation.detail))
 
     case observation.defn

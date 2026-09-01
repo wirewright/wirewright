@@ -1,7 +1,8 @@
 class Ww::Harmony
   defrecord HttpServerDefn,
     host : String,
-    port : UInt16,
+    port : ServerPort,
+    key : Term,
     security : TlsServerConfig?,
     brief: true
 
@@ -122,14 +123,34 @@ class Ww::Harmony
         queue_delegate_handler,
       ])
 
+      port_cfg = defn.port
+
       if tls_config = defn.security
         # TODO: I'm sure there's a lot more configuration to it than this.
         context = OpenSSL::SSL::Context::Server.new
         context.certificate_chain = tls_config.cert.unwrap.to_s
         context.private_key = tls_config.key.unwrap.to_s
-        server.bind_tls(defn.host, defn.port.to_i, context)
+
+        case port_cfg
+        in ExclusiveServerPort
+          address = server.bind_tls(defn.host, port_cfg.port.to_i, context)
+        in SharedServerPort
+          address = server.bind_tls(defn.host, port_cfg.port.to_i, context, reuse_port: true)
+        in AutoServerPort
+          address = server.bind_tls(defn.host, context)
+        end
       else
-        server.bind_tcp(defn.host, defn.port.to_i)
+        case port_cfg
+        in ExclusiveServerPort
+          address = server.bind_tcp(defn.host, port_cfg.port.to_i)
+        in SharedServerPort
+          address = server.bind_tcp(defn.host, port_cfg.port.to_i, reuse_port: true)
+        in AutoServerPort
+          # Binding to port 0 binds to an OS-assigned port.
+          #
+          # Reference: https://www.man7.org/linux/man-pages/man2/bind.2.html
+          address = server.bind_tcp(defn.host, 0)
+        end
       end
     rescue e : IO::Error | OpenSSL::Error
       observations << ServerStartFailed.new(defn, e.message || "i/o error")
@@ -155,7 +176,12 @@ class Ww::Harmony
 
         case command
         in HttpRxListening
-          observations << HttpServerStarted.new(defn, id, queue)
+          info = Term[]
+          if port_cfg.is_a?(AutoServerPort)
+            info = Term[port: address.port]
+          end
+
+          observations << HttpServerStarted.new(defn, id, queue, info)
         in HttpRxClosed
           break
         in HttpRxCrashed

@@ -467,8 +467,43 @@
     (queue (@reply @replies) ((+ 1 2)))))
 
 ;; format: binary, format-policy: abort, failure to encode
+(rack
+  (frame
+    (server (@pool (ws local 9813) format: binary)
+      (feed (@in front) (@out back)))
+    (pool @pool)
 
-;; format: text, format-policy: abort, failure to encode
+    (cell @in (+ 1 2))
+    (cell @out)
+    (client (@in -> (ws local 9813) -> @out format: binary format-policy: abort)))
+
+  (frame/tail fast-forward: true
+    (pool @pool)
+
+    (cell @in (+ 1 2))
+    (cell @out)
+    (client (@in -> (ws local 9813) -> @out format: binary format-policy: abort)
+      (dn "format encode error"))))
+
+;; format: text, format-policy: abort, failure to encode (server side)
+(rack
+  (frame
+    (server (@pool (ws local 9813 link: portal) format: text format-policy: abort)
+      (cell @wrong (+ 1 2))
+      (feed @wrong (@out back)))
+    (pool @pool)
+
+    (cell @in "Hello")
+    (cell @out)
+    (client (@in -> (ws local 9813 link: portal) -> @out format: text)))
+
+  (frame/tail fast-forward: true
+    (pool @pool)
+
+    (cell @in "Hello")
+    (cell @out)
+    (client (@in -> (ws local 9813 link: portal) -> @out format: text)
+      (dn "connection closed by the other side"))))
 
 ;; Client format-policy: wrap
 (rack
@@ -1846,3 +1881,81 @@
     (cell @out)
     (discard @out)
     (client (@in -> (ws local 9813) -> @out format: text) up)))
+
+;; port: auto
+(rack
+  (frame
+    (frag @server
+      (server (@pool (tcp local auto) format: text)
+        (feed (@in front) (@out back))))
+    (pool @pool)
+
+    (manipulator (@server (server [@_ _ (up ⍊ port_)] _*) -> (client [_ -> (_ _ port←?) -> _] _*))
+      (client (@query -> (tcp local ?) -> @replies format: text)))
+
+    (queue (@query @queries) ("a" "b" "c"))
+    (queue (@reply @replies) ()))
+
+  (frame/tail fast-forward: true
+    (queue (@query @queries) ())
+    (queue (@reply @replies) ("a" "b" "c"))))
+
+;; port: shared, server key: _
+(rack
+  (frame
+    (module {}
+      (server (@pool (tcp local (shared 9813) key: alice link: portal) format: text)
+        (feed (@in front) (@out back)))
+      (pool @pool))
+
+    (module {}
+      (server (@pool (tcp local (shared 9813) key: bob link: portal) format: text)
+        (feed (@in front) (@out back)))
+      (pool @pool))
+
+    (module {}
+      (server (@pool (tcp local (shared 9813) key: charlie link: portal) format: text)
+        (feed (@in front) (@out back)))
+      (pool @pool))
+
+    (frag @client)
+
+    (cell @queries ("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m" "n" "o" "p"))
+    (cell @replies ())
+    (cell @query)
+    (cell @reply)
+
+    (backsys
+      {¦ queries: (Q_ _*) -query_ -reply -client_}
+        <> {(Q): (), query: ^Q, client: (client (@query -> (tcp local 9813 key: ^Q link: portal) -> @reply))}
+      {¦ -query reply_ replies: (_* `>reply) client_}
+        <> {(reply): (), >reply: ^reply, (client): ()}))
+
+  (frame/tail fast-forward: true
+    (module {}
+      (server (@pool (tcp local (shared 9813) key: alice link: portal) up format: text)
+        (feed (@in front) (@out back)))
+      (pool @pool))
+
+    (module {}
+      (server (@pool (tcp local (shared 9813) key: bob link: portal) up format: text)
+        (feed (@in front) (@out back)))
+      (pool @pool))
+
+    (module {}
+      (server (@pool (tcp local (shared 9813) key: charlie link: portal) up format: text)
+        (feed (@in front) (@out back)))
+      (pool @pool))
+
+    (frag @client)
+
+    (cell @queries ())
+    (cell @replies ("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m" "n" "o" "p"))
+    (cell @query)
+    (cell @reply)
+
+    (backsys
+      {¦ queries: (Q_ _*) -query_ -reply -client_}
+        <> {(Q): (), query: ^Q, client: (client (@query -> (tcp local 9813 key: ^Q link: portal) -> @reply))}
+      {¦ -query reply_ replies: (_* `>reply) client_}
+        <> {(reply): (), >reply: ^reply, (client): ()})))

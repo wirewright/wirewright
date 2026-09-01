@@ -38,7 +38,11 @@ class Ww::Harmony
 
   defcase RunningWebSocketHandler, server_id : ServerId, brief: true
 
-  defcase RunningServer, defn : ServerDefn, server_id : ServerId, brief: true
+  defcase RunningServer,
+    defn : ServerDefn,
+    server_id : ServerId,
+    info : Term::Dict,
+    brief: true
 
   # Retriable broken-ness. This is only used at startup, before we connect
   # to the server. After we connect, any breaks result in a `BrokenServer`.
@@ -97,7 +101,7 @@ class Ww::Harmony
   {% end %}
 
   alias FactFeature = ServerDefn | ClientDefn | ServerId | EndpointId | MsgId | HttpRequestId |
-                      String | Term | Term::Blob | FactClass | HttpResponseResult
+                      String | Term | Term::Dict | Term::Blob | FactClass | HttpResponseResult
 
   alias FactSet = IndexedSet(Fact, FactFeature)
 end

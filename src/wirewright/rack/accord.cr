@@ -86,7 +86,7 @@ module Ww::Rack::Accord
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
-          continue unless defn = http_server_transport?(transportQ)
+          continue unless defn = http_server_transport?(hg, node.addr, transportQ)
 
           next unless link = link?(linkQ)
           next unless format = Format.format?(state.schemas, hg, node, formatQ)
@@ -106,7 +106,7 @@ module Ww::Rack::Accord
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
-          continue unless defn = http_server_transport?(transportQ)
+          continue unless defn = http_server_transport?(hg, node.addr, transportQ)
 
           next unless format = Format.format?(state.schemas, hg, node, formatQ)
           next unless format_policy = Format.policy?(policyQ)
@@ -125,7 +125,7 @@ module Ww::Rack::Accord
               format-policy: (%optional discard policyQ_))
           template_*]
         WWML
-          continue unless defn = socket_server_transport?(transportQ)
+          continue unless defn = socket_server_transport?(hg, node.addr, transportQ)
 
           next unless format = Format.format?(state.schemas, hg, node, formatQ)
           next unless format_policy = Format.policy?(policyQ)
@@ -284,7 +284,7 @@ module Ww::Rack::Accord
     # |@ rack.[network].host
     #
     # |@summary
-    # Lets you describe a server or client host.
+    # Description of a server or client host.
     Term.case(term) do
       # |@ rack.[network].host
       #
@@ -323,21 +323,80 @@ module Ww::Rack::Accord
     end
   end
 
-  # |@ rack.client.key
+  private def port?(term : Term) : Harmony::ServerPort?
+    # |@ rack.[network].port
+    #
+    # |@summary
+    # Description of a server or client port.
+    Term.case(term) do
+      # |@ rack.[network].port
+      #
+      # |@pattern
+      # (%number u16)
+      #
+      # |@block
+      # A constant port.
+      #
+      # |@example
+      # ```wwml
+      # 5000
+      # ```
+      matchpi %{(%number u16)} do
+        Harmony::ExclusiveServerPort.new(term.to(UInt16))
+      end
+
+      # |@ rack.[network].port
+      #
+      # |@pattern
+      # (shared port←(%number u16))
+      #
+      # |@block
+      # A shared constant port (`SO_REUSEPORT`).
+      #
+      # |@example
+      # ```wwml
+      # (shared 5000)
+      # ```
+      matchpiT %{(shared port←(%number u16))} do
+        Harmony::SharedServerPort.new(port)
+      end
+
+      # |@ rack.[network].port
+      #
+      # |@pattern
+      # auto
+      #
+      # |@block
+      # Asks the operating system for an unused port. The port can be learned
+      # from the server's `up`, which for servers with an `auto` port is different
+      # from the normal `up`, in that it also includes the port: `(up (%number u16))`.
+      matchpi %{auto} do
+        Harmony::AutoServerPort.new
+      end
+
+      otherwise { }
+    end
+  end
+
+  # |@ rack.[network].key
   #
   # |@summary
-  # The `key` pair accepted by all client transports.
+  # The `key` pair accepted by all client and server transports.
   #
   # |@block
-  # By default, all clients with the same transport (same by value, equal) will
-  # share the same underlying connection, regardless of where they are in
-  # the circuit or how many of them there are.
+  # By default, all clients and servers with the same transport (same by
+  # value; equal) will share the same underlying connection, or the same
+  # underlying HTTP/socket server, regardless of where they are in the circuit
+  # or how many of them there are.
   #
-  # This may come as a strange design choice, but the opposite choice -- to make
-  # all client nodes be separate connections -- is also not a very good one.
+  # This may come as a strange design choice. But the opposite choice -- to make
+  # all nodes be separate connections or servers -- is also not a very good one,
+  # in particular because nodes have no identity beyond content identity,
+  # i.e., transport.
   #
-  # If you have, say, a hundred components, and each for some reason wants
-  # access to an HTTP client, instead of doing complex routing, you can just
+  # This is particularly relevant for clients. If you have, say, a hundred
+  # components, and each for some reason wants access to an HTTP client,
+  # instead of doing complex routing to a single HTTP client, you can just
   # give each component its own HTTP client node. If they share the same key
   # (and they do share the same default `master` key if you don't change
   # it explicitly) -- if they share the same key, then the same connection
@@ -348,6 +407,11 @@ module Ww::Rack::Accord
   # (no needless connection duplication, running out of fds, etc.) Moreover --
   # you should thank Rack for this -- concurrent access is managed completely
   # transparently for you.
+  #
+  # What is said above applies to servers, too; a server's transport can also
+  # have a `key: _`. But this is more of a rarity; it's not often that you put
+  # a server inside each button, say (whereas it would sense to put a client in
+  # each button, if e.g. the button is responsible for sending a request).
   #
   # |@example
   # Consider this circuit:
@@ -432,14 +496,16 @@ module Ww::Rack::Accord
   # |@summary
   # Transports supported by the server node.
 
-  private def socket_server_transport?(term : Term) : Harmony::SocketServerDefn?
+  private def socket_server_transport?(hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Harmony::SocketServerDefn?
     Term.case(term) do
       # |@ rack.server.transport
       #
       # |@pattern
-      # (tcp host_ port←(%number u16) ⍊ link_⋮ direct)
+      # (tcp host_ port_ ⍊ key_⋮ master link_⋮ direct)
       #
       # |@key host rack.[network].host
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       #
       # |@block
@@ -454,17 +520,21 @@ module Ww::Rack::Accord
       #
       # (pool @pool)
       # ```
-      matchpiT %{(tcp hostQ_ port←(%number u16) ⍊ link_⋮ direct)} do
+      matchpiT %{(tcp hostQ_ portQ_ ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_))} do
         return unless host = host?(hostQ)
+        return unless port = port?(portQ)
+        return unless key = key?(hg, addr, keyQ)
+        return unless link = link?(linkQ)
 
-        Harmony::TcpServerDefn.new(host, port, link?(link) || return)
+        Harmony::TcpServerDefn.new(host, port, key, link)
       end
 
       # |@ rack.server.transport
       #
       # |@pattern
-      # (unix path_string ⍊ link_⋮ direct)
+      # (unix path_string ⍊ key_⋮ master link_⋮ direct)
       #
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       #
       # |@block
@@ -481,8 +551,11 @@ module Ww::Rack::Accord
       #
       # (pool @pool)
       # ```
-      matchpiT %{(unix path_string ⍊ link_⋮ direct)}, path: NormalPath do
-        Harmony::UnixServerDefn.new(path, link?(link) || return)
+      matchpiT %{(unix path_string ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_))}, path: NormalPath do
+        return unless key = key?(hg, addr, keyQ)
+        return unless link = link?(linkQ)
+
+        Harmony::UnixServerDefn.new(path, key, link)
       end
 
       otherwise { }
@@ -529,10 +602,11 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (ws host_ port←(%number u16) ⍊ key_⋮ master ⋮link path⋮ "" renew⋮ false)
+      # (ws host_ port_ ⍊ key_⋮ master ⋮link path⋮ "" renew⋮ false)
       #
       # |@key host rack.[network].host
-      # |@key key rack.client.key
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       # |@key renew rack.client.transport.renew
       #
@@ -584,10 +658,11 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (wss host_ port←(%number u16) ⍊ key_⋮ master path⋮ "" ⋮link renew⋮ false)
+      # (wss host_ port_ ⍊ key_⋮ master path⋮ "" ⋮link renew⋮ false)
       #
       # |@key host rack.[network].host
-      # |@key key rack.client.key
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       # |@key renew rack.client.transport.renew
       #
@@ -625,10 +700,11 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (tcp host_ port←(%number u16) ⍊ key_⋮ master ⋮link renew⋮ false)
+      # (tcp host_ port_ ⍊ key_⋮ master ⋮link renew⋮ false)
       #
       # |@key host rack.[network].host
-      # |@key key rack.client.key
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       # |@key renew rack.client.transport.renew
       #
@@ -659,7 +735,7 @@ module Ww::Rack::Accord
       # |@pattern
       # (unix path_string ⍊ key_⋮ master ⋮link renew⋮ false)
       #
-      # |@key key rack.client.key
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       # |@key renew rack.client.transport.renew
       #
@@ -688,14 +764,16 @@ module Ww::Rack::Accord
     end
   end
 
-  private def http_server_transport?(term : Term) : Harmony::HttpServerDefn?
+  private def http_server_transport?(hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Harmony::HttpServerDefn?
     Term.case(term) do
       # |@ rack.server.transport
       #
       # |@pattern
-      # (http host_ port←(%number u16))
+      # (http host_ port_ ⍊ key_⋮ master)
       #
       # |@key host rack.[network].host
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       #
       # |@block
       # An HTTP server at *host*:*port*.
@@ -741,9 +819,11 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (ws host_ port←(%number u16) ⍊ link_⋮ direct)
+      # (ws host_ port_ ⍊ key_⋮ master link_⋮ direct)
       #
       # |@key host rack.[network].host
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       #
       # |@block
@@ -760,23 +840,30 @@ module Ww::Rack::Accord
       # (pool @pool)
       # ```
 
-      matchpiT %{[http hostQ_ port←(%number u16)]}, %{[ws hostQ_ port←(%number u16)]} do
+      matchpiT(
+        %{(http hostQ_ portQ_ ⍊ key: (%optional master keyQ_))},
+        %{(ws hostQ_ portQ_ ⍊ key: (%optional master keyQ_))},
+      ) do
         return unless host = host?(hostQ)
+        return unless port = port?(portQ)
+        return unless key = key?(hg, addr, keyQ)
 
-        Harmony::HttpServerDefn.new(host, port, security: nil)
+        Harmony::HttpServerDefn.new(host, port, key, security: nil)
       end
 
       # |@ rack.server.transport
       #
       # |@pattern
-      # (https host_ port←(%number u16) ⍊ cert_string key_string)
+      # (https host_ port_ ⍊ key_⋮ master ssl-cert_string ssl-key_string)
       #
       # |@key host rack.[network].host
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       #
-      # |@key cert
+      # |@key ssl-cert
       # Path to the file containing the public certificate chain.
       #
-      # |@key key
+      # |@key ssl-key
       # Path to the private key file.
       #
       # |@block
@@ -791,7 +878,7 @@ module Ww::Rack::Accord
       # running with something along the lines of:
       #
       # ```wwml
-      # (server (@pool (https local 5000 cert: "path/to/openssl.cert" key: "path/to/openssl.key"))
+      # (server (@pool (https local 5000 ssl-cert: "path/to/openssl.cert" ssl-key: "path/to/openssl.key"))
       #   (backsys
       #     {¦ request: [get ["/"]] -response_}
       #       <> {response: (ok "Hello")}))
@@ -800,15 +887,17 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (wss host_ port←(%number u16) ⍊ link_⋮ direct cert_string key_string)
+      # (wss host_ port_ ⍊ key_⋮ master link_⋮ direct ssl-cert_string ssl-key_string)
       #
       # |@key host rack.[network].host
+      # |@key port rack.[network].port
+      # |@key key rack.[network].key
       # |@key link rack.[network].link
       #
-      # |@key cert
+      # |@key ssl-cert
       # Path to the file containing the public certificate chain.
       #
-      # |@key key
+      # |@key ssl-key
       # Path to the private key file.
       #
       # |@block
@@ -820,21 +909,24 @@ module Ww::Rack::Accord
       # Works similar to `https`. Here's a simple echo server:
       #
       # ```wwml
-      # (server (@pool (wss local 5000 cert: "path/to/openssl.cert" key: "path/to/openssl.key"))
+      # (server (@pool (wss local 5000 ssl-cert: "path/to/openssl.cert" ssl-key: "path/to/openssl.key"))
       #   (feed (@in front) (@out back)))
       #
       # (pool @pool)
       # ```
 
       matchpiT(
-        %{(https hostQ_ port←(%number u16) ⍊ cert_string key_string)},
-        %{(wss hostQ_ port←(%number u16) ⍊ cert_string key_string)},
-        cert: NormalPath, key: NormalPath,
+        %{(https hostQ_ portQ_ ⍊ key: (%optional master keyQ_) ssl-cert_string ssl-key_string)},
+        %{(wss hostQ_ portQ_ ⍊ key: (%optional master keyQ_) ssl-cert_string ssl-key_string)},
+        ssl_cert: NormalPath,
+        ssl_key: NormalPath,
       ) do
         return unless host = host?(hostQ)
+        return unless port = port?(portQ)
+        return unless key = key?(hg, addr, keyQ)
 
-        tls_config = Harmony::TlsServerConfig.new(cert, key)
-        Harmony::HttpServerDefn.new(host, port, security: tls_config)
+        tls_config = Harmony::TlsServerConfig.new(ssl_cert, ssl_key)
+        Harmony::HttpServerDefn.new(host, port, key, security: tls_config)
       end
 
       otherwise { }
@@ -846,15 +938,15 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (http host_ port←(%number u16) ⍊ key_⋮ master)
+      # (http host_ port_ ⍊ key_⋮ master)
       # (http host_ ⍊ key_⋮ master)
       #
       # |@key host rack.[network].host
       #
-      # |@key port
-      # The port number. If omitted, uses the default HTTP port 8080.
+      # |@key port rack.[network].port
+      # If omitted, uses the default HTTP port 8080.
       #
-      # |@key key rack.client.key
+      # |@key key rack.[network].key
       #
       # |@block
       # Connects to an HTTP server at *host*:*port*.
@@ -914,15 +1006,15 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (https host_ port←(%number u16) ⍊ key_⋮ master verify⋮ true)
+      # (https host_ port_ ⍊ key_⋮ master verify⋮ true)
       # (https host_ ⍊ key_⋮ master verify⋮ true)
       #
       # |@key host rack.[network].host
       #
       # |@key port
-      # The port number. If omitted, uses the default HTTPS port 443.
+      # If omitted, uses the default HTTPS port 443.
       #
-      # |@key key rack.client.key
+      # |@key key rack.[network].key
       #
       # |@key verify
       # Whether to verify the certificate.
@@ -1016,7 +1108,13 @@ module Ww::Rack::Accord
 
   private def status_and_incarnation(world : Harmony::ReadonlyWorld, defn : Harmony::ServerDefn) : {Term, Harmony::ServerId?}
     world.each(Harmony::RunningServer, defn: defn) do |fact|
-      return Term.of(:up), fact.server_id
+      if fact.info.empty?
+        # E.g. `up`.
+        return Term.of(:up), fact.server_id
+      else
+        # E.g. `(up port: 5000)`.
+        return Term.of(fact.info.with(0, :up)), fact.server_id
+      end
     end
 
     world.each(Harmony::PendingServer, defn: defn) do |fact|
@@ -1589,7 +1687,12 @@ module Ww::Rack::Accord
       #
       # TODO: We should also provide a descriptive error message explaining why
       # the thing doesn't encode!
-      next unless message = Format.encode?(client.format, message)
+      begin
+        next unless message = encode?(client.format, client.format_policy, message)
+      rescue e : FormatAborted
+        status_patch = D7.patch(client.node, {2, {:dn, e.message || "format encode error"}})
+        next
+      end
 
       if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(incarnation, message))
         # Consider it sent, erase the message.

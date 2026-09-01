@@ -10,14 +10,25 @@ class Ww::Harmony
                       HttpRequestReceived | HttpRequestHandled | HttpResponseReceived |
                       WebSocketHandlerAdded | WebSocketHandlerRemoved
 
-  defrecord SocketServerStarted, defn : SocketServerDefn, server_id : ServerId, queue : SocketServerQueue, brief: true
+  defrecord SocketServerStarted,
+    defn : SocketServerDefn,
+    server_id : ServerId,
+    queue : SocketServerQueue,
+    info : Term::Dict,
+    brief: true
 
   defrecord PeerConnected, server_id : ServerId, peer_id : PeerId, queue : SocketQueue, brief: true
   defrecord PeerDisconnected, server_id : ServerId, peer_id : PeerId, brief: true
   defrecord PeerCrashed, server_id : ServerId, peer_id : PeerId, detail : String, brief: true
   defrecord PeerReceived, peer_id : PeerId, msgid : MsgId, payload : Term::Blob, brief: true
 
-  defrecord HttpServerStarted, defn : HttpServerDefn, server_id : ServerId, queue : HttpServerQueue, brief: true
+  defrecord HttpServerStarted,
+    defn : HttpServerDefn,
+    server_id : ServerId,
+    queue : HttpServerQueue,
+    info : Term::Dict,
+    brief: true
+
   defrecord HttpRequestReceived, server_id : ServerId, request_id : HttpRequestId, request : Term, brief: true
   defrecord HttpRequestHandled, request_id : HttpRequestId, brief: true
   defrecord WebSocketHandlerAdded, server_id : ServerId, brief: true

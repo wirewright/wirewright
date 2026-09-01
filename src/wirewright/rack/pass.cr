@@ -303,36 +303,14 @@ module Ww::Rack
       end
     end
 
-    if backspec
-      result = patterns.leftmost? do |pattern|
-        M1.backmap?(pattern, Term.of(backspec), payload)
-      end
+    return unless backspec
 
-      return unless result
-      return D7.patch(node, {2, result})
+    result = patterns.leftmost? do |pattern|
+      M1.backmap?(pattern, Term.of(backspec), payload)
     end
 
-    # If value is absent or doesn't match, we have to clear stuff. But we
-    # don't know the names of things because *selector* doesn't match. So
-    # instead we match each *pattern* in turn to figure out the captures
-    # to clear.
-    env_log_list = patterns.leftmost? do |pattern|
-      matches = M1.matches_and_logs(Term[], M1.operator(pattern), payload)
-      matches.present? ? matches : nil
-    end
+    return unless result
 
-    return unless env_log_list
-
-    backspec = Term::Dict.build do |commit|
-      env_log_list.each do |env, _|
-        env.each_entry do |capture, _|
-          commit.with({capture}, Term[])
-        end
-      end
-    end
-
-    rep = M1.backmapR(Slice[{env_log_list, backspec}], payload)
-    result = Term.collapse(rep)
     D7.patch(node, {2, result})
   end
 end
