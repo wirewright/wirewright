@@ -2449,7 +2449,7 @@ module Ww::Rack
       #         offspring: ^(set members [_ member_string])})
       #
       # (supervisor (@reports @report [path (path_string report) _] - @pool)
-      #   (frag (@report [path (path_string report) _]
+      #   (manipulator (@report [path (path_string report) _]
       #                    -> (appearance paths `path)
       #                       (appearance paths path_))
       #     (appearance paths)))
