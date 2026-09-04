@@ -1,0 +1,497 @@
+;; rulesetR
+(rack
+  (frame
+    (cell @x 0)
+    (rewriter (@x -> (rulesetR) -> @y)
+      _ => 100 ;; test if it is ordered by specificity
+      0 => 1
+      1 => 2
+      2 => 3)
+    (cell @y)
+    (feed @y @x))
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y 1)⟩)
+  (frame pattern: true
+    ⟨& (cell @x 1)
+       (cell @y)⟩)
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y 2)⟩)
+  (frame pattern: true
+    ⟨& (cell @x 2)
+       (cell @y)⟩)
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y 3)⟩)
+  (frame pattern: true
+    ⟨& (cell @x 3)
+       (cell @y)⟩)
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y 100)⟩)
+  (frame pattern: true
+    ⟨& (cell @x 100)
+       (cell @y)⟩)
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y 100)⟩))
+  ;; ...
+
+;; exh rulesetR
+(rack
+  (frame
+    (cell @x 2)
+    (rewriter (@x -> (rulesetR exh: true) -> @y)
+      ±n => (e ^(+ n 1))
+      (e n_) => (e ^n ^(- n 1))
+      (e n_ m_number) => (e ^m ^(* n 2))
+      (e n_ m_) => (e ^m . ^n))
+    (cell @y))
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y (e 6 . 2))⟩)
+  end)
+
+(rack
+  (frame
+    (rewriter ((rulesetR exh: true) - (@a @b @:c @:d))
+      [±n _] <> {n: ^(+ n 1)}
+      [_ ±n] <> {n: ^(+ n 1)}
+      {¦ c: ±n} <> {n: ^(+ n 1)}
+      {¦ d: ±n -▢_} <> {n: ^(+ n 1), ▢: true}
+      {¦ d_: 403 -▢_} <> {(d): (), ▢: true}
+      {¦ -d_ -▢_} <> {d: 400, ▢: true})
+
+    (cell @a 100)
+    (cell @b 200)
+    (cell @c 300)
+    (cell @d 400))
+
+  (frame/tail
+    (cell @a 101)
+    (cell @b 201)
+    (cell @c 301)
+    (cell @d 401))
+
+  (frame/tail
+    (cell @a 102)
+    (cell @b 202)
+    (cell @c 302)
+    (cell @d 402))
+
+  (frame/tail
+    (cell @a 103)
+    (cell @b 203)
+    (cell @c 303)
+    (cell @d 403))
+
+  (frame/tail
+    (cell @a 104)
+    (cell @b 204)
+    (cell @c 304)
+    (cell @d))
+
+  (frame/tail
+    (cell @a 105)
+    (cell @b 205)
+    (cell @c 305)
+    (cell @d 400))
+
+  (frame/tail
+    (cell @a 106)
+    (cell @b 206)
+    (cell @c 306)
+    (cell @d 401)))
+  ;; ...
+
+;; ascR: elementary
+(rack
+  (frame
+    (cell @x (0 0 0 0 0))
+    (rewriter (@x -> (ascR (rulesetR)) -> @y)
+      ±n => ^(+ n 1))
+    (cell @y)
+    (feed @y @x))
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y (1 1 1 1 1))⟩)
+  (frame pattern: true
+    ⟨& (cell @x (1 1 1 1 1))
+       (cell @y)⟩)
+  (frame pattern: true
+    ⟨& (cell @x)
+       (cell @y (2 2 2 2 2))⟩))
+  ;; ...
+
+;; ascR: make sure it really ascends
+(rack
+  (frame
+    (cell @x (e (e 0) (e 1)))
+    (rewriter (@x - (ascR (rulesetR)) - @y)
+      ±n => ^(+ n 1)
+      (e ±n) => (p ^\n style: "text-blue-500")
+      (e a_ b_) => (group ^b ^a))
+    (cell @y)
+    (backsys @y  {¦ -seen_} <> {seen: true}))
+  (frame pattern: true
+    ⟨& (cell @x (e (e 0) (e 1)))
+       (cell @y
+         (group
+           (p "2" style: "text-blue-500")
+           (p "1" style: "text-blue-500")))⟩)
+  (frame pattern: true
+    ⟨& (cell @x (e (e 0) (e 1)))
+       (cell @y
+         (group seen: true
+           (p "2" style: "text-blue-500")
+           (p "1" style: "text-blue-500")))⟩)
+  end)
+
+(rack
+  (frame
+    (cell @x (e (d 0) (e 1)))
+    (rewriter (@x - (ascR (rulesetR)) - @y)
+      ±n => ^(+ n 1)
+      (e n_) => ^\n
+      (e a_ b_string) <> {a: ^b, b: ^a})
+    (cell @y))
+  (frame pattern: true
+    ⟨& (cell @x (e (d 0) (e 1)))
+       (cell @y (e "2" (d 1)))⟩)
+  end)
+
+;; ascR: impassable selector
+(rack
+  (frame
+    (cell @x (+ (literal "100") (literal "200") "300"))
+    (rewriter (@x - ascR - @y)
+      (impassable '_)
+      x_string => (seen ^x)
+      'x_ => (leaf ^x))
+    (cell @y))
+  (frame pattern: true
+    ⟪(cell @y (+ (leaf "100") (leaf "200") (seen "300")))⟫)
+  end)
+
+;; ascR: passable
+(rack
+  (frame
+    (cell @x
+      (+ (literal "100") (+ "a" "b") (literal "200") "300"))
+    (rewriter (@x - ascR - @y)
+      (passable (+ _*))
+      x_string => (seen ^x))
+    (cell @y))
+  (frame pattern: true
+    ⟪(cell @y
+       (+ (literal "100") (+ (seen "a") (seen "b")) (literal "200") (seen "300")))⟫)
+  end)
+
+;; ascR: passable + impassable
+(rack
+  (frame
+    (cell @x
+      (+ (literal "100") (+ "a" "b") (literal "200") "300"))
+    (rewriter (@x - ascR - @y)
+      (passable (+ _*))
+      (impassable (+ _ _))
+      x_string => (seen ^x))
+    (cell @y))
+  (frame pattern: true
+    ⟪(cell @y
+       (+ (literal "100") (+ "a" "b") (literal "200") (seen "300")))⟫)
+  end)
+
+;; descR: elementary
+(rack
+  (frame
+    (cell @x (e (d 0) (e 1)))
+    (rewriter (@x - (descR (rulesetR)) - @y)
+      ±n => ^(+ n 1)
+      (e n_) => ^\n
+      (e a_ b_string) <> {a: ^b, b: ^a})
+    (cell @y))
+  (frame pattern: true
+    ⟨& (cell @x (e (d 0) (e 1)))
+       (cell @y (e (d 1) "1"))⟩)
+  end)
+
+;; bidiR: elementary
+(rack
+  (frame
+    (cell @x ((+ "1" (I "2")) ?))
+    (part (@x @in) (in_ _))
+    (part (@x @out) (_ out_))
+    (rewriter (@in - bidiR - @out)
+      x_string => (node (token ^x))
+      (I (node a_)) => (node (cursor ^a))
+      (+ (node a_) (node b_)) => (node (seq ^a "+" ^b))))
+  (frame pattern: true
+    ⟨& (cell @x ((+ "1" (I "2")) (node (seq (token "1") "+" (cursor (token "2"))))))⟩)
+  end)
+
+;; waveR elementary
+(rack
+  (frame
+    (cell @in
+      ((x (a 1) (b 2))
+       (c)))
+    (rewriter (@in -> waveR -> @out)
+      (x (a n_) (b m_) ⍊ -sum_) <> {sum: ^(+ n m)}
+      (a _ ⍊ -seen_) <> {seen: true}
+      (b _ ⍊ -seen_) <> {seen: true}
+      (c) => ((c)))
+    (cell @out))
+  (frame pattern: true
+    ⟨(cell @out
+       ((x (a 1 seen: true) (b 2 seen: true) sum: 3)
+        ((c))))⟩)
+  end)
+
+;; dirR axis
+(rack
+  (frame
+    (rewriter ((chainR (descR (rulesetR phase: main) axis: in) (rulesetR phase: post)) - {@:in, @:bus})
+      (main {¦ in: (place var_ `dst) bus: ((set var_ value_) _* `reply)})
+        <> {dst: ^value, reply: (changed ^var ^value)}
+      (main {¦ in: (place var_ value_) bus: ((unset var_) _*)})
+        <> {(value): ()}
+      (main {¦ in: (link a_ b_) bus: ((changed a_ value_) _* `reply)})
+        <> {(reply): ((unset ^a) (set ^b ^value))}
+      (post {¦ bus: (event_ _*)})
+        <> {(event): ()})
+    (cell @bus ((set x 0)))
+    (cell @in
+      (document
+        (group
+          (place x)
+          (place y)
+          (link x a)
+          (link a y))
+        (link y b)
+        (link b x)
+        (place a)
+        (place b))))
+  (frame pattern: true fast-forward: true
+    ⟨(cell @in
+       (document
+         (group
+           (place x 0)
+           (place y)
+           (link x a)
+           (link a y))
+         (link y b)
+         (link b x)
+         (place a)
+         (place b)))⟩)
+  (frame pattern: true fast-forward: true
+    ⟨(cell @in
+       (document
+         (group
+           (place x)
+           (place y)
+           (link x a)
+           (link a y))
+         (link y b)
+         (link b x)
+         (place a 0)
+         (place b)))⟩)
+  (frame pattern: true fast-forward: true
+    ⟨(cell @in
+       (document
+         (group
+           (place x)
+           (place y 0)
+           (link x a)
+           (link a y))
+         (link y b)
+         (link b x)
+         (place a)
+         (place b)))⟩)
+  (frame pattern: true fast-forward: true
+    ⟨(cell @in
+       (document
+         (group
+           (place x)
+           (place y)
+           (link x a)
+           (link a y))
+         (link y b)
+         (link b x)
+         (place a)
+         (place b 0)))⟩)
+  (frame pattern: true fast-forward: true
+    ⟨(cell @in
+       (document
+         (group
+           (place x 0)
+           (place y)
+           (link x a)
+           (link a y))
+         (link y b)
+         (link b x)
+         (place a)
+         (place b)))⟩))
+  ;; ...
+
+;; Extension
+(rack
+  (frame
+    (cell @in ((x y) z))
+    (cell @out)
+    (rewriter (@in - ascR - @out)
+      x => 100
+      y => 200
+      (±a ±b) => (result ^(+ a b))
+      (a_dict b←z) <> {b: ^a, a: ^b})
+    (backsys @out
+      {¦ -seen_} <> {seen: true}))
+  (frame pattern: true
+    ⟨& (cell @in ((x y) z))
+       (cell @out (z (result 300)))⟩)
+  (frame pattern: true
+    ⟨& (cell @in ((x y) z))
+       (cell @out (z (result 300) seen: true))⟩)
+  end)
+
+;; Feed
+(rack
+  (frame
+    (cell @in ((x y) z))
+    (cell @out)
+    (rewriter (@in -> ascR -> @out)
+      x => 100
+      y => 200
+      (±a ±b) => (result ^(+ a b))
+      (a_dict b←z) <> {b: ^a, a: ^b})
+    (backsys @out
+      {¦ -seen_} <> {seen: true}))
+  (frame pattern: true
+    ⟨& (cell @in)
+       (cell @out (z (result 300)))⟩)
+  (frame pattern: true
+    ⟨& (cell @in)
+       (cell @out (z (result 300) seen: true))⟩)
+  end)
+
+;; chainR, rulesetR phase
+(rack
+  (frame
+    (cell @in ((x y) (a b)))
+    (cell @out)
+    (cell @rewriter
+      (chainR
+        (ascR (rulesetR phase: fst))
+        (descR (rulesetR phase: snd))))
+    (rewriter (@in -> @rewriter -> @out)
+      (fst x) => 100
+      (fst y) => 200
+      (fst (±a ±b)) => ^(+ a b)
+      (snd (a_ b_dict)) <> {b: ^a, a: ^b}))
+  (frame pattern: true
+    ⟨& (cell @in)
+       (cell @out ((a b) 300))⟩)
+  end)
+
+;; chainR -- no change in first
+(rack
+  (frame
+    (cell @in ((a b) (c d)))
+    (cell @out)
+    (cell @rewriter
+      (chainR
+        (ascR (rulesetR phase: fst))
+        (descR (rulesetR phase: snd))))
+    (rewriter (@in -> @rewriter -> @out)
+      (fst x) => 100
+      (fst y) => 200
+      (fst (±a ±b)) => ^(+ a b)
+      (snd (a_ b_dict)) <> {b: ^a, a: ^b}))
+  (frame pattern: true
+    ⟨& (cell @in)
+       (cell @out ((c d) (a b)))⟩)
+  end)
+
+;; chainR -- no change in second
+(rack
+  (frame
+    (cell @in ((x y) c))
+    (cell @out)
+    (cell @rewriter
+      (chainR
+        (ascR (rulesetR phase: fst))
+        (descR (rulesetR phase: snd))))
+    (rewriter (@in -> @rewriter -> @out)
+      (fst x) => 100
+      (fst y) => 200
+      (fst (±a ±b)) => ^(+ a b)
+      (snd (a_ b_dict)) <> {b: ^a, a: ^b}))
+  (frame pattern: true
+    ⟨& (cell @in)
+       (cell @out (300 c))⟩)
+  end)
+
+;; adjR
+(rack
+  (frame
+    (rewriter ((adjR (rulesetR)) - @world)
+      {¦ m_: < -l} <> {m: >}
+      {¦ m_: > -r} <> {m: <}
+      {¦ m_: > r: .} <> {m: .}
+      {¦ l: > m_: .} <> {m: >}
+      {¦ l: . m_: <} <> {m: .}
+      {¦ m_: . r: <} <> {m: <})
+    (cell @world (> . . . .)))
+  (frame/tail
+    (cell @world (. > . . .)))
+  (frame/tail
+    (cell @world (. . > . .)))
+  (frame/tail
+    (cell @world (. . . > .)))
+  (frame/tail
+    (cell @world (. . . . >)))
+  (frame/tail
+    (cell @world (. . . . <)))
+  (frame/tail
+    (cell @world (. . . < .)))
+  (frame/tail
+    (cell @world (. . < . .)))
+  (frame/tail
+    (cell @world (. < . . .)))
+  (frame/tail
+    (cell @world (< . . . .)))
+  (frame/tail
+    (cell @world (> . . . .)))
+  (frame/tail
+    (cell @world (. > . . .))))
+  ;; ...
+
+;; valueR
+(rack
+  (frame
+    (rewriter ((valueR x (rulesetR)) - @in)
+      ±n <> {n: ^(+ n 1)})
+    (cell @in {x: 100, y: 200}))
+  (frame/tail
+    (cell @in {x: 101, y: 200}))
+  (frame/tail
+    (cell @in {x: 102, y: 200})))
+  ;; ...
+
+;; valueR replace with zero
+(rack
+  (frame
+    (rewriter ((valueR x (rulesetR)) - @in)
+      ±n <> {n: ^(+ n 1)}
+      10 => (^splice))
+    (cell @in {x: 7, y: 200}))
+  (frame/tail
+    (cell @in {x: 8, y: 200}))
+  (frame/tail
+    (cell @in {x: 9, y: 200}))
+  (frame/tail
+    (cell @in {x: 10, y: 200}))
+  (frame/tail
+    (cell @in {y: 200}))
+  end)

@@ -47,25 +47,29 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack))
 
+(test "rack/rewriter.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-rewriter))
+
 (test "rack/tspace.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-misc rack-tspace))
+  tags: (d7 delta7 rack rack-tspace))
 
 (test "rack/fs.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-misc rack-fs))
+  tags: (d7 delta7 rack rack-io rack-fs))
 
 (test "rack/socket.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-misc rack-socket))
+  tags: (d7 delta7 rack rack-io rack-socket))
 
 (test "rack/http.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-misc rack-http))
+  tags: (d7 delta7 rack rack-io rack-http))
 
 (test "rack/db.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-misc rack-db))
+  tags: (d7 delta7 rack rack-io rack-db))
 
 (test "editR.test.wwml"
   color: (oklch 0.7 0.1 indigo)
