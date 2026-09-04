@@ -1020,13 +1020,16 @@ module Ww::Rack
       # |@ rack.manipulator
       #
       # |@pattern
+      # [manipulator (@edge_ -> patterns_*) child_]
       # [manipulator (@edge_ selector_ -> patterns_*) child_]
       #
       # |@key edge rack.edge
       # The edge identifying the source place.
       #
       # |@key selector m1.operator
-      # The pattern to use to extract part(s) of the value at *edge*.
+      # The pattern to use to extract part(s) of the value at *edge*. If omitted, creates
+      # a capture under the name of *edge*. For example, `(@x -> ...)` is the same as
+      # `(@x x_ -> ...)`.
       #
       # |@key patterns m1.operator
       # A list of alternative patterns to find part(s) of *child* with. The first
@@ -1078,7 +1081,10 @@ module Ww::Rack
       #
       # ;; ...etc.
       # ```
-      matchpi %{[manipulator (@edge_ _ -> _*) child0_]} do
+      matchpi(
+        %{[manipulator (@edge_ -> _*) child0_]},
+        %{[manipulator (@edge_ _ -> _*) child0_]},
+      ) do
         mix0 = Term.of(:group, Term.morph(node, {0, :manipulable}), child0)
 
         D7.mixture(node, mix0) do |mix1|
@@ -1099,7 +1105,10 @@ module Ww::Rack
       end
 
       # Internal
-      matchpi %{[manipulable (@edge_ _ -> _*) _]} do
+      matchpi(
+        %{[manipulable (@edge_ -> _*) _]},
+        %{[manipulable (@edge_ _ -> _*) _]},
+      ) do
         D7.gnd(node, edge)
       end
 

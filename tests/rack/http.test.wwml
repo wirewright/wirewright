@@ -769,7 +769,7 @@
     (cell @query)
     (cell @reply)
     (cell @replies ())
-    (manipulator (@query query_ -> ⟪(http local 9813 ⍊ key: (%- (%never) query))⟫)
+    (manipulator (@query -> ⟪(http local 9813 ⍊ key: (%- (%never) query))⟫)
       (client (@query -> (http local 9813) -> @reply))))
 
   (frame pattern: true fast-forward: true
@@ -805,7 +805,7 @@
      (cell @query)
      (cell @reply)
      (cell @replies ("/a" "/b" "/c" "/d" "/e" "/f" "/g" "/h" "/i" "/j" "/k" "/l" "/m" "/n"))
-     (manipulator (@query query_ -> ⟪(http local 9813 ⍊ key: (%- (%never) query))⟫)
+     (manipulator (@query -> ⟪(http local 9813 ⍊ key: (%- (%never) query))⟫)
        (client (@query -> (http local 9813 key: (get "/n")) -> @reply)
          up)))))
 
@@ -821,7 +821,7 @@
 
     (part (@server @port) (server (@_ _ (up ⍊ port_)) _*))
 
-    (manipulator (@port port_ -> ⟪(http local `port)⟫)
+    (manipulator (@port -> ⟪(http local `port)⟫)
       (client (@query -> (http local) -> @reply)))
 
     (cell @query (get "/kaixo"))

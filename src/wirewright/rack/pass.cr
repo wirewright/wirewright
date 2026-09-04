@@ -278,6 +278,12 @@ module Ww::Rack
   def manipulate(hg : D7::Hypergraph) : Indexable(D7::Patch)
     hg.propose(:manipulable) do |node|
       Term.case(node.term) do
+        matchpi %{[manipulable header←(input←(%'edge capture_) -> _*) payload_]} do
+          selector = Term.of(:"%let", capture, :_)
+          patterns = header.items.move(1)
+          manipulate(hg, node, hg.resolve(node.addr, input), selector, patterns, payload)
+        end
+
         matchpi %{[manipulable header←(@input_ selector_ -> _*) payload_]} do
           patterns = header.items.move(2)
           manipulate(hg, node, hg.resolve(node.addr, input), selector, patterns, payload)

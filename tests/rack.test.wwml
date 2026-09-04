@@ -3560,7 +3560,7 @@
       (cell @expr (+ 1 2))
       (part (@expr @x) (+ x_ _))
       (backsys @x  ±n <> {n: ^(+ n 1)})
-      (manipulator (@x x_ -> (appearance _ `x) (appearance _ x_))
+      (manipulator (@x -> (appearance _ `x) (appearance _ x_))
         (appearance local))
       (sensor (view local x_)))
     (frame pattern: true
@@ -7134,6 +7134,20 @@
 
 ;; manipulator
 (group
+  ;; Shorthand
+  (rack
+    (frame
+      (cell @src "Kaixo")
+      (manipulator (@src -> (cell @dst `src))
+        (cell @dst)))
+
+    (frame/tail
+      (cell @src "Kaixo")
+      (manipulator (@src -> (cell @dst `src))
+        (cell @dst "Kaixo")))
+
+    end)
+
   ;; From docs
   (rack
     (frame
