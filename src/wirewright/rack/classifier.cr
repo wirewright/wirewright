@@ -968,41 +968,147 @@ module Ww::Rack
       #
       # |@pattern
       # [frag @edge_]
-      # [frag @edge_ node_]
+      # [frag @edge_ child_]
+      #
+      # |@key edge rack.edge
+      # The edge at which to expose a snapshot of *child* at the start of the frame.
+      # Writes to this edge propose a new *child*. Writes take precedence over evolution
+      # of the *child*.
+      #
+      # |@key child rack
+      # The child node.
+      #
+      # |@summary
+      # Designates a place in the circuit where a node can be stored.
       #
       # |@block
-      # NOTE: I am unsure about the difference between frag and `node`/`circuit` now
-      # that we define frag as both readable and writable. The only difference I can
-      # see is that when I write to the frag's cell, the execution of that is carried over
-      # to the next tick, whereas in `circuit`, when I write to the cell it creates on the current
-      # level,  the execution continues within the same tick as the evaluator descends down
-      # to the next level, breadth-first. There's also obviously the isolation; subcircuits
-      # are completely sealed from the outside in base Rack (termspaces can be used to
-      # connect them, however). Frags, on the other hand, are simply a reference to
-      # a part or "pocket" of the current running circuit. Since we use synchronous rewriting,
-      # anything that reads the frag or stuff within it (e.g. cells defined in the frag)
-      # sees only the previous frame; so there's nothing unexpected on that end.
-      matchpi %{[frag @edge_ value0_]} do
-        # NOTE: The empty case is handled below.
-        mix0 = Term.of(:group, {:cell, edge, value0}, {:group, value0})
+      # The *fragment node* is a relative of the cell node `rack.cell`. It designates
+      # a place in the circuit, but instead of treating the term stored in it as inert,
+      # it treats it as its *child* node. Therefore, circuit evolution can pass through
+      # fragments. Unlike `rack.node`, `rack.circuit`, and similar, `frag` does not isolate
+      # its *child* from the outside; nor does the simulation metaphor used for `node`,
+      # `circuit`, etc. apply to *child*.
+      #
+      # Note that you can never manipulate or observe, via *edge*, the *evolving* child. You
+      # can only manipulate and observe the snapshot of *child* at the start of the frame
+      # (before *child* and the surrounding circuit is evolved).
+      #
+      # 1. If *edge* is updated to *child'* or erased, the frag node is rewritten so that
+      #    its *child* is *child'* or erased. The version of *child* evolved by one step
+      #    is discarded.
+      # 2. If *edge* is unchanged, the frag node is rewritten so that its *child* is evolved
+      #    by one step.
+      #
+      # |@example
+      # Frag is used when you want to refer to a fragment of the circuit without isolating
+      # its contents:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 0)
+      # (frag @feed (feed @x @y))
+      # (cell @y)
+      #
+      # ;; Frame 1
+      #
+      # (cell @x)
+      # (frag @feed (feed @x @y))
+      # (cell @y 0)
+      # ```
+      #
+      # This example can be modified like so:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 0)
+      # (cell @y)
+      # (cell @z)
+      # (frag @feed (feed @x @y))
+      #
+      # (backsys
+      #   {¦ -x y -z feed: (feed @src_ @dst_)}
+      #     <> {src: @y, dst: @z})
+      #
+      # ;; Frame 1 (omitting backsys because it does not change)
+      #
+      # (cell @x)
+      # (cell @y 0)
+      # (cell @z)
+      # (frag @feed (feed @x @y))
+      #
+      # ;; Frame 2
+      #
+      # (cell @x)
+      # (cell @y 0)
+      # (cell @z)
+      # (frag @feed (feed @y @z)) ;; NOTICE: The backsys rewrote @x -> @y, @y -> @z
+      #
+      # ;; Frame 3
+      #
+      # (cell @x)
+      # (cell @y)
+      # (cell @z 0)
+      # (frag @feed (feed @y @z))
+      # ```
+      #
+      # As a curious curiosity, since the fragment node has access to its own edge,
+      # you can make a crude "replicator":
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (frag @self
+      #   (module {@parent: @self}
+      #     (frag @self)
+      #     (feed (copy @parent) @self)))
+      #
+      # ;; Frame 1
+      #
+      # (frag @self
+      #   (module {@parent: @self}
+      #     (frag @self
+      #       (module {@parent: @self}
+      #         (frag @self)
+      #         (feed (copy @parent) @self)))
+      #     (feed (copy @parent) @self)))
+      #
+      # ;; Frame 2
+      #
+      # (frag @self
+      #   (module {@parent: @self}
+      #     (frag @self
+      #       (module {@parent: @self}
+      #         (frag @self
+      #           (module {@parent: @self}
+      #             (frag @self)
+      #             (feed (copy @parent) @self)))
+      #         (feed (copy @parent) @self)))
+      #     (feed (copy @parent) @self)))
+      #
+      # ;; And so on until you reach Rack's maximum rewrite depth...
+      # ```
+      matchpi %{[frag @edge_ child0_]} do
+        mix0 = Term.of(:group, {:cell, edge, child0}, {:group, child0})
 
         D7.mixture(node, mix0) do |mix1|
           Term.case(mix1) do
-            # New value arrived. Higher priority.
-            matchpi %{(group (cell @_ value1_) _)} do
-              continue if value0 == value1
+            # New child arrived. Higher priority.
+            matchpi %{(group (cell @_ child1_) _)} do
+              continue if child0 == child1
 
-              Term.morph(node, {2, value1})
+              Term.morph(node, {2, child1})
             end
 
-            # Value was erased. Higher priority.
+            # Cell was erased. Higher priority.
             matchpi %{(group (cell @_) _)} do
               Term.morph(node, {2, nil})
             end
 
-            # If cell did not change, use the updated group content as value.
-            matchpi %{(group _ (group value1_))} do
-              Term.morph(node, {2, value1})
+            # If cell did not change, update from group content.
+            matchpi %{(group _ (group child1_))} do
+              Term.morph(node, {2, child1})
             end
           end
         end
