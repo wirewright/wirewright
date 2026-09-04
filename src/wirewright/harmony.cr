@@ -10,7 +10,6 @@ require "./harmony/http_client"
 require "./harmony/goal"
 require "./harmony/fact"
 require "./harmony/action"
-require "./harmony/portal"
 
 # Wirewright Harmony is an experimental control loop... thing for IO, most importantly
 # network-related IO.
@@ -57,10 +56,10 @@ class Ww::Harmony
   defrecord SharedServerPort, port : UInt16
   defrecord AutoServerPort
 
-  alias Link = PortalLink | DirectLink
+  alias Link = HandoffLink | StreamLink
 
-  defrecord PortalLink, brief: true
-  defrecord DirectLink, brief: true
+  defrecord HandoffLink, brief: true
+  defrecord StreamLink, brief: true
 
   # A generic close command used by `SocketQueue`, `SocketServerQueue`, and other
   # exchange queues (see `Exchange`).
@@ -72,74 +71,6 @@ class Ww::Harmony
     attempt : UInt32,
     generation : UInt64,
     copying: true
-
-  struct ActionSet
-    include Enumerable(Action)
-
-    def initialize
-      @actions = {} of Action => UInt64?
-    end
-
-    def includes?(action : Action) : Bool
-      @actions.has_key?(action)
-    end
-
-    def each(& : Action ->) : Nil
-      @actions.each { |action, _| yield action }
-    end
-
-    def add(action : Action) : Nil
-      @actions.put_if_absent(action, nil)
-    end
-
-    def delete(action : Action) : Nil
-      @actions.delete(action)
-    end
-
-    def transfer(action : Action, queue_id : UInt64) : Nil
-      @actions[action] = queue_id
-    end
-
-    def reject!(& : Action, UInt64? -> Bool) : Nil
-      @actions.reject! do |action, queue_id|
-        yield action, queue_id
-      end
-    end
-
-    def pretty_print(pp)
-      pp.list("ActionSet[", @actions, "]") do |action, queue_id|
-        action.pretty_print(pp)
-        if queue_id
-          pp.text("@#{queue_id}")
-        end
-      end
-    end
-  end
-
-  # A read-only view of an `ActionSet`.
-  #
-  # NOTE: This is a thin wrapper around `ActionSet` exposing only the methods that read,
-  # to be absolutely sure you don't modify the action set accidentally (or intentionally!)
-  # Only Harmony can modify the action set. You can only look at it.
-  struct ReadonlyActionSet
-    include Enumerable(Action)
-
-    # :nodoc:
-    def initialize(@actions : ActionSet)
-    end
-
-    def includes?(action : Action) : Bool
-      @actions.includes?(action)
-    end
-
-    def each(& : Action ->) : Nil
-      @actions.each { |action| yield action }
-    end
-
-    def pretty_print(pp)
-      @actions.pretty_print(pp)
-    end
-  end
 
   # A read-only view of Harmony's world model (a `FactSet`).
   #
@@ -214,7 +145,7 @@ class Ww::Harmony
 
   # Replaces the current set of *goals*.
   def submit(@goals : GoalSet) : Nil
-    Log.trace { "submit() goals: #{@goals.pretty_inspect}" }
+    Log.trace { "goals=#{@goals.inspect}" }
   end
 
   # Runs one step of observation. This incorporates external feedback into Harmony's
@@ -227,8 +158,6 @@ class Ww::Harmony
       return Set::Changelog(Fact).empty
     end
 
-    Log.trace { "world before Harmony.apply(): #{@world.pretty_inspect}" }
-
     changelog = @world.transaction do
       observations.each do |observation|
         Log.debug { observation }
@@ -237,13 +166,9 @@ class Ww::Harmony
       end
     end
 
-    if changelog.empty?
-      Log.trace { "world did not change after Harmony.apply()" }
-      return Set::Changelog(Fact).empty
+    changelog.each do |change|
+      Log.trace { change }
     end
-
-    Log.trace { "world changelog: #{changelog.inspect}" }
-    Log.trace { "world after Harmony.apply(): #{@world.pretty_inspect}" }
 
     changelog
   end
@@ -282,25 +207,33 @@ class Ww::Harmony
 
       exp = Math.min(MIN_ACTION_RETRY_DELAY * 2**attempt, MAX_ACTION_RETRY_DELAY)
       delay = exp * (0.5..1.0).sample(@rng) # With jitter
-      @backoff[action] = Backoff.new(now + delay, attempt, @generation)
+      backoff = Backoff.new(now + delay, attempt, @generation)
+      @backoff[action] = backoff
       @actions.add(action)
 
-      Log.debug { action }
+      Log.debug { "Execute #{action}; next backoff=#{backoff}" }
 
       Harmony.execute(ExecuteContext.new(@observations, @exchange), action)
     end
 
-    @actions.reject! do |action, queue_id|
+    @actions.reject! do |action, status|
       if Harmony.completed?(action, @world)
-        Log.trace { "#{action} completed" }
+        Log.debug { "Completed #{action}" }
         next true
       end
 
-      next false unless queue_id
-      next false unless @exchange.dead?(queue_id)
-
-      Log.trace { "#{action} died with its queue" }
-      true
+      case status
+      in ActionSet::Orphan
+        false # Keep
+      in ActionSet::Owned
+        # Check if its owner queue is dead. If it is the action is dead too!
+        if @exchange.dead?(status.queue_id)
+          Log.debug { "Killed #{action}" }
+          true # Reject
+        else
+          false # Keep
+        end
+      end
     end
 
     # Backoff GC
@@ -323,7 +256,7 @@ class Ww::Harmony
   #   pp! world
   #
   #   goals = Harmony::GoalSet.new
-  #   goals << Harmony::Server.new(Harmony::TcpServerDefn.new("127.0.0.1", 5000u16, Harmony::DirectLink.new))
+  #   goals << Harmony::Server.new(Harmony::TcpServerDefn.new("127.0.0.1", Harmony::ExclusiveServerPort.new(5000u16), Term.of(:master), Harmony::HandoffLink.new))
   #
   #   world.each(Harmony::RunningPeer) do |peer|
   #     goals << Harmony::PeerKeepalive.new(peer.peer_id)
@@ -332,11 +265,10 @@ class Ww::Harmony
   #   goals
   # end
   # ```
-  def self.run(& : ReadonlyFactSet, ReadonlyActionSet -> GoalSet) : Nil
-    alarm = BlockingSignal.new
+  def self.run(signal = BlockingSignal.new, & : ReadonlyWorld, ReadonlyActionSet -> GoalSet) : Nil
     epoch = 0u64
 
-    harmony = new(-> { alarm.call })
+    harmony = new(-> { signal.call })
 
     loop do
       harmony.observe
@@ -347,7 +279,7 @@ class Ww::Harmony
       if deadline = harmony.deadline?
         timeout = deadline - Time.instant
       end
-      epoch = alarm.wait_until(epoch, timeout)
+      epoch = signal.wait_until(epoch, timeout)
     end
   end
 
@@ -441,7 +373,7 @@ class Ww::Harmony
       case action
       in AcceptMessage then SocketAccept.new(action.msgid)
       in SendMessage   then SocketSend.new(action.payload)
-      in InformReady   then SocketInformReady.new
+      in InformReady   then SocketInformReady.new(action.capacity)
       in InformBusy    then SocketInformBusy.new
       end
     end
@@ -597,12 +529,12 @@ class Ww::Harmony
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : MessageAccepted) : Nil
+  def self.apply(ctx : ApplyContext, observation : MessageReceivedByPeer) : Nil
     ctx.world.add(RemoteReceiveConfirmation.new(observation.endpoint_id, observation.payload))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : MessageLost) : Nil
+  def self.apply(ctx : ApplyContext, observation : MessageNotSent) : Nil
     ctx.actions.delete(SendMessage.new(observation.endpoint_id, observation.payload))
   end
 
@@ -770,7 +702,7 @@ class Ww::Harmony
       # that needs one.
       goals.any?(OutgoingMessage, endpoint_id: fact.endpoint_id, payload: fact.payload)
     in MessageSlotReflection
-      goals.includes?(MessageSlot.new(fact.endpoint_id))
+      goals.any?(MessageSlot, endpoint_id: fact.endpoint_id)
     in RemoteMessageSlot
       true
     in HttpServerRequest
@@ -859,7 +791,7 @@ class Ww::Harmony
     in OutgoingMessage
       SendMessage.new(goal.endpoint_id, goal.payload)
     in MessageSlot
-      InformReady.new(goal.endpoint_id)
+      InformReady.new(goal.endpoint_id, goal.capacity)
     in HttpServerResponse
       RespondToHttpRequest.new(goal.server_id, goal.request_id, goal.response)
     in HttpClientRequest

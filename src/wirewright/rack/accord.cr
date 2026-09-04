@@ -1,3 +1,8 @@
+# |@ rack.[network]
+#
+# |@summary
+# Groups articles related to the `rack.client` and `rack.server` nodes.
+
 # Integrates Rack with `Harmony`.
 module Ww::Rack::Accord
   extend self
@@ -74,64 +79,26 @@ module Ww::Rack::Accord
     hg.propose(proposals, :server) do |node|
       Term.case(node.term) do
         # Skip servers that are currently down.
-        matchpi %{[server [@_ _ dn] _*]} { }
-        matchpi %{[server [@_ _ (dn _string)] _*]} { }
+        matchpi %{[server (@_ _ dn) _*]} { }
+        matchpi %{[server (@_ _ (dn _string)) _*]} { }
 
-        matchpi(<<-WWML) do
-        [server
-          (@pool_ transportQ←(ws _* ⍊ link: (%optional direct linkQ_)) _?
-            ⍊ in: (%optional @in @input_)
-              out: (%optional @out @output_)
-              format: (%optional text formatQ_)
-              format-policy: (%optional discard policyQ_))
-          template_*]
-        WWML
-          continue unless defn = http_server_transport?(hg, node.addr, transportQ)
-
-          next unless link = link?(linkQ)
-          next unless format = Format.format?(state.schemas, hg, node, formatQ)
-          next unless format_policy = Format.policy?(policyQ)
+        matchpi %{[server (@pool_ configQ_ _?) template_*]} do
+          next unless config = server_config?(state, hg, node.addr, configQ)
 
           abs_pool = hg.resolve(node.addr, pool)
-          machine = stack_alloc WebSocketServer.new(node, defn, link, abs_pool, input, output, template.as_d, format, format_policy)
-          step(ctx, hg, machine)
-        end
 
-        matchpi(<<-WWML) do
-        [server
-          (@pool_ transportQ_ _?
-            ⍊ request: (%optional @request @request_)
-              response: (%optional @response @response_)
-              format: (%optional text formatQ_)
-              format-policy: (%optional discard policyQ_))
-          template_*]
-        WWML
-          continue unless defn = http_server_transport?(hg, node.addr, transportQ)
+          case config
+          in HttpServerConfig
+            machine = stack_alloc HttpServer.new(node, config.transport, abs_pool, config.encoder, config.decoder, template.as_d)
+          in SocketServerConfig
+            case transport = config.transport
+            in Harmony::SocketServerDefn
+              machine = stack_alloc SocketServer.new(node, transport, abs_pool, config.encoder, config.decoder, config.encoder_capacity, config.decoder_capacity, template.as_d)
+            in WebSocketServerDefn
+              machine = stack_alloc WebSocketServer.new(node, transport.defn, transport.link, abs_pool, config.encoder, config.decoder, config.encoder_capacity, config.decoder_capacity, template.as_d)
+            end
+          end
 
-          next unless format = Format.format?(state.schemas, hg, node, formatQ)
-          next unless format_policy = Format.policy?(policyQ)
-
-          abs_pool = hg.resolve(node.addr, pool)
-          machine = stack_alloc HttpServer.new(node, defn, abs_pool, request, response, template.as_d, format, format_policy)
-          step(ctx, hg, machine)
-        end
-
-        matchpi(<<-WWML) do
-        [server
-          (@pool_ transportQ_ _?
-            ⍊ in: (%optional @in @input_)
-              out: (%optional @out @output_)
-              format: (%optional text formatQ_)
-              format-policy: (%optional discard policyQ_))
-          template_*]
-        WWML
-          continue unless defn = socket_server_transport?(hg, node.addr, transportQ)
-
-          next unless format = Format.format?(state.schemas, hg, node, formatQ)
-          next unless format_policy = Format.policy?(policyQ)
-
-          abs_pool = hg.resolve(node.addr, pool)
-          machine = stack_alloc SocketServer.new(node, defn, abs_pool, input, output, template.as_d, format, format_policy)
           step(ctx, hg, machine)
         end
 
@@ -143,31 +110,25 @@ module Ww::Rack::Accord
       Term.case(node.term) do
         # Allow the circuit to use an errorless `dn` to disable the socket. Also
         # ignore clients that are currently down for other reasons.
-        matchpi %{[client [@_ -> _ -> @_] dn]} { }
-        matchpi %{[client [@_ -> _ -> @_] (dn _string)]} { }
+        matchpi %{[client [_ -> _ -> _] dn]} { }
+        matchpi %{[client [_ -> _ -> _] (dn _string)]} { }
 
-        matchpi(<<-WWML) do
-        [client
-          (@outgoing_ -> transportQ_ -> @ingoing_
-            ⍊ format: (%optional text formatQ_)
-              format-policy: (%optional discard policyQ_))
-          _?]
-        WWML
+        matchpi(
+          %{[client (encoderQ_ -> transportQ_ -> decoderQ_)]},
+          %{[client (encoderQ_ -> transportQ_ -> decoderQ_) _]},
+        ) do
           defn = http_client_transport?(hg, node.addr, transportQ) ||
                  socket_client_transport?(hg, node.addr, transportQ)
 
           continue unless defn
 
-          next unless format = Format.format?(state.schemas, hg, node, formatQ)
-          next unless format_policy = Format.policy?(policyQ)
-
-          abs_outgoing = hg.resolve(node.addr, outgoing)
-          abs_ingoing = hg.resolve(node.addr, ingoing)
+          next unless encoder = encoder?(state, hg, node.addr, encoderQ)
+          next unless decoder = decoder?(state, hg, node.addr, decoderQ)
 
           if defn.is_a?(Harmony::HttpClientDefn)
-            machine = stack_alloc HttpClient.new(node, defn, abs_outgoing, abs_ingoing, format, format_policy)
+            machine = stack_alloc HttpClient.new(node, defn, encoder, decoder)
           else
-            machine = stack_alloc SocketClient.new(node, defn, abs_outgoing, abs_ingoing, format, format_policy)
+            machine = stack_alloc SocketClient.new(node, defn, encoder, decoder)
           end
 
           step(ctx, hg, machine)
@@ -175,6 +136,600 @@ module Ww::Rack::Accord
 
         otherwise { }
       end
+    end
+  end
+
+  # :nodoc:
+  EDGE_IN = Term.of(:edge, :in)
+  # :nodoc:
+  EDGE_OUT = Term.of(:edge, :out)
+
+  alias ServerConfig = HttpServerConfig | SocketServerConfig
+
+  defrecord HttpServerConfig,
+    encoder : Encoder,
+    decoder : Decoder,
+    transport : Harmony::HttpServerDefn
+
+  defrecord SocketServerConfig,
+    encoder : Encoder,
+    decoder : Decoder,
+    encoder_capacity : UInt32,
+    decoder_capacity : UInt32,
+    transport : Harmony::SocketServerDefn | WebSocketServerDefn
+
+  private def server_config?(state : State, hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : ServerConfig?
+    # |@ rack.server.config
+    #
+    # |@summary
+    # Describes the configuration of a server.
+    Term.case(term) do
+      # |@ rack.server.config
+      #
+      # |@pattern
+      # (decoder_ -> transport_ -> encoder_)
+      #
+      # |@key decoder rack.[network].decoder
+      # The decoder that all client devices will use to parse ingoing bytes
+      # into terms.
+      #
+      # |@key transport rack.[network].transport
+      # The transport to use.
+      #
+      # |@key encoder rack.[network].encoder
+      # The encoder that all client devices will use to convert terms to
+      # outgoing bytes.
+      #
+      # |@block
+      # The full form of the config.
+      #
+      # ### Socket servers
+      #
+      # For socket servers, the full form of the *encoder* `(_ @_)`, *decoder*, or both
+      # can be extended with the `capacity` pair: `capacity: (%number u32)`.
+      #
+      # `capacity` caps the number of messages in the ingoing queue, the outgoing queue,
+      # or both. If a capped queue contains *capacity* or more messages, the client
+      # device will refuse to accept new messages.
+      #
+      # `capacity` only works with transports whose `link` implements backpressure
+      # (such as `link: handoff`; see `rack.[network].link`).
+      #
+      # |@example
+      # ```wwml
+      # (server (@pool ((text @request) -> (http local 5000) -> (text @response)))
+      #   (cell @response (ok "Hello World")))
+      # (pool @pool)
+      # ```
+      #
+      # Limiting the capacity of the ingoing message queue means the client device will
+      # refuse to accept more messages until the ingoing message queue is exhausted:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (server (@pool ((text @in capacity: 1) -> (ws local 5000 link: handoff) -> (text @out)))
+      #   (feed (@in front) (@back out)))
+      # (pool @pool)
+      #
+      # (queue (@name @names) ("Alice" "Bob" "Charlie"))
+      # (client (@name -> (ws local 5000 link: handoff) -> @replies))
+      # ```
+      #
+      # The client above is broken: it doesn't have anywhere to put replies. Thanks to
+      # the combination of `link: handoff` and `capacity: 1`, the client will only send
+      # `"Alice"` to the client device; which is promptly moved into the outgoing queue,
+      # and stalls there since it has nowhere to go. To illustrate:
+      #
+      # ```wwml
+      # ;; Frame N (omitting server)
+      #
+      # (pool @pool
+      #   (device
+      #     (cell @id "unique client device id")
+      #     (cell @in ())
+      #     (cell @out ())
+      #     (feed (@in front) (@out back))))
+      #
+      # (queue (@name @names) ("Alice" "Bob" "Charlie"))
+      # (client (@name -> (ws local 5000 link: handoff) -> @replies)
+      #   up)
+      #
+      # ;; Frame N+1
+      #
+      # (pool @pool
+      #   (device
+      #     (cell @id "unique client device id")
+      #     (cell @in ("Alice"))
+      #     (cell @out ())
+      #     (feed (@in front) (@out back))))
+      #
+      # (queue (@name @names) ("Bob" "Charlie"))
+      # (client (@name -> (ws local 5000 link: handoff) -> @replies)
+      #   up)
+      #
+      # ;; Frame N+2
+      #
+      # (pool @pool
+      #   (device
+      #     (cell @id "unique client device id")
+      #     (cell @in ())
+      #     (cell @out ("Alice"))
+      #     (feed (@in front) (@out back))))
+      #
+      # (queue (@name @names) ("Bob" "Charlie"))
+      # (client (@name -> (ws local 5000 link: handoff) -> @replies)
+      #   up)
+      # ```
+      #
+      # `"Alice"` will sit in the client device's out queue until the connection is
+      # dropped or until `client` finally fixes itself and adds a replies cell or queue:
+      #
+      # ```wwml
+      # ;; Frame N+M
+      #
+      # (pool @pool
+      #   (device
+      #     (cell @id "unique client device id")
+      #     (cell @in ())
+      #     (cell @out ("Alice"))
+      #     (feed (@in front) (@out back))))
+      #
+      # (queue (@name @names) ("Bob" "Charlie"))
+      # (queue (@reply @replies) ())
+      # (client (@name -> (ws local 5000 link: handoff) -> @replies)
+      #   up)
+      #
+      # ;; Frame N+M+1
+      #
+      # (pool @pool
+      #   (device
+      #     (cell @id "unique client device id")
+      #     (cell @in ())
+      #     (cell @out ())
+      #     (feed (@in front) (@out back))))
+      #
+      # (queue (@name @names) ("Bob" "Charlie"))
+      # (queue (@reply @replies) ("Alice"))
+      # (client (@name -> (ws local 5000 link: handoff) -> @replies)
+      #   up)
+      # ```
+      #
+      # After this, *names* proceed to be sent properly.
+      #
+      # You can similarly limit the out queue:
+      #
+      # ```wwml
+      # (server (@pool ((text @in capacity: 1) -> (ws local 5000 link: handoff) -> (text @out capacity: 1)))
+      #   (feed (@in front) (@back out)))
+      # (pool @pool)
+      # ```
+      #
+      # In the above, I limited *both* of them. This means only one message gets to enter
+      # the client device's in queue. Then if it is moved away for processing, more messages
+      # can enter the client device. When a reply is put in the client device's out queue,
+      # no more messages are accepted until the other side confirms it received it.
+      matchpi %{(decoderQ_dict -> transportQ_ -> encoderQ_dict)} do
+        return unless decoder = decoder?(state, hg, addr, decoderQ)
+        return unless transport = server_transport?(hg, addr, transportQ)
+        return unless encoder = encoder?(state, hg, addr, encoderQ)
+
+        case transport
+        in Harmony::HttpServerDefn
+          HttpServerConfig.new(encoder, decoder, transport)
+        in Harmony::SocketServerDefn, WebSocketServerDefn
+          decoder_capacity = UInt32::MAX
+          Term.matchpi?(decoderQ, %{(_ @_ ⍊ capacity_: (%number u32))}) do
+            decoder_capacity = capacity.to(UInt32)
+          end
+
+          encoder_capacity = UInt32::MAX
+          Term.matchpi?(encoderQ, %{(_ @_ ⍊ capacity_: (%number u32))}) do
+            encoder_capacity = capacity.to(UInt32)
+          end
+
+          SocketServerConfig.new(encoder, decoder, encoder_capacity, decoder_capacity, transport)
+        end
+      end
+
+      # |@ rack.server.config
+      #
+      # |@pattern
+      # transport_
+      #
+      # |@key transport rack.[network].transport
+      # The transport to use.
+      #
+      # |@block
+      # The short form of the config. It is a shorthand for
+      # `(text @in) -> <your transport> -> (text @out)`.
+      #
+      # |@example
+      # ```wwml
+      # (server (@pool (ws local 5000))
+      #   (feed (@in front) (@out back)))
+      # (pool @pool)
+      # ```
+      otherwise do
+        return unless transport = server_transport?(hg, addr, term)
+
+        encoder = Encoder.new(EDGE_OUT, Format::Plaintext.new, policy: :clog)
+        decoder = Decoder.new(EDGE_IN, Format::Plaintext.new, policy: :discard)
+
+        encoder_capacity = UInt32::MAX
+        decoder_capacity = UInt32::MAX
+
+        case transport
+        in Harmony::HttpServerDefn
+          HttpServerConfig.new(encoder, decoder, transport)
+        in Harmony::SocketServerDefn, WebSocketServerDefn
+          SocketServerConfig.new(encoder, decoder, encoder_capacity, decoder_capacity, transport)
+        end
+      end
+    end
+  end
+
+  alias ServerTransport = Harmony::ServerDefn | WebSocketServerDefn
+
+  defrecord WebSocketServerDefn,
+    defn : Harmony::HttpServerDefn,
+    link : Harmony::Link
+
+  private def server_transport?(hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : ServerTransport?
+    Term.case(term) do
+      # WebSockets are special in that they require an HTTP(S) server but they're
+      # not an HTTP(S) server on its own. In a sense they're both an HTTP(S) server
+      # and a socket server. So we have to handle them in this ugly way.
+      matchpi(
+        %{(ws _* ⍊ link: (%optional stream linkQ_))},
+        %{(wss _* ⍊ link: (%optional stream linkQ_))},
+      ) do
+        return unless transport = http_server_transport?(hg, addr, term)
+        return unless link = link?(linkQ)
+
+        WebSocketServerDefn.new(transport, link)
+      end
+
+      otherwise do
+        http_server_transport?(hg, addr, term) || socket_server_transport?(hg, addr, term)
+      end
+    end
+  end
+
+  enum EncoderPolicy
+    Clog
+    Discard
+  end
+
+  private def encoder_policy?(term : Term) : EncoderPolicy?
+    # |@ rack.[network].encoder.policy
+    #
+    # |@summary
+    # The ways encoding can fail.
+    Term.case(term) do
+      # |@ rack.[network].encoder.policy
+      #
+      # |@pattern
+      # clog
+      #
+      # |@block
+      # Messages that were encoded successfully proceed to the remote endpoint.
+      # Messages that failed to encode stay in place without further progress.
+      matchpi %{clog} do
+        EncoderPolicy::Clog
+      end
+
+      # |@ rack.[network].encoder.policy
+      #
+      # |@pattern
+      # discard
+      #
+      # |@block
+      # Messages that were encoded successfully proceed to the remote endpoint.
+      # Messages that were not are dropped.
+      matchpi %{discard} do
+        EncoderPolicy::Discard
+      end
+
+      otherwise { }
+    end
+  end
+
+  enum DecoderPolicy
+    Discard
+    Wrap
+  end
+
+  private def decoder_policy?(term : Term) : DecoderPolicy?
+    # |@ rack.[network].decoder.policy
+    #
+    # |@summary
+    # The ways decoding can fail.
+    Term.case(term) do
+      # |@ rack.[network].decoder.policy
+      #
+      # |@pattern
+      # discard
+      #
+      # |@block
+      # Messages that were decoded successfully are passed through. Messages
+      # that were not are dropped.
+      matchpi %{discard} do
+        DecoderPolicy::Discard
+      end
+
+      # |@ rack.[network].decoder.policy
+      #
+      # |@pattern
+      # wrap
+      #
+      # |@block
+      # Messages are wrapped in a result type: `(ok msg_)` if decoded successfully,
+      # where *msg* is the decoded message; or `(err detail_string)`, where *detail*
+      # should explain why decoding failed.
+      matchpi %{wrap} do
+        DecoderPolicy::Wrap
+      end
+
+      otherwise { }
+    end
+  end
+
+  defrecord Encoder, edge : Term, format : Format::Any, policy : EncoderPolicy
+
+  private def encoder?(state : State, hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Encoder?
+    # |@ rack.[network].encoder
+    #
+    # |@summary
+    # Description of an encoder.
+    #
+    # |@block
+    # An encoder uses a *format* to convert a Wirewright term to an arbitrary byte
+    # payload (blob).
+    Term.case(term) do
+      # |@ rack.[network].encoder
+      #
+      # |@pattern
+      # @edge_
+      #
+      # |@block
+      # Shorthand for `(@edge_ text)`. E.g., instead of writing `(@x text)`, you
+      # can simply write `@x`.
+      matchpi %{@_} do
+        format = Format::Plaintext.new
+        Encoder.new(term, format, policy: :clog)
+      end
+
+      # |@ rack.[network].encoder
+      #
+      # |@pattern
+      # (format_ @edge_ ⍊ policy_⋮ clog)
+      #
+      # |@key format rack.[network].format
+      # The format to use. E.g., `ml`, `text`.
+      #
+      # |@key policy rack.[network].encoder.policy
+      # How encode failure should mainifest.
+      #
+      # |@block
+      # Constructs an *encoder* given its format and its failure mode.
+      matchpi %{(formatQ_ @edge_ ⍊ policy: (%optional clog policyQ_))} do
+        return unless format = format?(state.schemas, hg, addr, formatQ)
+        return unless policy = encoder_policy?(policyQ)
+
+        Encoder.new(edge, format, policy)
+      end
+
+      otherwise { }
+    end
+  end
+
+  # :nodoc:
+  #
+  # NOTE: Even though the format can contain an edge (e.g. schema), the server
+  # or client node actually doesn't participate in that edge, so we don't have
+  # to yield it here.
+  def each_encoder_edge(term : Term, & : Term ->) : Nil
+    Term.case(term) do
+      matchpi %{@_} { yield term }
+      matchpi %{[_ @edge_]} { yield edge }
+      otherwise { }
+    end
+  end
+
+  defrecord Decoder, edge : Term, format : Format::Any, policy : DecoderPolicy
+
+  private def decoder?(state : State, hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Decoder?
+    # |@ rack.[network].decoder
+    #
+    # |@summary
+    # Description of a decoder.
+    #
+    # |@block
+    # A decoder uses a *format* to convert an arbitrary byte payload (blob) to
+    # a Wirewright term.
+    Term.case(term) do
+      # |@ rack.[network].decoder
+      #
+      # |@pattern
+      # @edge_
+      #
+      # |@block
+      # Shorthand for `(@edge_ text)`. E.g., instead of writing `(@x text)`, you
+      # can simply write `@x`.
+      matchpi %{@_} do
+        format = Format::Plaintext.new
+        Decoder.new(term, format, policy: :discard)
+      end
+
+      # |@ rack.[network].decoder
+      #
+      # |@pattern
+      # (format_ @edge_ ⍊ policy_⋮ discard)
+      #
+      # |@key format rack.[network].format
+      # The format to use. E.g., `ml`, `text`.
+      #
+      # |@key policy rack.[network].decoder.policy
+      # How decode failure should mainifest.
+      #
+      # |@block
+      # Constructs a *decoder* given the desired format and its failure mode.
+      matchpi %{(formatQ_ @edge_ ⍊ policy: (%optional discard policyQ_))} do
+        return unless format = format?(state.schemas, hg, addr, formatQ)
+        return unless policy = decoder_policy?(policyQ)
+
+        Decoder.new(edge, format, policy)
+      end
+
+      otherwise { }
+    end
+  end
+
+  # :nodoc:
+  #
+  # NOTE: Even though the format can contain an edge (e.g. schema), the server
+  # or client node actually doesn't participate in that edge, so we don't have
+  # to yield it here.
+  def each_decoder_edge(term : Term, & : Term ->) : Nil
+    Term.case(term) do
+      matchpi %{@_} { yield term }
+      matchpi %{[_ @edge_]} { yield edge }
+      otherwise { }
+    end
+  end
+
+  private def format?(schemas : ICache, hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Format::Any?
+    # |@ rack.[network].format
+    #
+    # |@summary
+    # Description of how to (de)serialize terms.
+    Term.case(term) do
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # binary
+      #
+      # |@block
+      # Arbitrary binary payloads (blob terms), e.g. `⟬de ad be ef⟭`.
+      #
+      # It is possible to *send* (but not receive) strings with `format: binary`. In
+      # that case, the string's UTF-8 byte representation is sent. If you want to send
+      # *and* receive strings, consider using `text`.
+      #
+      # NOTE: For transports that do not support content-type (TCP, UNIX, WebSockets etc.),
+      # the blob's media type will be stripped before the blob is sent.
+      matchpi %{binary} do
+        Format::Binary.new
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # text
+      #
+      # |@block
+      # Send and receive string terms, transmitted over the wire as UTF-8.
+      # E.g. `"hello world"`.
+      matchpi %{text} do
+        Format::Plaintext.new
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # json
+      #
+      # |@block
+      # JSON payloads. (De)serializes terms into JSON. This uses a *very* loose
+      # mapping of terms to JSON. This is because terms do not map to JSON exactly.
+      # Without you providing hints during deserialization, the terms you get out of
+      # `format: json` can look very ugly.
+      #
+      # For example, the term `(+ 1 2 x: 100 y: 200)` is serialized by `format: json`
+      # into `{"0": "+", "1": 1, "2": 2, "x": 100, "y": 200}`, which deserializes
+      # into the term `{"0": "+", "1": 1, "2": 2, "x": 100, "y": 200}`.
+      #
+      # Use this only as a last resort. The better options are `jsonp` (JSON protocol,
+      # where we serialize terms into JSON objects properly tagged with types etc.)
+      # or `(json @_ _)`, where you can specify a schema to drive the decoding. The latter
+      # is the recommended approach since it reduces the attack surface by forcing
+      # you to explicitly specify the kinds of JSON to accept.
+      matchpi %{json} do
+        Format::TermJSON.new
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # (json @edge_ top_)
+      #
+      # |@key edge rack.edge
+      # Tells where to look for the JSON schema node (see `rack.schema`).
+      #
+      # |@key top
+      # Selects a toplevel rule from the JSON schema.
+      #
+      # |@block
+      # Uses a JSON schema to (de)serialize terms. See `rack.schema` for
+      # more info.
+      matchpi %{(json @edge_ top_)} do
+        targets = Pf::Kit.stack_array(Schema::JSON, 1)
+
+        hg.each_member(hg.resolve(addr, edge), heads: {Term.of(:schema)}) do |candidate|
+          Term.matchpi?(candidate.term, %{[schema (@_ json) schemaQ_*]}) do
+            targets << schemas.put_if_absent(schemaQ) { Schema::JSON.new(schemaQ) }
+          end
+        end
+
+        continue unless schema = targets.single?
+
+        Format::TermJSONSchema.new(schema, top)
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # ml
+      #
+      # |@block
+      # Uses a compact, restricted subset of WwML to (de)serialize terms
+      # transparently for you.
+      #
+      # Compact ML includes the following parts of the WwML grammar:
+      # - Number literals such as `100`, `1.23`, `≈100`, `1/2`.
+      # - String literals such as `"hello"`.
+      # - Symbol literals such as `xyz`, `⸍qux⸝`.
+      # - Boolean literals `true` and `false`.
+      # - Dictionary terms of the general form:  `()`, `(+ 1 2)`, `(+ 1 2 x: 100 y: 200)`,
+      #   etc. Even pairsonly dictionaries are represented this way: `(x: 100 y: 200)`.
+      #
+      # NOTE: Right now, this still uses the full-blown WwML parser; which means
+      # `ml` is vulnerable to all sorts of things; in the future, we plan to use
+      # a smaller, faster, better fortified parser for this, since we expect `format: ml`
+      # to be Internet-facing in some scenarios.
+      matchpi %{ml} do
+        Format::TermML.new
+      end
+
+      # |@ rack.[network].format
+      #
+      # |@pattern
+      # prettyml
+      #
+      # |@block
+      # Uses WwML to encode (pretty print) the term, with all the shorthands and
+      # associated slowness. May produce multiline output. For example, `±x`
+      # is serialized as `(%let x _number)` when using `ml`, but with `prettyml`,
+      # it is serialized as `±x`.
+      #
+      # Use this for debugging / visualization only. `prettyml` is not guaranteed
+      # to be fast -- not to parse, nor to pretty print.
+      matchpi %{prettyml} do
+        Format::TermPrettyML.new
+      end
+
+      otherwise { }
     end
   end
 
@@ -191,75 +746,36 @@ module Ww::Rack::Accord
       # |@ rack.[network].link
       #
       # |@pattern
-      # portal
+      # handoff
       #
       # |@block
-      # Uses the internal Portal protocol to transmit the payload.
+      # Uses the handoff protocol to transmit the payload.
       #
-      # Linking with `portal` is more reliable than with `direct`, and interacts
-      # well with the semantics of Rack.
+      # Linking with `handoff` is more reliable than with `stream`, and interacts
+      # well with the semantics of Rack. You can imagine `stream` as a "firehose"
+      # for messages, and `handoff` as a careful message exchange where each party
+      # respects the other's capacity.
       #
       # For example, a client's outgoing message cell is not emptied until the message
-      # crosses over to the other side, which provides a natural kind of backpressure;
-      # nor are messages sent until the other side tells its ingoing message cell
-      # is empty.
+      # crosses over to the other side *and the other side confirms that*. This provides
+      # a natural kind of backpressure. Nor are messages *sent* until the other side
+      # tells us its ingoing message cell is empty.
       #
-      # The main drawback of `link: portal` is that it places more load on
-      # the network, involving round-trips and so on.
+      # The main drawback of `link: handoff` is that it places more load on the network,
+      # may involve round-trips and may even send the payload just for it to be declined
+      # by the other side (although the last point should be rare in practice).
       #
-      # ### Portal
+      # ### The handoff protocol
       #
-      # The Portal protocol supports the following messages:
-      #
-      # - `DATA <msgid> <payload bytes...>`: Alice sends *payload* to Bob,
-      #    with Alice's message id `<msgid>` of choice. `<msgid>` is 1-16
-      #    hex digits (a 64-bit unsigned integer written in hex).
-      # - `ACCEPT <msgid>`: Bob confirms that he received Alice's payload
-      #    with the given *msgid*. Alice is free to remove *msgid* on her side.
-      # - `READY`: Bob sends this to Alice to signal that his "mailbox" is empty;
-      #   he is ready to receive the next message, if any.
-      # - `BUSY`: Bob sends this to Alice to signal that his "mailbox" is full;
-      #   he cannot receive any messages yet.
-      #
-      # Due to the way the protocol is designed and implemented right now (and I doubt
-      # huge improvements to the current behavior are possible...), `READY` and `BUSY`
-      # are *advisory* on the protocol level. Moreover, they can be sent by either party
-      # at any point in time.
-      #
-      # The protocol places no demands on the order of messages, nor on the state or
-      # statefulness of senders, receivers, or both.
-      #
-      # However, `rack.server` and `rack.client` in particular demand readiness of
-      # the other party before they send and, in turn, report their own readiness.
-      #
-      # An important point is races. Races are definitely possible with this protocol.
-      # Let's say Bob sends READY to Alice, which triggers Alice to start sending her
-      # DATA to Bob; simultaneously, Bob changes his mind and sends BUSY. We observe
-      # the two messages passing each other in the wire. Alice finishes sending DATA
-      # and receives Bob's BUSY; Bob finishes sending BUSY and receives Alice's DATA.
-      #
-      # The above *advisory* label covers the case described here. DATA will be buffered
-      # and processed normally as in `link: direct`; but it will be shown to Bob
-      # only when he is ready, just as he sends the READY message to Alice.
-      #
-      # In theory, this could create a persistent backlog of one message, but I'm not sure
-      # about that. Moreover, such a mode gets rid of the guarantee that "absent in my
-      # outgoing cell" means "present in their ingoing cell". Importantly, however, all
-      # this is only true when you explicitly write into the ingoing cell. If Portal has
-      # full control over the cell, and you only look at it or clear it (e.g. by moving
-      # the message it contains elsewhere, or by literally clearing it), then I'd expect
-      # no races of the kind I described. In other words, as far as I understand, it is
-      # possible to "break" this protocol (to an extent), but only if you actively interfere
-      # with its normal functioning. One possible fix could be to use some sort of a "token",
-      # a "microphone" the parties pass between each other to speak. But I'm not sure.
-      matchpi %{portal} do
-        Harmony::PortalLink.new
+      # TODO: Documentation
+      matchpi %{handoff} do
+        Harmony::HandoffLink.new
       end
 
       # |@ rack.[network].link
       #
       # |@pattern
-      # direct
+      # stream
       #
       # |@block
       # Direct passthrough of the payload to the underlying transport.
@@ -268,12 +784,12 @@ module Ww::Rack::Accord
       # - Message sends are confirmed locally (senders do not care about acknowledgement
       #   or feedback about the message they sent from receivers).
       #
-      # More importantly, with direct link, there is a window of time when the message
+      # More importantly, with `link: stream`, there is a window of time when the message
       # is neither on the sender's side nor on the receiver's side -- it is "in the wire". If
       # anything happens to the connection while a message is travelling in the wire, the message
-      # is lost. So you wouldn't want to e.g. transfer money between peers with `link: direct`.
-      matchpi %{direct} do
-        Harmony::DirectLink.new
+      # is lost. So you wouldn't want to e.g. transfer money between peers with `link: stream`.
+      matchpi %{stream} do
+        Harmony::StreamLink.new
       end
 
       otherwise { }
@@ -292,7 +808,7 @@ module Ww::Rack::Accord
       # local
       #
       # |@block
-      # Shorthand for `127.0.0.1`.
+      # Shorthand for `"127.0.0.1"`.
       matchpi %{local} do
         "127.0.0.1"
       end
@@ -303,7 +819,7 @@ module Ww::Rack::Accord
       # public
       #
       # |@block
-      # Shorthand for `0.0.0.0`.
+      # Shorthand for `"0.0.0.0"`.
       matchpi %{public} do
         "0.0.0.0"
       end
@@ -368,8 +884,8 @@ module Ww::Rack::Accord
       #
       # |@block
       # Asks the operating system for an unused port. The port can be learned
-      # from the server's `up`, which for servers with an `auto` port is different
-      # from the normal `up`, in that it also includes the port: `(up (%number u16))`.
+      # from the server's `up`. The `up` is different for servers with an `auto`
+      # port, in that it also tells the port: `(up port: (%number u16))`.
       matchpi %{auto} do
         Harmony::AutoServerPort.new
       end
@@ -402,16 +918,10 @@ module Ww::Rack::Accord
   # it explicitly) -- if they share the same key, then the same connection
   # will be used for all of them.
   #
-  # Thus you get the benefit of both decentralization and isolation (no complex
-  # interaction beyond the "membrane") of each component, and centralization
-  # (no needless connection duplication, running out of fds, etc.) Moreover --
-  # you should thank Rack for this -- concurrent access is managed completely
-  # transparently for you.
-  #
   # What is said above applies to servers, too; a server's transport can also
   # have a `key: _`. But this is more of a rarity; it's not often that you put
-  # a server inside each button, say (whereas it would sense to put a client in
-  # each button, if e.g. the button is responsible for sending a request).
+  # a server inside each button, say (whereas it would make sense to put a client in
+  # each button, if e.g. the buttons are responsible for sending requests).
   #
   # |@example
   # Consider this circuit:
@@ -477,9 +987,6 @@ module Ww::Rack::Accord
   # If there are zero or more than one cells at the edge, or if the cell is empty,
   # the entire transport is invalidated. The client (and the underlying connection)
   # are not started until the key is known.
-  #
-  # Changing the key dynamically will make the client "join" and "leave"
-  # different connections.
   private def key?(hg : D7::Hypergraph, addr : D7::NodeAddr, term : Term) : Term?
     unless Term.edge?(term)
       return term
@@ -501,7 +1008,7 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (tcp host_ port_ ⍊ key_⋮ master link_⋮ direct)
+      # (tcp host_ port_ ⍊ key_⋮ master link_⋮ stream)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
@@ -517,10 +1024,9 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (tcp local 5000))
       #   (feed (@in front) (@out back)))
-      #
       # (pool @pool)
       # ```
-      matchpiT %{(tcp hostQ_ portQ_ ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_))} do
+      matchpiT %{(tcp hostQ_ portQ_ ⍊ key: (%optional master keyQ_) link: (%optional stream linkQ_))} do
         return unless host = host?(hostQ)
         return unless port = port?(portQ)
         return unless key = key?(hg, addr, keyQ)
@@ -532,7 +1038,7 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (unix path_string ⍊ key_⋮ master link_⋮ direct)
+      # (unix path_string ⍊ key_⋮ master link_⋮ stream)
       #
       # |@key key rack.[network].key
       # |@key link rack.[network].link
@@ -548,10 +1054,9 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (unix "/tmp/example.sock"))
       #   (feed (@in front) (@out back)))
-      #
       # (pool @pool)
       # ```
-      matchpiT %{(unix path_string ⍊ key: (%optional master keyQ_) link: (%optional direct linkQ_))}, path: NormalPath do
+      matchpiT %{(unix path_string ⍊ key: (%optional master keyQ_) link: (%optional stream linkQ_))}, path: NormalPath do
         return unless key = key?(hg, addr, keyQ)
         return unless link = link?(linkQ)
 
@@ -592,17 +1097,17 @@ module Ww::Rack::Accord
       # leave you confused. A new connection is a new connection, after all, and we'd like
       # the boundary in between to be clearly recongizable.
       #
-      # If you protocol or the way you use `client` allows you to, you may actually want
+      # If your protocol or the way you use `client` allows you to, you may actually want
       # automatic reconnects. That's why `renew: true` exists, to relieve you of the need
       # to manually reset the client.
       #
       # You can still reconnect a broken client by clearing its status, either manually
-      # (by literally deleting it) or through rules.
+      # (by literally deleting the status) or through rules.
 
       # |@ rack.client.transport
       #
       # |@pattern
-      # (ws host_ port_ ⍊ key_⋮ master ⋮link path⋮ "" renew⋮ false)
+      # (ws host_ port_ ⍊ key_⋮ master link_⋮ stream path⋮ "" renew⋮ false)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
@@ -643,7 +1148,7 @@ module Ww::Rack::Accord
       matchpiT(<<-'WWML', path: String) do
       (ws hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
-          link: (%optional direct linkQ_)
+          link: (%optional stream linkQ_)
           path⋮ ""
           renew⋮ false)
       WWML
@@ -658,7 +1163,7 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (wss host_ port_ ⍊ key_⋮ master path⋮ "" ⋮link renew⋮ false)
+      # (wss host_ port_ ⍊ key_⋮ master path⋮ "" link_⋮ stream renew⋮ false)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
@@ -684,7 +1189,7 @@ module Ww::Rack::Accord
       matchpiT(<<-'WWML', path: String) do
       (wss hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
-          link: (%optional direct linkQ_)
+          link: (%optional stream linkQ_)
           path⋮ ""
           renew⋮ false
           verify⋮ true)
@@ -700,7 +1205,7 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (tcp host_ port_ ⍊ key_⋮ master ⋮link renew⋮ false)
+      # (tcp host_ port_ ⍊ key_⋮ master link_⋮ stream renew⋮ false)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
@@ -720,7 +1225,7 @@ module Ww::Rack::Accord
       matchpiT(<<-'WWML') do
       (tcp hostQ_ port←(%number u16)
         ⍊ key: (%optional master keyQ_)
-          link: (%optional direct linkQ_)
+          link: (%optional stream linkQ_)
           renew⋮ false)
       WWML
         return unless host = host?(hostQ)
@@ -733,7 +1238,7 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (unix path_string ⍊ key_⋮ master ⋮link renew⋮ false)
+      # (unix path_string ⍊ key_⋮ master link_⋮ stream renew⋮ false)
       #
       # |@key key rack.[network].key
       # |@key link rack.[network].link
@@ -751,7 +1256,7 @@ module Ww::Rack::Accord
       matchpi(<<-'WWML', path: NormalPath) do
       (unix path_string
         ⍊ key: (%optional master keyQ_)
-          link: (%optional direct linkQ_)
+          link: (%optional stream linkQ_)
           renew⋮ false)
       WWML
         return unless link = link?(linkQ)
@@ -819,7 +1324,7 @@ module Ww::Rack::Accord
       # |@ rack.server.transport
       #
       # |@pattern
-      # (ws host_ port_ ⍊ key_⋮ master link_⋮ direct)
+      # (ws host_ port_ ⍊ key_⋮ master link_⋮ stream)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
@@ -836,7 +1341,6 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (ws local 5000))
       #   (feed (@in front) (@out back)))
-      #
       # (pool @pool)
       # ```
 
@@ -882,12 +1386,13 @@ module Ww::Rack::Accord
       #   (backsys
       #     {¦ request: [get ["/"]] -response_}
       #       <> {response: (ok "Hello")}))
+      # (pool @pool)
       # ```
 
       # |@ rack.server.transport
       #
       # |@pattern
-      # (wss host_ port_ ⍊ key_⋮ master link_⋮ direct ssl-cert_string ssl-key_string)
+      # (wss host_ port_ ⍊ key_⋮ master link_⋮ stream ssl-cert_string ssl-key_string)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
@@ -911,7 +1416,6 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (wss local 5000 ssl-cert: "path/to/openssl.cert" ssl-key: "path/to/openssl.key"))
       #   (feed (@in front) (@out back)))
-      #
       # (pool @pool)
       # ```
 
@@ -1063,48 +1567,42 @@ module Ww::Rack::Accord
     node : D7::Node,
     defn : Harmony::SocketServerDefn,
     pool : D7::AbsEdge,
-    in_edge : Term,
-    out_edge : Term,
-    template : Term::Dict,
-    format : Format::Any,
-    format_policy : Format::Policy
+    encoder : Encoder,
+    decoder : Decoder,
+    encoder_capacity : UInt32,
+    decoder_capacity : UInt32,
+    template : Term::Dict
 
   defcase SocketClient,
     node : D7::Node,
     defn : Harmony::SocketClientDefn,
-    outgoing : D7::AbsEdge,
-    ingoing : D7::AbsEdge,
-    format : Format::Any,
-    format_policy : Format::Policy
+    encoder : Encoder,
+    decoder : Decoder
 
   defcase HttpServer,
     node : D7::Node,
     defn : Harmony::HttpServerDefn,
     pool : D7::AbsEdge,
-    request_edge : Term,
-    response_edge : Term,
-    template : Term::Dict,
-    format : Format::Any,
-    format_policy : Format::Policy
+    encoder : Encoder,
+    decoder : Decoder,
+    template : Term::Dict
 
   defcase WebSocketServer,
     node : D7::Node,
     defn : Harmony::HttpServerDefn,
     link : Harmony::Link,
     pool : D7::AbsEdge,
-    in_edge : Term,
-    out_edge : Term,
-    template : Term::Dict,
-    format : Format::Any,
-    format_policy : Format::Policy
+    encoder : Encoder,
+    decoder : Decoder,
+    encoder_capacity : UInt32,
+    decoder_capacity : UInt32,
+    template : Term::Dict
 
   defcase HttpClient,
     node : D7::Node,
     defn : Harmony::HttpClientDefn,
-    outgoing : D7::AbsEdge,
-    ingoing : D7::AbsEdge,
-    format : Format::Any,
-    format_policy : Format::Policy
+    encoder : Encoder,
+    decoder : Decoder
 
   private def status_and_incarnation(world : Harmony::ReadonlyWorld, defn : Harmony::ServerDefn) : {Term, Harmony::ServerId?}
     world.each(Harmony::RunningServer, defn: defn) do |fact|
@@ -1156,9 +1654,9 @@ module Ww::Rack::Accord
 
     status, incarnation = status_and_incarnation(ctx.world, server.defn)
 
-    # When there's no incarnation, this means the server has disappeared for some reason. Along
-    # with it, assume all its clients have disappeared. Clear the pool and update the status
-    # to inform the circuit.
+    # When there's no incarnation, this means the server has disappeared for some reason. Assume
+    # all its clients have disappeared, too. Clear the pool and update the status to inform
+    # the circuit.
     if incarnation.nil?
       return D7.patches(
         # (server (@_ _ ⏏) _*)
@@ -1172,8 +1670,6 @@ module Ww::Rack::Accord
   end
 
   private def step(ctx : StepContext, hg : D7::Hypergraph, server : WebSocketServer) : D7::Patch?
-    # If there's no associated pool, then the server's "machine" is structurally
-    # incomplete, so it cannot work -- nor does it *exist*, really.
     unless pool = Rack.pool?(hg, server.pool)
       # (server (@_ _ ⏏) _*)
       return D7.patch(server.node, {1, 2, {:dn, "missing pool"}})
@@ -1182,9 +1678,6 @@ module Ww::Rack::Accord
     ctx.goals.add(Harmony::Server.new(server.defn))
 
     status, incarnation = status_and_incarnation(ctx.world, server.defn)
-
-    # Ditto as above: the server disappeared, assume its clients disappeared too.
-    # Clear the pool and update the status to inform the circuit.
     if incarnation.nil?
       return D7.patches(
         # (server (@_ _ ⏏) _*)
@@ -1194,6 +1687,8 @@ module Ww::Rack::Accord
       )
     end
 
+    # A web socket server is an HTTP server extended with a WebSocket handler.
+    # Make the handler, and ensure no conflicts arise.
     handler = ctx.goals.single?(Harmony::WebSocketHandler, server_id: incarnation)
     handler ||= Harmony::WebSocketHandler.new(incarnation, server.link)
     ctx.goals.add(handler)
@@ -1216,15 +1711,17 @@ module Ww::Rack::Accord
     step(ctx, hg, client, status, incarnation)
   end
 
-  defrecord DeviceIn, key : UInt32
-  defrecord DeviceOut, key : UInt32, msg : Term?, smart: true
+  defrecord ClientDevice, tree : D7::CircuitNode, key : UInt32
+
+  defrecord DeviceIn, key : UInt32, size : UInt32
+  defrecord DeviceOut, key : UInt32, size : UInt32, msg : Term?, smart: true
   defrecord DeviceCell, key : UInt32, value : Term
 
   # :nodoc:
   EDGE_ID = Term.of(:edge, :id)
 
   # Returns the peer id associated with *device*.
-  private def extract?(device : D7::CircuitNode, cls : Harmony::PeerId.class | Harmony::HttpRequestId.class)
+  private def extract?(device : ClientDevice, cls : Harmony::PeerId.class | Harmony::HttpRequestId.class)
     # NOTE: the id cell is the first cell because we generate it this way. So
     # O(N) here is effectively O(1).
     return unless cell = extract?(device, DeviceCell, EDGE_ID)
@@ -1234,24 +1731,28 @@ module Ww::Rack::Accord
     cls.new(repr)
   end
 
-  private def extract?(device : D7::CircuitNode, cls : DeviceIn.class, edge : Term) : DeviceIn?
-    return unless cell = extract?(device, DeviceCell, edge)
-    return unless _ = cell.value.as_itemsonly_d?
-
-    DeviceIn.new(cell.key)
-  end
-
-  private def extract?(device : D7::CircuitNode, cls : DeviceOut.class, edge : Term) : DeviceOut?
+  # Returns the ingoing message queue associated with *device*.
+  private def extract?(device : ClientDevice, cls : DeviceIn.class, edge : Term) : DeviceIn?
     return unless cell = extract?(device, DeviceCell, edge)
     return unless msgs = cell.value.as_itemsonly_d?
 
-    DeviceOut.new(cell.key, msgs.items.first?)
+    DeviceIn.new(cell.key, msgs.uitemsize)
   end
 
-  private def extract?(device : D7::CircuitNode, cls : DeviceCell.class, edge needle : Term) : DeviceCell?
+  # Returns the outgoing message queue associated with *device*.
+  private def extract?(device : ClientDevice, cls : DeviceOut.class, edge : Term) : DeviceOut?
+    return unless cell = extract?(device, DeviceCell, edge)
+    return unless msgs = cell.value.as_itemsonly_d?
+
+    DeviceOut.new(cell.key, msgs.uitemsize, msgs.items.first?)
+  end
+
+  # Searches for a nonempty cell at *edge* in *device*.
+  private def extract?(device : ClientDevice, cls : DeviceCell.class, edge needle : Term) : DeviceCell?
+    tree = device.tree
     candidates = Pf::Kit.stack_array(DeviceCell, 1)
 
-    device.children.each_with_index(offset: device.feature.range.begin) do |child, index|
+    tree.children.each_with_index(offset: tree.feature.range.begin) do |child, index|
       next unless child.is_a?(D7::GndLeaf)
 
       node = child.feature.node
@@ -1268,26 +1769,29 @@ module Ww::Rack::Accord
     candidates.single?
   end
 
-  private def each_device(devices : D7::CircuitNode, & : D7::CircuitNode, UInt32 ->) : Nil
-    devices.children.zip(0u32...devices.children.size) do |device, device_key|
+  # Yields each client device along with its key in the underlying term in the circuit.
+  private def each_client_device(device_tree : D7::CircuitNode, & : ClientDevice ->) : Nil
+    device_tree.children.zip(0u32...device_tree.children.size) do |device, device_key|
       next unless device.is_a?(D7::CircuitNode)
 
       node : Term::Dict = device.feature.node
       next unless node.itemsize >= 1
       next unless node.items.first == Term.of(:device)
 
-      yield device, device_key
+      yield ClientDevice.new(device, device_key)
     end
   end
 
   alias DeviceChange = DeviceAdded | DeviceRemoved | DeviceModified
-  alias DeviceModified = DeviceReceivedMessage | DeviceReceivedBatch | DeviceSentMessage
+  alias DeviceModified = DeviceEnqueueOne | DeviceEnqueueMany |
+                         DeviceDequeue | DeviceClearCell
 
   defrecord DeviceAdded, device : Term, brief: true
   defrecord DeviceRemoved, device_key : UInt32, brief: true
-  defrecord DeviceReceivedMessage, device_key : UInt32, mailbox_key : UInt32, msg : Term, brief: true
-  defrecord DeviceReceivedBatch, device_key : UInt32, mailbox_key : UInt32, batch : Slice(Term), brief: true
-  defrecord DeviceSentMessage, device_key : UInt32, mailbox_key : UInt32, brief: true
+  defrecord DeviceEnqueueOne, device_key : UInt32, mailbox_key : UInt32, msg : Term, brief: true
+  defrecord DeviceEnqueueMany, device_key : UInt32, mailbox_key : UInt32, batch : Slice(Term), brief: true
+  defrecord DeviceDequeue, device_key : UInt32, mailbox_key : UInt32, brief: true
+  defrecord DeviceClearCell, device_key : UInt32, cell_key : UInt32, brief: true
 
   struct DeviceChangeList
     def initialize
@@ -1332,17 +1836,22 @@ module Ww::Rack::Accord
         # the same device.
         device0 = commit[change.device_key]
 
-        mailbox0 = device0[change.mailbox_key, 2]
         case change
-        in DeviceReceivedMessage
+        in DeviceEnqueueOne
+          mailbox0 = device0[change.mailbox_key, 2]
           mailbox1 = mailbox0.append(change.msg)
-        in DeviceReceivedBatch
+          device1 = Term.morph(device0, {change.mailbox_key, 2, mailbox1})
+        in DeviceEnqueueMany
+          mailbox0 = device0[change.mailbox_key, 2]
           mailbox1 = mailbox0.transaction(&.concat(change.batch))
-        in DeviceSentMessage
+          device1 = Term.morph(device0, {change.mailbox_key, 2, mailbox1})
+        in DeviceDequeue
+          mailbox0 = device0[change.mailbox_key, 2]
           mailbox1 = mailbox0.replace(0...1, Term.rep)
+          device1 = Term.morph(device0, {change.mailbox_key, 2, mailbox1})
+        in DeviceClearCell
+          device1 = Term.morph(device0, {change.cell_key, 2, nil})
         end
-
-        device1 = Term.morph(device0, {change.mailbox_key, 2, mailbox1})
 
         commit.with(change.device_key, device1)
       end
@@ -1366,207 +1875,202 @@ module Ww::Rack::Accord
     end
   end
 
-  class FormatAborted < Exception
-    @callstack = CallStack.empty
-  end
+  defrecord Clog
+  defrecord Discard
+
+  alias EncodeFailedAction = Clog | Discard
+  alias DecodeFailedAction = Discard
 
   defrecord HttpRequest, term : Term
   defrecord HttpResponse, term : Term
 
-  private def encode?(format : Format::Any, policy : Format::Policy, msg : Term) : Term::Blob?
-    payload = Format.encode?(format, msg)
+  private def encode(encoder : Encoder, message : Term) : Term::Blob | EncodeFailedAction
+    result = Format.encode?(encoder.format, message)
 
-    case policy
-    in .discard?
-      payload
-    in .abort?, .wrap? # ?!
-      payload || raise FormatAborted.new
+    case encoder.policy
+    in .clog?    then result || Clog.new
+    in .discard? then result || Discard.new
     end
   end
 
-  private def decode?(format : Format::Any, policy : Format::Policy, payload : Term::Blob) : Term?
-    term = Format.decode?(format, payload)
+  private def decode(decoder : Decoder, payload : Term::Blob) : Term | DecodeFailedAction
+    result = Format.decode?(decoder.format, payload)
 
-    case policy
-    in .discard?
-      term
-    in .abort?
-      term || raise FormatAborted.new
-    in .wrap?
-      if term
-        Term.of(:ok, term)
-      else
-        Term.of(:err, "format decode error")
-      end
+    case decoder.policy
+    in .discard? then result || Discard.new
+    in .wrap?    then result ? Term.of(:ok, result) : Term.of(:err, "message decode error")
     end
   end
 
-  private def encode?(format : Format::Any, policy : Format::Policy, request : HttpRequest) : Term?
+  private def encode(encoder : Encoder, request : HttpRequest) : Term | EncodeFailedAction
+    result : Term? = nil
+
     Term.case(request.term) do
       matchpi %{[_symbol _ body_]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(request.term, {2, blob})
+        if blob = Format.encode?(encoder.format, body)
+          result = Term.morph(request.term, {2, blob})
+        end
       end
 
       # Keep all other requests as-is.
       otherwise do
-        request.term
+        result = request.term
       end
+    end
+
+    case encoder.policy
+    in .clog?    then result || Clog.new
+    in .discard? then result || Discard.new
     end
   end
 
-  private def decode?(format : Format::Any, policy : Format::Policy, payload : HttpRequest) : Term?
+  private def decode(decoder : Decoder, payload : HttpRequest) : Term | DecodeFailedAction
+    result : Term? = nil
+
     Term.case(payload.term) do
       matchpiT %{[_symbol _ bodyQ_blob]} do
-        return unless body = Format.decode?(format, bodyQ)
-
-        Term.morph(payload.term, {2, body})
+        if body = Format.decode?(decoder.format, bodyQ)
+          result = Term.morph(payload.term, {2, body})
+        end
       end
 
       # Keep all other requests as-is.
       otherwise do
-        payload.term
+        result = payload.term
       end
+    end
+
+    case decoder.policy
+    in .discard? then result || Discard.new
+    in .wrap?    then result ? Term.of(:ok, result) : Term.of(:err, "request decode error")
     end
   end
 
-  private def encode?(format : Format::Any, policy : Format::Policy, response : HttpResponse) : Term?
+  private def encode(encoder : Encoder, response : HttpResponse) : Term | EncodeFailedAction
+    result : Term? = nil
+
     Term.case(response.term) do
       matchpi %{[_ [attachment body_]]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(response.term, {1, 1, blob})
+        if blob = Format.encode?(encoder.format, body)
+          result = Term.morph(response.term, {1, 1, blob})
+        end
       end
 
       matchpi %{[_ [file _string body_]]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(response.term, {1, 2, blob})
+        if blob = Format.encode?(encoder.format, body)
+          result = Term.morph(response.term, {1, 2, blob})
+        end
       end
 
       matchpi %{[_ body_]} do
-        return unless blob = Format.encode?(format, body)
-
-        Term.morph(response.term, {1, blob})
-      end
-
-      # Keep all other requests as-is.
-      otherwise do
-        response.term
-      end
-    end
-  end
-
-  private def decode?(format : Format::Any, policy : Format::Policy, payload : HttpResponse) : Term?
-    Term.case(payload.term) do
-      matchpiT %{[_ [attachment bodyQ_blob]]} do
-        return unless body = Format.decode?(format, bodyQ)
-
-        Term.morph(payload.term, {1, 1, body})
-      end
-
-      matchpiT %{[_ [file _string bodyQ_blob]]} do
-        return unless body = Format.decode?(format, bodyQ)
-
-        Term.morph(payload.term, {1, 2, body})
-      end
-
-      matchpiT %{[_ bodyQ_blob]} do
-        return unless body = Format.decode?(format, bodyQ)
-
-        Term.morph(payload.term, {1, body})
+        if blob = Format.encode?(encoder.format, body)
+          result = Term.morph(response.term, {1, blob})
+        end
       end
 
       # Keep all other responses as-is.
       otherwise do
-        payload.term
+        result = response.term
       end
+    end
+
+    case encoder.policy
+    in .clog?    then result || Clog.new
+    in .discard? then result || Discard.new
     end
   end
 
-  private def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | WebSocketServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
-    _, device_tree = D7.follow(hg.@tree, pool.node.addr)
-    return unless device_tree.is_a?(D7::CircuitNode)
+  private def decode(decoder : Decoder, payload : HttpResponse) : Term | DecodeFailedAction
+    result : Term? = nil
 
-    changes = DeviceChangeList.new
+    Term.case(payload.term) do
+      matchpiT %{[_ [attachment bodyQ_blob]]} do
+        if body = Format.decode?(decoder.format, bodyQ)
+          result = Term.morph(payload.term, {1, 1, body})
+        end
+      end
 
-    each_device(device_tree) do |device, device_key|
-      next unless peer_id = extract?(device, Harmony::PeerId)
+      matchpiT %{[_ [file _string bodyQ_blob]]} do
+        if body = Format.decode?(decoder.format, bodyQ)
+          result = Term.morph(payload.term, {1, 2, body})
+        end
+      end
 
-      # Detect device disconnects.
-      unless ctx.world.any?(Harmony::RunningPeer, peer_id: peer_id)
-        changes << DeviceRemoved.new(device_key)
+      matchpiT %{[_ bodyQ_blob]} do
+        if body = Format.decode?(decoder.format, bodyQ)
+          result = Term.morph(payload.term, {1, body})
+        end
+      end
+
+      # Keep all other responses as-is.
+      otherwise do
+        result = payload.term
+      end
+    end
+
+    case decoder.policy
+    in .discard? then result || Discard.new
+    in .wrap?    then result ? Term.of(:ok, result) : Term.of(:err, "request decode error")
+    end
+  end
+
+  private def sync_ingoing(ctx, server, device, id : Harmony::PeerId, inbox, changes) : Nil
+    received = Pf::Kit.stack_array({Harmony::MsgId, Term}, 1)
+
+    ctx.world.each(Harmony::IngoingMessage, endpoint_id: id) do |fact|
+      confirmation = Harmony::IngoingReceiveConfirmation.new(fact.endpoint_id, fact.msgid)
+
+      # Initiate confirmation. If confirmation is a fact, this means it's complete.
+      unless ctx.world.includes?(confirmation)
+        ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
+        ctx.goals << confirmation
         next
       end
 
-      alive = false
-
-      # Process ingoing messages.
-      pass do
-        next unless inbox = extract?(device, DeviceIn, server.in_edge)
-
-        alive = true
-
-        # Indicate to the other side that *peer* has spare space for messages.
-        ctx.goals.add(Harmony::MessageSlot.new(peer_id))
-
-        rows = Pf::Kit.stack_array({Harmony::MsgId, Term}, 1)
-
-        ctx.world.each(Harmony::IngoingMessage, endpoint_id: peer_id) do |fact|
-          confirmation = Harmony::IngoingReceiveConfirmation.new(fact.endpoint_id, fact.msgid)
-
-          # Initiate confirmation. If confirmation is a fact, this means it's complete.
-          unless ctx.world.includes?(confirmation)
-            ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
-            ctx.goals << confirmation
-            next
-          end
-
-          next unless msg = decode?(server.format, server.format_policy, fact.payload)
-
-          rows << {fact.msgid, msg}
-        end
-
-        # Most often there are no messages.
-        next if rows.empty?
-
-        # Sometimes there's just one message.
-        if row = rows.single?
-          _, msg = row
-          changes << DeviceReceivedMessage.new(device_key, inbox.key, msg)
-          next
-        end
-
-        # Very rarely there are several messages.
-        rows.unstable_sort_by! { |msgid, _| msgid.repr }
-        batch = rows.to_readonly_slice { |(_, msg)| msg }
-        changes << DeviceReceivedBatch.new(device_key, inbox.key, batch)
+      case decode_out = decode(server.decoder, fact.payload)
+      in Term
+        received << {fact.msgid, decode_out}
+      in Discard
       end
-
-      # Process outgoing messages.
-      pass do
-        next unless outbox = extract?(device, DeviceOut, server.out_edge)
-
-        alive = true
-        next unless msg = outbox.msg?
-        next unless payload = encode?(server.format, server.format_policy, msg)
-
-        if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(peer_id, payload))
-          changes << DeviceSentMessage.new(device_key, outbox.key)
-          next
-        end
-
-        ctx.goals << Harmony::OutgoingMessage.new(peer_id, payload)
-      end
-
-      next unless alive
-
-      ctx.goals << Harmony::PeerKeepalive.new(peer_id)
-    rescue FormatAborted
     end
 
-    ctx.world.each(Harmony::RunningPeer, server_id: incarnation) do |fact|
+    # Most often there are no messages.
+    return if received.empty?
+
+    # Sometimes there's just one message.
+    if row = received.single?
+      _, msg = row
+      changes << DeviceEnqueueOne.new(device.key, inbox.key, msg)
+      return
+    end
+
+    # Very rarely there are several messages.
+    received.unstable_sort_by! { |msgid, _| msgid.repr }
+    batch = received.to_readonly_slice { |(_, msg)| msg }
+    changes << DeviceEnqueueMany.new(device.key, inbox.key, batch)
+  end
+
+  private def sync_outgoing(ctx, server, device, id : Harmony::PeerId, outbox, changes) : Nil
+    return unless msg = outbox.msg?
+
+    case encode_out = encode(server.encoder, msg)
+    in Term::Blob
+      # They've received it, we can safely dequeue.
+      if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(id, encode_out))
+        changes << DeviceDequeue.new(device.key, outbox.key)
+        return
+      end
+
+      # Keep willing to send it.
+      ctx.goals << Harmony::OutgoingMessage.new(id, encode_out)
+    in Clog
+    in Discard
+      changes << DeviceDequeue.new(device.key, outbox.key)
+    end
+  end
+
+  private def sync_connected(ctx, server, id : Harmony::ServerId, changes) : Nil
+    ctx.world.each(Harmony::RunningPeer, server_id: id) do |fact|
       next if fact.peer_id.in?(ctx.acknowledged)
 
       # Keep the peer and all messages designated for it alive. We will process
@@ -1579,13 +2083,57 @@ module Ww::Rack::Accord
       instance = Term::Dict.build do |commit|
         commit << :device
         commit << {:cell, {:edge, :id}, fact.peer_id.repr}
-        commit << {:cell, server.in_edge, Term[]}
-        commit << {:cell, server.out_edge, Term[]}
+        commit << {:cell, server.decoder.edge, Term[]}
+        commit << {:cell, server.encoder.edge, Term[]}
         commit.concat(server.template.items)
       end
 
       changes << DeviceAdded.new(Term.of(instance))
     end
+  end
+
+  private def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | WebSocketServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
+    _, device_tree = D7.follow(hg.@tree, pool.node.addr)
+    return unless device_tree.is_a?(D7::CircuitNode)
+
+    changes = DeviceChangeList.new
+
+    each_client_device(device_tree) do |device|
+      next unless peer_id = extract?(device, Harmony::PeerId)
+
+      # Detect device disconnects.
+      unless ctx.world.any?(Harmony::RunningPeer, peer_id: peer_id)
+        changes << DeviceRemoved.new(device.key)
+        next
+      end
+
+      inbox = extract?(device, DeviceIn, server.decoder.edge)
+      outbox = extract?(device, DeviceOut, server.encoder.edge)
+
+      # The device is closed, it is no longer accepting or sending messages.
+      next if inbox.nil? && outbox.nil?
+
+      if inbox
+        sync_ingoing(ctx, server, device, peer_id, inbox, changes)
+      end
+
+      if outbox
+        sync_outgoing(ctx, server, device, peer_id, outbox, changes)
+      end
+
+      # If our thresholds allow it, indicate to the other side that the device
+      # has spare space for messages.
+      pass do
+        next if inbox && inbox.size >= server.decoder_capacity
+        next if outbox && outbox.size >= server.encoder_capacity
+
+        ctx.goals.add(Harmony::MessageSlot.new(peer_id, server.decoder_capacity))
+      end
+
+      ctx.goals << Harmony::PeerKeepalive.new(peer_id)
+    end
+
+    sync_connected(ctx, server, incarnation, changes)
 
     D7.patches(
       # (server (@_ _ ⏏) _*)
@@ -1595,24 +2143,25 @@ module Ww::Rack::Accord
     )
   end
 
+  # TODO: refactors
   private def step(ctx : StepContext, hg : D7::Hypergraph, server : HttpServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
     _, device_tree = D7.follow(hg.@tree, pool.node.addr)
     return unless device_tree.is_a?(D7::CircuitNode)
 
     changes = DeviceChangeList.new
 
-    each_device(device_tree) do |device, device_key|
+    each_client_device(device_tree) do |device|
       next unless request_id = extract?(device, Harmony::HttpRequestId)
 
       # If this request id doesn't have a corresponding request, this means the request was
       # handled already and we can remove this device.
       unless ctx.world.any?(Harmony::HttpServerRequest, server_id: incarnation, request_id: request_id)
-        changes << DeviceRemoved.new(device_key)
+        changes << DeviceRemoved.new(device.key)
         next
       end
 
       # Wait until a response is available.
-      unless response = extract?(device, DeviceCell, server.response_edge)
+      unless response = extract?(device, DeviceCell, server.encoder.edge)
         ctx.goals.add(Harmony::HttpServerRequestKeepalive.new(request_id))
         next
       end
@@ -1620,16 +2169,22 @@ module Ww::Rack::Accord
       # Discard response if its encoding is invalid. Since we no longer keep the corresponding
       # request alive, and we're edge-triggered, the request will disappear eventually along
       # with the device.
-      begin
-        next unless payload = encode?(server.format, server.format_policy, HttpResponse.new(response.value))
-      rescue FormatAborted
+      case encode_out = encode(server.encoder, HttpResponse.new(response.value))
+      in Term
+        payload = encode_out
+      in Clog
+        ctx.goals.add(Harmony::HttpServerRequestKeepalive.new(request_id))
+        next
+      in Discard
+        ctx.goals.add(Harmony::HttpServerRequestKeepalive.new(request_id))
+        changes << DeviceClearCell.new(device.key, response.key)
         next
       end
 
       # If the response does not specify the content type explictily, and Format
       # suggests one, use the suggested content type.
       pass do
-        next unless suggested_content_type = Format.content_type?(server.format)
+        next unless suggested_content_type = Format.content_type?(server.encoder.format)
         next if payload.includes?(:"content-type")
 
         payload = Term.morph(payload, {:"content-type", suggested_content_type})
@@ -1643,12 +2198,10 @@ module Ww::Rack::Accord
       # Do not reintroduce requests we've already handled.
       next if fact.request_id.in?(ctx.acknowledged)
 
-      begin
-        next unless request = decode?(server.format, server.format_policy, HttpRequest.new(fact.request))
-      rescue FormatAborted
-        # NOTE: Since HTTP is stateless and works one request at a time -- at least
-        # conceptually -- discard (drop request) and abort (drop connection) are
-        # the same thing.
+      case decode_out = decode(server.decoder, HttpRequest.new(fact.request))
+      in Term
+        request = decode_out
+      in Discard
         next
       end
 
@@ -1657,8 +2210,8 @@ module Ww::Rack::Accord
       instance = Term::Dict.build do |commit|
         commit << :device
         commit << {:cell, {:edge, :id}, fact.request_id.repr}
-        commit << {:cell, server.request_edge, request}
-        commit << {:cell, server.response_edge}
+        commit << {:cell, server.decoder.edge, request}
+        commit << {:cell, server.encoder.edge}
         commit.concat(server.template.items)
       end
 
@@ -1673,24 +2226,24 @@ module Ww::Rack::Accord
     )
   end
 
+  # TODO: refactors
   private def step(ctx : StepContext, hg : D7::Hypergraph, client : SocketClient, status : Term, incarnation : Harmony::ClientId) : D7::Patch?
     status_patch = D7.patch(client.node, {2, status})
 
     # Handle the source.
     source_patch = nil
     pass do
-      next unless source = Rack.cell?(hg, client.outgoing)
+      abs_encoder_edge = hg.resolve(client.node.addr, client.encoder.edge)
+      next unless source = Rack.cell?(hg, abs_encoder_edge)
       next unless message = source.value?
 
-      # If the message fails to encode (e.g. due to limits) we "clog" the message
-      # cell so that failure is evident.
-      #
-      # TODO: We should also provide a descriptive error message explaining why
-      # the thing doesn't encode!
-      begin
-        next unless message = encode?(client.format, client.format_policy, message)
-      rescue e : FormatAborted
-        status_patch = D7.patch(client.node, {2, {:dn, e.message || "format encode error"}})
+      case encode_out = encode(client.encoder, message)
+      in Term::Blob
+        message = encode_out
+      in Clog
+        next
+      in Discard
+        source_patch = D7.patch(source.node, {2, nil})
         next
       end
 
@@ -1708,7 +2261,8 @@ module Ww::Rack::Accord
     # Handle the target.
     target_patch = nil
     pass do
-      next unless target = Rack.cell?(hg, client.ingoing)
+      abs_decoder_edge = hg.resolve(client.node.addr, client.decoder.edge)
+      next unless target = Rack.cell?(hg, abs_decoder_edge)
 
       ingoing = nil
 
@@ -1724,7 +2278,7 @@ module Ww::Rack::Accord
       next unless target.empty?
 
       if ingoing.nil?
-        ctx.goals.add(Harmony::MessageSlot.new(incarnation))
+        ctx.goals.add(Harmony::MessageSlot.new(incarnation, capacity: 1u32))
         next
       end
 
@@ -1738,12 +2292,10 @@ module Ww::Rack::Accord
 
       ctx.goals.delete(Harmony::IngoingMessageKeepalive.new(ingoing.endpoint_id, ingoing.msgid))
 
-      begin
-        next unless msg = decode?(client.format, client.format_policy, ingoing.payload)
-
-        target_patch = D7.patch(target.node, {2, msg})
-      rescue e : FormatAborted
-        status_patch = D7.patch(client.node, {2, {:dn, e.message || "format decode error"}})
+      case decode_out = decode(client.decoder, ingoing.payload)
+      in Term
+        target_patch = D7.patch(target.node, {2, decode_out})
+      in Discard
       end
     end
 
@@ -1754,21 +2306,29 @@ module Ww::Rack::Accord
     )
   end
 
+  # TODO: refactors
   private def step(ctx : StepContext, hg : D7::Hypergraph, client : HttpClient, status : Term, incarnation : Harmony::ClientId) : D7::Patch?
     patch = D7.patch(client.node, {2, status})
 
-    # If there's no current request, then there's no response to wait or be waiting for.
     pass do
-      next unless source = Rack.cell?(hg, client.outgoing)
+      # If there's no current request, then there's no response to wait or be waiting for.
+      abs_encoder_edge = hg.resolve(client.node.addr, client.encoder.edge)
+      next unless source = Rack.cell?(hg, abs_encoder_edge)
       next unless request = source.value?
 
-      next unless target = Rack.cell?(hg, client.ingoing)
+      # If the response cell is occupied, wait until it is not. There is an opportunity
+      # for an in-flight request to be aborted if the response cell *becomes* full.
+      abs_decoder_edge = hg.resolve(client.node.addr, client.decoder.edge)
+      next unless target = Rack.cell?(hg, abs_decoder_edge)
       next unless target.empty?
 
-      begin
-        next unless request = encode?(client.format, client.format_policy, HttpRequest.new(request))
-      rescue e : FormatAborted
-        patch = D7.patch(client.node, {2, {:dn, e.message || "format encode error"}})
+      case encode_out = encode(client.encoder, HttpRequest.new(request))
+      in Term
+        request = encode_out
+      in Clog
+        next
+      in Discard
+        patch = D7.patches(patch, D7.patch(source.node, {2, nil}))
         next
       end
 
@@ -1778,26 +2338,21 @@ module Ww::Rack::Accord
       end
 
       payload = fact.result.response
-
-      case payload
-      in Harmony::HttpResponseError
-        patch = D7.patch(client.node, {2, {:dn, payload.detail}})
+      if payload.is_a?(Harmony::HttpResponseError)
+        patch = D7.patches(patch, D7.patch(client.node, {2, {:dn, payload.detail}}))
         next
+      end
+
+      # payload : Term
+
+      case decode_out = decode(client.decoder, HttpResponse.new(payload))
       in Term
+        patch = D7.patches(patch,
+          D7.patch(source.node, {2, nil}),
+          D7.patch(target.node, {2, decode_out}),
+        )
+      in Discard
       end
-
-      begin
-        next unless response = decode?(client.format, client.format_policy, HttpResponse.new(payload))
-      rescue e : FormatAborted
-        patch = D7.patch(client.node, {2, {:dn, e.message || "format decode error"}})
-        next
-      end
-
-      patch = D7.patches(
-        D7.patch(client.node, {2, status}),
-        D7.patch(source.node, {2, nil}),
-        D7.patch(target.node, {2, response}),
-      )
     end
 
     patch

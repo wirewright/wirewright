@@ -2,7 +2,7 @@ class Ww::Harmony
   # NOTE: Observations are strictly internal. You have no access to them from outside
   # Harmony. The only things you have access to is `Fact` and `Goal`.
   alias Observation = SocketServerStarted | HttpServerStarted | ServerStopped |
-                      ServerStartFailed | ServerCrashed | MessageAccepted | MessageLost |
+                      ServerStartFailed | ServerCrashed | MessageReceivedByPeer | MessageNotSent |
                       PeerConnected | PeerDisconnected | PeerCrashed | PeerReceived |
                       MessageHandled | FactForgotten | SocketClientStarted | HttpClientStarted |
                       ClientStopped | SocketClientReceived | ClientStartFailed | Ready | Busy |
@@ -48,8 +48,8 @@ class Ww::Harmony
   defrecord ClientStartFailed, defn : ClientDefn, detail : String, brief: true
 
   defrecord MessageHandled, endpoint_id : EndpointId, msgid : MsgId, brief: true
-  defrecord MessageAccepted, endpoint_id : EndpointId, payload : Term::Blob, brief: true
-  defrecord MessageLost, endpoint_id : EndpointId, payload : Term::Blob, brief: true
+  defrecord MessageReceivedByPeer, endpoint_id : EndpointId, payload : Term::Blob, brief: true
+  defrecord MessageNotSent, endpoint_id : EndpointId, payload : Term::Blob, brief: true
 
   defrecord Ready, endpoint_id : EndpointId, brief: true
   defrecord Busy, endpoint_id : EndpointId, brief: true

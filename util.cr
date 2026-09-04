@@ -5140,6 +5140,10 @@ struct Set::Changelog(Element)
     @log.each { |change| yield change }
   end
 
+  def +(other : Changelog(Element)) : Changelog(Element)
+    Changelog.new(@log + other.@log)
+  end
+
   # :nodoc:
   def after_added(element : Element) : Changelog(Element)
     Changelog.new(@log.append(Added(Element).new(element)))

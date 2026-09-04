@@ -81,7 +81,7 @@ module Testtool
   end
 
   # :ditto:
-  def rack_compare(frame : Term, actual : Iterator::Stop)
+  def rack_compare(frame : Term, actual : Nil)
     RackComparisonResult.new(frame.in?(Term.of(:end), Term.of(:terminates)))
   end
 
@@ -89,23 +89,62 @@ module Testtool
 
   def run(test : RackTest, assets, stat, complaints) : Nil
     automaton = Rack::Automaton.new
-    frames = automaton.frames(test.seed)
 
-    # Skip through seed.
-    before = test.seed
+    seed : Term = test.seed
+    before : Term? = seed
 
     test.frames.each do |after|
-      if before.is_a?(Iterator::Stop)
+      if before.nil?
         complaints << complaint("Rack stopped producing frames but a frame was expected", expected: after)
         break
       end
 
+      success = false
+
+      if after == Term.of(:wait)
+        loop do
+          seed, action = automaton.next(seed)
+
+          case action
+          in Rack::Automaton::Again
+            next
+          in Rack::Automaton::DisplaySubframe
+            next # Skip subframes
+          in Rack::Automaton::DisplayFrame
+            complaints << complaint("Rack produced frames but indefinite wait was expected",
+              before: before.as(Term),
+              after: after,
+              got: action.content,
+            )
+          in Rack::Automaton::Wait
+            if deadline = action.deadline?
+              automaton.wait(deadline)
+              next
+            end
+
+            success = true
+          in Rack::Automaton::End
+            complaints << complaint("An indefinite wait was expected but Rack produced `end`",
+              before: before.as(Term),
+              after: after,
+              got: Term.of(:end),
+            )
+          end
+
+          break
+        end
+
+        break unless success
+        next
+      end
+
       loop do
-        actual = measure(stat) { frames.next }
+        seed, actual = measure(stat) { automaton.next_frame(seed) }
 
         case rack_compare(after, actual)
         in .match?
           before = actual
+          success = true
           break
         in .mismatch?
           complaints << complaint("Rack frame mismatch",
@@ -118,6 +157,8 @@ module Testtool
           before = actual
         end
       end
+
+      break unless success
     end
 
     # Teardown by passing empty circuit.

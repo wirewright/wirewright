@@ -177,12 +177,12 @@ class Ww::Harmony
       @observations << InformedBusy.new(@id)
     end
 
-    def on_message_accepted(payload : Term::Blob) : Nil
-      @observations << MessageAccepted.new(@id, payload)
+    def on_message_received_by_peer(payload : Term::Blob) : Nil
+      @observations << MessageReceivedByPeer.new(@id, payload)
     end
 
-    def on_message_lost(payload : Term::Blob) : Nil
-      @observations << MessageLost.new(@id, payload)
+    def on_message_not_sent(payload : Term::Blob) : Nil
+      @observations << MessageNotSent.new(@id, payload)
     end
 
     def on_message_handled(msgid : MsgId) : Nil

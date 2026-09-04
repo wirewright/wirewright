@@ -12,7 +12,7 @@ class Ww::Harmony
   defcase IngoingReceiveConfirmation, endpoint_id : EndpointId, msgid : MsgId, brief: true
   defcase OutgoingMessage, endpoint_id : EndpointId, payload : Term::Blob, brief: true
 
-  defcase MessageSlot, endpoint_id : EndpointId, brief: true
+  defcase MessageSlot, endpoint_id : EndpointId, capacity : UInt32, brief: true
 
   defcase HttpServerResponse,
     server_id : ServerId,
@@ -42,7 +42,7 @@ class Ww::Harmony
   {% end %}
 
   alias GoalFeature = ServerDefn | ClientDefn | ServerId | EndpointId | MsgId | HttpRequestId |
-                      Term | Term::Blob | GoalClass | Link
+                      Term | Term::Blob | GoalClass | Link | UInt32
 
   alias GoalSet = IndexedSet(Goal, GoalFeature)
 end

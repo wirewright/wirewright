@@ -30,8 +30,7 @@ class Ww::Harmony
   # and can be freely forgotten and otherwise manipulated.
   #
   # By analogy, an independent belief is a kind of "useful hallucination" --
-  # an imaginary entity used for state-keeping; perhaps, in a very loose, structural
-  # sense, a "thought".
+  # an imaginary entity used for state-keeping.
   alias IndependentBelief = PendingServer | BrokenServer | PendingClient | BrokenClient | IngoingMessage |
                             IngoingReceiveConfirmation | RemoteReceiveConfirmation | RemoteMessageSlot |
                             HttpClientResponse

@@ -36,10 +36,13 @@ class Ww::Harmony
 
       begin
         yield
-        changelog1 = @changelog
-        changelog1.not_nil!
+        changelog1 = @changelog.not_nil!
+        if changelog0
+          changelog0 += changelog1
+        end
+        changelog1
       ensure
-        # Restore the old changelog.
+        # Restore the old changelog (extended with nested changes).
         @changelog = changelog0
       end
     end
@@ -113,6 +116,7 @@ class Ww::Harmony
       end
     end
 
+    # :nodoc:
     def self.match?(element : Element, ivar : Symbol, feature : Feature) : Bool forall Element, Feature
       {% begin %}
         case ivar
@@ -128,15 +132,25 @@ class Ww::Harmony
       {% end %}
     end
 
+    # :nodoc:
+    def self.each_feature(element : Element, & : Feature ->) : Nil
+      {% begin %}
+        case element
+        {% for type in Element.union_types %}
+        in {{type}}
+          yield {{type}}.as(Feature)
+          {% for ivar in type.instance_vars %}\
+            yield element.@{{ivar.id}}.as(Feature)
+          {% end %}
+        {% end %}
+        end
+      {% end %}
+    end
+
     # Returns `true` if the block is `true` for any element in this set.
     def any?(& : Element -> Bool) : Bool
       @elements.any? { |element| yield element }
     end
-
-    # Returns `true` if the block is `true` for any element of type T in this set.
-    # def any?(cls : T.class, & : T -> Bool) : Bool forall T
-    #   any?(cls) { |element| yield element }
-    # end
 
     # Returns `true` if the block is `true` for any element of type T in this set.
     # Only elements whose instance vars contain all of *hints* are considered.
@@ -173,32 +187,19 @@ class Ww::Harmony
         {% T.raise "argument must be a member of Element, but #{T} is not" %}
       {% end %}
 
-      if element.in?(@elements)
-        return false
-      end
+      return false unless @elements.add?(element)
 
-      @elements << element
+      feature_ids = Pf::Kit.stack_array(FeatureId, 8)
 
-      features = Pf::Kit.stack_array(FeatureId, 8)
-
-      pass do
-        feature = @features.put_if_absent(element.class) do
+      IndexedSet(Element, Feature).each_feature(element) do |feature|
+        feature_id = @features.put_if_absent(feature) do
           @seq, _ = @seq + 1, FeatureId.new(@seq)
         end
-        features << feature
+        feature_ids << feature_id
       end
 
-      {% for ivar in T.instance_vars %}
-        pass do
-          feature = @features.put_if_absent(element.@{{ivar}}) do
-            @seq, _ = @seq + 1, FeatureId.new(@seq)
-          end
-          features << feature
-        end
-      {% end %}
-
-      features.each do |feature|
-        usage = @index.put_if_absent(feature) { Set(Element).new }
+      feature_ids.each do |feature_id|
+        usage = @index.put_if_absent(feature_id) { Set(Element).new }
         usage << element
       end
 
@@ -224,7 +225,7 @@ class Ww::Harmony
 
       @changelog = @changelog.try(&.after_removed(element))
 
-      pass(element.class) do |feature|
+      IndexedSet(Element, Feature).each_feature(element) do |feature|
         feature_id = @features[feature]
 
         usage = @index[feature_id]
@@ -234,19 +235,6 @@ class Ww::Harmony
         assert @index.delete(feature_id)
         assert @features.delete(feature)
       end
-
-      {% for ivar in T.instance_vars %}
-        pass(element.@{{ivar}}) do |feature|
-          feature_id = @features[feature]
-
-          usage = @index[feature_id]
-          assert usage.delete(element)
-          next unless usage.empty?
-
-          assert @index.delete(feature_id)
-          assert @features.delete(feature)
-        end
-      {% end %}
 
       true
     end
