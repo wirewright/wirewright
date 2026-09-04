@@ -1217,7 +1217,8 @@ module Ww::Scenery
       #
       # |@pattern
       # (viewport children_+ ⍊
-      #   aim⋮ on
+      #   aim-through⋮ false
+      #   aim-pan⋮ true
       #   page-x_⋮ 0
       #   page-y_⋮ 0
       #   offset-x_⋮ 0
@@ -1229,14 +1230,12 @@ module Ww::Scenery
       #
       # |@key children scenery
       #
-      # |@key aim
-      # Specifies how the viewport will handle nested `aim` nodes and
-      # `selection-aim` selections.
+      # |@key aim-through
+      # Whether to pass aim rects through to parent viewports. They will in turn aim
+      # to show this viewport and the aimed thing(s) inside it.
       #
-      # - `on`: absorbs aim rects while adjusting the viewport (default, fallback).
-      # - `on-through`: passes aim rects through while adjusting the viewport.
-      # - `off`: absorbs aim rects without adjusting the viewport.
-      # - `off-through`: passes aim rects through without adjusting the viewport.
+      # |@key aim-pan
+      # Whether to adjust the viewport to show the aimed thing(s).
       #
       # |@key page-x scenery.unit
       # TODO: How to describe this?
