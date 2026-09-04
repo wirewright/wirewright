@@ -182,7 +182,7 @@ module Ww::Rack::Database
         Exec.new(sql, transcribe(rest.items))
       end
 
-      # |@ rack.db.query
+      # |@ rack.db.stmt
       #
       # |@pattern
       # (query sql_string args_*)

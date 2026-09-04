@@ -508,7 +508,47 @@ module Ww::Rack
       # |@ rack.locals
       #
       # |@pattern
-      # [locals locals←((%past @_ min: 0)) _*]
+      # [locals locals←((%past @_ min: 0)) children_*]
+      #
+      # |@key locals rack.edge
+      # A list of edges to keep local to *children*.
+      #
+      # |@key children rack
+      # Zero or more child nodes.
+      #
+      # |@summary
+      # Groups zero or more nodes and introduces a new scope, importing all edges
+      # from the outside with an explicit list of exemptions.
+      #
+      # |@block
+      # The `locals` node is basically the opposite of `rack.module`. Instead of
+      # *blocking* all edges except some, `locals` *allows* all edges *except* some.
+      # In other words, while a `module` declares which edges to share, `locals`
+      # declares which edges to keep local.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x "Hello")
+      # (cell @y)
+      # (locals (@x)
+      #   (cell @x "Kaixo")
+      #   (feed @x @y))
+      #
+      # ;; Frame 1
+      #
+      # (cell @x "Hello")
+      # (cell @y "Kaixo")
+      # (locals (@x)
+      #   (cell @x)
+      #   (feed @x @y))
+      # ```
+      #
+      # In the example above, the `cell` inside `locals` wins because `feed` refers
+      # to its edge. If `feed` were to try searching for `@x` higher in the node tree,
+      # it'd hit `locals`, which blocks search specifically for `@x`. When `feed` searches
+      # for `@y`, `locals` passe it through, so the destination cell is found correctly.
       matchpi %{[locals locals←((%past @_ min: 0)) _*]} do
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
       end
@@ -1275,22 +1315,48 @@ module Ww::Rack
 
       # |@ rack.transfer
       #
+      # |@summary
+      # Moves values from one place to another, transforming them as they pass through.
+
+      # |@ rack.transfer
+      #
       # |@pattern
       # [transfer (@src_ pattern_ @dst_) template_]
       #
       # |@key src rack.edge
-      # The edge used to find the cell from which to take a value.
+      # The edge identifying a place from which to take the input. It must be
+      # nonempty for the transfer to be carried out.
       #
       # |@key pattern m1.operator
-      # The pattern used to gate transfer. The captures it makes are made available in
-      # *template* as variables.
+      # The pattern used to filter input terms. The captures it makes are made
+      # available in *template* as Alloy variables.
       #
       # |@key dst rack.edge
-      # The edge used to find the cell where to place the value.
+      # The edge identifying a place where to put the output. It must be empty for
+      # the transfer to be carried out.
       #
       # |@key template alloy
-      # The template to use to transform the value in passing. Captures made in
-      # *pattern* are available in the template as variables.
+      # The template to use to transform the input value to the output value. Captures
+      # made in *pattern* are available in the template as Alloy variables.
+      #
+      # |@block
+      # Moves a matching value from *src* to *dst*, transforming it in passing
+      # using *template*.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 2)
+      # (cell @y)
+      # (transfer (@x ±n @y) ^(* n 2))
+      #
+      # ;; Frame 1
+      #
+      # (cell @x)
+      # (cell @y 4)
+      # (transfer (@x ±n @y) ^(* n 2))
+      # ```
       matchpi %{[transfer (@src_ pattern_ @dst_) template_]} do
         D7.mixture(node, Term.of(:transfer, { {:not}, {src}, {pattern}, dst }, template)) { node }
       end
@@ -1299,6 +1365,47 @@ module Ww::Rack
       #
       # |@pattern
       # [transfer (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]
+      #
+      # |@key srcs rack.edge
+      # One or more edges identifying places to take input values from. All of
+      # them must be nonempty for the transfer to be carried out.
+      #
+      # |@key pattern m1.operator
+      # The pattern used to filter input terms. The captures it makes are made
+      # available in *template* as Alloy variables. The values of *srcs* are
+      # passed in matching order: e.g., for `(@x @y @z)` where `(cell @x 100)`,
+      # `(cell @y 200)`, `(cell @z 300)`, *pattern* will be shown `(100 200 300)`.
+      #
+      # |@key dst rack.edge
+      # The edge identifying a place where to put the output. It must be empty for
+      # the transfer to be carried out.
+      #
+      # |@block
+      # Moves one or more matching values from *srcs* to *dst*, transforming them in
+      # passing using *template*.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 100)
+      # (cell @y 200)
+      # (cell @z 300)
+      # (transfer ((@x @y @z) (x_ y_ z_) @sink)
+      #   (^z ^(* y 2) ^x))
+      #
+      # (cell @sink)
+      #
+      # ;; Frame 1
+      #
+      # (cell @x)
+      # (cell @y)
+      # (cell @z)
+      # (transfer ((@x @y @z) (x_ y_ z_) @sink)
+      #   (^z ^(* y 2) ^x))
+      #
+      # (cell @sink (300 400 100))
+      # ```
       matchpi %{[transfer (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
         D7.mixture(node, Term.of(:transfer, { {:not}, srcs, pattern, dst }, template)) { node }
       end
@@ -1307,6 +1414,75 @@ module Ww::Rack
       #
       # |@pattern
       # [transfer ((not (%group inhibitors_ (%past @_))) srcs←((%past @_ min: 1)) pattern_ @dst_) template_]
+      #
+      # |@key inhibitors rack.edge
+      # Zero or more *inhibitor* edges. They identify places that, if nonempty, prevent
+      # this `transfer` from carrying out its job even if all other conditions are satisfactory.
+      #
+      # |@key srcs rack.edge
+      # One or more edges identifying places to take input values from. All of
+      # them must be nonempty for the transfer to be carried out.
+      #
+      # |@key pattern m1.operator
+      # The pattern used to filter input terms. The captures it makes are made
+      # available in *template* as Alloy variables. The values of *srcs* are
+      # passed in matching order: e.g., for `(@x @y @z)` where `(cell @x 100)`,
+      # `(cell @y 200)`, `(cell @z 300)`, *pattern* will be shown `(100 200 300)`.
+      #
+      # |@key dst rack.edge
+      # The edge identifying a place where to put the output. It must be empty for
+      # the transfer to be carried out.
+      #
+      # |@block
+      # Moves one or more matching values from *srcs* to *dst*, transforming them in
+      # passing using *template*, under the condition that all of the *inhibitors*
+      # must be empty.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @inhibitor)
+      #
+      # (cell @x 100)
+      # (cell @y 200)
+      #
+      # (transfer ((not @inhibitor) (@x @y) (±x ±y) @sum)
+      #   ^(+ x y))
+      #
+      # (cell @sum)
+      #
+      # ;; Frame 1
+      #
+      # (cell @inhibitor)
+      #
+      # (cell @x)
+      # (cell @y)
+      #
+      # (transfer ((not @inhibitor) (@x @y) (±x ±y) @sum)
+      #   ^(+ x y))
+      #
+      # (cell @sum 300)
+      # ```
+      #
+      # Compare this with:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @inhibitor "Kaixo mundua")
+      #
+      # (cell @x 100)
+      # (cell @y 200)
+      #
+      # (transfer ((not @inhibitor) (@x @y) (±x ±y) @sum)
+      #   ^(+ x y))
+      #
+      # (cell @sum)
+      # ```
+      #
+      # Here, because the `@inhibitor` cell is nonempty, the transfer is not
+      # carried out.
       matchpi %{[transfer ((not (%group inhibitors_ (%past @_))) srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
         edges = [] of Term
         edges.concat(inhibitors.items)
@@ -2766,8 +2942,8 @@ module Ww::Rack
       # [db (@stmt_ -> uri_string -> @response_) status_]
       #
       # |@key stmt rack.edge
-      # The edge used to find the cell containing the SQL to execute. Its value must
-      # be one of: `rack.db.stmt`, `rack.db.query`.
+      # The edge identifying a place from which to take the SQL code. Its value must
+      # be one a `rack.db.stmt`.
       #
       # |@key uri
       # The URI to connect to the database. Currently, only the following databases
@@ -2775,7 +2951,7 @@ module Ww::Rack
       # - SQLite3: for example, `sqlite:/tmp/people.db`.
       #
       # |@key response rack.edge
-      # The edge used to find the cell to store the database response. The response
+      # The edge identifying a place where to put the response of the database. The response
       # can be of several forms:
       # - `(ok ±rows-affected)` for successful `exec` statements.
       # - `(ok rows_dict*)` for successful `query` statements.
@@ -2788,8 +2964,133 @@ module Ww::Rack
       #
       # - `up` means the connection is active.
       # - `pending` means there is an ongoing transition.
-      # - `(dn detail_string)` means the connection is inactive, with *detail
+      # - `(dn detail_string)` means the connection is inactive, with *detail*
       #   providing more details as to why.
+      #
+      # |@summary
+      # A database client.
+      #
+      # |@block
+      # Provides access to a database.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @plan
+      #   ((exec "create table if not exists people (name string, age int)")
+      #    (exec "insert into people values (?, ?)" "Alice" 25)
+      #    (exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (feed (@plan front) @stmt)
+      #
+      # (cell @stmt)
+      # (cell @response)
+      # (db (@stmt -> "sqlite3:/tmp/people.db" -> @response))
+      # ;; We discard only number OKs, which correspond to `exec`s. Query OKs
+      # ;; won't be discarded.
+      # (discard @response (ok _number))
+      #
+      # ;; Frame 1
+      # ;; Assume we connected to the database. I will omit `feed`, `db`, `discard`
+      # ;; nodes because they do not change; otherwise, this step-through will
+      # ;; be excessively long.
+      #
+      # (cell @plan
+      #   ((exec "insert into people values (?, ?)" "Alice" 25)
+      #    (exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (cell @stmt (exec "create table if not exists people (name string, age int)"))
+      # (cell @response)
+      #
+      # ;; Frame 2
+      #
+      # (cell @plan
+      #   ((exec "insert into people values (?, ?)" "Alice" 25)
+      #    (exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (cell @stmt)
+      # (cell @response (ok 0))
+      #
+      # ;; Frame 3
+      #
+      # (cell @plan
+      #   ((exec "insert into people values (?, ?)" "Alice" 25)
+      #    (exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (cell @stmt)
+      # (cell @response)
+      #
+      # ;; Frame 4
+      #
+      # (cell @plan
+      #   ((exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (cell @stmt (exec "insert into people values (?, ?)" "Alice" 25))
+      # (cell @response)
+      #
+      # ;; Frame 5
+      #
+      # (cell @plan
+      #   ((exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (cell @stmt)
+      # (cell @response (ok 1))
+      #
+      # ;; Frame 6
+      #
+      # (cell @plan
+      #   ((exec "insert into people values (?, ?)" "Bob" 26)
+      #    (exec "insert into people values (?, ?)" "Charlie" 27)
+      #    (query "select * from people")))
+      #
+      # (cell @stmt)
+      # (cell @response)
+      #
+      # ;; ... and similarly for Bob and Charlie:
+      #
+      # (cell @plan
+      #   ((query "select * from people")))
+      #
+      # (cell @stmt)
+      # (cell @response (ok 1)) ;; Charlie's ok
+      #
+      # ;; Frame N
+      #
+      # (cell @plan
+      #   ((query "select * from people")))
+      #
+      # (cell @stmt)
+      # (cell @response)
+      #
+      # ;; Frame N+1
+      #
+      # (cell @plan ())
+      # (cell @stmt (query "select * from people"))
+      # (cell @response)
+      #
+      # ;; Frame N+2
+      #
+      # (cell @plan ())
+      # (cell @stmt)
+      # (cell @response
+      #   (ok
+      #     {"name": "Alice", "age": 25}
+      #     {"name": "Bob", "age" 26}
+      #     {"name": "Charlie", "age": 27}))
+      # ```
       matchpi(
         %{[db (@stmt_ -> _string -> @response_)]},
         %{[db (@stmt_ -> _string -> @response_) _]},
