@@ -87,14 +87,14 @@ class Ww::Harmony
     abstract def on_crash(exception : Exception) : Nil
     abstract def on_disconnect(detail : String) : Nil
 
-    abstract def on_message_received_by_peer(payload : Term::Blob) : Nil
-    abstract def on_message_not_sent(payload : Term::Blob) : Nil
-    abstract def on_message_handled(msgid : MsgId) : Nil
+    abstract def on_message_delivered_to_remote(payload : Term::Blob) : Nil
+    abstract def on_message_declined_by_remote(payload : Term::Blob) : Nil
+    abstract def on_message_from_remote_accepted(msgid : MsgId) : Nil
 
-    abstract def on_receive_ready : Nil
-    abstract def on_receive_busy : Nil
-    abstract def on_informed_ready : Nil
-    abstract def on_informed_busy : Nil
+    abstract def on_remote_ready : Nil
+    abstract def on_remote_busy : Nil
+    abstract def on_sent_ready_to_remote : Nil
+    abstract def on_sent_busy_to_remote : Nil
 
     alias HandleFlow = HandleContinue | HandleBreak | HandleAbort
 
@@ -157,34 +157,34 @@ class Ww::Harmony
     # We want to send something.
     def handle(command : SocketSend) : HandleFlow
       unless @loop.stream?(&.write(command.payload.to_slice))
-        @loop.on_message_not_sent(command.payload)
+        @loop.on_message_declined_by_remote(command.payload)
         return HandleAbort.new("message not sent")
       end
 
-      # In nonblocking mode, seeing it "go toward & across the wire" counts
-      # as a successful send.
-      @loop.on_message_received_by_peer(command.payload)
+      # In nonblocking mode, seeing the message "go toward & across the wire"
+      # counts as a delivery.
+      @loop.on_message_delivered_to_remote(command.payload)
 
       HandleContinue.new
     end
 
     # We want to confirm we've received their message.
     def handle(command : SocketAccept) : HandleFlow
-      @loop.on_message_handled(command.msgid)
+      @loop.on_message_from_remote_accepted(command.msgid)
 
       HandleContinue.new
     end
 
     # We are ready to accept the next message.
     def handle(command : SocketInformReady) : HandleFlow
-      @loop.on_informed_ready
+      @loop.on_sent_ready_to_remote
 
       HandleContinue.new
     end
 
     # We cannot accept messages anymore.
     def handle(command : SocketInformBusy) : HandleFlow
-      @loop.on_informed_busy
+      @loop.on_sent_busy_to_remote
 
       HandleContinue.new
     end
@@ -195,7 +195,7 @@ class Ww::Harmony
       # way to make the other side say, "I'm ready". Instead, we manufacture and
       # send this message locally. Basically, we're saying, "pretend the other
       # side said it's ready".
-      @loop.on_receive_ready
+      @loop.on_remote_ready
 
       HandleContinue.new
     end
@@ -323,7 +323,7 @@ class Ww::Harmony
       end
 
       @outstanding = nil
-      @loop.on_message_received_by_peer(payload)
+      @loop.on_message_delivered_to_remote(payload)
 
       HandleContinue.new
     end
@@ -335,15 +335,15 @@ class Ww::Harmony
 
       @peer_ready = false
       @outstanding = nil
-      @loop.on_message_not_sent(payload)
-      @loop.on_receive_busy
+      @loop.on_message_declined_by_remote(payload)
+      @loop.on_remote_busy
 
       HandleContinue.new
     end
 
     def handle(frame : Protocol::Ready) : HandleFlow
       @peer_ready = true
-      @loop.on_receive_ready
+      @loop.on_remote_ready
 
       HandleContinue.new
     end
@@ -351,7 +351,7 @@ class Ww::Harmony
     # We want to send something.
     def handle(command : SocketSend) : HandleFlow
       unless @outstanding.nil? && @peer_ready
-        @loop.on_message_not_sent(command.payload)
+        @loop.on_message_declined_by_remote(command.payload)
         return HandleContinue.new
       end
 
@@ -370,7 +370,7 @@ class Ww::Harmony
         return HandleAbort.new("ACCEPTED not sent")
       end
 
-      @loop.on_message_handled(command.msgid)
+      @loop.on_message_from_remote_accepted(command.msgid)
 
       HandleContinue.new
     end
@@ -383,7 +383,7 @@ class Ww::Harmony
         return HandleAbort.new("READY not sent")
       end
 
-      @loop.on_informed_ready
+      @loop.on_sent_ready_to_remote
 
       HandleContinue.new
     end
@@ -391,7 +391,7 @@ class Ww::Harmony
     # We cannot accept messages anymore.
     def handle(command : SocketInformBusy) : HandleFlow
       @capacity = 0u32
-      @loop.on_informed_busy
+      @loop.on_sent_busy_to_remote
 
       HandleContinue.new
     end

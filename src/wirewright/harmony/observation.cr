@@ -2,11 +2,11 @@ class Ww::Harmony
   # NOTE: Observations are strictly internal. You have no access to them from outside
   # Harmony. The only things you have access to is `Fact` and `Goal`.
   alias Observation = SocketServerStarted | HttpServerStarted | ServerStopped |
-                      ServerStartFailed | ServerCrashed | MessageReceivedByPeer | MessageNotSent |
+                      ServerStartFailed | ServerCrashed | MessageDeliveredToRemote | MessageDeclinedByRemote |
                       PeerConnected | PeerDisconnected | PeerCrashed | PeerReceived |
-                      MessageHandled | FactForgotten | SocketClientStarted | HttpClientStarted |
-                      ClientStopped | SocketClientReceived | ClientStartFailed | Ready | Busy |
-                      InformedReady | InformedBusy | ActionTransferredToQueue | ActionRejected |
+                      MessageFromRemoteAccepted | FactForgotten | SocketClientStarted | HttpClientStarted |
+                      ClientStopped | SocketClientReceived | ClientStartFailed | RemoteReady | RemoteBusy |
+                      SentReadyToRemote | SentBusyToRemote | ActionTransferredToQueue | ActionRejected |
                       HttpRequestReceived | HttpRequestHandled | HttpResponseReceived |
                       WebSocketHandlerAdded | WebSocketHandlerRemoved
 
@@ -47,15 +47,15 @@ class Ww::Harmony
   defrecord ClientStopped, defn : ClientDefn, client_id : ClientId, detail : String, brief: true
   defrecord ClientStartFailed, defn : ClientDefn, detail : String, brief: true
 
-  defrecord MessageHandled, endpoint_id : EndpointId, msgid : MsgId, brief: true
-  defrecord MessageReceivedByPeer, endpoint_id : EndpointId, payload : Term::Blob, brief: true
-  defrecord MessageNotSent, endpoint_id : EndpointId, payload : Term::Blob, brief: true
+  defrecord MessageFromRemoteAccepted, endpoint_id : EndpointId, msgid : MsgId, brief: true
+  defrecord MessageDeliveredToRemote, endpoint_id : EndpointId, payload : Term::Blob, brief: true
+  defrecord MessageDeclinedByRemote, endpoint_id : EndpointId, payload : Term::Blob, brief: true
 
-  defrecord Ready, endpoint_id : EndpointId, brief: true
-  defrecord Busy, endpoint_id : EndpointId, brief: true
+  defrecord RemoteReady, endpoint_id : EndpointId, brief: true
+  defrecord RemoteBusy, endpoint_id : EndpointId, brief: true
 
-  defrecord InformedReady, endpoint_id : EndpointId, brief: true
-  defrecord InformedBusy, endpoint_id : EndpointId, brief: true
+  defrecord SentReadyToRemote, endpoint_id : EndpointId, brief: true
+  defrecord SentBusyToRemote, endpoint_id : EndpointId, brief: true
 
   defrecord FactForgotten, fact : Fact, brief: true
   defrecord ActionTransferredToQueue, action : Action, queue_id : UInt64, brief: true

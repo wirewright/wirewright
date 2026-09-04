@@ -161,32 +161,32 @@ class Ww::Harmony
       @observations << ClientStopped.new(@defn, @id, detail)
     end
 
-    def on_receive_ready : Nil
-      @observations << Ready.new(@id)
+    def on_remote_ready : Nil
+      @observations << RemoteReady.new(@id)
     end
 
-    def on_receive_busy : Nil
-      @observations << Busy.new(@id)
+    def on_remote_busy : Nil
+      @observations << RemoteBusy.new(@id)
     end
 
-    def on_informed_ready : Nil
-      @observations << InformedReady.new(@id)
+    def on_sent_ready_to_remote : Nil
+      @observations << SentReadyToRemote.new(@id)
     end
 
-    def on_informed_busy : Nil
-      @observations << InformedBusy.new(@id)
+    def on_sent_busy_to_remote : Nil
+      @observations << SentBusyToRemote.new(@id)
     end
 
-    def on_message_received_by_peer(payload : Term::Blob) : Nil
-      @observations << MessageReceivedByPeer.new(@id, payload)
+    def on_message_delivered_to_remote(payload : Term::Blob) : Nil
+      @observations << MessageDeliveredToRemote.new(@id, payload)
     end
 
-    def on_message_not_sent(payload : Term::Blob) : Nil
-      @observations << MessageNotSent.new(@id, payload)
+    def on_message_declined_by_remote(payload : Term::Blob) : Nil
+      @observations << MessageDeclinedByRemote.new(@id, payload)
     end
 
-    def on_message_handled(msgid : MsgId) : Nil
-      @observations << MessageHandled.new(@id, msgid)
+    def on_message_from_remote_accepted(msgid : MsgId) : Nil
+      @observations << MessageFromRemoteAccepted.new(@id, msgid)
     end
   end
 end

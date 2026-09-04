@@ -66,13 +66,17 @@ class Ww::Harmony
 
     # Yields each element of type T, whose instance variables include all
     # of *hints*.
-    def each(cls : T.class, **hints : Feature, & : T ->) : Nil forall T
-      each(cls, hints) { |element| yield element }
-    end
+    def each(cls : T.class, **hints : **KV, & : T ->) : Nil forall T, KV
+      {%
+        # Validate KV keys at compile-time, otherwise we'd have a very hard time hunting
+        # KeyErrors from .match?
+        KV.keys.each do |key|
+          unless T.instance_vars.any? { |ivar| ivar.name == key }
+            KV.raise "invalid key #{key}"
+          end
+        end
+      %}
 
-    # Yields each element of type T, whose instance variables include all
-    # of *hints*.
-    def each(cls : T.class, hints : NamedTuple, & : T ->) : Nil forall T
       return unless feature_id = @features[cls]?
 
       membersets = Pf::Kit.stack_array(Set(Element), 8)

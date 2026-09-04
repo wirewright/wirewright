@@ -2017,12 +2017,12 @@ module Ww::Rack::Accord
   private def sync_ingoing(ctx, server, device, id : Harmony::PeerId, inbox, changes) : Nil
     received = Pf::Kit.stack_array({Harmony::MsgId, Term}, 1)
 
-    ctx.world.each(Harmony::IngoingMessage, endpoint_id: id) do |fact|
-      confirmation = Harmony::IngoingReceiveConfirmation.new(fact.endpoint_id, fact.msgid)
+    ctx.world.each(Harmony::IngoingMessage, receiver_id: id) do |fact|
+      confirmation = Harmony::MessageInLocalInbox.new(fact.receiver_id, fact.msgid)
 
       # Initiate confirmation. If confirmation is a fact, this means it's complete.
       unless ctx.world.includes?(confirmation)
-        ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
+        ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.receiver_id, fact.msgid)
         ctx.goals << confirmation
         next
       end
@@ -2056,7 +2056,7 @@ module Ww::Rack::Accord
     case encode_out = encode(server.encoder, msg)
     in Term::Blob
       # They've received it, we can safely dequeue.
-      if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(id, encode_out))
+      if ctx.world.includes?(Harmony::MessageInRemoteInbox.new(id, encode_out))
         changes << DeviceDequeue.new(device.key, outbox.key)
         return
       end
@@ -2076,7 +2076,7 @@ module Ww::Rack::Accord
       # Keep the peer and all messages designated for it alive. We will process
       # the messages on the next tick.
       ctx.goals.add(Harmony::PeerKeepalive.new(fact.peer_id))
-      ctx.world.each(Harmony::IngoingMessage, endpoint_id: fact.peer_id) do |msg_fact|
+      ctx.world.each(Harmony::IngoingMessage, receiver_id: fact.peer_id) do |msg_fact|
         ctx.goals.add(Harmony::IngoingMessageKeepalive.new(fact.peer_id, msg_fact.msgid))
       end
 
@@ -2127,7 +2127,7 @@ module Ww::Rack::Accord
         next if inbox && inbox.size >= server.decoder_capacity
         next if outbox && outbox.size >= server.encoder_capacity
 
-        ctx.goals.add(Harmony::MessageSlot.new(peer_id, server.decoder_capacity))
+        ctx.goals.add(Harmony::MessageCapacity.new(peer_id, server.decoder_capacity))
       end
 
       ctx.goals << Harmony::PeerKeepalive.new(peer_id)
@@ -2247,7 +2247,7 @@ module Ww::Rack::Accord
         next
       end
 
-      if ctx.world.includes?(Harmony::RemoteReceiveConfirmation.new(incarnation, message))
+      if ctx.world.includes?(Harmony::MessageInRemoteInbox.new(incarnation, message))
         # Consider it sent, erase the message.
         source_patch = D7.patch(source.node, {2, nil})
         next
@@ -2267,8 +2267,8 @@ module Ww::Rack::Accord
       ingoing = nil
 
       # Keep all pending messages alive, but save only the one with min(msgid).
-      ctx.world.each(Harmony::IngoingMessage, endpoint_id: incarnation) do |fact|
-        ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid)
+      ctx.world.each(Harmony::IngoingMessage, receiver_id: incarnation) do |fact|
+        ctx.goals << Harmony::IngoingMessageKeepalive.new(fact.receiver_id, fact.msgid)
 
         if ingoing.nil? || fact.msgid.repr < ingoing.msgid.repr
           ingoing = fact
@@ -2278,11 +2278,11 @@ module Ww::Rack::Accord
       next unless target.empty?
 
       if ingoing.nil?
-        ctx.goals.add(Harmony::MessageSlot.new(incarnation, capacity: 1u32))
+        ctx.goals.add(Harmony::MessageCapacity.new(incarnation, capacity: 1u32))
         next
       end
 
-      confirmation = Harmony::IngoingReceiveConfirmation.new(ingoing.endpoint_id, ingoing.msgid)
+      confirmation = Harmony::MessageInLocalInbox.new(ingoing.receiver_id, ingoing.msgid)
 
       # Initiate confirmation. If confirmation is a fact, this means it's complete.
       unless ctx.world.includes?(confirmation)
@@ -2290,7 +2290,7 @@ module Ww::Rack::Accord
         next
       end
 
-      ctx.goals.delete(Harmony::IngoingMessageKeepalive.new(ingoing.endpoint_id, ingoing.msgid))
+      ctx.goals.delete(Harmony::IngoingMessageKeepalive.new(ingoing.receiver_id, ingoing.msgid))
 
       case decode_out = decode(client.decoder, ingoing.payload)
       in Term

@@ -524,38 +524,39 @@ class Ww::Harmony
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : MessageHandled) : Nil
-    ctx.world.add(IngoingReceiveConfirmation.new(observation.endpoint_id, observation.msgid))
+  def self.apply(ctx : ApplyContext, observation : MessageFromRemoteAccepted) : Nil
+    ctx.world.add(MessageInLocalInbox.new(observation.endpoint_id, observation.msgid))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : MessageReceivedByPeer) : Nil
-    ctx.world.add(RemoteReceiveConfirmation.new(observation.endpoint_id, observation.payload))
+  def self.apply(ctx : ApplyContext, observation : MessageDeliveredToRemote) : Nil
+    ctx.world.add(MessageInRemoteInbox.new(observation.endpoint_id, observation.payload))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : MessageNotSent) : Nil
+  def self.apply(ctx : ApplyContext, observation : MessageDeclinedByRemote) : Nil
+    # Just cancel the send.
     ctx.actions.delete(SendMessage.new(observation.endpoint_id, observation.payload))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : InformedReady) : Nil
-    ctx.world.add(MessageSlotReflection.new(observation.endpoint_id))
+  def self.apply(ctx : ApplyContext, observation : SentReadyToRemote) : Nil
+    ctx.world.add(LocalMessageDemand.new(observation.endpoint_id))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : InformedBusy) : Nil
-    ctx.world.delete(MessageSlotReflection.new(observation.endpoint_id))
+  def self.apply(ctx : ApplyContext, observation : SentBusyToRemote) : Nil
+    ctx.world.delete(LocalMessageDemand.new(observation.endpoint_id))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : Ready) : Nil
-    ctx.world.add(RemoteMessageSlot.new(observation.endpoint_id))
+  def self.apply(ctx : ApplyContext, observation : RemoteReady) : Nil
+    ctx.world.add(RemoteMessageDemand.new(observation.endpoint_id))
   end
 
   # :nodoc:
-  def self.apply(ctx : ApplyContext, observation : Busy) : Nil
-    ctx.world.delete(RemoteMessageSlot.new(observation.endpoint_id))
+  def self.apply(ctx : ApplyContext, observation : RemoteBusy) : Nil
+    ctx.world.delete(RemoteMessageDemand.new(observation.endpoint_id))
   end
 
   # :nodoc:
@@ -655,16 +656,16 @@ class Ww::Harmony
     in Client
       # Ditto for clients.
       world.any?(RunningClient, defn: goal.defn) || world.any?(BrokenClient, defn: goal.defn)
-    in IngoingReceiveConfirmation
+    in MessageInLocalInbox
       world.includes?(goal)
     in OutgoingMessage
       # An outgoing message is "satisfied" when the other side confirms it received
       # the message. Alternatively, an outgoing message is satisfied when there is
       # no slot on the other side.
-      world.any?(RemoteReceiveConfirmation, endpoint_id: goal.endpoint_id, payload: goal.payload) ||
-        !world.any?(RemoteMessageSlot, endpoint_id: goal.endpoint_id)
-    in MessageSlot
-      world.includes?(MessageSlotReflection.new(goal.endpoint_id))
+      world.any?(MessageInRemoteInbox, endpoint_id: goal.endpoint_id, payload: goal.payload) ||
+        !world.any?(RemoteMessageDemand, endpoint_id: goal.endpoint_id)
+    in MessageCapacity
+      world.includes?(LocalMessageDemand.new(goal.endpoint_id))
     in HttpServerResponse
       # This goal is satisfied when the server no longer asks for us to process such
       # a request.
@@ -692,18 +693,18 @@ class Ww::Harmony
     in IngoingMessage
       # An ingoing message is wanted as long as the corresponding keepalive
       # token is present in goals.
-      IngoingMessageKeepalive.new(fact.endpoint_id, fact.msgid).in?(goals)
-    in IngoingReceiveConfirmation
+      IngoingMessageKeepalive.new(fact.receiver_id, fact.msgid).in?(goals)
+    in MessageInLocalInbox
       # An ingoing receive confirmation is needed while such confirmation is
       # requested by the goals.
       goals.includes?(fact)
-    in RemoteReceiveConfirmation
+    in MessageInRemoteInbox
       # A send confirmation is needed while there's a matching outgoing message
       # that needs one.
       goals.any?(OutgoingMessage, endpoint_id: fact.endpoint_id, payload: fact.payload)
-    in MessageSlotReflection
-      goals.any?(MessageSlot, endpoint_id: fact.endpoint_id)
-    in RemoteMessageSlot
+    in LocalMessageDemand
+      goals.any?(MessageCapacity, endpoint_id: fact.endpoint_id)
+    in RemoteMessageDemand
       true
     in HttpServerRequest
       HttpServerRequestKeepalive.new(fact.request_id).in?(goals)
@@ -736,8 +737,13 @@ class Ww::Harmony
         # handler to run.
         world.any?(RunningWebSocketHandler, server_id: belief.server_id)
       end
-    in IngoingMessage, IngoingReceiveConfirmation, RemoteReceiveConfirmation,
-       MessageSlotReflection, RemoteMessageSlot
+    in IngoingMessage
+      case ept = belief.receiver_id
+      in PeerId   then world.any?(RunningPeer, peer_id: ept)
+      in ClientId then world.any?(RunningClient, client_id: ept)
+      end
+    in MessageInLocalInbox, MessageInRemoteInbox,
+       LocalMessageDemand, RemoteMessageDemand
       # These ones want their endpoint to be running.
       case ept = belief.endpoint_id
       in PeerId   then world.any?(RunningPeer, peer_id: ept)
@@ -786,11 +792,11 @@ class Ww::Harmony
       AddWebSocketHandler.new(goal.server_id, goal.link)
     in Client
       StartClient.new(goal.defn)
-    in IngoingReceiveConfirmation
+    in MessageInLocalInbox
       AcceptMessage.new(goal.endpoint_id, goal.msgid)
     in OutgoingMessage
       SendMessage.new(goal.endpoint_id, goal.payload)
-    in MessageSlot
+    in MessageCapacity
       InformReady.new(goal.endpoint_id, goal.capacity)
     in HttpServerResponse
       RespondToHttpRequest.new(goal.server_id, goal.request_id, goal.response)
@@ -804,7 +810,7 @@ class Ww::Harmony
     case fact
     in RunningPeer
       DropPeer.new(fact.peer_id)
-    in RunningWebSocketHandler, MessageSlotReflection, HttpServerRequest
+    in RunningWebSocketHandler, LocalMessageDemand, HttpServerRequest
       ForgetFact.new(fact)
     end
   end
@@ -850,7 +856,7 @@ class Ww::Harmony
       DropPeer.new(fact.peer_id)
     in RunningWebSocketHandler
       RemoveWebSocketHandler.new(fact.server_id)
-    in MessageSlotReflection
+    in LocalMessageDemand
       InformBusy.new(fact.endpoint_id)
     in HttpServerRequest
       RejectHttpRequest.new(fact.server_id, fact.request_id)
@@ -888,15 +894,15 @@ class Ww::Harmony
     in DropPeer
       !world.any?(RunningPeer, peer_id: action.peer_id)
     in AcceptMessage
-      world.includes?(IngoingReceiveConfirmation.new(action.endpoint_id, action.msgid))
+      world.includes?(MessageInLocalInbox.new(action.endpoint_id, action.msgid))
     in SendMessage
-      world.includes?(RemoteReceiveConfirmation.new(action.endpoint_id, action.payload))
+      world.includes?(MessageInRemoteInbox.new(action.endpoint_id, action.payload))
     in ForgetFact
       !world.includes?(action.fact)
     in InformReady
-      world.includes?(MessageSlotReflection.new(action.endpoint_id))
+      world.includes?(LocalMessageDemand.new(action.endpoint_id))
     in InformBusy
-      !world.includes?(MessageSlotReflection.new(action.endpoint_id))
+      !world.includes?(LocalMessageDemand.new(action.endpoint_id))
     in RespondToHttpRequest, RejectHttpRequest
       # These are completed if the request they are meant to respond to or
       # reject disappears.
