@@ -910,6 +910,66 @@ module Ww
           valueR(key, rewriter(successor, data))
         end
 
+        # |@ rho.stageR
+        #
+        # |@pattern
+        # [stageR successor_]
+        #
+        # |@key successor rho
+        #
+        # |@block
+        # The *stage rewriter* lets you split the rulebase into zero or more sections,
+        # called *stages*. *successor* is instantiated for each stage, the stage being
+        # the instance's rulebase, and the resulting rewriters are "stitched" together
+        # into a sequence using `rho.chainR`.
+        #
+        # |@example
+        # This is how `stageR` can be used with `rack.rewriter`:
+        #
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (rewriter (@x -> (stageR (scanR (rulesetR))) -> @y)
+        #  (stage
+        #    a => b
+        #    b => a)
+        #  (stage
+        #    a => 100
+        #    b => 200))
+        #
+        # (cell @x (a b a))
+        # (cell @y)
+        #
+        # ;; Frame 1 (rewriter omitted because it does not change)
+        # (cell @x)
+        # (cell @y (200 100 200))
+        #
+        # ;; Rewriting proceeded in two stages:
+        # ;;   Input: (a b a)
+        # ;; Stage 1: (b a b)
+        # ;; Stage 2: (200 100 200)
+        # ```
+        matchpi %{[stageR successor_]} do
+          continue unless document = data.as_d?
+
+          stages = Pf::Kit.stack_array(Rewriter, 4)
+
+          document.items.each do |item|
+            Term.matchpi?(item, %{[stage stagedata_*]}) do
+              stages << rewriter(successor, stagedata)
+            end
+          end
+
+          return noR if stages.empty?
+
+          zero = stages[0]
+          stages.each(within: 1..) do |successor|
+            zero = chainR(zero, successor)
+          end
+
+          zero
+        end
+
         # |@ rho.section
         #
         # |@pattern

@@ -495,3 +495,21 @@
   (frame/tail
     (cell @in {y: 200}))
   end)
+
+;; stageR
+(rack
+  (frame
+    (rewriter (@x -> (stageR (scanR (rulesetR))) -> @y)
+      (stage
+        a => b
+        b => a)
+      (stage
+        a => 100
+        b => 200))
+
+    (cell @x (a b a))
+    (cell @y))
+
+  (frame/tail
+    (cell @x)
+    (cell @y (200 100 200))))
