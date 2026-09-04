@@ -1236,29 +1236,26 @@
   ;; here because the error message in `pending` can be basically anything --
   ;; i.e. it's platform-dependent.
   (frame pattern: true fast-forward: true
-    ((%literal
-       (module {}
+    (%'(module {}
          (server (@pool ((ml @in) -> (tcp local 9813) -> (ml @out)) up)
            (backsys
              {¦ in: (±n _*) out: (_* `>n)}
                <> {(n): (), >n: ^(+ n 1)}))
-         (pool @pool)))
+         (pool @pool))
 
-     (%literal
-       (module {}
+     %'(module {}
          (server (@pool ((ml @in) -> (tcp local 9814) -> (ml @out)) up)
            (backsys
              {¦ in: (±n _*) out: (_* `>n)}
                <> {(n): (), >n: ^(+ n 1)}))
-         (pool @pool)))
+         (pool @pool))
 
-     (%literal
-       (module {}
+     %'(module {}
          (server (@pool ((ml @in) -> (tcp local 9815) -> (ml @out)) up)
            (backsys
              {¦ in: (±n _*) out: (_* `>n)}
                <> {(n): (), >n: ^(+ n 1)}))
-         (pool @pool)))
+         (pool @pool))
 
      _*
 
