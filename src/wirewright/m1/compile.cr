@@ -760,8 +760,12 @@ module Ww::M1
         )
       end
 
+      matchpiT %{[%'%mime type_]}, cue: :"%mime" do
+        Op::MimeString.new(compile(Π.pattern(type)))
+      end
+
       matchpiT %{[%'%mime type_ params_]}, cue: :"%mime" do
-        Op::Mime.new(compile(Π.pattern(type)), compile(Π.pattern(params)))
+        Op::MimeTypeAndParams.new(compile(Π.pattern(type)), compile(Π.pattern(params)))
       end
 
       matchpiT %{(%'%composition ⍊ min_ max_ type: %'_number)}, cue: {:"%composition", :_number} do

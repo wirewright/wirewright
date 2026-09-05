@@ -1326,8 +1326,19 @@ module Ww::M1
 
   # :nodoc:
   #
+  # (%mime "text/plain;charset=UTF-8")  (%mime "image/png")
+  def match(ctx, op : Op::MimeString, matchee : Tzip, plan)
+    return Fb[] unless blob = matchee.term.as_blob?
+    return Fb[] unless classif = blob.classif?
+
+    media_type_string = Tzip.new(Term.of(classif.to_s), Log.none)
+    match(ctx, op.successor, media_type_string, plan)
+  end
+
+  # :nodoc:
+  #
   # (%mime "text/plain" {charset: "UTF-8"})  (%mime "image/png" _)
-  def match(ctx, op : Op::Mime, matchee : Tzip, plan)
+  def match(ctx, op : Op::MimeTypeAndParams, matchee : Tzip, plan)
     return Fb[] unless blob = matchee.term.as_blob?
     return Fb[] unless classif = blob.classif?
 

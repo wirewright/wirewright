@@ -2943,6 +2943,34 @@ module Ww::M1
       # |@ m1.operator.mime
       #
       # |@pattern
+      # (%'%mime type_)
+      #
+      # |@key type m1.operator
+      # MIME type operator.
+      #
+      # See e.g. https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/MIME_types
+      # for reference.
+      #
+      # |@block
+      # Matches a blob's MIME type as a string.
+      #
+      # TODO: Currently, it is impossible to change a blob's MIME type through a backmap.
+      #
+      # |@example
+      # ```wwml
+      # (describe (%mime type_)) => ^type
+      # (describe _blob) => "no MIME type"
+      #
+      # (describe ⟬de ad be ef⟭)                            ;; => "no MIME type"
+      # (describe ⟬de ad be ef ⁑ application/octet-stream⟭) ;; => "application/octet-stream"
+      # ```
+      matchpi %{[%'%mime type_]}, cue: :"%mime" do
+        Term.of(:"%mime", Normalize.sealed(Π.pattern(type)))
+      end
+
+      # |@ m1.operator.mime
+      #
+      # |@pattern
       # (%'%mime type_ params_)
       #
       # |@key type m1.operator
@@ -2960,15 +2988,16 @@ module Ww::M1
       # |@block
       # Matches a blob's MIME type and parameters.
       #
-      # ```
+      # TODO: Currently, it is impossible to change a blob's MIME type through a backmap.
+      #
+      # |@example
+      # ```wwml
       # (describe (%mime "text/plain" {charset: "UTF-8"})) => "This is a UTF-8 text"
       # (describe (%mime "text/plain" _)) => "This is some other text"
       # (describe (%mime "image/png" _)) => "This is an image"
       # ```
       matchpi %{[%'%mime type_ params_]}, cue: :"%mime" do
-        Term.of(:"%mime",
-          Normalize.sealed(Π.pattern(type)),
-          Normalize.sealed(Π.pattern(params)))
+        Term.of(:"%mime", Normalize.sealed(Π.pattern(type)), Normalize.sealed(Π.pattern(params)))
       end
 
       # TODO: (%mime type_ subtype_ params_)
