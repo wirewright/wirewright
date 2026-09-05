@@ -803,8 +803,12 @@ module Ww
     end
 
     @[Dncast]
-    def append(item)
-      self.with(items.size, item)
+    def append(item, *, limit : UInt32 = UInt32::MAX)
+      if uitemsize + 1 < limit
+        self.with(uitemsize, item)
+      else
+        replace(0u32...(uitemsize + 1) - limit, Term.rep).with(limit - 1, item)
+      end
     end
 
     # FIXME: this MUST NOT be O(n), WTF?

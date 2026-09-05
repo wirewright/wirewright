@@ -8,7 +8,7 @@ module MuSoma
     getter stateR : Rho::Rewriter
     getter fbR : Rho::Rewriter
     getter app : App
-    getter history_limit : Int32 # TODO: Codex::Config#history_limit
+    getter history_limit : UInt32 # TODO: Codex::Config#history_limit
 
     # :nodoc:
     def initialize(@theme, @initial_state, @pretty, @stateR, @fbR, @app, @history_limit)
@@ -22,11 +22,11 @@ module MuSoma
       fbR = Rho.rewriter(Term.of(codex), section: Term.of(:fbR))
       app = App.new(codex)
 
-      history_limit = 128
+      history_limit = 128u32
       pass do
         next unless setting = codex[:settings, :"history-limit"]?
         next unless setting = setting.as_n?
-        next unless setting = setting.to?(Int32)
+        next unless setting = setting.to?(UInt32)
 
         history_limit = setting
       end

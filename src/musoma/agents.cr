@@ -788,33 +788,65 @@ module MuSoma
 
       ws.state.update do |state|
         Term.case(state) do
-          matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind|
-            prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
-            drafts1 = automaton.next_subframes(draft, prepass: prepass, library: ws.library.get)
-            draft1 = drafts1.last
+          matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind, ahead|
+            single_step = status == Term.of(:".")
 
+            subframes = next_subframes(automaton, ws.library.get, draft)
+            draft1 = subframes.last
+
+            # The ... (proceed to evaluate) continues into the next frame, but . (single step)
+            # turns into - (paused, aka no evaluation / do not evaluate).
             status1 = status
-            if status == Term.of(:".")
+            if single_step
               status1 = Term.of(:"-")
             end
 
-            pass do
-              # They are navigating history while we're running. Just update
-              # the draft and move on.
-              next unless ahead == Term.of(:"*")
+            # They are navigating history while we're running. Just update the draft and move on.
+            unless ahead == Term.of(:"*")
+              next state.with(:timeline, {behind, :I, ahead, status1, draft1})
+            end
 
-              # Time is running.
+            # Ahead is `*`, aka we're at the present (end-of-time).
 
-              drafts1.each do |subframe|
-                # Do not insert duplicate consecutive entries.
-                next if behind.items.last? == subframe
+            # Deduplicate consecutive subframes, taking into account the last subframe
+            # in *behind* too.
+            deduped_subframes = Pf::Kit.stack_array(Term, 4)
+            dedupe_cons(behind, subframes, deduped_subframes)
 
-                if behind.itemsize < history_limit
-                  behind = behind.append(subframe)
-                else
-                  behind = behind.rest.append(subframe)
+            # Get rid of the easy case right away.
+            unless single_step
+              deduped_subframes.each do |subframe|
+                behind = behind.append(subframe, limit: history_limit)
+              end
+              # Ahead remains the same, `*`.
+              next state.with(:timeline, {behind, :I, ahead, status1, draft1})
+            end
+
+            # Single-step. Single-stepping can produce empty deduped subframes which
+            # indicates Rack did some IO but nothing changed in the circuit (yet). Remember
+            # Rack is allowed to emit duplicate subframes, too. If all of this is the case,
+            # we try producing more subframes, but only up to a safe limit. In degenerate
+            # cases there can be arbitrarily many IO frames so we don't want to block forever.
+            32.times do
+              break if deduped_subframes.present?
+
+              subframes = next_subframes(automaton, ws.library.get, draft)
+              draft1 = subframes.last
+              dedupe_cons(behind, subframes, deduped_subframes)
+            end
+
+            if deduped_subframes.size > 1
+              behind = behind.append(deduped_subframes.first, limit: history_limit)
+              ahead = Term::Dict.build do |commit|
+                deduped_subframes.each(within: 1...) do |subframe|
+                  commit << subframe
                 end
               end
+            else
+              deduped_subframes.each do |subframe|
+                behind = behind.append(subframe, limit: history_limit)
+              end
+              # Ahead remains the same, `*`.
             end
 
             state.with(:timeline, {behind, :I, ahead, status1, draft1})
@@ -823,6 +855,22 @@ module MuSoma
           otherwise { state }
         end
       end
+    end
+
+    # Appends deduplicated consecutive subframes to *sink*.
+    private def dedupe_cons(behind : Term::Dict, subframes : Slice(Term), sink) : Nil
+      pred = behind.items.last?
+      subframes.each do |subframe|
+        next if pred == subframe
+
+        sink << subframe
+        pred = subframe
+      end
+    end
+
+    private def next_subframes(automaton : Rack::Automaton, library : Rack::Assembler::RuleLibrary, draft : Term) : Slice(Term)
+      prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
+      automaton.next_subframes(draft, prepass: prepass, library: library)
     end
   end
 
