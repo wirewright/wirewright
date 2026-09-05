@@ -1584,6 +1584,9 @@ scroll: {}
          (p ^"…⸢omitted⸣ rune(s) omitted…" style: "font-sans text-theme-muted")
          (p ^"⸢(escape suffix)⸣\"" style: "text-theme-string")))
 
+(LongBlobWidget content←(%mime type_))
+  => (p ^"⟬…⸢(hex (hashcode content))⸣… ⁑ ⸢type⸣⟭" style: "text-theme-blob")
+
 (LongBlobWidget content_blob)
   => (p ^"⟬…⸢(hex (hashcode content))⸣…⟭" style: "text-theme-blob")
 
