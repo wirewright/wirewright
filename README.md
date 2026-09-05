@@ -1,11 +1,8 @@
-<div align="center">
-
-![Wirewright Logo](https://github.com/user-attachments/assets/3e5dc602-9c8d-412d-a7fa-9e1a0c3b466e)
-</div>
-
 # Wirewright [![Discord](https://badgen.net/badge/icon/discord?icon=discord&label=Wirewright)](https://discord.com/invite/bkgmGU7FFQ)
 
-What if a program was not a sequence of instructions, but a world? A world that you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can poke *as it evolves*, introducing new things and removing old ones.
+<img width="300" alt="Wirewright MuSoma Logo" src="https://github.com/user-attachments/assets/0bb06a8f-8ddf-4e49-99fe-0c0b1f44b760" align="right" />
+
+What if a program was not a sequence of instructions, but a world? A world you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can poke *as it evolves*, introducing new things and removing old ones.
 
 Wirewright is an experimental research project built around this idea.
 
