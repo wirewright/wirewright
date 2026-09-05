@@ -232,13 +232,11 @@ Here, things starting with `^` pertain to Alloy.
 **Harmony** is the thing managing servers, clients, and other kinds of IO for Rack — restarting them and so on
 
 Finally, there's **MuSoma**. It is an interactive graphical environment for Rack. Like some systems divide themselves into a *graphical interface* and a *kernel*, Wirewright has the division between MuSoma and Rack.
-## Tutorials
+## Tutorials and guides
 
-I'm going to try writing tutorials for Wirewright. Please visit one of:
+See the `guides/` directory.
 
-- [Tutorial, Part 1](man/tutorial-1.md)
-
-Please note that Wirewright currently only runs on Linux. However, the tutorials above use `irack`, which should run on WSL; at least I hope so.
+- [Wirewright: The Guide (Part 0)](guides/Guide (Part 0).md)
 
 ## Building Wirewright
 

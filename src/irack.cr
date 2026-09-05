@@ -17,10 +17,13 @@ module InteractiveRack
         irack [OPTIONS] path/to/seed.wwml
 
       SYNOPSIS
-        Interactive Rack. Wirewright Rack is a rewrite regime implemented using
-        D7. Wirewright D7 is a symbolic physics toolkit. Wirewright is a symbolic
-        physics environment. Symbolic physics is physics where instead of objects
-        and geometry you have symbols and symbolic structure!
+        `irack` is short for interactive Rack. It is a tiny command-line front-end
+        for Rack.
+
+        Wirewright Rack is a specimen of *symbolic physics*. Wirewright is a
+        *symbolic physics environment*. Symbolic physics is physics where
+        instead of entities we have symbolic structure, and instead of math-
+        heavy laws we have rewriting of that structure.
 
       OPTIONS
         -s, --single-step
