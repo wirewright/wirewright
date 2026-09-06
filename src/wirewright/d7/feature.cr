@@ -114,8 +114,9 @@ module Ww::D7
   defrecord ScopeClosedExcept, bindings : Term::Dict
 
   # A sentinel value used in `Parent#passable` to state that a parent is
-  # passable. Some optimizations rely on this since they cannot look "into"
-  # a `PassablePredicate` to determine whether it is something like `-> { true }`.
+  # passable. Some optimizations rely on this since they cannot look inside
+  # a `PassablePredicate` to determine whether it is something trivial such
+  # as `-> { true }`.
   module Passable
     extend self
 
@@ -192,15 +193,15 @@ module Ww::D7
   defcase GndLeaf, feature : Gnd do
     @levels : Atomic(LevelSummary*) = Atomic.new(Pointer(LevelSummary).null)
 
-    def levels : Slice(LevelSummary)
+    def summary : TreeSummary
       if levelsptr = @levels.get(:acquire) # not null
-        return Slice(LevelSummary).new(levelsptr, 1, read_only: true)
+        return TreeSummary.new(Slice(LevelSummary).new(levelsptr, 1, read_only: true))
       end
 
       levels = Slice[LevelSummary.new(1u32, Set{feature.head}, feature.edges)]
       @levels.set(levels.to_unsafe, :release)
 
-      levels
+      TreeSummary.new(levels)
     end
   end
 
@@ -243,168 +244,204 @@ module Ww::D7
   defcase GroupNode,
     feature : Parent,
     children : Slice(ParseTree),
-    levels : Slice(LevelSummary)
+    summary : TreeSummary
 
   defcase CircuitNode,
     feature : Circuit,
     children : Slice(ParseTree),
     leaf : ParseTree,
-    levels : Slice(LevelSummary)
+    summary : TreeSummary
 
   # Smart constructor for `GroupNode`.
   def GroupNode.new(feature : Parent, children : Slice(ParseTree)) : GroupNode
-    # An empty group, for example `(group)`.
-    if children.empty?
-      return GroupNode.new(feature, children, INERT_LEVELS)
-    end
-
-    if child = children.single?
-      return GroupNode.new(feature, children, D7.levels(child))
-    end
-
-    maxlevel = children.max_of { |child| D7.maxlevel(child) }
-
-    levels = (0...maxlevel).to_readonly_slice do |depth|
-      children.reduce(LevelSummary.new) do |memo, child|
-        level_index = -(maxlevel - depth)
-        level = D7.levels(child)[level_index]?
-        level ||= LevelSummary.new
-        LevelSummary.union(memo, level)
-      end
-    end
-
-    GroupNode.new(feature, children, levels)
+    summary = TreeSummary.union(children) { |child| D7.summary(child) }
+    GroupNode.new(feature, children, summary)
   end
 
   # Smart constructor for `CircuitNode`.
   def CircuitNode.new(feature : Circuit, children : Slice(ParseTree), leaf) : CircuitNode
-    leaf_levels = D7.levels(leaf)
+    # NOTE: We could merge prior levels of the leaf with children, but this would
+    # make very little sense because `Circuit#leaf`s never contain subcircuits,
+    # and they wouldn't work either way; so I doubt it's worth spending the effort here.
+    leaf_level = D7.summary(leaf).current_level
+    summary = TreeSummary.union(children) { |child| D7.summary(child) }.append(leaf_level)
+    CircuitNode.new(feature, children, leaf, summary)
+  end
 
-    # FIXME: In theory we'd actually want to merge leaf_levels#prior into
-    # children levels and then append leaf_levels#last to  the result. In
-    # practice, however, `Circuit#leaf`s never contain subcircuits and they
-    # wouldn't work either way; so I doubt it's worth spending the effort here.
-    leaf_level = leaf_levels.last
+  struct LevelSummary
+    # Returns the number of ground nodes (`GndLeaf`) in this level.
+    getter population : UInt32
 
-    if children.empty?
-      levels = Slice[LevelSummary.new, leaf_level]
-      return CircuitNode.new(feature, children, leaf, levels)
+    # Returns the set of ground node heads (`Gnd#head`) in this level.
+    getter heads : Set(Term)
+
+    # Returns the set of ground node edges (`Gnd#edges`) in this level.
+    getter edges : Set(Term)
+
+    # :nodoc:
+    def initialize(@population, @heads : Set(Term), @edges : Set(Term))
     end
 
-    if child = children.single?
-      levels = D7.levels(child).append(leaf_level)
-      return CircuitNode.new(feature, children, leaf, levels)
+    # :nodoc:
+    EMPTY = new(population: 0u32, heads: Set(Term).new, edges: Set(Term).new)
+
+    # Constructs an empty level summary.
+    def self.new : LevelSummary
+      EMPTY
     end
 
-    maxlevel = children.max_of { |child| D7.maxlevel(child) }
-
-    levels = (0...maxlevel + 1).to_readonly_slice do |depth|
-      # Append leaf_level.
-      if depth == maxlevel
-        next leaf_level
-      end
-
-      children.reduce(LevelSummary.new) do |memo, child|
-        level_index = -(maxlevel - depth)
-        level = D7.levels(child)[level_index]?
-        level ||= LevelSummary.new
-        LevelSummary.union(memo, level)
-      end
+    # Returns the union of two level summaries.
+    def self.union(a : LevelSummary, b : LevelSummary) : LevelSummary
+      new(
+        a.population + b.population,
+        a.heads | b.heads,
+        a.edges | b.edges,
+      )
     end
 
-    assert levels.size >= 2
-
-    CircuitNode.new(feature, children, leaf, levels)
+    # Returns `true` if *term* is a head of one of the ground nodes in this level.
+    def head?(term : Term) : Bool
+      @heads.includes?(term)
+    end
   end
 
-  # TODO: For heads we can use a large-ish Bloom filter. Things like
-  # set of Term are already 64B+ of pure control overhead, we can safely use memory
-  # sizes of that kind of magnitude for the bitmap (512-1024 bits).
-  defrecord LevelSummary,
-    population : UInt32,
-    heads : Set(Term),
-    edges : Set(Term)
-
-  # :nodoc:
-  LevelSummary::EMPTY = LevelSummary.new(0u32, Set(Term).new, Set(Term).new)
-
-  # Constructs an empty level summary.
-  def LevelSummary.new : LevelSummary
-    EMPTY
-  end
-
-  # Returns the union of two level summaries.
-  def LevelSummary.union(a : LevelSummary, b : LevelSummary) : LevelSummary
-    LevelSummary.new(
-      a.population + b.population,
-      a.heads | b.heads,
-      a.edges | b.edges,
-    )
-  end
-
-  # :nodoc:
-  INERT_LEVELS = Slice[LevelSummary.new]
-
-  # :nodoc:
-  def levels(tree : InertLeaf) : Slice(LevelSummary)
-    INERT_LEVELS
-  end
-
-  # :nodoc:
-  def levels(tree : ScopeNode) : Slice(LevelSummary)
-    child_levels = levels(tree.child)
-    child_level = child_levels.last
-
-    edges = Set(Term).new
-
-    case scope = tree.feature.scope
-    in ScopeOpenExcept
-      child_level.edges.each do |edge|
-        # If edge is absent in edges, it's local, so it does not propagate outwards.
-        next if edge.in?(scope.edges)
-
-        edges << edge
-      end
-    in ScopeClosedExcept
-      child_level.edges.each do |edge|
-        # If no exterior is defined, the edge is local to the scope, and
-        # does not propagate outwards.
-        next unless exterior = scope.bindings[edge]?
-
-        edges << exterior
-      end
+  struct TreeSummary
+    # :nodoc:
+    def initialize(@levels : Slice(LevelSummary))
+      assert @levels.present?
     end
 
-    child_level = LevelSummary.new(child_level.population, child_level.heads, edges)
-    child_levels.prior.append(child_level)
+    # :nodoc:
+    EMPTY = new(Slice[LevelSummary.new])
+
+    # Constructs an empty tree summary.
+    def self.new : TreeSummary
+      EMPTY
+    end
+
+    def self.union(objects : Indexable(T), & : T -> TreeSummary) : TreeSummary forall T
+      if objects.empty?
+        return EMPTY
+      end
+
+      if object = objects.single?
+        return yield object
+      end
+
+      maxlevel = objects.max_of { |object| (yield object).maxlevel }
+
+      # a b c      a b c       a b c
+      # d e    ->    d e   ->  ∪ ∪ ∪
+      # f              f       ø d e
+      #                        ∪ ∪ ∪
+      #                        ø ø f
+      #                      [-------]
+      #                       levels
+      levels = (0...maxlevel).to_readonly_slice do |depth|
+        objects.reduce(LevelSummary.new) do |memo, object|
+          summary = yield object
+          level_index = -(maxlevel - depth)
+          level = summary.level?(level_index)
+          level ||= LevelSummary.new
+          LevelSummary.union(memo, level)
+        end
+      end
+
+      new(levels)
+    end
+
+    def level?(index : Int32) : LevelSummary?
+      @levels[index]?
+    end
+
+    # Returns the summary of the child level, if any.
+    def child_level? : LevelSummary?
+      @levels[-2]?
+    end
+
+    # Returns the summary of the current level.
+    def current_level : LevelSummary
+      @levels[-1]
+    end
+
+    def maxlevel : Int32
+      @levels.size
+    end
+
+    # Returns the number of ground nodes in this tree.
+    def population : UInt32
+      @levels.sum(&.population)
+    end
+
+    def head?(term : Term) : Bool
+      @levels.any?(&.head?(term))
+    end
+
+    # Updates the summary of the current level.
+    def update_current(& : LevelSummary -> LevelSummary) : TreeSummary
+      TreeSummary.new(@levels.prior.append(yield current_level))
+    end
+
+    def append(summary : LevelSummary) : TreeSummary
+      TreeSummary.new(@levels.append(summary))
+    end
   end
 
   # :nodoc:
-  def levels(tree : MixtureNode) : Slice(LevelSummary)
-    levels(tree.child)
+  def summary(tree : InertLeaf) : TreeSummary
+    TreeSummary.new
   end
 
   # :nodoc:
-  def levels(tree : GndLeaf | GroupNode | CircuitNode) : Slice(LevelSummary)
-    tree.levels
+  def summary(tree : ScopeNode) : TreeSummary
+    summary(tree.child).update_current do |level|
+      edges = Set(Term).new
+
+      case scope = tree.feature.scope
+      in ScopeOpenExcept
+        level.edges.each do |edge|
+          # If edge is absent in edges, it's local, so it does not propagate outwards.
+          next if edge.in?(scope.edges)
+
+          edges << edge
+        end
+      in ScopeClosedExcept
+        level.edges.each do |edge|
+          # If no exterior is defined, the edge is local to the scope, and
+          # does not propagate outwards.
+          next unless exterior = scope.bindings[edge]?
+
+          edges << exterior
+        end
+      end
+
+      LevelSummary.new(level.population, level.heads, edges)
+    end
+  end
+
+  # :nodoc:
+  def summary(tree : MixtureNode) : TreeSummary
+    summary(tree.child)
+  end
+
+  # :nodoc:
+  def summary(tree : GndLeaf | GroupNode | CircuitNode) : TreeSummary
+    tree.summary
   end
 
   {% if flag?(:docs) %}
-    # Returns level summaries for levels of *tree*.
-    #
-    # NOTE: The **last** summary is root-most.
-    def levels(tree : ParseTree) : Slice(LevelSummary)
+    def summary(tree : ParseTree) : TreeSummary
     end
   {% end %}
 
   # Returns the circuit depth of *tree*. It is at least `1` (toplevel circuit only),
   # but could be larger than one (e.g. `2` means toplevel circuit with subcircuits,
-  # `3` means toplevel circuits + subcircuits + sub-subcircuits, etc.)
+  # `3` means toplevel circuits + subcircuits + sub-subcircuits, etc.) It is never zero!
   def maxlevel(tree : ParseTree) : Int32
     case tree
     in InertLeaf, GndLeaf     then 1
     in ScopeNode, MixtureNode then maxlevel(tree.child)
-    in GroupNode, CircuitNode then tree.levels.size
+    in GroupNode, CircuitNode then summary(tree).maxlevel
     end
   end
 
@@ -414,14 +451,10 @@ module Ww::D7
   # of circuits.
   def population(tree : ParseTree) : UInt32
     case tree
-    in InertLeaf
-      0u32
-    in GndLeaf
-      1u32
-    in GroupNode, CircuitNode
-      tree.levels.sum(&.population)
-    in ScopeNode, MixtureNode
-      population(tree.child)
+    in InertLeaf              then 0u32
+    in GndLeaf                then 1u32
+    in GroupNode, CircuitNode then summary(tree).population
+    in ScopeNode, MixtureNode then population(tree.child)
     end
   end
 
@@ -433,7 +466,7 @@ module Ww::D7
     in GndLeaf
       tree.head == head
     in GroupNode, CircuitNode
-      tree.levels.present? && head.in?(tree.levels.last.heads)
+      summary(tree).current_level.head?(head)
     in ScopeNode, MixtureNode
       head?(tree.child, head)
     end

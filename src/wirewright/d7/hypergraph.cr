@@ -179,7 +179,7 @@ module Ww::D7
     end
 
     private def self.resolve_root(ctx, addr, tree : CircuitNode, membership, id_zero) : Nil
-      stat = tree.levels[-2]? || LevelSummary.new
+      stat = tree.summary.child_level? || LevelSummary.new
       return unless membership.all?(&.in?(stat.edges))
 
       tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
@@ -247,7 +247,7 @@ module Ww::D7
     private def self.resolve_inner(ctx, addr, tree : GroupNode, membership, id_zero) : Nil
       return if membership.empty?
 
-      stat = tree.levels.last? || LevelSummary.new
+      stat = tree.summary.current_level
       return unless membership.all?(&.in?(stat.edges))
       return unless ctx.guide.call(tree)
 
@@ -262,8 +262,7 @@ module Ww::D7
 
     # Returns `true` if *head* is present in the hypergraph at *any* level.
     def has_head_anywhere?(head : Term) : Bool
-      levels = D7.levels(@tree)
-      levels.any?(&.heads.includes?(head))
+      D7.summary(@tree).head?(head)
     end
 
     # Returns `true` if there are no nodes at the current level and below
