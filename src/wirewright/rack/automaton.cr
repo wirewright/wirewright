@@ -454,43 +454,6 @@ class Ww::Rack::Automaton
     subframes.append(circuit1)
   end
 
-  # class FrameIterator
-  #   include Iterator(Term)
-
-  #   def initialize(@automaton : Automaton, seed : Term)
-  #     @circuit = seed
-  #   end
-
-  #   def next
-  #     loop do
-  #       @circuit, action = @automaton.blocking_next(@circuit)
-
-  #       case action
-  #       in DisplaySubframe
-  #       in DisplayFrame
-  #         return action.content
-  #       in End
-  #         return Iterator.stop
-  #       end
-  #     end
-  #   end
-  # end
-
-  # # Returns an iterator over frame contents (i.e., `DisplayFrame#content`)
-  # # throughout the evolution of *seed*.
-  # #
-  # # NOTE: The iterator is not guaranteed to terminate; this depends entirely
-  # # on *seed*. For example, oscillators will not terminate.
-  # #
-  # # NOTE: Certain configurations of the automaton (such as automata constructed
-  # # with `DisplayMask::None`) will not return even on `Iterator#next` on infinite
-  # # *seed*s (e.g. an oscillator), because such configurations assume completion;
-  # # so for *seeds* that cannot complete, they will basically cause a busy-loop
-  # # in `Iterator#next`.
-  # def frames(seed : Term) : Iterator(Term)
-  #   FrameIterator.new(self, seed)
-  # end
-
   # Returns the recursive median of frametime (buffer capacity 32). This
   # measurement only includes `step` (e.g. `Rack.step`), and not e.g.
   # `D7.fuse`.
