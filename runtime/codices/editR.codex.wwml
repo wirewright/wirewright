@@ -641,7 +641,7 @@ C←[C'←[I M←[cancel compose] _*] compose _string]
   <> {M: (inspect item ⸨left,right,left,right⸩)}
 
 ;; C-a means edit the enclosing dict as text.
-⟨[(I M←(keyboard key a dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _]⟩
+⟨⟨[(I M←(keyboard key a dn ⍊ ctrl) _* ⍊ structural: true) ("" * "") _]⟩⟩
   <> {M: (edit dict)}
 
 ;; Typing `:` at the end will try to submit and edit pair with that key
