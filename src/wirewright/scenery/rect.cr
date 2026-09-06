@@ -172,6 +172,11 @@ module Ww::Scenery
       size.iy
     end
 
+    # Returns the bottom coordinate of this rectangle.
+    def b : Magnitude
+      br.y
+    end
+
     # Returns the size of this rectangle's diagonal.
     def diagonal : Magnitude
       size.length

@@ -7,14 +7,13 @@ module Ww::Scenery
   end
 
   private def aim!(cache, node : ShapedText, box : OriginBox) : AimResponse
-    x = box.bounds.x
-    y = box.bounds.y
-
     foci = Pf::Kit.stack_array(Rect, 4)
 
     seen = Set(Decoration).new
     seen.compare_by_identity
 
+    x = box.bounds.x
+    y = box.bounds.y
     line_wrap(node, at: box.bounds.w) do |line|
       line.items.each do |item|
         case item
@@ -22,10 +21,28 @@ module Ww::Scenery
           ibeam = item.selection
           next unless ibeam.aim
 
-          foci << Rect[x, y, ibeam.thickness, node.line_height].margin(ibeam.clearance)
+          foci << Rect.intersection(
+            Rect[x, y, ibeam.thickness, node.line_height].margin(ibeam.clearance),
+            # Intersect with a rect that starts at the top-left corner of the box, ends
+            # *vertically* at the bottom-right corner, and *horizontally* continues
+            # indefinitely like so:
+            #
+            #  +-----------+
+            #  |******************** . . .
+            #  |******************** . . .
+            #  |******************** . . .
+            #  +-----------+
+            #
+            # This way, if the I-beam is at the very end of a viewport, it is
+            # displayed with clearance rather than clipped. I-beams stick out
+            # to the right (but not to the left!), so if we instead intersect with
+            # box.bounds, it'll simply not fit and be clipped almost entirely.
+            Rect.new(tl: box.bounds.tl, br: Point[Magnitude::INFINITY, box.bounds.b]),
+          )
+
           if ibeam.clearance_line
-            foci << Rect[x, y - node.line_height, ibeam.thickness, node.line_height]
-            foci << Rect[x, y + node.line_height, ibeam.thickness, node.line_height]
+            foci << Rect.intersection(Rect[x, y - node.line_height, ibeam.thickness, node.line_height], box.bounds)
+            foci << Rect.intersection(Rect[x, y + node.line_height, ibeam.thickness, node.line_height], box.bounds)
           end
         in Endl, ShapedStyledGlyph
           item.decorations.each do |decoration|
@@ -43,11 +60,11 @@ module Ww::Scenery
             end
 
             # Mark the glyph rect as a focus, plus clearance.
-            foci << Rect[x, y, advance, node.line_height].margin(spec.clearance)
+            foci << Rect.intersection(Rect[x, y, advance, node.line_height].margin(spec.clearance), box.bounds)
 
             if spec.clearance_line
-              foci << Rect[x, y - node.line_height, advance, node.line_height]
-              foci << Rect[x, y + node.line_height, advance, node.line_height]
+              foci << Rect.intersection(Rect[x, y - node.line_height, advance, node.line_height], box.bounds)
+              foci << Rect.intersection(Rect[x, y + node.line_height, advance, node.line_height], box.bounds)
             end
           end
 
@@ -61,12 +78,6 @@ module Ww::Scenery
 
       x = box.bounds.x
       y += node.line_height
-    end
-
-    # Don't include empty space around foci (from the text's point of view; e.g.,
-    # due to clearance).
-    foci.map! do |focus|
-      Rect.intersection(focus, box.bounds)
     end
 
     AimResponse.new(node, foci.to_unsafe_readonly_slice!)
