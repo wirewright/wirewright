@@ -51,79 +51,89 @@ module Ww::D7
     end
   end
 
-  # :nodoc:
-  def update(parser : Parser, circuit : Term, level : Int, &fn : NodeAddr, Flat -> Term) : Term
-    feature_tree = parser.parse(circuit)
-    update(feature_tree, level, &fn)
+  # Applies *patch* to *hg*'s tree. Returns the resulting patched circuit.
+  def apply(hg : Hypergraph, patch : Patch) : Term
+    trie = {} of {UInt32, UInt32} => UInt32
+    reps = {} of UInt32 => Term
+    seq = 1u32 # 0 is root
+
+    patch.each do |node_id, rep|
+      node = hg[node_id]
+
+      pred = 0u32 # root
+      node.addr.each do |key|
+        pred = trie.put_if_absent({pred, key}) do
+          seq, _ = seq + 1, seq
+        end
+      end
+
+      reps[pred] = rep
+    end
+
+    guidance = RepairGuidance.new(trie, reps, current: 0u32)
+    apply(hg.tree, guidance)
   end
 
   # :nodoc:
-  def update(tree : ParseTree, level : Int, &fn : NodeAddr, Flat -> Term) : Term
-    assert level >= 0
-
-    repair_tree = update(NodeAddr.empty, tree, level, fn)
+  def apply(tree : ParseTree, guidance : RepairGuidance) : Term
+    repair_tree = repair(tree, guidance)
     collapse(repair_tree)
   end
 
-  private def update(addr, tree : InertLeaf | GndLeaf, level, fn) : RepairTree
-    if level.zero?
-      return fn.call(addr, tree.feature)
+  private struct RepairGuidance
+    def initialize(
+      @trie : Hash({UInt32, UInt32}, UInt32),
+      @reps : Hash(UInt32, Term),
+      @current : UInt32,
+    )
     end
 
-    tree.feature.node
+    def []?(key : UInt32) : RepairGuidance?
+      return unless successor = @trie[{@current, key}]?
+
+      RepairGuidance.new(@trie, @reps, successor)
+    end
+
+    def has_rep? : Bool
+      @reps.has_key?(@current)
+    end
+
+    def rep? : Term?
+      @reps[@current]?
+    end
   end
 
-  private def update(addr, tree : ScopeNode, level, fn) : RepairTree
-    repair(tree) do |child|
-      update(addr, child, level, fn)
-    end
+  private def repair(tree : InertLeaf | GndLeaf, guidance : RepairGuidance) : RepairTree
+    guidance.rep? || tree.feature.node
   end
 
-  private def update(addr, tree : MixtureNode, level, fn) : RepairTree
-    repair(tree) do |child|
-      update(addr, child, level, fn)
-    end
+  private def repair(tree : ScopeNode | MixtureNode, guidance : RepairGuidance) : RepairTree
+    repair(tree) { |child| repair(child, guidance) }
   end
 
-  private def update(addr, tree : CircuitNode, level, fn) : RepairTree
-    if level.zero?
-      return update(addr, tree.leaf, level, fn)
+  private def repair(tree : CircuitNode, guidance : RepairGuidance) : RepairTree
+    if guidance.has_rep?
+      return repair(tree.leaf, guidance)
     end
 
-    assert level > 0
-
-    if maxlevel(tree) < level
-      # This branch cannot possibly contain circuits at the target level.
-      return Term.of(tree.feature.node)
-    end
-
-    # NOTE: Circuits must surround themselves with scopes to seal themselves off
-    # from the outside world completely. Otherwise, two circuits with the same
-    # level would be able to communicate, and that would go against our semantics.
-    #
-    #   ;; Must NOT work!
-    #   (circuit @0 (cell @x 100))
-    #   (circuit @1 (cell @y))
-    #   (circuit @2 (feed @x @y))
-    #
     treatment = GroupNode.new(parent(tree.feature.node, tree.feature.range), tree.children)
-    update(addr, treatment, level - 1, fn)
+    repair(treatment, guidance)
   end
 
-  private def update(addr, tree : GroupNode, level, fn) : RepairTree
-    if maxlevel(tree) < level
-      # This branch cannot possibly contain circuits at the target level.
-      return Term.of(tree.feature.node)
-    end
-
-    # TODO: If GroupNode is impassable, that's just a pointless walk down. If *fn* was
-    # a hashmap (which it could very well be, I suppose) we could just skip going down
-    # if no addr in the hashmap is prefixed by *addr*...
-
+  private def repair(tree : GroupNode, guidance : RepairGuidance) : RepairTree
     repair(tree) do |child, index|
       key = tree.feature.range.begin + index
-      update(addr.append(key), child, level, fn)
+      successor = guidance[key]?
+      successor ? repair(child, successor) : unchanged(child)
     end
+  end
+
+  private def unchanged(tree : InertLeaf | GndLeaf | CircuitNode | ParentNode | MixtureNode) : Term
+    Term.of(tree.feature.node)
+  end
+
+  private def unchanged(tree : ScopeNode) : Term
+    unchanged(tree.child)
   end
 
   # :nodoc:
@@ -169,24 +179,14 @@ module Ww::D7
     MAX_SUBSTEPS.times do |level|
       patch = yield hg
 
-      if patch.present?
-        # TODO: Remove this when it'd be possible to get rid of nodeids. We can
-        # just use nodeaddrs. There's no need for nodeids.
-        addr_patch = patch.to_h do |node_id, replacement|
-          {hg[node_id].addr, replacement}
-        end
+      pass do
+        next if patch.empty?
 
-        circuit = update(parser, circuit, level) do |addr, flat|
-          case flat
-          in Inert then flat.node
-          in Gnd   then addr_patch[addr]? || flat.node
-          end
-        end
+        circuit = apply(hg, patch)
+        next if substeps.last == circuit
 
-        unless substeps.last == circuit
-          substeps << circuit
-          tree = parser.parse(circuit)
-        end
+        substeps << circuit
+        tree = parser.parse(circuit)
       end
 
       hg = Hypergraph.new(tree, level + 1)

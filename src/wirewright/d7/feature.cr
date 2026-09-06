@@ -739,7 +739,9 @@ module Ww::D7
     yield tree.child
   end
 
-  # Handles repair of a `ParentNode`. Yields each child to the block for repair.
+  # Handles repair of a `ParentNode`. Yields each child and its index to the block
+  # for repair. The block must return a `RepairTree` (the type is omitted because for
+  # some reason Crystal refuses to typecheck subsets of RepairTree).
   def repair(tree : ParentNode, &) : RepairTree
     children = Pf::Kit.stack_array(RepairTree)
     changed = false

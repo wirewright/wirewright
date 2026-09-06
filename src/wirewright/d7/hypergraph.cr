@@ -419,7 +419,7 @@ module Ww::D7
       proposals
     end
 
-    def propose(proposals, *heads : Symbol, &fn : Node -> Patch?) : Nil
+    def propose(proposals : Array(Patch), *heads : Symbol, &fn : Node -> Patch?) : Nil
       heads.each do |head|
         each_node_with_head(Term.of(head)) do |node|
           proposal = fn.call(node)
