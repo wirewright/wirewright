@@ -140,42 +140,51 @@ module MuSoma
     agents.present(ws)
   end
 
-  def entangle(ws : Workspace, agents : AgentPopulation)
-    plan = Plan.new
+  alias Perturbation = D7::Hypergraph -> Array(D7::Patch)
+  alias Plan = Array(Perturbation)
 
-    # Plan: observe ("soak in" changes from the circuit)
-    #
-    # NOTE: Pausing applies to entangle read but NOT entangle write. We cannot "pause"
-    # the real world & its perturbations (we can, in terms of computation, but
-    # that won't make much sense); so the latest circuit absorbs changes even
-    # if it is paused. However while paused we prevent the circuit from affecting
-    # the real world.
-    Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ (%any . ...) draft_)}}) do
+  def entangle(ws : Workspace, agents : AgentPopulation)
+    Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ status_ draft_)}}) do
       draft_tree = ws.parser.parse(draft)
       draft_hg = D7::Hypergraph.new(draft_tree)
-      agents.observe(ws, draft_hg, plan)
-    end
 
-    # Plan: scheduler
-    ws.scheduler.tick do |event|
-      agents.receive(ws, plan, event)
-    end
+      plan = Plan.new
 
-    # Plan: msgq
-    if msg = ws.msgq.shift?
-      agents.receive(ws, plan, msg)
-    end
+      # Plan: observe ("soak in" changes from the circuit). Only do this if time
+      # is not paused (either single step `.` or time is running `...`, but not
+      # paused `-`.)
+      unless status == Term.of(:-)
+        agents.observe(ws, draft_hg, plan)
+      end
 
-    # Rendezvous (execute plan)
-    if plan.present?
+      # NOTE: We do not pause the scheduler and we certainly cannot pause
+      # the outside world.
+
+      # Plan from scheduler events.
+      ws.scheduler.tick do |event|
+        agents.receive(ws, plan, event)
+      end
+
+      # Plan from message in msgq.
+      if msg = ws.msgq.shift?
+        agents.receive(ws, plan, msg)
+      end
+
+      return if plan.empty?
+
+      proposals = [] of D7::Patch
+
+      plan.each do |perturbation|
+        proposals.concat(perturbation.call(draft_hg))
+      end
+
+      patch = D7::Regime.merge(draft_hg, proposals)
+
+      draft1 = D7.apply(draft_hg, patch)
+      # draft1 = MuSoma.perturb(draft_tree, plan)
+
       ws.state.update do |state|
-        Term.matchpi?(state, %{{¦ timeline: (_ I _ _ draft_)}}) do
-          draft_tree = ws.parser.parse(draft)
-          draft1 = MuSoma.perturb(draft_tree, plan)
-          state = Term.morph(state, {:timeline, 4, draft1})
-        end
-
-        state
+        Term.morph(state, {:timeline, 4, draft1})
       end
     end
   end

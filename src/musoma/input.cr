@@ -1,4 +1,9 @@
 module MuSoma
+  alias UpdateInput = UpdateFocus | UpdateKeyboardState
+
+  defrecord UpdateFocus, addr : D7::NodeAddr, focus : Term
+  defrecord UpdateKeyboardState, addr : D7::NodeAddr, keys : Pf::Set(Term)
+
   alias Input = InputModel | KeyboardModel
 
   defrecord InputModel, focus : InputFocus, keys : Pf::Set(Term), copying: true

@@ -1,6 +1,5 @@
 module MuSoma
   alias Msg = MediaService::WindowDescriptionChanged | ExtrinsicMap::Reload | Scheduler::Event
-  alias Plan = Set(Perturbation)
 
   # Emitted for each term in state's `requests: (_*)`.
   defrecord AppRequest, term : Term
@@ -725,8 +724,74 @@ module MuSoma
       @vantages.sync(reflections)
     end
 
-    def receive(ws, plan, msg : Scheduler::Event)
-      plan << msg
+    private def perturb(node : D7::Node, event : Scheduler::Tick) : D7::Patch?
+      nodeQ = node.term
+
+      Term.case(nodeQ) do
+        matchpi %{[ticker duration-term_ ±ticks]} do
+          return unless duration = MuSoma.duration?(duration_term)
+          return if duration.negative? # ?!
+          return unless event.period == duration
+
+          D7.patch(node, {2, ticks + event.crossings})
+        end
+
+        matchpi %{[sequencer duration-term_ seq_+]} do
+          return unless duration = MuSoma.duration?(duration_term)
+          return if duration.negative? # ?!
+          return unless event.period == duration
+
+          bits = [] of Bool
+
+          seq.items.each do |item|
+            Term.case(item) do
+              matchpi %{(> _)} { bits << true }
+              otherwise { bits << false }
+            end
+          end
+
+          bits.rotate!(-event.crossings) # shl()
+
+          result = nodeQ.transaction do |commit|
+            seq.items.zip(bits, 2...nodeQ.itemsize) do |item, active, key|
+              if active
+                Term.case(item) do
+                  matchpi %{(> _)} { }
+
+                  otherwise do
+                    commit.with(key, Term.of(:>, item))
+                  end
+                end
+              else
+                Term.case(item) do
+                  matchpi %{(> arg_)} do
+                    commit.with(key, arg)
+                  end
+
+                  otherwise { item }
+                end
+              end
+            end
+          end
+
+          D7.replace(node, Term.of(result))
+        end
+
+        otherwise { }
+      end
+    end
+
+    def receive(ws, plan, msg : Scheduler::Tick)
+      perturbation = Perturbation.new do |hg|
+        hg.propose(:ticker, :sequencer) do |candidate|
+          perturb(candidate, msg)
+        end
+      end
+
+      plan << perturbation
+    end
+
+    def receive(ws, plan, msg : Scheduler::Expire)
     end
 
     def receive(ws, plan, msg)
@@ -862,7 +927,14 @@ module MuSoma
       # Update mice in the circuit. Note that we can't do anything smart here
       # because a (mouse) node can appear out of nowhere in the circuit and it
       # must be updated with whatever state available, changed or not.
-      plan << UpdateMice.new(mice0, mice1)
+      perturbation = ->(hg : D7::Hypergraph) do
+        hg.propose(:mouse) do |candidate|
+          perturb(candidate, mice0, mice1)
+        end
+      end
+      plan << perturbation
+
+      # plan << UpdateMice.new(mice0, mice1)
 
       state0 = MediaService::Mouse::State::None
       if mouse0 = mice0.first?
@@ -878,6 +950,61 @@ module MuSoma
     end
 
     def receive(ws, plan, msg) : Nil
+    end
+
+    def perturb(node : D7::Node, mice0 : Slice(MediaService::Mouse), mice1 : Slice(MediaService::Mouse)) : D7::Patch?
+      Term.matchpi?(node.term, %{[mouse buttons_*]}) do
+        nodeQ = node.term.as_d
+
+        # NOTE: Currently, only one mouse is actually handled, even though we could
+        # handle more. The API for this could be a `mouse-list` node which lists mouse
+        # info including ids, and `mouse` with an `id: _` filter.
+        mouse = mice1.first?
+
+        result = nodeQ.pairspart.transaction do |commit|
+          commit << :mouse
+
+          if mouse.nil?
+            if nodeQ.includes?(:anchor)
+              commit.with(:anchor, :"?")
+            end
+            if nodeQ.includes?(:focus)
+              commit.with(:focus, :"?")
+            end
+            if nodeQ.includes?(:mode)
+              commit.with(:mode, :"?")
+            end
+
+            next
+          end
+
+          if nodeQ.includes?(:anchor)
+            commit.with(:anchor, MuSoma.translate(mouse.position.anchor))
+          end
+          if nodeQ.includes?(:focus)
+            commit.with(:focus, MuSoma.translate(mouse.position.focus))
+          end
+          if nodeQ.includes?(:mode)
+            commit.with(:mode, MuSoma.translate(mouse.position.mode))
+          end
+
+          prev_mouse_state = MediaService::Mouse::State::None
+          if prev_mouse = mice0.find { |candidate| candidate.id == mouse.id }
+            prev_mouse_state = prev_mouse.state
+          end
+
+          known = MediaService::Mouse::State.parse(buttons.items)
+          pressed = mouse.state - prev_mouse_state
+          released = prev_mouse_state - mouse.state
+          present = (known - released) | pressed
+
+          present.each do |button|
+            commit << button.term
+          end
+        end
+
+        D7.replace(node, Term.of(result))
+      end
     end
 
     def update(state_var : Var, state0, state1) : Nil
@@ -1043,7 +1170,17 @@ module MuSoma
         end
 
         InputExchange.sync(exchange0, @exchange, input_sync, keyboard_sync) do |action|
-          plan << action
+          perturbation = ->(hg : D7::Hypergraph) do
+            unless row = D7.follow?(hg.tree, action.addr)
+              return [D7::Patch.new]
+            end
+
+            node_id, _ = row
+            node = hg[node_id]
+            [perturb(node, action)]
+          end
+
+          plan << perturbation
         end
 
         # Assume they are holding the keys until the next update arrives.
@@ -1055,6 +1192,24 @@ module MuSoma
     end
 
     def receive(ws, plan, msg)
+    end
+
+    # NOTE: *node* must be `input` or `keyboard`!
+    private def perturb(node : D7::Node, action : UpdateKeyboardState) : D7::Patch?
+      nodeQ = node.term.as_d
+      head, *_ = nodeQ.items
+
+      result = nodeQ.pairspart.transaction do |commit|
+        commit << head
+        commit.concat(action.keys)
+      end
+
+      D7.replace(node, Term.of(result))
+    end
+
+    # NOTE: *node* must be `input` or `keyboard`!
+    private def perturb(node : D7::Node, action : UpdateFocus) : D7::Patch?
+      D7.patch(node, {:focus, action.focus == Term.of(false) ? nil : action.focus})
     end
   end
 
