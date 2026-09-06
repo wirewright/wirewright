@@ -96,9 +96,10 @@ module MuSoma
       @app.present(workspace)
     end
 
-    def entangle
+    def observe(workspace : Workspace, hg : D7::Hypergraph, plan : Plan) : Nil
       # In no particular order.
-      {@keyboard, @scheduler}
+      @keyboard.observe(workspace, hg, plan)
+      @scheduler.observe(workspace, hg, plan)
     end
 
     def receive(workspace : Workspace, request : AppRequest) : Nil
@@ -142,7 +143,7 @@ module MuSoma
   def entangle(ws : Workspace, agents : AgentPopulation)
     plan = Plan.new
 
-    # Plan: read
+    # Plan: observe ("soak in" changes from the circuit)
     #
     # NOTE: Pausing applies to entangle read but NOT entangle write. We cannot "pause"
     # the real world & its perturbations (we can, in terms of computation, but
@@ -151,14 +152,8 @@ module MuSoma
     # the real world.
     Term.matchpi?(ws.state.get, %{{¦ timeline: (_ I _ (%any . ...) draft_)}}) do
       draft_tree = ws.parser.parse(draft)
-
-      EntangleContinuation.entangle(ws, plan, *agents.entangle) do |sink|
-        D7.each_flat_feature_with_addr(draft_tree) do |feature, addr|
-          next unless feature.is_a?(D7::Gnd)
-
-          sink.call(feature.node, addr)
-        end
-      end
+      draft_hg = D7::Hypergraph.new(draft_tree)
+      agents.observe(ws, draft_hg, plan)
     end
 
     # Plan: scheduler

@@ -5,37 +5,6 @@ module MuSoma
   # Emitted for each term in state's `requests: (_*)`.
   defrecord AppRequest, term : Term
 
-  struct EntangleContinuation
-    def initialize(@cont : (Term, D7::NodeAddr ->) ->)
-    end
-
-    def self.entangle(workspace, plan, agent, &fn : (Term, D7::NodeAddr ->) ->)
-      _ = agent.entangle?(workspace, plan, new(fn))
-    end
-
-    def self.entangle(workspace, plan, agent, *agents, &fn : (Term, D7::NodeAddr ->) ->)
-      cont = ->(first : (Term, D7::NodeAddr ->)) do
-        entangle(workspace, plan, *agents) do |rest|
-          composite = ->(feature : Term, addr : D7::NodeAddr) do
-            first.call(feature, addr)
-            rest.call(feature, addr)
-          end
-          fn.call(composite)
-        end
-      end
-
-      case agent.entangle?(workspace, plan, new(cont))
-      in true  # Executed the continuation
-      in false # Did not
-        entangle(workspace, plan, *agents, &fn)
-      end
-    end
-
-    def each_with_addr(&fn : Term, D7::NodeAddr ->)
-      @cont.call(fn)
-    end
-  end
-
   class EditorAgent
     def initialize(@codex_ref : ExtrinsicMap::ReadingRef)
       @seen = Bytes.empty
@@ -939,32 +908,32 @@ module MuSoma
       @exchange = InputExchange.new
     end
 
-    def entangle?(ws : Workspace, plan, nodes) : Bool
-      return false unless Var.pending?({ws.state, :timeline})
+    def observe(ws : Workspace, hg : D7::Hypergraph, plan : Plan) : Nil
+      return unless Var.pending?({ws.state, :timeline})
 
       @exchange = InputExchange.new
 
-      nodes.each_with_addr do |node, addr|
-        Term.case(node) do
+      hg.each_node_with_head(Term.of(:input), Term.of(:keyboard)) do |node|
+        nodeQ = node.term
+
+        Term.case(nodeQ) do
           matchpi %{(input _* ⍊ focus_⋮ false)} do |focus|
             next unless focus = InputFocus.parse?(focus)
 
-            keys = node.items.move(1)
-            @exchange = @exchange.register(addr, InputModel.new(focus, keys.to_pf_set))
+            keys = nodeQ.items.move(1)
+            @exchange = @exchange.register(node.addr, InputModel.new(focus, keys.to_pf_set))
           end
 
           matchpi %{(keyboard _* ⍊ focus_⋮ false)} do |focus|
             next unless focus = InputFocus.parse?(focus)
 
-            keys = node.items.move(1)
-            @exchange = @exchange.register(addr, KeyboardModel.new(focus, keys.to_pf_set))
+            keys = nodeQ.items.move(1)
+            @exchange = @exchange.register(node.addr, KeyboardModel.new(focus, keys.to_pf_set))
           end
 
           otherwise { }
         end
       end
-
-      true
     end
 
     def receive(ws : Workspace, plan, msg : MediaService::WindowDescriptionChanged)
@@ -1094,13 +1063,15 @@ module MuSoma
       @periods = Set(Time::Span).new
     end
 
-    def entangle?(ws : Workspace, plan, nodes) : Bool
-      return false unless Var.pending?({ws.state, :timeline})
+    def observe(ws : Workspace, hg : D7::Hypergraph, plan : Plan) : Nil
+      return unless Var.pending?({ws.state, :timeline})
 
       seen = Set(Time::Span).new
 
-      nodes.each_with_addr do |node, _|
-        Term.case(node) do
+      hg.each_node_with_head(Term.of(:sequencer), Term.of(:ticker)) do |node|
+        nodeQ = node.term
+
+        Term.case(nodeQ) do
           matchpi %{[sequencer duration-term_ _+]} do
             next unless duration = MuSoma.duration?(duration_term)
             next if duration.negative? # ?!
@@ -1127,8 +1098,6 @@ module MuSoma
       end
 
       @periods = seen
-
-      true
     end
   end
 
