@@ -589,7 +589,7 @@ history-limit: 128
 ;; Section widget
 
 (open-section-widget addr_ title_string node_)
-  => (group detail: col
+  => (group detail: col multiline: true
        (group detail: seq
          (atom type: (expander ^addr icon: "expand_more" center: true) mass: 0)
          (group detail: (section ^title)))
@@ -670,7 +670,7 @@ history-limit: 128
 
 --- pretty/style-down ;; Constraints go down
 
-;; Root asks itself about style via mode: content.
+;; Root asks itself about style via ?mode: content.
 (root _* ⍊ -mode -?mode_)
   <> {?mode: content}
 
@@ -685,16 +685,14 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 
 --- pretty/style-up ;; Styles go up
 
-(atom _* ⍊ ±mass -style_ ?mode_)
-  <> {(?mode): (),
-      style: (inline ^:mass children: ())}
-
 (atom caption_string ⍊ -mass_)
   <> {mass: ^(charcount caption)}
 
+(atom _* ⍊ ±mass -style_ ?mode_)
+  <> {(?mode): (), style: (inline ^:mass children: ())}
+
 (group ⍊ -style_ ?mode_)
-  <> {(?mode): (),
-      style: (inline mass: 0 children: ())}
+  <> {(?mode): (), style: (inline mass: 0 children: ())}
 
 (group entries_+ ⍊ -borrowing-styles_)
   <> {borrowing-styles:
@@ -824,6 +822,11 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 ;; :x
 (group ⍊ detail: seq) => (^splice)
 (group children_* ⍊ detail: seq) => (row ^*children)
+
+;; <Section heading>
+;; (section ...)
+(group ⍊ detail: col) => (^splice)
+(group children_* ⍊ detail: col) => (col ^*children)
 
 ;; x: 100
 (group key_ value_ ⍊ detail: (pair sep_string row))
