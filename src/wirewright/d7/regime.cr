@@ -418,7 +418,7 @@ module Ww::D7
 
         queries.each do |query|
           probably_matches = query.deps.all? do |_, dep|
-            dep.min.zero? || hg.has_head_anywhere?(dep.head)
+            dep.min.zero? || D7.summary(hg.tree).has_head?(dep.head)
           end
 
           next unless probably_matches

@@ -300,7 +300,7 @@ module Ww::D7
     end
 
     # Returns `true` if *term* is a head of one of the ground nodes in this level.
-    def head?(term : Term) : Bool
+    def has_head?(term : Term) : Bool
       @heads.includes?(term)
     end
   end
@@ -373,8 +373,8 @@ module Ww::D7
       @levels.sum(&.population)
     end
 
-    def head?(term : Term) : Bool
-      @levels.any?(&.head?(term))
+    def has_head?(term : Term) : Bool
+      @levels.any?(&.has_head?(term))
     end
 
     # Updates the summary of the current level.
@@ -455,20 +455,6 @@ module Ww::D7
     in GndLeaf                then 1u32
     in GroupNode, CircuitNode then summary(tree).population
     in ScopeNode, MixtureNode then population(tree.child)
-    end
-  end
-
-  # Returns `true` if one or more nodes with the given *head* exist in *tree*.
-  def head?(tree : ParseTree, head : Term) : Bool
-    case tree
-    in InertLeaf
-      false
-    in GndLeaf
-      tree.head == head
-    in GroupNode, CircuitNode
-      summary(tree).current_level.head?(head)
-    in ScopeNode, MixtureNode
-      head?(tree.child, head)
     end
   end
 
@@ -667,7 +653,7 @@ module Ww::D7
   end
 
   def follow?(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}?
-    hg = Hypergraph.new(tree, 0u32) # ?!
+    hg = Hypergraph.new(tree)
     prefix = NodeAddr.empty
     id_zero = NodeId.new(0)
 

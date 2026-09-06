@@ -133,7 +133,8 @@ module Ww::Rack::Part
   SYM_PART = Term.of(:part)
 
   def probably_exists_in?(hg : D7::Hypergraph) : Bool
-    hg.has_head_anywhere?(SYM_CELL) && hg.has_head_anywhere?(SYM_PART)
+    summary = D7.summary(hg.tree)
+    summary.has_head?(SYM_CELL) && summary.has_head?(SYM_PART)
   end
 
   def each_root_cell(hg : D7::Hypergraph, & : D7::Node, D7::AbsEdge, Term ->) : Nil

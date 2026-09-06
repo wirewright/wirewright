@@ -158,8 +158,8 @@ module Ww::D7
   # See `D7` for terminology (e.g. subframe vs. substep).
   def step(parser : Parser, circuit : Term, required_heads : Indexable(Term) = Slice(Term).empty, &) : Slice(Term)
     tree = parser.parse(circuit)
-    hg = Hypergraph.new(tree, level: 0)
-    if required_heads.present? && required_heads.none? { |head| hg.has_head_anywhere?(head) }
+    hg = Hypergraph.new(tree, 0)
+    if required_heads.present? && required_heads.none? { |head| D7.summary(hg.tree).has_head?(head) }
       return Slice[circuit]
     end
 

@@ -312,7 +312,7 @@ module MuSoma
   end
 
   def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
-    hg = D7::Hypergraph.new(tree, level: 0u32) # ?!
+    hg = D7::Hypergraph.new(tree)
 
     markup = Term.rep # ?!
 
