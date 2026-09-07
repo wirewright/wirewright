@@ -233,7 +233,7 @@ Finally, there's **MuSoma**. It is an interactive graphical environment for Rack
 
 See the `guides/` directory.
 
-- [Wirewright: The Guide (Part 0)](guides/Guide (Part 0).md)
+- [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
 
 ## Building Wirewright
 
