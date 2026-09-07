@@ -36,13 +36,13 @@ module InteractiveRack
       EXAMPLE
         $ echo "(cell @x 0) (cell @y) (feed @x @y)" > /tmp/seed.wwml
         $ irack /tmp/seed.wwml
-        ((cell @x 0)
-         (cell @y)
-         (feed @x @y))
+        (cell @x 0)
+        (cell @y)
+        (feed @x @y)
 
-        ((cell @x)
-         (cell @y 0)
-         (feed @x @y))
+        (cell @x)
+        (cell @y 0)
+        (feed @x @y)
 
       HELP
     end
@@ -97,7 +97,7 @@ module InteractiveRack
           puts
         end
 
-        puts ML.display(action.content, maxwidth: 80)
+        puts ML.display(action.content, maxwidth: 80, style: ML::Style::Document)
 
         if single_step
           gets
@@ -115,7 +115,7 @@ module InteractiveRack
           puts ";; Frame #{frame_count}"
         end
 
-        puts ML.display(action.content, maxwidth: 80)
+        puts ML.display(action.content, maxwidth: 80, style: ML::Style::Document)
 
         if detailed
           puts "| frame_count=#{frame_count} rec_median(frametime, 32)=#{automaton.median.humanize}"
