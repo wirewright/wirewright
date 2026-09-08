@@ -1122,11 +1122,25 @@ module Ww::M1
         form_result = Render.none
       end
 
-      if result.is_a?(Render::Some) && form_result.is_a?(Render::Some) && result.object != form_result.object
+      # If there are several agents participating in the mutation of a Slot, and
+      # one agent's mutation is nested, and this one's isn't (so the outer agent
+      # overwrites the changes of the inner agent entirely), consider that
+      # a conflict. E.g.:
+      #
+      #   (x_ _) <> {(x): ()}
+      #   ((±x)) <> {x: ^(+ x 1)}
+      #
+      # Here, the first agent overwrites (erases) the mutation of the second one.
+      # The second one is not happy about that, so it triggers a conflict.
+      pass do
+        next unless result.is_a?(Render::Some)
+        next unless form_result.is_a?(Render::Some)
+        next if result.object == form_result.object
+
         agents = agents(node)
-        unless agents.size == 1
-          return Conflict.new(agents)
-        end
+        next if agents.size == 1
+
+        return Conflict.new(agents)
       end
 
       if result.is_a?(Render::None)
