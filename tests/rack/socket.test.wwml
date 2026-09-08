@@ -1640,9 +1640,7 @@
     (server (@pool ((binary @in) -> (ws local 9814) -> (binary @out)))
       (client ((binary @request) -> (ws local 9813 key: @id) -> (binary @response)))
       (part (@in @request) (request_ _*))
-      ;; TODO: (part (@out @response) (_* `response))
-      (cell @response)
-      (feed @response (@out back)))
+      (part (@out @response) (_* `response)))
 
     (circuit @clients
       ;; Alice

@@ -47,6 +47,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-essential))
 
+(test "rack/part.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-essential rack-part))
+
 (test "rack/rewriter.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-rewriter))
