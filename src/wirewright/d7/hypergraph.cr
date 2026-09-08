@@ -59,17 +59,17 @@ module Ww::D7
     # Returns the wrapped `ParseTree`.
     getter tree : ParseTree
 
-    # :nodoc:
-    def initialize(@tree, @level : TargetLevel)
+    # Constructs a hypergraph of nodes at the given *level*.
+    def initialize(@tree : ParseTree, @level_query : TargetLevel)
       @annotations = Set(Annotation).new
     end
 
-    # Constructs a hypergraph for querying nodes only at the given target *level*.
+    # Constructs a hypergraph of nodes at a specific *level*.
     def initialize(tree : ParseTree, level : UInt32)
       initialize(tree, SingleLevel.new(level))
     end
 
-    # Constructs a hypergraph for querying nodes at any level.
+    # Constructs a hypergraph of nodes at all levels.
     def initialize(tree : ParseTree)
       initialize(tree, AnyLevel.new)
     end
@@ -98,9 +98,7 @@ module Ww::D7
     # NOTE: The notion of "bottom" does not exist for hypergraphs querying *any level*.
     # Raises on that.
     def bottom? : Bool
-      target = @level
-
-      case target
+      case query = @level_query
       in AnyLevel
         raise AssertionError.new("the notion of bottom does not exist for hypergraphs querying any level")
       in SingleLevel
@@ -108,11 +106,11 @@ module Ww::D7
 
       maxlevel = D7.maxlevel(@tree)
 
-      if target.level < maxlevel
+      if query.level < maxlevel
         return false # Definitely some nodes.
       end
 
-      if target.level > maxlevel
+      if query.level > maxlevel
         return true # Definitely no nodes.
       end
 
@@ -151,7 +149,7 @@ module Ww::D7
     # skip as much work as possible if the head is definitely absent in a subtree.
     def each_node_with_head(head : Term, &fn : Node ->) : Nil
       guide = Guide.new do |summary|
-        case @level
+        case @level_query
         in AnyLevel
           summary.has_head?(head)
         in SingleLevel
@@ -209,7 +207,7 @@ module Ww::D7
       id_zero, origin = row
 
       guide = Guide.new do |summary|
-        case @level
+        case @level_query
         in AnyLevel
           summary.has_head?(head)
         in SingleLevel
@@ -260,7 +258,7 @@ module Ww::D7
       id_zero, origin = row
 
       guide = Guide.new do |summary|
-        case @level
+        case @level_query
         in AnyLevel
           heads.empty? || heads.any? { |head| summary.has_head?(head) }
         in SingleLevel
@@ -407,7 +405,7 @@ module Ww::D7
     end
 
     def gnd_map(replacements : Hash(NodeAddr, Gnd)) : Hypergraph
-      Hypergraph.new(D7.gnd_map(@tree, replacements), @level)
+      Hypergraph.new(D7.gnd_map(@tree, replacements), @level_query)
     end
 
     def propose(*heads : Symbol, &fn : Node -> Patch?) : Indexable(Patch)
@@ -465,7 +463,7 @@ module Ww::D7
       end
 
       ctx = WalkContext.new(hg, guide, ids, sink)
-      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level, level: 0u32, id_zero: 0u32)
+      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level_query, level: 0u32, id_zero: 0u32)
     end
 
     private def self.walk(ctx, addr, tree : InertLeaf, target, level, id_zero) : WalkFlow
