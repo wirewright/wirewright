@@ -3,7 +3,7 @@
 Thank you for being interested in Wirewright. It'll be a wild ride, I promise :) We'll start from the very basics, and slowly build our way up to more practical programs.
 
 > [!NOTE]
-> Wirewright is heavily experimental and is not even versioned properly yet. Some parts of the system are being built as they are documented. Even though *these* guides are expected to cover some of the most stable parts of the system, do not expect Wirewright to be stabile in general (yet). I am working on it.
+> Wirewright is heavily experimental and is not even versioned properly yet. Some parts of the system are being built while they are documented. Even though *these* guides are expected to cover some of the most stable parts of the system, do not expect Wirewright to be stabile in general (yet). I am working on it.
 
 To get started, download the [latest release](https://github.com/wirewright/wirewright/releases/latest) of Wirewright, an archive, and extract it. Inside the archive is a directory named `ww-dist`. `cd` there once you have it. From the command line, the whole process could look like this:
 

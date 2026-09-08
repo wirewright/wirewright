@@ -177,7 +177,7 @@ So what is Wirewright? Good question. As a software project (as opposed to a phi
 
 At the foundation of Wirewright are **terms**. All terms are immutable. There are six types of terms: numbers, strings, booleans, symbols, dictionaries, and blobs (for binary data). Dictionaries are of most interest. Conceptually, a dictionary is a list of *entries*, where each entry is the pair `(key, value)`, and keys are unique. An entry can be an *item* (its key is 0 or a successor of an item key), or a *pair* (all other entries). Items therefore form a chain called the *itemspart* (e.g., keys 0, 1, 2, etc.) The rest of entries form the dictionary's *pairspart*.
 
-A term is an abstract object, a kind of "Platonic" entity. The machine represents them with bits and bytes and trees in memory, But for a human, it would be useful to have a *text* representation of terms. Wirewright Main Language, WwML for short (and if you want it even shorter, ML) is such a representation.
+A term is an abstract object, a kind of "Platonic" entity. The machine represents them with bits and bytes and trees in memory, but for a human, a *text* representation would be much more useful. Wirewright Main Language, WwML for short (and if you want it even shorter, ML), is such a representation.
 
 **WwML** started as S-expressions extended with key-value pairs, e.g. `(/ 1 2 precision: 3)`. Over time, it evolved into a notation with *a lot* of shorthands, so much so that sometimes it stops looking like S-expressions at all:
 
@@ -234,6 +234,7 @@ Finally, there's **MuSoma**. It is an interactive graphical environment for Rack
 See the `guides/` directory.
 
 - [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
+- [Wirewright: The Guide (Part 1)](<guides/Guide (Part 1).md>)
 
 ## Building Wirewright
 
