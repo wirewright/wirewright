@@ -28,10 +28,12 @@ require "./wirewright/outcome"
 require "./wirewright/service"
 require "./wirewright/extrinsic_map"
 
-require "./wirewright/path_monitor"
-require "./wirewright/path_server"
-require "./wirewright/uri_server"
-require "./wirewright/resource_server"
+{% if flag?(:dwuir) %}
+  require "./wirewright/path_monitor"
+  require "./wirewright/path_server"
+  require "./wirewright/uri_server"
+  require "./wirewright/resource_server"
+{% end %}
 
 require "./wirewright/ml"
 require "./wirewright/lr"
@@ -43,8 +45,10 @@ require "./wirewright/microfold"
 
 require "./wirewright/console"
 
-require "./wirewright/dwuir"
-require "./wirewright/soma"
+{% if flag?(:dwuir) %}
+  require "./wirewright/dwuir"
+  require "./wirewright/soma"
+{% end %}
 
 module Ww
 end
@@ -53,12 +57,17 @@ end
 include Ww
 
 require "./wirewright/m1"
+require "./wirewright/ruleset"
 require "./wirewright/rho"
 require "./wirewright/scan_kit"
 require "./wirewright/parse_kit"
-require "../baz5"
+
+{% if flag?(:dwuir) %}
+  require "../baz5"
+  require "../libtermbox2"
+{% end %}
+
 require "./wirewright/d7"
-require "../libtermbox2"
 
 require "./wirewright/alloy"
 require "./wirewright/harmony"

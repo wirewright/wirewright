@@ -1,5 +1,3 @@
-{% skip_file unless flag?(:dwuir) %}
-
 module Ww::DwUIR
   extend self
 
