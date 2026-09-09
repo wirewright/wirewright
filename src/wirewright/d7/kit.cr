@@ -1,172 +1,4 @@
 module Ww::D7
-  defcase MatchTable, groups : Pf::Map(Term, MatchGroup) do
-    # :nodoc:
-    EMPTY = new(groups: Pf::Map(Term, MatchGroup).new)
-
-    def self.new
-      EMPTY
-    end
-
-    def self.assoc(key, value) : MatchTable
-      EMPTY.assoc(key, value)
-    end
-
-    def assoc(key, object : MatchGroup) : MatchTable
-      {% unless flag?(:release) %}
-        assert !groups.has_key?(key)
-      {% end %}
-
-      copy_with(groups: groups.assoc(key, object))
-    end
-  end
-
-  def group?(table : MatchTable, name : Term) : MatchGroup?
-    table.groups[name]?
-  end
-
-  def group(table : MatchTable, name : Term) : MatchGroup
-    group?(table, name) || raise KeyError.new
-  end
-
-  def degree(object) : Int32
-    degree = 0
-    each_match(object) do
-      degree += 1
-    end
-    degree
-  end
-
-  def select(match_table : MatchTable, & : Match -> Bool) : MatchTable
-    groups1 = match_table.groups.map_value do |group|
-      self.select(group) { |match| yield match }
-    end
-
-    MatchTable.new(groups1)
-  end
-
-  def select(group : MatchGroup, & : Match -> Bool) : MatchGroup
-    filtered = Pf::Kit.stack_array(Match)
-
-    group.each do |match|
-      next unless yield match
-
-      filtered << match
-    end
-
-    if filtered.size == group.size
-      return group
-    end
-
-    filtered.to_readonly_slice(&.itself)
-  end
-
-  alias MatchGroup = Slice(Match)
-
-  defrecord Match, hg : Hypergraph, node : Node, env : Term::Dict
-
-  # Returns the first `Match` in *object*.
-  def match(object : Match) : Match
-    object
-  end
-
-  # :ditto:
-  def match(object : MatchGroup) : Match
-    match(object.first)
-  end
-
-  def each_match(object : Match, &) : Nil
-    yield object
-  end
-
-  def each_match(object : MatchGroup, &) : Nil
-    object.each { |match| yield match }
-  end
-
-  def each_match(object : MatchTable, &) : Nil
-    object.groups.each do |_, group|
-      each_match(group) { |match| yield match }
-    end
-  end
-
-  # Returns the first node in *object*.
-  def node(object) : Node
-    match(object).node
-  end
-
-  # Returns the identifier of the first node in *object*.
-  def id(object) : NodeId
-    node(object).id
-  end
-
-  # Shorthand for running `Term::Dict#[]?(*args)`on the first term in *object*.
-  def part?(object, *args)
-    node(object).term[*args]?
-  end
-
-  # Retrieves the value associated with *capture* in the first match env
-  # in *object*.
-  #
-  # *capture* is converted to a term using `Term.of`.
-  def fetch(object, capture) : Term
-    match(object).env[capture]
-  end
-
-  # Retrieves the values associated with *captures* in the first match env
-  # in *object*.
-  def fetch(object, *captures) : Tuple
-    captures.map { |capture| fetch(object, capture) }
-  end
-
-  def find?(match_group : MatchGroup, *, where capture : Term | Symbol, eq needle : AbsEdge) : Match?
-    capture = Term.of(capture)
-
-    match_group.find do |match|
-      D7.resolve(fetch(match, capture), wrt: match) == needle
-    end
-  end
-
-  # Same as `find?`, but raises `Enumerable::NotFoundError` if no matches
-  # were found.
-  def find(*args, **kwargs) : Match
-    find?(*args, **kwargs) || raise Enumerable::NotFoundError.new
-  end
-
-  # FIXME: Not sure what this function is doing. Is there a better name?
-  def permutation(dev : Match, src : MatchGroup, capture, arranged_like_in goal : Indexable(Term)) : Slice(Int32) forall T
-    assert src.size == goal.size
-
-    if src.size < 8 # Fast path
-      permutation = src.to_readonly_slice do |match|
-        goal.index! do |candidate|
-          D7.resolve(candidate, wrt: dev) == D7.resolve(fetch(match, capture), wrt: match)
-        end
-      end
-      return permutation
-    end
-
-    #  src  a c b
-    # goal  b a c
-    table = {} of AbsEdge => Int32
-    src.each_with_index do |match, index|
-      table[D7.resolve(fetch(match, capture), wrt: match)] = index
-    end
-
-    # table
-    #   a 0
-    #   c 1
-    #   b 2
-    # -->
-    # b a c
-    # -->
-    # 2 0 1
-    goal.to_readonly_slice { |term| table[D7.resolve(term, wrt: dev)] }
-  end
-
-  # See `Hypergraph#resolve`.
-  def resolve(edge : Term, *, wrt match : Match) : AbsEdge
-    match.hg.resolve(match.node.addr, edge)
-  end
-
   # An immutable map of node ids to replacement terms.
   #
   # Disjoint changes to the same node are supported and will be properly merged.
@@ -177,32 +9,12 @@ module Ww::D7
     Pf::Map.assoc(object.id, term)
   end
 
-  # :ditto:
-  def replace(object : Match, term : Term) : Patch
-    replace(object.node, term)
-  end
-
-  # :ditto:
-  def replace(object : MatchGroup, term : Term) : Patch
-    patches(object) { |match| replace(match, term) }
-  end
-
   # Constructs a patch that morphs node terms in *object* according
   # to *morphseq*.
   #
   # See also `Term.morph`.
   def patch(object : Node, *morphseq) : Patch
     Patch.assoc(object.id, Term.morph(object.term, *morphseq))
-  end
-
-  # :ditto:
-  def patch(object : Match, *morphseq) : Patch
-    patch(object.node, *morphseq)
-  end
-
-  # :ditto:
-  def patch(object : MatchGroup, *morphseq) : Patch
-    patches(object) { |match| patch(match, *morphseq) }
   end
 
   # Constructs patches for each object in *objects* using the block;
@@ -232,6 +44,224 @@ module Ww::D7
   # Shorthand that lets you list & merge multiple patches from the arguments.
   def patches(*objects : Patch) : Patch
     patches(objects)
+  end
+
+  private def compatible?(a : Tpath, b : Tpath) : Bool
+    if a.size == b.size
+      return a != b # if different, then they're compatible
+    end
+
+    sm, lg = a.size < b.size ? {a, b} : {b, a}
+    !lg.starts_with?(sm) # E.g. Tpath[2] and Tpath[2—1] are incompatible.
+  end
+
+  private def compatible?(ref : Term, successor : Term, &predicate : Tpath -> Bool) : Bool
+    compatible?(ref, successor, Tpath[], predicate)
+  end
+
+  private def compatible?(ref : Term, successor : Term, path, predicate) : Bool
+    if ref == successor
+      return true # compatible
+    end
+
+    unless (ref = ref.as_d?) && (successor = successor.as_d?)
+      return predicate.call(path)
+    end
+
+    if ref.itemsize == successor.itemsize
+      # Visit items recursively.
+      successor.items.each_with_index do |item1, index|
+        subpath = path.append(Tpath.value(index))
+        item0 = ref[index]
+        return false unless compatible?(item0, item1, subpath, predicate)
+      end
+    else
+      # Itemsize change (adding or removing an item) is treated holistically:
+      # only one participant is allowed to modify it. To achieve this we mark
+      # all items as having been modified.
+      target = {ref, successor}.max_by(&.itemsize)
+      target.items.each_with_index do |target, index|
+        subpath = path.append(Tpath.value(index))
+        return false unless predicate.call(subpath)
+      end
+    end
+
+    ref.each_entry(in: Term::Dict.pairspart) do |key, value0|
+      subpath = path.append(Tpath.value(key))
+      unless value1 = successor[key]?
+        # Successor removed *key*.
+        return false unless predicate.call(subpath)
+        next
+      end
+
+      # Successor possibly modified *key*.
+      unless compatible?(value0, value1, subpath, predicate)
+        return false
+      end
+    end
+
+    successor.each_entry(in: Term::Dict.pairspart) do |key, _|
+      next if key.in?(ref)
+
+      # Successor added *key*.
+      subpath = path.append(Tpath.value(key))
+      return false unless predicate.call(subpath)
+    end
+
+    true # compatible
+  end
+
+  private def compatible?(orig : Term, rep0 : Term, rep1 : Term) : Bool
+    affected0 = Pf::Kit.stack_array(Tpath)
+
+    _ = compatible?(orig, rep0) do |path|
+      affected0 << path
+
+      true # continue
+    end
+
+    compatible?(orig, rep1) do |path1|
+      affected0.all? { |path0| compatible?(path0, path1) }
+    end
+  end
+
+  # Accumulates changes made by *successor* into *acc*. Changes are found
+  # by comparing *ref* and *successor*.
+  #
+  # WARNING: This method assumes implicitly that the changes of all *successors*
+  # accumulated into *acc* are disjoint. If they conflict, this method will
+  # break. You are expected to guard calls to this method with a disjointedness check.
+  private def overlay(acc : Term, ref : Term, successor : Term) : Term
+    unless (acc_dict = acc.as_d?) && (successor_dict = successor.as_d?)
+      return successor
+    end
+
+    assert ref_dict = ref.as_d?
+
+    result = acc_dict.transaction do |commit|
+      ref_dict.each_entry do |key, ref_value|
+        unless successor_value = successor_dict[key]?
+          # Successor removed *key*.
+          commit.without(key)
+          next
+        end
+
+        # We'd like to keep acc's values unless the successor modifies
+        # the entry.
+        next if successor_value == ref_value
+
+        # Successor modified *key*.
+        commit.with(key, overlay(acc_dict[key], ref_value, successor_value))
+      end
+
+      successor.each_entry do |key, successor_value|
+        next if key.in?(ref_dict)
+
+        # Successor created *key*.
+        commit.with(key, successor_value)
+      end
+    end
+
+    Term.of(result)
+  end
+
+  def merge(hg : Hypergraph, proposals : Indexable(Patch)) : Patch
+    if proposals.empty?
+      return Patch.new
+    end
+
+    # A table from node id to replacement proposals for that node along
+    # with proposal index (used for ranking).
+    #
+    # NOTE: Proposals are sorted by soln, and iteration is inorder, thus
+    # the arrays here are sorted as well by proposal index, asc, and
+    # therefore by soln, asc.
+    patchtab = {} of NodeId => Array({Term, UInt32})
+
+    probably_conflicts = false
+
+    proposals.each_with_index do |proposal, proposal_index|
+      proposal.each do |node_id, rep|
+        reps = patchtab.put_if_absent(node_id) { [] of {Term, UInt32} }
+        reps << {rep, proposal_index.to_u32}
+
+        if reps.size > 1
+          probably_conflicts = true
+        end
+      end
+    end
+
+    proposals_declined = Pf::USet32[]
+    if probably_conflicts
+      proposals_declined = decline_set(hg, patchtab)
+    end
+
+    Patch.transaction do |patch|
+      patchtab.each do |node_id, reps|
+        if entry = reps.single? # Fast path
+          rep, proposal_index = entry
+          next if proposal_index.in?(proposals_declined)
+
+          patch.assoc(node_id, rep)
+          next
+        end
+
+        ref = hg[node_id].term
+        acc = ref
+
+        reps.each do |rep, proposal_index|
+          next if proposal_index.in?(proposals_declined)
+
+          acc = overlay(acc, ref, rep)
+        end
+
+        patch.assoc(node_id, acc)
+      end
+    end
+  end
+
+  # Computes the proposal decline set for *patchtab*: declines proposals
+  # that conflict.
+  def decline_set(hg : Hypergraph, patchtab : Hash(NodeId, Array({Term, UInt32}))) : Pf::USet32
+    Pf::USet32.transaction do |declined|
+      patchtab.each do |node_id, reps|
+        orig = hg[node_id].term
+
+        reps.each_with_index do |(rep0, proposal_index0), i|
+          next if proposal_index0.in?(declined)
+
+          abstains = false
+
+          reps.each_with_index do |(rep1, proposal_index1), j|
+            next if i == j
+            next if proposal_index1.in?(declined)
+
+            # If our (rep0's) proposal index is smaller, then we are more preferred,
+            # and thus we won't disable ourselves in case of conflict with rep1. This
+            # means there is little point in checking for conflict in the first place.
+            # rep1, who is less preferred, will do that instead.
+            next if proposal_index0 < proposal_index1
+
+            # We shouldn't have the same rule propose two versions for the same node.
+            # This can't happen because all rules return a Patch, which is a hash table;
+            # its keys cannot repeat.
+            assert proposal_index0 != proposal_index1
+
+            next if compatible?(orig, rep0, rep1)
+
+            # We (rep0) are less preferred than rep1 and are also incompatible with
+            # it. We are in conflict with rep1. We must abstain in favor of rep1
+            # because we are less preferred.
+            abstains = true
+            break
+          end
+
+          next unless abstains
+
+          declined << proposal_index0
+        end
+      end
+    end
   end
 
   # Performs *frame fusion*.

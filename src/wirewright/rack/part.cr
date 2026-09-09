@@ -240,7 +240,7 @@ module Ww::Rack::Part
       end
     end
 
-    D7::Regime.merge(hg, {patch, updates})
+    D7.merge(hg, {patch, updates})
   end
 
   # Finds all `part` nodes and builds a graph of them.

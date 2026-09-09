@@ -249,21 +249,23 @@ class Ww::Rack::Automaton
               FS.step(@fs_state) do |fs|
                 Rewriter.step(@rewriter_state) do |rewriter|
                   Backsys.step(@backsys_state) do |backsys|
-                    D7.step(@parser, subframes.last) do |hg|
-                      prepass.call(hg) do |hg|
-                        proposals = [] of D7::Patch
+                    Misc.step do |misc|
+                      D7.step(@parser, subframes.last) do |hg|
+                        prepass.call(hg) do |hg|
+                          proposals = [] of D7::Patch
 
-                        extrinsics.call(hg, proposals)
-                        parser.call(hg, proposals)
-                        database.call(hg, proposals)
-                        accord.call(hg, proposals)
-                        supervisor.call(hg, proposals)
-                        fs.call(hg, proposals)
-                        rewriter.call(hg, proposals)
-                        backsys.call(hg, proposals)
-                        Rack.propose(hg, proposals)
+                          extrinsics.call(hg, proposals)
+                          parser.call(hg, proposals)
+                          database.call(hg, proposals)
+                          accord.call(hg, proposals)
+                          supervisor.call(hg, proposals)
+                          fs.call(hg, proposals)
+                          rewriter.call(hg, proposals)
+                          backsys.call(hg, proposals)
+                          misc.call(hg, proposals)
 
-                        D7::Regime.merge(hg, proposals)
+                          D7.merge(hg, proposals)
+                        end
                       end
                     end
                   end

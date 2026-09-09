@@ -129,115 +129,6 @@ module Ww::Rack
       # |@ rack.feed
       #
       # |@pattern
-      # [feed source_ destination_]
-      # [feed (not inhibitors_*) source_ destination_]
-      #
-      # |@key source rack.feed.source
-      # One or more sources of terms.
-      #
-      # |@key destination rack.feed.destination
-      # One or more corresponding destinations.
-      #
-      # |@key inhibitors rack.edge
-      # One or more inhibitor edges.
-      #
-      # |@block
-      # Feeds allow you to move terms from one place (usually designated by
-      # `rack.cell`) to another. There are several variants of the feed node:
-      #
-      # - *Transfer*: move a term from one place to another (1:1).
-      # - *Aggregate*: move terms from many places to one (M:1).
-      # - *Broadcast*: move terms from one place to many (1:M).
-      # - *Parallel transfer*: move terms from many places to many places (M:M)
-      #
-      # Feeds can have *inhibitors*. The presence of a nonempty cell at one of
-      # inhibitor edges deactivates the feed.
-      #
-      # |@example
-      #
-      # ### Transfer
-      #
-      # ```wwml
-      # (cell @x 100)
-      # (cell @y)
-      # (feed @x @y)
-      # ```
-      #
-      # ... evolves to:
-      #
-      # ```wwml
-      # (cell @x)
-      # (cell @y 100)
-      # (feed @x @y)
-      # ```
-      #
-      # ### Aggregate
-      #
-      # ```wwml
-      # (cell @x 100)
-      # (cell @y 200)
-      # (feed (@x @y) @z)
-      # (cell @z)
-      # ```
-      #
-      # ... evolves to:
-      #
-      # ```wwml
-      # (cell @x)
-      # (cell @y)
-      # (feed (@x @y) @z)
-      # (cell @z (100 200))
-      # ```
-      #
-      # ### Broadcast
-      #
-      # ```wwml
-      # (cell @x (100 200))
-      # (feed @x (@y @z))
-      # (cell @y)
-      # (cell @z)
-      # ```
-      #
-      # ... evolves to:
-      #
-      # ```wwml
-      # (cell @x)
-      # (feed @x (@y @z))
-      # (cell @y 100)
-      # (cell @z 200)
-      # ```
-      #
-      # ### Parallel transfer
-      #
-      # ```wwml
-      # (cell @x 100)
-      # (cell @y 200)
-      # (feed (@x @y) (@b @a)) ;; NOTICE how we flip the order: @b @a
-      #
-      # (cell @a)
-      # (cell @b)
-      # ```
-      #
-      # ... evolves to:
-      #
-      # ```wwml
-      # (cell @x)
-      # (cell @y)
-      # (feed (@x @y) (@b @a))
-      #
-      # ;; We've flipped the order above:
-      # (cell @a 200)
-      # (cell @b 100)
-      # ```
-      matchpi %{[feed _*]} do
-        continue unless spec = Feed.spec?(node)
-
-        D7.gnd(node, Feed.edges(spec), defn: Feed.render(spec))
-      end
-
-      # |@ rack.feed
-      #
-      # |@pattern
       # [feed (%group edges_ (%past @_ min: 3))]
       #
       # |@key edges rack.edge
@@ -290,6 +181,134 @@ module Ww::Rack
         end
 
         D7.mixture(node, defn) { node }
+      end
+
+      # |@ rack.feed
+      #
+      # |@pattern
+      # [feed source_ destination_]
+      # [feed (not inhibitors_*) source_ destination_]
+      #
+      # |@key source rack.feed.source
+      # Source(s) of the feed.
+      #
+      # |@key destination rack.feed.destination
+      # Destination(s) of the feed.
+      #
+      # |@key inhibitors rack.edge
+      # One or more inhibitor edges.
+      #
+      # |@block
+      # Feeds allow you to move terms from one place (usually designated by
+      # `rack.cell`) to another. There are several variants of the feed node:
+      #
+      # - *Transfer*: move a term from one place to another (1:1).
+      # - *Aggregate*: move terms from many places to one (M:1).
+      # - *Distribute*: move terms from one place to many (1:M), the inverse of *aggregate*.
+      # - *Broadcast*: move a term from one place to many (1:M).
+      # - *Parallel transfer*: move terms from many places to many places (M:M)
+      #
+      # Feeds can have *inhibitors*. The presence of a nonempty cell at one of
+      # inhibitor edges deactivates the feed.
+      #
+      # |@example
+      #
+      # ### Transfer
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y)
+      # (feed @x @y)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y 100)
+      # (feed @x @y)
+      # ```
+      #
+      # ### Aggregate
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y 200)
+      # (feed (@x @y) @z)
+      # (cell @z)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y)
+      # (feed (@x @y) @z)
+      # (cell @z (100 200))
+      # ```
+      #
+      # ### Distribute
+      #
+      # ```wwml
+      # (cell @x (100 200))
+      # (feed (@x items) (@y @z))
+      # (cell @y)
+      # (cell @z)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (feed (@x items) (@y @z))
+      # (cell @y 100)
+      # (cell @z 200)
+      # ```
+      #
+      # ### Broadcast
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (feed @x (@y @z))
+      # (cell @y)
+      # (cell @z)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (feed @x (@y @z))
+      # (cell @y 100)
+      # (cell @z 100)
+      # ```
+      #
+      # ### Parallel transfer
+      #
+      # ```wwml
+      # (cell @x 100)
+      # (cell @y 200)
+      # (feed (@x @y) (@b @a)) ;; NOTICE how we flip the order: @b @a
+      #
+      # (cell @a)
+      # (cell @b)
+      # ```
+      #
+      # ... evolves to:
+      #
+      # ```wwml
+      # (cell @x)
+      # (cell @y)
+      # (feed (@x @y) (@b @a))
+      #
+      # ;; We've flipped the order above:
+      # (cell @a 200)
+      # (cell @b 100)
+      # ```
+      matchpi %{[feed _*]} do
+        continue unless spec = Feed.spec?(node)
+
+        D7.gnd(node, Feed.edges(spec))
       end
 
       # |@ rack.discard
@@ -1357,8 +1376,8 @@ module Ww::Rack
       # (cell @y 4)
       # (transfer (@x ±n @y) ^(* n 2))
       # ```
-      matchpi %{[transfer (@src_ pattern_ @dst_) template_]} do
-        D7.mixture(node, Term.of(:transfer, { {:not}, {src}, {pattern}, dst }, template)) { node }
+      matchpi %{[transfer (@src_ _ @dst_) _]} do
+        D7.gnd(node, src, dst)
       end
 
       # |@ rack.transfer
@@ -1406,8 +1425,11 @@ module Ww::Rack
       #
       # (cell @sink (300 400 100))
       # ```
-      matchpi %{[transfer (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
-        D7.mixture(node, Term.of(:transfer, { {:not}, srcs, pattern, dst }, template)) { node }
+      matchpi %{[transfer (srcs←((%past @_ min: 1)) _ @dst_) _]} do
+        edges = Set(Term).new
+        edges.concat(srcs.items)
+        edges << dst
+        D7.gnd(node, edges)
       end
 
       # |@ rack.transfer
@@ -1483,13 +1505,12 @@ module Ww::Rack
       #
       # Here, because the `@inhibitor` cell is nonempty, the transfer is not
       # carried out.
-      matchpi %{[transfer ((not (%group inhibitors_ (%past @_))) srcs←((%past @_ min: 1)) pattern_ @dst_) template_]} do
-        edges = [] of Term
+      matchpi %{[transfer ((not (%group inhibitors_ (%past @_ min: 0))) srcs←((%past @_ min: 1)) _ @dst_) _]} do
+        edges = Set(Term).new
         edges.concat(inhibitors.items)
         edges.concat(srcs.items)
         edges << dst
-
-        D7.gnd(node, edges, defn: Term.of(:transfer, inhibitors, srcs, pattern, dst, template))
+        D7.gnd(node, edges)
       end
 
       # |@ rack.backsys
@@ -1747,8 +1768,8 @@ module Ww::Rack
       #
       # |@pattern
       # [view (@src_ pattern_ @dst_) template_]
-      matchpi %{[view (@src_ pattern_ @dst_) template_]} do
-        D7.gnd(node, src, dst, defn: Term.of(:view, { {src}, {pattern}, dst }, template))
+      matchpi %{[view (@src_ _ @dst_) _]} do
+        D7.gnd(node, src, dst)
       end
 
       # |@ rack.view
@@ -1759,39 +1780,6 @@ module Ww::Rack
         edges = [] of Term
         edges.concat(srcs.items)
         edges << dst
-
-        D7.gnd(node, edges)
-      end
-
-      # |@ rack.extension
-      #
-      # |@pattern
-      # [extension (@src_ pattern_ @dst_) template_]
-      matchpi %{[extension (@src_ pattern_ @dst_) template_]} do
-        D7.gnd(node, src, dst, defn: Term.of(:extension, { {src}, {pattern}, dst }, template))
-      end
-
-      # |@ rack.extension
-      #
-      # |@pattern
-      # [extension (@src_ src-pattern_ @dst_ dst-pattern_) template_]
-      matchpi %{[extension (@src_ src-pattern_ @dst_ dst-pattern_) template_]} do
-        D7.gnd(node, src, dst, defn: Term.of(:extension, { {src}, {src_pattern}, dst, dst_pattern }, template))
-      end
-
-      # |@ rack.extension
-      #
-      # |@pattern
-      # [extension (srcs←((%past @_ min: 1)) src-pattern_ @dst_) template_]
-      # [extension (srcs←((%past @_ min: 1)) src-pattern_ @dst_ dst-pattern_) template_]
-      matchpi(
-        %{[extension (srcs←((%past @_ min: 1)) _ @dst_ _) _]},
-        %{[extension (srcs←((%past @_ min: 1)) _ @dst_) _]},
-      ) do
-        edges = [] of Term
-        edges.concat(srcs.items)
-        edges << dst
-
         D7.gnd(node, edges)
       end
 

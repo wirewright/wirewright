@@ -70,52 +70,52 @@
       (feed @a (@b front)))
     end)
 
-  ;; Atop (absent)
+  ;; Over (absent)
   (rack
     (frame
       (cell @a 100)
       (cell @b)
-      (feed @a (atop @b)))
+      (feed @a (over @b)))
     (frame
       (cell @a)
       (cell @b 100)
-      (feed @a (atop @b)))
+      (feed @a (over @b)))
     end)
 
-  ;; Atop (present)
+  ;; Over (present)
   (rack
     (frame
       (cell @a 100)
       (cell @b qux)
-      (feed @a (atop @b)))
+      (feed @a (over @b)))
     (frame
       (cell @a)
       (cell @b 100)
-      (feed @a (atop @b)))
+      (feed @a (over @b)))
     end)
 
-  ;; Atop...front
+  ;; Over...front
   (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
-      (feed @a (atop (@b front))))
+      (feed @a (over (@b front))))
     (frame
       (cell @a)
       (cell @b (100 b c))
-      (feed @a (atop (@b front))))
+      (feed @a (over (@b front))))
     end)
 
-  ;; Atop...back
+  ;; Over...back
   (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
-      (feed @a (atop (@b back))))
+      (feed @a (over (@b back))))
     (frame
       (cell @a)
       (cell @b (a b 100))
-      (feed @a (atop (@b back))))
+      (feed @a (over (@b back))))
     end)
 
   ;; Dequeue
@@ -353,39 +353,55 @@
       (cell @agg ((100 a z) (200 b z) (300 c z))))
     end)
 
-  ;; Aggregate: atop ... back
+  ;; Aggregate: over ... back
   (rack
     (frame
       (cell @a 100)
       (cell @b (a b c))
       (cell @c (x y z))
-      (feed (@a (@b front) (copy (@c back))) (atop (@agg back)))
+      (feed (@a (@b front) (copy (@c back))) (over (@agg back)))
       (cell @agg (qux)))
     (frame
       (cell @a)
       (cell @b (b c))
       (cell @c (x y z))
-      (feed (@a (@b front) (copy (@c back))) (atop (@agg back)))
+      (feed (@a (@b front) (copy (@c back))) (over (@agg back)))
       (cell @agg ((100 a z))))
     end)
 
-  ;; Broadcast (basic)
+  ;; Distribute (basic)
   (rack
     (frame
       (cell @a (200 100 300))
-      (feed @a (@x @y @z))
+      (feed (@a items) (@x @y @z))
       (cell @x)
       (cell @y)
       (cell @z))
     (frame
       (cell @a)
-      (feed @a (@x @y @z))
+      (feed (@a items) (@x @y @z))
       (cell @x 200)
       (cell @y 100)
       (cell @z 300))
     end)
 
-  ;; Aggregate -> broadcast osc
+  ;; Broadcast
+  (rack
+    (frame
+      (cell @a 100)
+      (cell @b)
+      (cell @c)
+      (feed @a (@b @c)))
+
+    (frame
+      (cell @a)
+      (cell @b 100)
+      (cell @c 100)
+      (feed @a (@b @c)))
+
+    end)
+
+  ;; Aggregate -> distribute osc
   (rack
     (frame
       (cell @a 100)
@@ -393,21 +409,21 @@
       (cell @c (x y z))
       (feed (@a (@b front) (copy (@c back))) (@agg back))
       (cell @agg ())
-      (feed (@agg back) (@a (@b front) (atop (@c back)))))
+      (feed ((@agg back) items) (@a (@b front) (over (@c back)))))
     (frame
       (cell @a)
       (cell @b (b c))
       (cell @c (x y z))
       (feed (@a (@b front) (copy (@c back))) (@agg back))
       (cell @agg ((100 a z)))
-      (feed (@agg back) (@a (@b front) (atop (@c back)))))
+      (feed ((@agg back) items) (@a (@b front) (over (@c back)))))
     (frame
       (cell @a 100)
       (cell @b (a b c))
       (cell @c (x y z))
       (feed (@a (@b front) (copy (@c back))) (@agg back))
       (cell @agg ())
-      (feed (@agg back) (@a (@b front) (atop (@c back))))))
+      (feed ((@agg back) items) (@a (@b front) (over (@c back))))))
     ;; ...
 
   ;; Parallel transfer
@@ -457,7 +473,7 @@
       (cell @b 300)
       (feed (@a @b @c @d) @x)
       (cell @x)
-      (feed @x (@a @b @c @d)))
+      (feed (@x items) (@a @b @c @d)))
     (frame
       (cell @d)
       (cell @a)
@@ -465,7 +481,7 @@
       (cell @b)
       (feed (@a @b @c @d) @x)
       (cell @x (400 300 200 100))
-      (feed @x (@a @b @c @d)))
+      (feed (@x items) (@a @b @c @d)))
     (frame
       (cell @d 100)
       (cell @a 400)
@@ -473,7 +489,7 @@
       (cell @b 300)
       (feed (@a @b @c @d) @x)
       (cell @x)
-      (feed @x (@a @b @c @d))))
+      (feed (@x items) (@a @b @c @d))))
     ;; ...
 
   (rack
@@ -503,9 +519,9 @@
         (cell @z 100)))
     end)
 
-  ;; Conflicts like this one rely on addr comparison of participants deep in the guts
-  ;; of D7 to remain deterministic. The comparison is a method of last resort when
-  ;; it comes to sorting solutions. Here we exercise it.
+  ;; Conflicts like this one rely on lexicographic comparison of participants deep in
+  ;; the guts of D7 to remain deterministic. The comparison is a method of last resort
+  ;; when it comes to sorting solutions. Here we exercise it.
   (rack
     (frame
       (cell @x a)
@@ -515,7 +531,7 @@
       (cell @sink)
       (discard @sink))
     (frame
-      (cell @x) ;; < (cell @x)'s addr is smaller so it wins
+      (cell @x) ;; < (cell @x) is lexicographically smaller than @y
       (cell @y b)
       (feed @x @sink)
       (feed @y @sink)
@@ -553,15 +569,15 @@
       (cell @sink)
       (discard @sink))
     (frame
-      (cell @y) ;; < (cell @y)'s addr is smaller so it wins
-      (cell @x a)
+      (cell @y b)
+      (cell @x) ;; < ditto, (cell @x) is lexicographically smaller than @y
       (feed @x @sink)
       (feed @y @sink)
-      (cell @sink b)
+      (cell @sink a)
       (discard @sink))
     (frame
-      (cell @y)
-      (cell @x a)
+      (cell @y b)
+      (cell @x)
       (feed @x @sink)
       (feed @y @sink)
       (cell @sink)
@@ -571,7 +587,7 @@
       (cell @x)
       (feed @x @sink)
       (feed @y @sink)
-      (cell @sink a)
+      (cell @sink b)
       (discard @sink))
     (frame
       (cell @y)
@@ -1792,11 +1808,11 @@
           (module {}
             (cell @sum 1 output: true)
             (cell @view0 input: true)
-            (extension (@view0 v_ @sum) ^(sum v)))
+            (backsys {¦ view0_ ⋮sum} <> {sum: ^(sum view0)}))
           (module {}
             (cell @product 1 output: true)
             (cell @view1 input: true)
-            (extension (@view1 v_ @product) ^(product v)))))
+            (backsys {¦ view1_ ⋮product} <> {product: ^(product view1)}))))
       (backsys (@x)
         ((%all (%leaves (%flat (_ n) ns_) (cell @_ ±n ⍊ output))
                 ⟪(cell @_ (%group dst_ _?) ⍊ input)⟫°))
@@ -1910,8 +1926,8 @@
     (frame
       (circuit @x
         (cell @src 100)
-        (extension (@src ±n @voice0) ^(+ n 2))
-        (extension (@src ±n @voice1) ^(* n 2))
+        (backsys {¦ ±src ⋮voice0} <> {voice0: ^(+ src 2)})
+        (backsys {¦ ±src ⋮voice1} <> {voice1: ^(* src 2)})
         (cell @voice0)
         (cell @voice1))
       (backsys @x
@@ -1981,76 +1997,76 @@
     (frame
       (delay 3 "Foo")
       (cell @x-view)
-      (feed (copy @x) (atop @x-view))
+      (feed (copy @x) (over @x-view))
       (circuit @x
         (delay 3 "Bar")
         (cell @y-view)
-        (feed (copy @y) (atop @y-view))
+        (feed (copy @y) (over @y-view))
         (circuit @y (delay 3 "Baz"))))
     (frame
       (delay 2 "Foo")
       (cell @x-view
         ((delay 3 "Bar")
          (cell @y-view)
-         (feed (copy @y) (atop @y-view))
+         (feed (copy @y) (over @y-view))
          (circuit @y (delay 3 "Baz"))))
-      (feed (copy @x) (atop @x-view))
+      (feed (copy @x) (over @x-view))
       (circuit @x
         (delay 2 "Bar")
         (cell @y-view ((delay 3 "Baz")))
-        (feed (copy @y) (atop @y-view))
+        (feed (copy @y) (over @y-view))
         (circuit @y (delay 2 "Baz"))))
     (frame
       (delay 1 "Foo")
       (cell @x-view
         ((delay 2 "Bar")
          (cell @y-view ((delay 3 "Baz")))
-         (feed (copy @y) (atop @y-view))
+         (feed (copy @y) (over @y-view))
          (circuit @y (delay 2 "Baz"))))
-      (feed (copy @x) (atop @x-view))
+      (feed (copy @x) (over @x-view))
       (circuit @x
         (delay 1 "Bar")
         (cell @y-view ((delay 2 "Baz")))
-        (feed (copy @y) (atop @y-view))
+        (feed (copy @y) (over @y-view))
         (circuit @y (delay 1 "Baz"))))
     (frame
       "Foo"
       (cell @x-view
         ((delay 1 "Bar")
          (cell @y-view ((delay 2 "Baz")))
-         (feed (copy @y) (atop @y-view))
+         (feed (copy @y) (over @y-view))
          (circuit @y (delay 1 "Baz"))))
-      (feed (copy @x) (atop @x-view))
+      (feed (copy @x) (over @x-view))
       (circuit @x
         "Bar"
         (cell @y-view ((delay 1 "Baz")))
-        (feed (copy @y) (atop @y-view))
+        (feed (copy @y) (over @y-view))
         (circuit @y "Baz")))
     (frame
       "Foo"
       (cell @x-view
         ("Bar"
          (cell @y-view ((delay 1 "Baz")))
-         (feed (copy @y) (atop @y-view))
+         (feed (copy @y) (over @y-view))
          (circuit @y "Baz")))
-      (feed (copy @x) (atop @x-view))
+      (feed (copy @x) (over @x-view))
       (circuit @x
         "Bar"
         (cell @y-view ("Baz"))
-        (feed (copy @y) (atop @y-view))
+        (feed (copy @y) (over @y-view))
         (circuit @y "Baz")))
     (frame
       "Foo"
       (cell @x-view
         ("Bar"
          (cell @y-view ("Baz"))
-         (feed (copy @y) (atop @y-view))
+         (feed (copy @y) (over @y-view))
          (circuit @y "Baz")))
-      (feed (copy @x) (atop @x-view))
+      (feed (copy @x) (over @x-view))
       (circuit @x
         "Bar"
         (cell @y-view ("Baz"))
-        (feed (copy @y) (atop @y-view))
+        (feed (copy @y) (over @y-view))
         (circuit @y "Baz")))
     end))
 
@@ -2062,12 +2078,12 @@
       (circuit (@snd (fst_ snd_ _*))
         1 2 3 4 5 6)
       (cell @x qux)
-      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     (frame
       (circuit (@snd (fst_ snd_ _*))
         1 (seen qux ^fst ^snd) 3 4 5 6)
       (cell @x qux)
-      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     end)
 
   ;; Basic
@@ -2209,11 +2225,11 @@
     (frame
       (cell (@snd (fst_ snd_ _*)) (1 2 3 4 5 6))
       (cell @x qux)
-      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     (frame
       (cell (@snd (fst_ snd_ _*)) (1 (seen qux ^fst ^snd) 3 4 5 6))
       (cell @x qux)
-      (extension (@x x_ @snd) (seen ^x ^^fst ^^snd)))
+      (view (@x x_ @snd) (seen ^x ^^fst ^^snd)))
     end))
 
 ;; Frag
@@ -2361,270 +2377,6 @@
       (frag @y (feed @a @b))
       (cell @a)
       (cell @b 100))
-    end))
-
-;; extension
-(group
-  ;; Many sources, dst pattern `_`
-  (rack
-    (frame
-      (cell @x 1)
-      (queue (@y @y') (2 3 4))
-      (discard @y)
-      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
-      (cell @s 0))
-    (frame
-      (cell @x 1)
-      (queue (@y @y') (3 4))
-      (discard @y)
-      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
-      (cell @s 3))
-    (frame
-      (cell @x 1)
-      (queue (@y @y') (4))
-      (discard @y)
-      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
-      (cell @s 4))
-    (frame
-      (cell @x 1)
-      (queue (@y @y') ())
-      (discard @y)
-      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
-      (cell @s 5))
-    end)
-
-  ;; Ditto, dst unset
-  (rack
-    (frame
-      (cell @x 1)
-      (cell @y 2)
-      (discard @y)
-      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
-      (cell @s))
-    (frame
-      (cell @x 1)
-      (cell @y)
-      (discard @y)
-      (extension ((@x @y) (x_ y_) @s _) ^(+ x y))
-      (cell @s))
-    end)
-
-  ;; No dst pattern
-  (rack
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (2 3 4))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash)
-      (discard @trash))
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (2 3 4))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s 4)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash)
-      (discard @trash))
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (3 4 4))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash 2)
-      (discard @trash))
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (3 4 4))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s 6)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash)
-      (discard @trash))
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (4 4 6))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash 3)
-      (discard @trash))
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (4 4 6))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s 8)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash)
-      (discard @trash))
-    (frame
-      (cell @x 2)
-      (queue (@y @y') (4 6 8))
-      (extension ((@x @y) (x_ y_) @s) ^(* x y))
-      (cell @s)
-      (feed (@s @y) (@y' @trash))
-      (cell @trash 4)
-      (discard @trash)))
-    ;; ...
-
-  ;; Shorthand variant for one input, no dst pattern
-  (rack
-    (frame
-      (queue (@x @x') (1 2 3))
-      (discard @x)
-      (extension (@x x_ @y) ^(* x 2))
-      (cell @y))
-    (frame
-      (queue (@x @x') (2 3))
-      (discard @x)
-      (extension (@x x_ @y) ^(* x 2))
-      (cell @y 2))
-    (frame
-      (queue (@x @x') (3))
-      (discard @x)
-      (extension (@x x_ @y) ^(* x 2))
-      (cell @y 4))
-    (frame
-      (queue (@x @x') ())
-      (discard @x)
-      (extension (@x x_ @y) ^(* x 2))
-      (cell @y 6))
-    (frame
-      (queue (@x @x') ())
-      (discard @x)
-      (extension (@x x_ @y) ^(* x 2))
-      (cell @y))
-    end)
-
-  ;; Dst pattern constraint spans across to the source pattern
-  (rack
-    (frame
-      (module {}
-        (cell @x x)
-        (extension (@x k_ @y (%value k v_string)) ^v)
-        (cell @y {x: 10, a: "John", b: "Samantha", z: "David"}))
-      (module {}
-        (cell @x b)
-        (extension (@x k_ @y (%value k v_string)) ^v)
-        (cell @y {x: 10, a: "John", b: "Samantha", z: "David"})))
-    (frame
-      (module {}
-        (cell @x x)
-        (extension (@x k_ @y (%value k v_string)) ^v)
-        (cell @y {x: 10, a: "John", b: "Samantha", z: "David"}))
-      (module {}
-        (cell @x b)
-        (extension (@x k_ @y (%value k v_string)) ^v)
-        (cell @y "Samantha")))
-    end)
-
-  ;; Extension semantics
-  (rack
-    (frame
-      (cell @x "hi")
-      (extension (@x x_string @view)
-        (foo ^x flag: true))
-      (cell @view)
-      (backsys @view  {¦ flag -seen_} <> {seen: true}))
-    (frame
-      (cell @x "hi")
-      (extension (@x x_string @view)
-        (foo ^x flag: true))
-      (cell @view (foo "hi" flag: true))
-      (backsys @view  {¦ flag -seen_} <> {seen: true}))
-    (frame
-      (cell @x "hi")
-      (extension (@x x_string @view)
-        (foo ^x flag: true))
-      (cell @view (foo "hi" flag: true seen: true))
-      (backsys @view  {¦ flag -seen_} <> {seen: true}))
-    end))
-
-;; Extension
-(group
-  ;; Extension of N cells (ok)
-  (rack
-    (frame
-      (cell @x 100)
-      (cell @y 200)
-      (extension ((@x @y) values_ @z) ^values)
-      (cell @z))
-    (frame
-      (cell @x 100)
-      (cell @y 200)
-      (extension ((@x @y) values_ @z) ^values)
-      (cell @z (100 200)))
-    end)
-
-  ;; Extension of N cells (missing)
-  (rack
-    (frame
-      (cell @x 100)
-      (cell @y)
-      (extension ((@x @y) values_ @z) ^values)
-      (cell @z))
-    end)
-
-  ;; Extension of N cells (delay, queue, mismatch)
-  (rack
-    (frame
-      (queue (@command @back) (greet welcome greet))
-      (delay 2 (discard @command))
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output))
-    (frame
-      (queue (@command @back) (greet welcome greet))
-      (delay 1 (discard @command))
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output "Hi, Mary of age 26!"))
-    (frame
-      (queue (@command @back) (greet welcome greet))
-      (discard @command)
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output "Hi, Mary of age 26!"))
-    (frame
-      (queue (@command @back) (welcome greet))
-      (discard @command)
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output "Hi, Mary of age 26!"))
-    (frame
-      (queue (@command @back) (greet))
-      (discard @command)
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output))
-    (frame
-      (queue (@command @back) ())
-      (discard @command)
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output "Hi, Mary of age 26!"))
-    (frame
-      (queue (@command @back) ())
-      (discard @command)
-      (cell @name "Mary")
-      (cell @age 26)
-      (extension ((@command @name @age) (greet name_ age_) @output)
-        ^"Hi, ⸢name⸣ of age ⸢age⸣!")
-      (cell @output))
     end))
 
 ;; Elementary 1D movement circuit
@@ -3577,14 +3329,14 @@
 ;; BUG: part must use relative edge in replacement cell
 (rack
   (frame
-    (feed (copy @count-parent) (atop @dbg))
+    (feed (copy @count-parent) (over @dbg))
     (cell @dbg)
     (module {@count: @count-parent}
       (cell @counter (counter 0))
       (part (@counter @count) (counter ±count))
       (backsys @count ±n <> {n: ^(+ n 1)})))
   (frame
-    (feed (copy @count-parent) (atop @dbg))
+    (feed (copy @count-parent) (over @dbg))
     (cell @dbg 0)
     (module {@count: @count-parent}
       (cell @counter (counter 1))

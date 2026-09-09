@@ -1,50 +1,38 @@
-# Guts of the `feed` node.
+# Implementation of the feed node.
 module Ww::Rack::Feed
   extend self
 
   alias Spec = WithoutInhibitors | WithInhibitors
 
-  # Crystal-side representation of the Inhibitor modifier that all variants
-  # of the feed node are allowed to have. For eaxmple `(feed (not @x @y) @u @v)`
-  # for Transfer, or, say, `(feed (not @x @y) @u (@v @w))` for Broadcast.
-  # These are known as "_ with inhibitors" variants: here, it is Transfer with
-  # inhibitors, and Broadcast with inhibitors, correspondingly.
-  defrecord WithInhibitors, node : Term, variant : Variant, inhibitors : Slice(Edge)
+  defrecord WithInhibitors, node : Term, variant : Variant, inhibitors : Slice(Place)
   defrecord WithoutInhibitors, node : Term, variant : Variant
 
-  alias Variant = Transfer | Aggregate | Broadcast | ParallelTransfer
+  alias Variant = Transfer | Aggregate | Distribute | ParallelTransfer | Broadcast
 
-  # Crystal-side representation of the Transfer variant of the feed node,
-  # for example `(feed @u @v)`.
-  defrecord Transfer, from : SrcEdge, to : DstEdge
+  defrecord Transfer, from : Source, to : Destination
+  defrecord Aggregate, from : Slice(Source), to : Destination
+  defrecord Distribute, from : Source, to : Slice(Destination)
 
-  # Crystal-side representation of the Aggregate variant of the feed node,
-  # for example `(feed (@u @v) @w)`.
-  defrecord Aggregate, from : Slice(SrcEdge), to : DstEdge
+  # *from* and to are guaranteed *to* be of equal size.
+  defrecord ParallelTransfer, from : Slice(Source), to : Slice(Destination) do
+    assert from.size == to.size
+  end
 
-  # Crystal-side representation of the Broadcast variant of the feed node,
-  # for example `(feed @u (@v @w))`.
-  defrecord Broadcast, from : SrcEdge, to : Slice(DstEdge)
+  defrecord Broadcast, from : Source, to : Slice(Destination)
 
-  # Crystal-side representation of the Parallel Transfer variant of
-  # the feed node, for example `(feed (@x @y) (@a @b))`.
-  defrecord ParallelTransfer, from : Slice(SrcEdge), to : Slice(DstEdge)
-
-  # Crystal-side representation of the source edge, for example `(feed ⏏@x⏏ @y)`,
-  # `(feed ⏏(copy (@x front))⏏ @y)` and so on.
-  alias SrcEdge = EdgeObject | Copy
+  alias Source = Place | Copy
 
   # Represents `(copy _)` as in `(feed ⏏(copy @x)⏏ @y)`
-  defrecord Copy, object : EdgeObject
+  defrecord Copy, place : Place
 
-  alias DstEdge = EdgeObject | Atop
+  alias Destination = Place | Over
 
-  # Represents `(atop _)` as in `(feed @x ⏏(atop @y)⏏)`
-  defrecord Atop, object : EdgeObject
+  # Represents `(over _)` as in `(feed @x ⏏(over @y)⏏)`
+  defrecord Over, place : Place
 
-  alias EdgeObject = Edge | Front | Back
+  alias Place = Edge | Front | Back
 
-  # Represesents `@_` as in `(feed ⏏@x⏏ (atop ⏏@y⏏))`.
+  # Represesents `@_` as in `(feed ⏏@x⏏ (over ⏏@y⏏))`.
   defrecord Edge, term : Term do
     {% unless flag?(:release) %}
       assert Term.edge?(term)
@@ -57,11 +45,20 @@ module Ww::Rack::Feed
   # Represents `(@_ back)` as in `(feed (copy ⏏(@x back)⏏) @y)`.
   defrecord Back, list_edge : Edge
 
-  # <edge object>
+  def edge(x : Edge | Front | Back | Copy | Over) : Term
+    case x
+    in Edge       then x.term
+    in Front      then x.list_edge.term
+    in Back       then x.list_edge.term
+    in Copy, Over then edge(x.place)
+    end
+  end
+
+  # <place>
   #   @_
   #   (@_ front)
   #   (@_ back)
-  private def edge_object?(term : Term) : EdgeObject?
+  private def place?(term : Term) : Place?
     Term.case(term) do
       matchpi %{(@u_ front)} { Front.new(Edge.new(u)) }
       matchpi %{(@u_ back)} { Back.new(Edge.new(u)) }
@@ -71,29 +68,29 @@ module Ww::Rack::Feed
   end
 
   # <src edge>
-  #   <edge object>
-  #   (copy <src edge object>)
-  private def src_edge?(term : Term) : SrcEdge?
+  #   <place>
+  #   (copy <place>)
+  private def src_edge?(term : Term) : Source?
     Term.case(term) do
       matchpi %{(copy arg_)} do
-        return unless edge_object = edge_object?(arg)
+        return unless place = place?(arg)
 
-        Copy.new(edge_object)
+        Copy.new(place)
       end
 
       otherwise do
-        edge_object?(term)
+        place?(term)
       end
     end
   end
 
   # <src edge list>
   #   (<src edge>+)
-  private def src_edge_list?(term : Term) : Slice(SrcEdge)?
+  private def src_edge_list?(term : Term) : Slice(Source)?
     return unless dict = term.as_itemsonly_d?
     return if dict.empty?
 
-    edges = Pf::Kit.stack_array(SrcEdge)
+    edges = Pf::Kit.stack_array(Source)
     dict.items.each do |item|
       return unless src_edge = src_edge?(item)
 
@@ -104,29 +101,29 @@ module Ww::Rack::Feed
   end
 
   # <dst edge>
-  #   <edge object>
-  #   (atop <edge object>)
-  private def dst_edge?(term : Term) : DstEdge?
+  #   <place>
+  #   (over <place>)
+  private def dst_edge?(term : Term) : Destination?
     Term.case(term) do
-      matchpi %{(atop arg_)} do
-        return unless edge_object = edge_object?(arg)
+      matchpi %{(over arg_)} do
+        return unless place = place?(arg)
 
-        Atop.new(edge_object)
+        Over.new(place)
       end
 
       otherwise do
-        edge_object?(term)
+        place?(term)
       end
     end
   end
 
   # <src edge list>
   #   (<dst edge>+)
-  private def dst_edge_list?(term : Term) : Slice(DstEdge)?
+  private def dst_edge_list?(term : Term) : Slice(Destination)?
     return unless dict = term.as_itemsonly_d?
     return if dict.empty?
 
-    edges = Pf::Kit.stack_array(DstEdge)
+    edges = Pf::Kit.stack_array(Destination)
     dict.items.each do |item|
       return unless dst_edge = dst_edge?(item)
 
@@ -147,46 +144,64 @@ module Ww::Rack::Feed
   #   <dst edge>
   #   <dst edge list>
   private def variant?(term : Term) : Variant?
-    Term.matchpi?(term, %{[feed src_ dst_]}) do
-      src_edge = src_edge?(src)
-      dst_edge = dst_edge?(dst)
+    Term.case(term) do
+      matchpi %{[feed (src_ items) dst_]} do
+        return unless src_edge = src_edge?(src)
+        return unless dst_edge_list = dst_edge_list?(dst)
 
-      if src_edge && dst_edge
-        # (feed @u @v)
-        return Transfer.new(src_edge, dst_edge)
+        Distribute.new(src_edge, dst_edge_list)
       end
 
-      src_edge_list = src_edge_list?(src)
+      matchpi %{[feed src_ dst_]} do
+        src_edge = src_edge?(src)
+        dst_edge = dst_edge?(dst)
 
-      if src_edge_list && dst_edge
-        # (feed (@u @v) @w)
-        return Aggregate.new(src_edge_list, dst_edge)
+        if src_edge && dst_edge
+          # (feed @u @v)
+          return Transfer.new(src_edge, dst_edge)
+        end
+
+        src_edge_list = src_edge_list?(src)
+
+        if src_edge_list && dst_edge
+          # (feed (@u @v) @w)
+          return Aggregate.new(src_edge_list, dst_edge)
+        end
+
+        dst_edge_list = dst_edge_list?(dst)
+
+        if src_edge && dst_edge_list
+          # (feed @u (@v @w))
+          return Broadcast.new(src_edge, dst_edge_list)
+        end
+
+        if src_edge_list && dst_edge_list && src_edge_list.size == dst_edge_list.size
+          # (feed (@x @y) (@a @b))
+          return ParallelTransfer.new(src_edge_list, dst_edge_list)
+        end
       end
 
-      dst_edge_list = dst_edge_list?(dst)
-
-      if src_edge && dst_edge_list
-        # (feed @u (@v @w))
-        return Broadcast.new(src_edge, dst_edge_list)
-      end
-
-      if src_edge_list && dst_edge_list
-        # (feed (@x @y) (@a @b))
-        return ParallelTransfer.new(src_edge_list, dst_edge_list)
-      end
+      otherwise { }
     end
   end
 
   # Tries to parse *term* as a feed node `Spec`. Returns the spec if successful.
   def spec?(term : Term) : Spec?
     Term.case(term) do
-      matchpi %{[feed (not (%group inhibitors_ (%past @_ min: 1))) rest_*]} do
+      matchpi %{[feed not←(not _+) rest_*]} do
         thunk = Term.of(rest.prepend(:feed))
         return unless variant = variant?(thunk)
 
-        WithInhibitors.new(thunk, variant,
-          inhibitors: inhibitors.items.to_readonly_slice { |edge| Edge.new(edge) },
-        )
+        inhibitors = Pf::Kit.stack_array(Place, 4)
+
+        inhibitorsQ = not.items.move(1)
+        inhibitorsQ.each do |inhibitorQ|
+          return unless inhibitor = place?(inhibitorQ)
+
+          inhibitors << inhibitor
+        end
+
+        WithInhibitors.new(thunk, variant, inhibitors.to_readonly_slice)
       end
 
       matchpi %{[feed _*]} do
@@ -215,7 +230,7 @@ module Ww::Rack::Feed
     each_edge(spec.variant) { |edge| yield edge }
 
     spec.inhibitors.each do |inhibitor|
-      yield inhibitor
+      each_edge(inhibitor) { |edge| yield edge }
     end
   end
 
@@ -226,15 +241,15 @@ module Ww::Rack::Feed
   end
 
   # :nodoc:
-  def each_edge(spec : Slice(SrcEdge) | Slice(DstEdge), & : Edge ->) : Nil
+  def each_edge(spec : Slice(Source) | Slice(Destination), & : Edge ->) : Nil
     spec.each do |item|
       each_edge(item) { |edge| yield edge }
     end
   end
 
   # :nodoc:
-  def each_edge(spec : Copy | Atop, & : Edge ->) : Nil
-    each_edge(spec.object) { |edge| yield edge }
+  def each_edge(spec : Copy | Over, & : Edge ->) : Nil
+    each_edge(spec.place) { |edge| yield edge }
   end
 
   # :nodoc:
@@ -247,94 +262,44 @@ module Ww::Rack::Feed
     yield spec
   end
 
-  # Returns a readonly slice of edge terms found in the given *spec*.
-  def edges(spec) : Slice(Term)
+  # Returns a set of edges found in *spec*.
+  def edges(spec) : Set(Term)
     edges = Pf::Kit.stack_array(Term)
     each_edge(spec) do |edge|
       edges << edge.term
     end
-    edges.to_readonly_slice(&.itself)
-  end
-
-  # Returns the first edge term in *spec*.
-  def edge(spec) : Term
-    each_edge(spec) { |edge| return edge.term }
-  end
-
-  {% if flag?(:docs) %}
-    # We *render* to represent different kinds of feed nodes in a single
-    # way, so that the rewrite regime can reason about them without being
-    # aware of all the diversity.
-    #
-    # The renderout looks like this:
-    #
-    # ```text
-    # (feed
-    #   (<list of inhibitor edges>)
-    #   (<list of input edges>)
-    #   (<list of output edges>)
-    #  <original node>)
-    # ```
-    #
-    # Notice how it presents the edges in a flat way, which is friendly
-    # toward the rewrite regime.
-    #
-    # The representation above is how the rewrite regime sees `feed` nodes.
-    # When the feed rule fires, we recover *spec* by parsing `<original node>`
-    # again, and pass it to `get?`, `put?`, or the high-level `patch?` along
-    # with matched nodes for variant-specific interpretation.
-    def render(spec : Spec) : Term
-    end
-  {% end %}
-
-  # :nodoc:
-  def render(spec : WithInhibitors) : Term
-    render(spec.node, spec.variant, spec.inhibitors)
-  end
-
-  # :nodoc:
-  def render(spec : WithoutInhibitors) : Term
-    render(spec.node, spec.variant, inhibitors: Slice(Edge).empty)
-  end
-
-  # :nodoc:
-  def render(node : Term, spec : Variant, inhibitors : Slice(Edge)) : Term
-    inputs = Pf::Kit.stack_array(Term)
-    outputs = Pf::Kit.stack_array(Term)
-
-    each_edge(spec.from) { |input| inputs << input.term }
-    each_edge(spec.to) { |output| outputs << output.term }
-
-    Term.of(:feed, inhibitors.map(&.term), inputs, outputs, node)
+    edges.to_set
   end
 
   {% if flag?(:docs) %}
     # Removes a value from a source cell *src*. Returns the resulting
     # patch to *src*, and the value removed. Returns `nil` if *src* is
     # not a cell, or if it the cell is empty.
-    def take?(spec : EdgeObject, src : D7::Node) : {D7::Patch, Term}?
+    def take?(spec : Place, cell : Cell) : {D7::Patch, Term}?
     end
   {% end %}
 
   # :nodoc:
-  def take?(spec : Edge, src : D7::Node) : {D7::Patch, Term}?
-    Term.matchpi?(src.term, %{[cell @_ value_]}) do
-      {D7.patch(src, {2, nil}), value}
-    end
+  def take?(spec : Edge, cell : Cell) : {D7::Patch, Term}?
+    return unless value = cell.value?
+
+    {D7.patch(cell.node, {2, nil}), value}
   end
 
   # :nodoc:
-  def take?(spec : Front, src : D7::Node) : {D7::Patch, Term}?
-    Term.matchpi?(src.term, %{[cell @_ values←[value_ _*]]}) do
-      {D7.patch(src, {2, values.replace(0, Term.rep)}), value}
-    end
+  def take?(spec : Front, cell : Cell) : {D7::Patch, Term}?
+    return unless dict = cell.value?.as_d?
+    return unless first = dict.items.first?
+
+    {D7.patch(cell.node, {2, dict.rest}), first}
   end
 
   # :nodoc:
-  def take?(spec : Back, src : D7::Node) : {D7::Patch, Term}?
-    Term.matchpi?(src.term, %{[cell @_ values←[_* value_]]}) do
-      {D7.patch(src, {2, values.without(values.itemsize - 1)}), value}
-    end
+  def take?(spec : Back, cell : Cell) : {D7::Patch, Term}?
+    return unless dict = cell.value?.as_d?
+    return unless last = dict.items.last?
+
+    {D7.patch(cell.node, {2, dict.prior}), last}
   end
 
   {% if flag?(:docs) %}
@@ -342,240 +307,236 @@ module Ww::Rack::Feed
     # patch to *src*, for consistency; it is guaranteed to be empty.
     # Returns also the value copied. Returns `nil` if *src* is not a cell,
     # or if it the cell is empty.
-    def copy?(spec : EdgeObject, src : D7::Node) : {D7::Patch, Term}?
+    def copy?(spec : Place, cell : Cell) : {D7::Patch, Term}?
     end
   {% end %}
 
   # :nodoc:
-  def copy?(spec : Edge, src : D7::Node) : {D7::Patch, Term}?
-    Term.matchpi?(src.term, %{[cell @_ value_]}) do
-      {D7::Patch.new, value}
-    end
+  def copy?(spec : Edge, cell : Cell) : {D7::Patch, Term}?
+    return unless value = cell.value?
+
+    {D7::Patch.new, value}
   end
 
   # :nodoc:
-  def copy?(spec : Front, src : D7::Node) : {D7::Patch, Term}?
-    Term.matchpi?(src.term, %{[cell @_ values←[value_ _*]]}) do
-      {D7::Patch.new, value}
-    end
+  def copy?(spec : Front, cell : Cell) : {D7::Patch, Term}?
+    return unless dict = cell.value?.as_d?
+    return unless first = dict.items.first?
+
+    {D7::Patch.new, first}
   end
 
   # :nodoc:
-  def copy?(spec : Back, src : D7::Node) : {D7::Patch, Term}?
-    Term.matchpi?(src.term, %{[cell @_ values←[_* value_]]}) do
-      {D7::Patch.new, value}
-    end
+  def copy?(spec : Back, cell : Cell) : {D7::Patch, Term}?
+    return unless dict = cell.value?.as_d?
+    return unless last = dict.items.last?
+
+    {D7::Patch.new, last}
   end
 
   {% if flag?(:docs) %}
-    # Inserts *value* into an empty edge object. Notably, list front
-    # and list back objects are considered empty, and result in the placement
-    # before the frontmost or backmost item (if any; correspondingly).
-    def place?(spec : EdgeObject, dst : D7::Node, value : Term) : D7::Patch?
+    # Inserts *value* into *cell* according to a place *spec*. Returns
+    # the resulting patch to *cell*. Returns `nil` if *value* cannot be placed
+    # (e.g. *cell* is already full).
+    def insert?(spec : Place, cell : Cell, value : Term) : D7::Patch?
     end
   {% end %}
 
   # :nodoc:
-  def place?(spec : Edge, dst : D7::Node, value : Term) : D7::Patch?
-    Term.matchpi?(dst.term, %{[cell @_]}) do
-      D7.patch(dst, {2, value})
-    end
+  def insert?(spec : Edge, cell : Cell, value : Term) : D7::Patch?
+    return unless cell.empty?
+
+    D7.patch(cell.node, {2, value})
   end
 
   # :nodoc:
-  def place?(spec : Front, dst : D7::Node, value : Term) : D7::Patch?
-    Term.matchpi?(dst.term, %{[cell @_ values←[_*]]}) do
-      D7.patch(dst, {2, values.prepend(value)})
-    end
+  def insert?(spec : Front, cell : Cell, value : Term) : D7::Patch?
+    return unless dict = cell.value?.as_d?
+
+    D7.patch(cell.node, {2, dict.prepend(value)})
   end
 
   # :nodoc:
-  def place?(spec : Back, dst : D7::Node, value : Term) : D7::Patch?
-    Term.matchpi?(dst.term, %{[cell @_ values←[_*]]}) do
-      D7.patch(dst, {2, values.append(value)})
-    end
+  def insert?(spec : Back, cell : Cell, value : Term) : D7::Patch?
+    return unless dict = cell.value?.as_d?
+
+    D7.patch(cell.node, {2, dict.append(value)})
   end
 
   {% if flag?(:docs) %}
-    # Replaces the value specified by *dst* and *spec* with *value*. List
-    # front and list back refer to the first and last elements of a list; if
-    # absent, or if the cell that is supposed to hold the list is empty,
-    # no action is taken.
-    #
-    # Returns the resulting patch to *dst* if successful.
-    def blend?(spec : EdgeObject, dst : D7::Node, value : Term) : D7::Patch?
+    # Replaces the value at *cell* with *value* according to *spec*.
+    # Returns the resulting patch to *cell* if successful.
+    def replace?(spec : Place, cell : Cell, value : Term) : D7::Patch?
     end
   {% end %}
 
   # :nodoc:
-  def blend?(spec : Edge, dst : D7::Node, value : Term) : D7::Patch?
-    Term.matchpi?(dst.term, %{[cell @_ _?]}) do
-      D7.patch(dst, {2, value})
-    end
+  def replace?(spec : Edge, cell : Cell, value : Term) : D7::Patch?
+    D7.patch(cell.node, {2, value})
   end
 
   # :nodoc:
-  def blend?(spec : Front, dst : D7::Node, value : Term) : D7::Patch?
-    Term.matchpi?(dst.term, %{[cell @_ values←[_ _*]]}) do
-      D7.patch(dst, {2, 0, value})
-    end
+  def replace?(spec : Front, cell : Cell, value : Term) : D7::Patch?
+    return unless dict = cell.value?.as_d?
+    return unless dict.itemsize > 0
+
+    D7.patch(cell.node, {2, 0, value})
   end
 
   # :nodoc:
-  def blend?(spec : Back, dst : D7::Node, value : Term) : D7::Patch?
-    Term.matchpi?(dst.term, %{[cell @_ values←[_* _]]}) do
-      D7.patch(dst, {2, values.itemsize - 1, value})
-    end
+  def replace?(spec : Back, cell : Cell, value : Term) : D7::Patch?
+    return unless dict = cell.value?.as_d?
+    return unless dict.itemsize > 0
+
+    D7.patch(cell.node, {2, dict.itemsize - 1, value})
   end
 
   {% if flag?(:docs) %}
-    # Takes or copies the value defined by *spec* and *src*. If successful,
-    # returns the patch to *src* and the value retrieved.
-    def get?(spec : SrcEdge, src : D7::Node) : {D7::Patch, Term}?
+    # Takes or copies the value at *cell* according to *spec*. If successful,
+    # returns the patch to *cell* along with the value.
+    def get?(spec : Source, cell : Cell) : {D7::Patch, Term}?
     end
   {% end %}
 
   # :nodoc:
-  def get?(spec : Copy, src : D7::Node)
-    copy?(spec.object, src)
+  def get?(spec : Copy, cell : Cell) : {D7::Patch, Term}?
+    copy?(spec.place, cell)
   end
 
   # :nodoc:
-  def get?(spec : EdgeObject, src : D7::Node)
-    take?(spec, src)
+  def get?(spec : Place, cell : Cell) : {D7::Patch, Term}?
+    take?(spec, cell)
   end
 
   {% if flag?(:docs) %}
-    # Places or blends *value* into the spot defined by *spec* and *dst*.
-    # If successful, returns the patch to *dst*.
-    def put?(spec : DstEdge, dst : D7::Node, value : Term) : {D7::Patch, Term}?
+    # Inserts or replaces *value* at *cell* according to *spec*. If successful,
+    # returns the patch to *cell*.
+    def put?(spec : Destination, cell : Cell, value : Term) : D7::Patch?
     end
   {% end %}
 
   # :nodoc:
-  def put?(spec : Atop, src : D7::Node, value : Term)
-    blend?(spec.object, src, value)
+  def put?(spec : Over, cell : Cell, value : Term) : D7::Patch?
+    replace?(spec.place, cell, value)
   end
 
   # :nodoc:
-  def put?(spec : EdgeObject, src : D7::Node, value : Term)
-    place?(spec, src, value)
+  def put?(spec : Place, cell : Cell, value : Term) : D7::Patch?
+    insert?(spec, cell, value)
   end
 
-  {% if flag?(:docs) %}
-    # *src* must match cells whose edge is captured under `src`.
-    # *dst* must match cells whose edge is captured under `dst`.
-    def patch?(spec : Variant, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
-    end
-  {% end %}
+  # (feed @x @y)  (feed (@xs front) @y)
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : Transfer) : D7::Patch?
+    return unless src_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(feed.from)))
+    return unless src_row = get?(feed.from, src_cell)
 
-  # :nodoc:
-  def patch?(spec : Transfer, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
-    assert src.size == 1
-    assert dst.size == 1
-    return unless get_response = get?(spec.from, src.first.node)
-
-    src_patch, value = get_response
-    return unless dst_patch = put?(spec.to, dst.first.node, value)
+    src_patch, src_value = src_row
+    return unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(feed.to)))
+    return unless dst_patch = put?(feed.to, dst_cell, src_value)
 
     D7.patches(src_patch, dst_patch)
   end
 
-  # :nodoc:
-  def patch?(spec : Aggregate, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
-    return unless spec.from.size == src.size
+  # (feed (@x @y) @z)
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : Aggregate) : D7::Patch?
+    return unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(feed.to)))
 
-    assert dst.size == 1
+    patches = Pf::Kit.stack_array(D7::Patch, 8)
 
-    patches = Pf::Kit.stack_array(D7::Patch, 4)
-    values = Pf::Kit.stack_array(Term, 4)
+    row = Term::Dict.build do |commit|
+      feed.from.each do |src|
+        return unless src_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(src)))
+        return unless src_row = get?(src, src_cell)
 
-    permutation = D7.permutation(dev, src, :src, arranged_like_in: edges(spec.from))
-    permutation.each do |index|
-      src_spec = spec.from[index]
-      src_match = src[index]
-      next unless get_response = get?(src_spec, src_match.node)
-
-      src_patch, src_value = get_response
-      patches << src_patch
-      values << src_value
+        src_patch, src_value = src_row
+        patches << src_patch
+        commit << src_value
+      end
     end
 
-    return unless patches.size == src.size # get?() must succeed for all nodes
-
-    assert patches.size == values.size
-
-    return unless dst_patch = put?(spec.to, dst.first.node, Term.of(values))
+    return unless dst_patch = put?(feed.to, dst_cell, Term.of(row))
 
     patches << dst_patch
 
     D7.patches(patches)
   end
 
-  # :nodoc:
-  def patch?(spec : Broadcast, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
-    return unless spec.to.size == dst.size
+  # (feed (@x items) (@y @z))
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : Distribute) : D7::Patch?
+    return unless src_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(feed.from)))
+    return unless src_row = get?(feed.from, src_cell)
 
-    assert src.size == 1
+    src_patch, src_value = src_row
+    return unless row = src_value.as_d?
+    return unless row.itemsize == feed.to.size
 
-    return unless get_response = get?(spec.from, src.first.node)
+    patches = Pf::Kit.stack_array(D7::Patch, 8)
+    patches << src_patch
 
-    src_patch, value = get_response
-    return unless dict = value.as_d?
-    return unless dict.itemsize == spec.to.size
-
-    patches = Pf::Kit.stack_array(D7::Patch, 4)
-
-    permutation = D7.permutation(dev, dst, :dst, arranged_like_in: edges(spec.to))
-    permutation.each do |index|
-      dst_spec = spec.to[index]
-      dst_match = dst[index]
-      dst_item = dict[index]
-      next unless dst_patch = put?(dst_spec, dst_match.node, dst_item)
+    row.items.zip(feed.to) do |value, dst|
+      return unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(dst)))
+      return unless dst_patch = put?(dst, dst_cell, value)
 
       patches << dst_patch
     end
 
-    return unless patches.size == spec.to.size # put?() must succeed for all nodes
+    D7.patches(patches)
+  end
 
-    patches << src_patch
+  # (feed (@x @y) (@a @b))
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : ParallelTransfer) : D7::Patch?
+    patches = Pf::Kit.stack_array(D7::Patch, 8)
+
+    feed.from.zip(feed.to) do |src, dst|
+      return unless src_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(src)))
+      return unless src_row = get?(src, src_cell)
+
+      src_patch, src_value = src_row
+      return unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(dst)))
+      return unless dst_patch = put?(dst, dst_cell, src_value)
+
+      patches << src_patch
+      patches << dst_patch
+    end
 
     D7.patches(patches)
   end
 
-  # :nodoc:
-  def patch?(spec : ParallelTransfer, dev : D7::Match, src : D7::MatchGroup, dst : D7::MatchGroup) : D7::Patch?
-    return unless spec.from.size == src.size
-    return unless spec.to.size == dst.size
+  # (feed @x (@y @z))
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : Broadcast) : D7::Patch?
+    return unless src_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(feed.from)))
+    return unless src_row = get?(feed.from, src_cell)
+
+    src_patch, src_value = src_row
 
     patches = Pf::Kit.stack_array(D7::Patch, 8)
-    values = Pf::Kit.stack_array(Term, 8)
+    patches << src_patch
 
-    src_permutation = D7.permutation(dev, src, :src, arranged_like_in: edges(spec.from))
-    src_permutation.each do |index|
-      src_spec = spec.from[index]
-      src_match = src[index]
-      next unless get_response = get?(src_spec, src_match.node)
+    feed.to.each do |dst|
+      return unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(dst)))
+      return unless dst_patch = put?(dst, dst_cell, src_value)
 
-      patch, value = get_response
-      patches << patch
-      values << value
+      patches << dst_patch
     end
-
-    return unless patches.size == src.size # get?() must succeed for all nodes
-
-    dst_permutation = D7.permutation(dev, dst, :dst, arranged_like_in: edges(spec.to))
-    dst_permutation.each do |index|
-      dst_spec = spec.to[index]
-      dst_match = dst[index]
-      dst_value = values[index]
-      next unless patch = put?(dst_spec, dst_match.node, dst_value)
-
-      patches << patch
-    end
-
-    return unless patches.size == src.size + dst.size # put?() must succeed for all nodes
 
     D7.patches(patches)
+  end
+
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : WithoutInhibitors) : D7::Patch?
+    step(hg, node, feed.variant)
+  end
+
+  def step(hg : D7::Hypergraph, node : D7::Node, feed : WithInhibitors) : D7::Patch?
+    # If the inhibitor cell does not exist, we're fine. If we succeed in `get?`ting it,
+    # then consider the feed inhibited.
+    active = feed.inhibitors.all? do |inhibitor|
+      inhibitor_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(inhibitor)))
+      inhibitor_cell.nil? || get?(inhibitor, inhibitor_cell).nil?
+    end
+
+    return unless active
+
+    # Otherwise, proceed to the variant.
+    step(hg, node, feed.variant)
   end
 end

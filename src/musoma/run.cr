@@ -178,10 +178,8 @@ module MuSoma
         proposals.concat(perturbation.call(draft_hg))
       end
 
-      patch = D7::Regime.merge(draft_hg, proposals)
-
+      patch = D7.merge(draft_hg, proposals)
       draft1 = D7.apply(draft_hg, patch)
-      # draft1 = MuSoma.perturb(draft_tree, plan)
 
       ws.state.update do |state|
         Term.morph(state, {:timeline, 4, draft1})
