@@ -560,7 +560,11 @@ history-limit: 128
 (closed-rewriter-widget addr_ header_)
   => (group detail: seq
        (atom type: (expander ^addr icon: "chevron_right") mass: 0)
-       (term (rewriter ^header)))
+       (inline
+         (group detail: (dict generic lbr: "(" rbr: ")")
+           (atom "rewriter" type: symbol)
+           (term ^header)
+           (atom "…" type: punct))))
 
 ;; Backsys widget
 
