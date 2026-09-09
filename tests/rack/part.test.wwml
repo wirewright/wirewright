@@ -1,0 +1,741 @@
+;; Elementary
+(rack
+  (frame
+    (part (@src @x) x_)
+    (backsys @x ±n <> {n: ^(+ n 1)})
+    (cell @src 100))
+
+  (frame/tail (cell @src 101))
+  (frame/tail (cell @src 102))
+  (frame/tail (cell @src 103)))
+  ;; ...
+
+;; Elementary chain
+(rack
+  (frame
+    (part (@src @x) x_)
+    (part (@x @y) y_)
+    (part (@y @z) z_)
+    (backsys @z ±n <> {n: ^(+ n 1)})
+    (cell @src 100))
+
+  (frame/tail (cell @src 101))
+  (frame/tail (cell @src 102))
+  (frame/tail (cell @src 103)))
+
+;; Elementary many
+(rack
+  (frame
+    (module {@src: @a}
+      (part (@src @x) x_)
+      (backsys @x ±n <> {n: ^(+ n 1)}))
+    (module {@src: @b}
+      (part (@src @x) x_)
+      (backsys @x ±n <> {n: ^(+ n 1)}))
+    (cell @a 100)
+    (cell @b 200))
+
+  (frame/tail (cell @a 101) (cell @b 201))
+  (frame/tail (cell @a 102) (cell @b 202))
+  (frame/tail (cell @a 103) (cell @b 203)))
+  ;; ...
+
+;; Elementary many chains
+(rack
+  (frame
+    (module {@src: @a}
+      (part (@src @x) x_)
+      (part (@x @y) y_)
+      (part (@y @z) z_)
+      (backsys @z ±n <> {n: ^(+ n 1)}))
+    (module {@src: @b}
+      (part (@src @x) x_)
+      (part (@x @y) y_)
+      (part (@y @z) z_)
+      (backsys @z ±n <> {n: ^(+ n 1)}))
+    (cell @a 100)
+    (cell @b 200))
+
+  (frame/tail (cell @a 101) (cell @b 201))
+  (frame/tail (cell @a 102) (cell @b 202))
+  (frame/tail (cell @a 103) (cell @b 203)))
+
+;; Legacy: Chain of length 1
+(rack
+  (frame
+    (cell @top (qux (1 2) (3 4)))
+    (part (@top @a) (qux (_ a_) _))
+    (feed (copy @a) @b)
+    (cell @b))
+
+  (frame
+    (cell @top (qux (1 2) (3 4)))
+    (part (@top @a) (qux (_ a_) _))
+    (feed (copy @a) @b)
+    (cell @b 2))
+
+  end)
+
+;; Legacy: Chain of length 2
+(rack
+  (frame
+    (cell @top (qux (1 2) (3 4)))
+    (part (@top @a) (qux a_ _))
+    (part (@a @b) (_ b_))
+    (feed (copy @a) @a-view)
+    (feed (copy @b) @b-view)
+    (cell @a-view)
+    (cell @b-view))
+
+  (frame
+    (cell @top (qux (1 2) (3 4)))
+    (part (@top @a) (qux a_ _))
+    (part (@a @b) (_ b_))
+    (feed (copy @a) @a-view)
+    (feed (copy @b) @b-view)
+    (cell @a-view (1 2))
+    (cell @b-view 2))
+
+  end)
+
+;; Legacy: Chain of length 3
+(rack
+  (frame
+    (cell @top (qux (1 {name: "Samantha"}) (3 4)))
+    (part (@top @a) (qux a_ _))
+    (part (@a @b) (_ b_))
+    (part (@b @c) {¦ name: c_string})
+    (feed (copy @a) @a-view)
+    (feed (copy @b) @b-view)
+    (feed (copy @c) @c-view)
+    (cell @a-view)
+    (cell @b-view)
+    (cell @c-view))
+
+  (frame
+    (cell @top (qux (1 {name: "Samantha"}) (3 4)))
+    (part (@top @a) (qux a_ _))
+    (part (@a @b) (_ b_))
+    (part (@b @c) {¦ name: c_string})
+    (feed (copy @a) @a-view)
+    (feed (copy @b) @b-view)
+    (feed (copy @c) @c-view)
+    (cell @a-view (1 {name: "Samantha"}))
+    (cell @b-view {name: "Samantha"})
+    (cell @c-view "Samantha"))
+
+  end)
+
+;; Legacy: Branching
+(rack
+  (frame
+    (cell @root
+      {xs: (1 2 3),
+       y: 4,
+       zs: ({a: 5, b: 6} {a: 7, b: 8}),
+       responses: ()})
+    (part (@root @xs) {¦ xs_})
+    (part (@root @y) {¦ y_})
+    (part (@root @zs) {¦ zs_})
+    (part (@root @responses) {¦ responses_})
+    (part (@xs @x) (x_ _*))
+    (part (@zs @z) (z_ _*))
+    (part (@z @a) {¦ a_})
+    (part (@z @b) {¦ b_})
+    (backsys {@:x @:y @:a @:b @:responses}
+      {¦ ±x ±y ±a ±b responses: (_* `back)}
+        <> {(x): (), back: {^:x ^:y ^:a ^:b}}))
+
+  (frame pattern: true
+    ⟪(cell @root
+       {xs: (2 3), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}),
+        responses: ({x: 1, y: 4, a: 5, b: 6})})⟫)
+
+  (frame pattern: true
+    ⟪(cell @root
+       {xs: (3), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}),
+        responses: ({x: 1, y: 4, a: 5, b: 6}
+                    {x: 2, y: 4, a: 5, b: 6})})⟫)
+
+  (frame pattern: true
+    ⟪(cell @root
+       {xs: (), y: 4, zs: ({a: 5, b: 6} {a: 7, b: 8}),
+        responses: ({x: 1, y: 4, a: 5, b: 6}
+                    {x: 2, y: 4, a: 5, b: 6}
+                    {x: 3, y: 4, a: 5, b: 6})})⟫)
+
+  end)
+
+;; Feedback loop is a noop
+(rack
+  (frame
+    (cell @top (foo 0))
+    (part (@top @a) (_ a_))
+    (part (@a @b) b_)
+    (part (@b @a) a_)
+    (backsys @b ±n <> {n: ^(+ n 1)}))
+
+  end)
+
+;; Loop with branch is a noop
+;;
+;;            +-----+
+;;            v     |
+;;   @top -> @a -> @b -> @c
+;;
+(rack
+  (frame
+    (cell @top (foo 0))
+    (part (@top @a) (_ a_))
+    (part (@a @b) b_)
+    (part (@b @a) a_)
+    (part (@b @c) c_)
+    (backsys @c ±n <> {n: ^(+ n 1)}))
+
+  end)
+
+;; Loop with branches is a noop
+;;
+;;            +-----+
+;;            v     |
+;;   @top -> @a -> @b -> @x
+;;                  \
+;;                   +-> @y
+(rack
+  (frame
+    (cell @top (foo (1 2)))
+    (part (@top @a) (_ a_))
+    (part (@a @b) b_)
+    (part (@b @a) a_)
+    (part (@b @x) (x_ _))
+    (part (@b @y) (_ y_))
+    (backsys @x ±n <> {n: ^(+ n 1)})
+    (backsys @y ±n <> {n: ^(+ n 1)}))
+
+  end)
+
+;; Legacy: Dyn mismatch manipulate
+(rack
+  (frame
+    (cell @top (foo 0 0))
+    (part (@top @a) (foo a←(%number 3 <= _ <= 7) _))
+    (part (@top @b) (foo _ b←(%number 7 <= _ <= 11)))
+    (backsys {@:top @:a @:b}
+      {¦ top: (foo ±n _) -a} <> {n: ^(+ n 1)}
+      {¦ top: (foo _ ±n) -b} <> {n: ^(+ n 1)}))
+
+  (frame pattern: true ⟪(foo 1 1)⟫)
+  (frame pattern: true ⟪(foo 2 2)⟫)
+  (frame pattern: true ⟪(foo 3 3)⟫)
+  (frame pattern: true ⟪(foo 3 4)⟫)
+  (frame pattern: true ⟪(foo 3 5)⟫)
+  (frame pattern: true ⟪(foo 3 6)⟫)
+  (frame pattern: true ⟪(foo 3 7)⟫)
+
+  end)
+
+;; Legacy: Nested
+(rack
+  (frame
+    (part (@top @a) (qux a_ _))
+    (part (@top @b) (qux _ b_))
+    (part (@a @x) (x_ _*))
+    (part (@b @y) (_* y_))
+    (backsys @x  ±n <> {n: ^(+ n 1)})
+    (backsys @y  ±n <> {n: ^(* n 2)})
+    (cell @top (qux (1 2) (3 4))))
+
+  (frame/tail
+    (cell @top (qux (2 2) (3 8))))
+
+  (frame/tail
+    (cell @top (qux (3 2) (3 16)))))
+  ;; ...
+
+;; Legacy: Removal of item
+(rack
+  (frame
+    (part (@top @a) (qux a_ _))
+    (part (@top @b) (qux _ b_))
+    (part (@a @x) (x_ _*))
+    (part (@b @y) (_* y_))
+    (feed (@x @y) @dst)
+    (discard @dst)
+    (cell @top (qux (1 2 3) (4 5 6)))
+    (cell @dst))
+
+  (frame/tail
+    (cell @top (qux (2 3) (4 5)))
+    (cell @dst (1 6)))
+
+  (frame/tail
+    (cell @top (qux (2 3) (4 5)))
+    (cell @dst))
+
+  (frame/tail
+    (cell @top (qux (3) (4)))
+    (cell @dst (2 5)))
+
+  (frame/tail
+    (cell @top (qux (3) (4)))
+    (cell @dst))
+
+  (frame/tail
+    (cell @top (qux () ()))
+    (cell @dst (3 4)))
+
+  (frame/tail
+    (cell @top (qux () ()))
+    (cell @dst))
+
+  end)
+
+;; Legacy: Removal of pair
+(rack
+  (frame
+    (part (@top @n) [qux n←(%number 1 < _ <= 3)])
+    (part (@top @x) (qux 1 ⍊ x_))
+    (part (@top @y) (qux 2 ⍊ y_))
+    (part (@top @z) (qux 3 ⍊ z_))
+    (backsys @n  ±n <> {n: ^(- n 1)})
+    (discard @x)
+    (discard @y)
+    (discard @z)
+    (cell @top (qux 3 x: 100 y: 200 z: 300)))
+
+  (frame/tail (cell @top (qux 2 x: 100 y: 200)))
+  (frame/tail (cell @top (qux 1 x: 100)))
+  (frame/tail (cell @top (qux 1)))
+
+  end)
+
+;; Legacy: Use with `feed...front`.
+;;
+;; NOTE: We're writing this in a very convoluted way with (module ...)
+;; because besides confusing *you*, it may also confuse the engine. What
+;; we're *really* to test here is the latter; we're trying to make sure
+;; the engine is *not* confused.
+(rack
+  (frame
+    (module {:@top, @msg: @mail}
+      (part (@top @mail) {¦ mail_})
+      (feed @msg (@mail front)))
+    (queue (@mail @inbox) (a b c))
+    (cell @top {name: "Samantha", mail: ()}))
+
+  (frame/tail
+    (queue (@mail @inbox) (b c))
+    (cell @top {name: "Samantha", mail: (a)}))
+
+  (frame/tail
+    (queue (@mail @inbox) (c))
+    (cell @top {name: "Samantha", mail: (b a)}))
+
+  (frame/tail
+    (queue (@mail @inbox) ())
+    (cell @top {name: "Samantha", mail: (c b a)}))
+
+  end)
+
+;; Legacy: Scoping
+(rack
+  (frame
+    (module {}
+      (cell @top (qux (1 2) (3 4)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    (module {}
+      (cell @top (qux (5 6) (7 8)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    (module {}
+      (cell @top (qux (9 10) (11 12)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})))
+
+  (frame
+    (module {}
+      (cell @top (qux (1 3) (3 4)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    (module {}
+      (cell @top (qux (5 7) (7 8)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    (module {}
+      (cell @top (qux (9 11) (11 12)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)})))
+
+  (frame
+    (module {}
+      (cell @top (qux (1 4) (3 4)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    (module {}
+      (cell @top (qux (5 8) (7 8)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))
+    (module {}
+      (cell @top (qux (9 12) (11 12)))
+      (part (@top @a) (qux (_ a_) _))
+      (backsys @a  ±n <> {n: ^(+ n 1)}))))
+  ;; ...
+
+(rack
+  (frame
+    (module {@a: @b}
+      (part (@a @b) (+ _ b_))
+      (backsys @b  ±n <> {n: ^(+ n 1)}))
+    (cell @b (+ 1 2)))
+
+  (frame/tail (cell @b (+ 1 3)))
+  (frame/tail (cell @b (+ 1 4))))
+  ;; ...
+
+;; Legacy: Multiple roots in parallel
+(rack
+  (frame
+    (part (@r0 @a) (+ a_ _))
+    (part (@r0 @b) (+ _ b_))
+    (part (@r1 @x) (* x←(%number _ <= 5) _))
+    (backsys (@a @b @x)
+      (±a ±b ±x) <> {(local (forall a b x)): ^(+ it 1)})
+    (cell @r0 (+ 1 2))
+    (cell @r1 (* 3 4)))
+
+  (frame/tail
+    (cell @r0 (+ 2 3))
+    (cell @r1 (* 4 4)))
+
+  (frame/tail
+    (cell @r0 (+ 3 4))
+    (cell @r1 (* 5 4)))
+
+  (frame/tail
+    (cell @r0 (+ 4 5))
+    (cell @r1 (* 6 4)))
+
+  end)
+
+;; Legacy: Multiple roots in sequence
+(rack
+  (frame
+    (part (@r0 @a) (+ a_ _))
+    (feed (copy @a) @r1)
+    (part (@r1 @b) (* _ b_))
+    (backsys @b  ±n <> {n: ^(+ n 1)})
+    (feed (copy @r1) (over @a))
+    (cell @r0 (+ (* 1 2) 3))
+    (cell @r1))
+
+  (frame/tail
+    (cell @r0 (+ (* 1 2) 3))
+    (cell @r1 (* 1 2)))
+
+  (frame/tail
+    (cell @r0 (+ (* 1 2) 3))
+    (cell @r1 (* 1 3)))
+
+  (frame/tail
+    (cell @r0 (+ (* 1 3) 3))
+    (cell @r1 (* 1 4)))
+
+  (frame/tail
+    (cell @r0 (+ (* 1 4) 3))
+    (cell @r1 (* 1 5))))
+  ;; ...
+
+;; Parts hanging off duplicate roots are ignored
+;;
+;;    @x  - @a
+;;    @x /
+(rack
+  (frame
+    (cell @x (+ 1 2))
+    (cell @x (+ 3 4))
+    (part (@x @a) (+ a_ _))
+    (backsys @a ±n <> {n: ^(+ n 1)}))
+
+  end)
+
+;; Parts writing into the same edge are ignored
+;;
+;;   @x - @a
+;;   @y /
+(rack
+  (frame
+    (cell @x (+ 1 2))
+    (cell @y (+ 3 4))
+    (part (@x @a) (+ a_ _))
+    (part (@y @a) (+ _ a_))
+    (backsys @a ±n <> {n: ^(+ n 1)}))
+
+  end)
+
+;; Conflicting write (same keypath)
+(rack
+  (frame
+    (part (@x @a) (+ a_ _))
+    (part (@x @b) (+ b_ _))
+    (part (@x @c) (+ _ c_))
+    (backsys @a ±n <> {n: ^(+ n 1)})
+    (backsys @b ±n <> {n: ^(+ n 2)}) ;; <<  notice the 2, so @a and @b propose diff values
+    (backsys @c ±n <> {n: ^(+ n 1)})
+    (cell @x (+ 1 2)))
+
+  (frame/tail
+    (cell @x (+ 1 3))))
+  ;; ...
+
+;; Legacy: Apparent conflicting write (same keypath), but values agree so it succeeds.
+(rack
+  (frame
+    (part (@x @a) (+ a_ _))
+    (part (@x @b) (+ b_ _))
+    (part (@x @c) (+ _ c_))
+    (backsys @a ±n <> {n: ^(+ n 1)})
+    (backsys @b ±n <> {n: ^(+ n 1)})
+    (backsys @c ±n <> {n: ^(+ n 1)})
+    (cell @x (+ 1 2)))
+
+  (frame/tail
+    (cell @x (+ 1 3)))
+
+  (frame/tail
+    (cell @x (+ 1 4))))
+  ;; ...
+
+;; Conflicting write (keypath prefix)
+;;
+;; Currently we prefer the parent.
+(rack
+  (frame
+    (part (@x @l) (foo l_ _))
+    (part (@x @r) (foo _ r_))
+    (part (@x @a) (foo (+ a_ _) _))
+    (backsys @a ±n <> {n: ^(+ n 1)})
+    (backsys @r ±n <> {n: ^(* n 2)})
+    (feed @l @bin)
+    (discard @bin)
+    (cell @x (foo (+ 1 2) 3))
+    (cell @bin))
+
+  (frame/tail
+    (cell @x (foo 6))
+    (cell @bin (+ 1 2)))
+
+  (frame/tail
+    (cell @x (foo 6))
+    (cell @bin))
+
+  end)
+
+;; Root modified, parts modified, patches are merged
+(rack
+  (frame
+    (part (@root @a) (+ a_ _))
+    (backsys @a ±n <> {n: ^(+ n 1)})
+    (backsys @root (+ _ ±n) <> {n: ^(+ n 1)})
+    (cell @root (+ 1 2)))
+
+  (frame/tail (cell @root (+ 2 3)))
+  (frame/tail (cell @root (+ 3 4))))
+  ;; ...
+
+;; Part with missing capture
+(rack
+  (frame
+    (part (@root @a) (+ a_ _))
+    (feed (copy @a) @a-view)
+    (cell @a-view))
+
+  end)
+
+;; Part with multiple captures
+(rack
+  (frame
+    (part (@root @a) (+ a_ b_))
+    (part (@root @b) (+ a_ b_))
+    (backsys @a  ±n <> {n: ^(+ n 1)})
+    (backsys @b  ±n <> {n: ^(* n 2)})
+    (cell @root (+ 1 2)))
+
+  (frame/tail (cell @root (+ 2 4)))
+  (frame/tail (cell @root (+ 3 8))))
+  ;; ...
+
+;; More advanced captures
+(rack
+  (frame
+    (part (@root @a) (%symbol blank a_ _))
+    (backsys @a  N←x <> {N: y})
+    (cell @root x_number))
+
+  (frame/tail (cell @root y_number))
+
+  end)
+
+;; Integration with tspace, manipulator node
+(rack
+  (frame
+    (cell @expr (+ 1 2))
+    (part (@expr @x) (+ x_ _))
+    (backsys @x  ±n <> {n: ^(+ n 1)})
+    (manipulator (@x -> (appearance _ `x) (appearance _ x_))
+      (appearance local))
+    (sensor (view local x_)))
+
+  (frame pattern: true
+    ⟨& (cell @expr (+ 1 2))
+       (sensor _ 1)⟩)
+
+  (frame pattern: true
+    ⟨& (cell @expr (+ 2 2))
+       (sensor _ 1)⟩)
+
+  (frame pattern: true
+    ⟨& (cell @expr (+ 3 2))
+       (sensor _ 2)⟩)
+
+  (frame pattern: true
+    ⟨& (cell @expr (+ 4 2))
+       (sensor _ 3)⟩))
+  ;; ...
+
+;; Different exclusive parts on the same edge
+(rack
+  (frame
+    (part (@xs @x) (`x))
+    (part (@xs @x) (x_))
+    (feed @src @x @src)
+    (cell @xs ())
+    (cell @src "Hello World"))
+
+  (frame/tail
+    (cell @xs ("Hello World"))
+    (cell @src))
+
+  (frame/tail
+    (cell @xs ())
+    (cell @src "Hello World")))
+  ;; ...
+
+;; Item flow
+(rack
+  (frame
+    (part (@in @x) (x_ _*))
+    (part (@out @y) (_* `y))
+    (feed @x @y)
+    (cell @in (1 2 3))
+    (cell @out ()))
+
+  (frame/tail
+    (cell @in (2 3))
+    (cell @out (1)))
+
+  (frame/tail
+    (cell @in (3))
+    (cell @out (1 2)))
+
+  (frame/tail
+    (cell @in ())
+    (cell @out (1 2 3)))
+
+  end)
+
+;; Chain with discard of parent
+(rack
+  (frame
+    (part (@xs @x) (_ x_ _))
+    (part (@x @y) (y_))
+    (discard @x)
+    (backsys @y ±n <> {n: ^(+ n 1)})
+    (cell @xs (1 (2) 3)))
+
+  (frame/tail
+    (cell @xs (1 3)))
+
+  end)
+
+;; Same part, different sources
+(rack
+  (frame
+    (part (@s0 @y) (_ y_ _))
+    (part (@s1 @y) (_ y_ _))
+    (part (@y @z) (±z))
+    (backsys @z ±n <> {n: ^(+ n 1)})
+    (cell @s0 (1 (2) 3))
+    (cell @s1 (4 (5) 6)))
+
+  end)
+
+;; 3-deep chain
+(rack
+  (frame
+    (part (@xs @x) (_ x_ _))
+    (part (@x @x') (x'_))
+    (part (@x' @n) (±n))
+    (backsys @n ±n <> {n: ^(+ n 1)})
+    (cell @xs (1 ((2)) 3)))
+
+  (frame/tail
+    (cell @xs (1 ((3)) 3)))
+
+  (frame/tail
+    (cell @xs (1 ((4)) 3)))
+
+  (frame/tail
+    (cell @xs (1 ((5)) 3))))
+  ;; ...
+
+;; Source pattern
+(rack
+  (frame
+    (part (@xs @n) ⟨(±n)⟩)
+    (part (@xs @m) ⟨±m⟩°)
+    (feed @n @m)
+    (part (@xs @x) (±x () _))
+    (backsys @x ±n <> {n: ^(+ n 1)})
+    (cell @xs (1 (2) 3)))
+
+  (frame/tail (cell @xs (2 () 2)))
+  (frame/tail (cell @xs (3 () 2)))
+  (frame/tail (cell @xs (4 () 2))))
+  ;; ...
+
+;; Append with increments
+(rack
+  (frame
+    (part (@xs @a) (a_ _*))
+    (part (@xs @b) (_ b_ _*))
+    (part (@xs @c) (_ _ c_ _*))
+    (part (@xs @d) (_ _ _ `d))
+    (backsys @a ±n <> {n: ^(+ n 1)})
+    (backsys @c ±n <> {n: ^(+ n 1)})
+    (feed @qux @d)
+    (part (@b @foo) (±foo))
+    (backsys @foo ±n <> {n: ^(+ n 1)})
+    (cell @xs (1 (2) 3))
+    (cell @qux 100))
+
+  (frame/tail
+    (cell @xs (2 (3) 4 100))
+    (cell @qux))
+
+  (frame/tail
+    (cell @xs (3 (4) 5 100))
+    (cell @qux)))
+  ;; ...
+
+;; Clear cell
+(rack
+  (frame
+    (part (@x @y) y_)
+    (discard @y)
+    (cell @x 100))
+
+  (frame/tail
+    (cell @x))
+
+  end)
