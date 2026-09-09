@@ -362,13 +362,13 @@ $
 
 Notice how the values in the aggregate dict are now flipped, too.
 
-The aggregate variant is the M:1 (many-to-one) variant of `feed`. There is its inverse, too, called the *broadcast* variant. In `seed.wwml`, write:
+The aggregate variant is the M:1 (many-to-one) variant of `feed`. There is its inverse, too, called the *distribute* variant. In `seed.wwml`, write:
 
 ```wwml
 (cell @x)
 (cell @y)
 (cell @z (100 200))
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 ```
 
 Running this with `irack`, we get:
@@ -378,13 +378,13 @@ $ ./irack --single-trace seed.wwml
 (cell @x)
 (cell @y)
 (cell @z (100 200))
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 <Press Enter>
 
 (cell @x 100)
 (cell @y 200)
 (cell @z)
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 <Press Enter>
 
 $
@@ -399,7 +399,7 @@ Now that we know the aggregate and the broadcast variants of `feed`, we can buil
 (cell @y 200)
 (cell @z)
 (feed (@x @y) @z)
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 ```
 
 The idea is for the first `feed` to "pack" `@x` and `@y` into a dictionary and put it at `@z`, and then on the next frame the second feed would do the reverse ­— "unpack" `@z` into `@x` and `@y`. Thus the cycle closes, and the circuit oscillates indefinitely between the two states:
@@ -410,28 +410,28 @@ $ ./irack --single-trace seed.wwml
 (cell @y 200)
 (cell @z)
 (feed (@x @y) @z)
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 <Press Enter>
 
 (cell @x)
 (cell @y)
 (cell @z (100 200))
 (feed (@x @y) @z)
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 <Press Enter>
 
 (cell @x 100)
 (cell @y 200)
 (cell @z)
 (feed (@x @y) @z)
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 <Press Enter>
 
 (cell @x)
 (cell @y)
 (cell @z (100 200))
 (feed (@x @y) @z)
-(feed @z (@x @y))
+(feed (@z items) (@x @y))
 <Ctrl-C>
 
 $
@@ -470,7 +470,39 @@ $
 
 The `feed` moved `@x` into `@a` (i.e., the corresponding destination), and `@y` into `@b`.
 
-To learn more about `feed`, use the doctool and navigate to `rack`, then to `feed`. What you should see is a page listing the *overloads* of `feed`, and describing each one of them in detail. *Overloads* is `doctool` vocabulary; do not confuse it with *variants*, which is a Rack-specific thing.
+The last variant of `feed` we will cover here is the *broadcast* variant. It broadcasts the same value to multiple destinations, while removing it at the source. In `seed.wwml`, type:
+
+```
+(cell @x 100)
+(cell @y)
+(cell @z)
+(feed @x (@y @z))
+```
+
+Then run the circuit with `irack`:
+
+```bash session
+$ ./irack --single-trace seed.wwml
+(cell @x 100)
+(cell @y)
+(cell @z)
+(feed @x (@y @z))
+<Press Enter>
+
+(cell @x)
+(cell @y 100)
+(cell @z 100)
+(feed @x (@y @z))
+<Press Enter>
+
+$
+```
+
+As you can see, `100` was moved to both `@y` and `@z` (the destination places of the `feed`), and `@x` (the source place) was cleared.
+
+`feed` allows you to do some extra things, but it is not necessary to know about them to proceed with this guide. If you are interested and want to experiment with `feed` a little bit more, feel free to check out the docs for `feed` in the doctool.
+
+To do so, open the doctool and navigate to `rack`, then to `feed`. What you should see is a page listing the *overloads* of `feed`, and describing each of them in detail. *Overloads* is `doctool` vocabulary; do not confuse it with *variants*, which is vocabulary coming from Rack.
 
 All variants of `feed` can be *inhibited*: you can attach a list of one or more edges that must *all* be empty (or not have a cell at them) for the `feed` to fire:
 
@@ -525,7 +557,7 @@ $
 
 Rack exited immediately due to *quiescence*, which you are already familiar with: the circuit simply did not change, because no node in it willed to change. `cell`s are inert, and `feed` is inhibited by the nonempty `@inhibitor`.
 
-In the aggregate, broadcast, and parallel transfer variants, you can use `front` and `back` (which I've covered in the beginning) instead of simple edges:
+In all `feed` variants, you can use `front` and `back` (which we have encountered in the beginning) instead of simple edges:
 
 ```wwml
 (cell @xs (1 2 3))
@@ -597,7 +629,7 @@ Rack exits after the second frame because `@z` is now occupied, so `feed` has no
 ```
 
 > [!NOTE]
-> The `.` in `(cell @a .)` is simply a symbol term. It can be replaced by any other term. You can do that if you want. E.g., replace it with `foo` or `"hello"` or `100`.
+> The `.` in `(cell @a .)` is simply a symbol term. It can be replaced by any other term. You can do that if you want. E.g., you can replace it with `foo` or `"hello"` or `100` and verify that nothing changes.
 
 **Experiment 6.** How would this circuit behave? Try to simulate it in your head, then observe using `irack`:
 
