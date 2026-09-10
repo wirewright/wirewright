@@ -2405,6 +2405,68 @@ module Ww::Rack
         D7.gnd(node, edge)
       end
 
+      # |@ rack.latest
+      #
+      # |@pattern
+      # [latest @edge_]
+      # [latest @edge_ value_]
+      #
+      # |@key edge rack.edge
+      # The edge to read from.
+      #
+      # |@key value
+      # The latest known value at edge. Can be missing if it was not read yet,
+      # or if it is absent.
+      #
+      # |@summary
+      # A utility node to read or maintain a copy of the value at an edge.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 100)
+      # (latest @x)
+      #
+      # ;; Frame 1
+      #
+      # (cell @x 100)
+      # (latest @x 100)
+      # ```
+      #
+      # Do note that there is a 1-tick delay, as with many other Rack nodes:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 100)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (latest @x)
+      #
+      # ;; Frame 1
+      #
+      # (cell @x 101)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (latest @x 100)
+      #
+      # ;; Frame 2
+      #
+      # (cell @x 102)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (latest @x 101)
+      #
+      # ;; Frame 3
+      #
+      # (cell @x 103)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (latest @x 102)
+      #
+      # ;; And so on...
+      # ```
+      matchpi %{[latest @edge_]}, %{[latest @edge_ _]} do
+        D7.gnd(node, edge)
+      end
+
       # |@ rack.log
       #
       # |@pattern

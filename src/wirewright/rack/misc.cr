@@ -10,7 +10,7 @@ module Ww::Rack::Misc
   end
 
   private def propose(hg : D7::Hypergraph, proposals)
-    hg.propose(proposals, :discard, :feed, :transfer, :delay, :view, :journal) do |candidate|
+    hg.propose(proposals, :discard, :latest, :feed, :transfer, :delay, :view, :journal) do |candidate|
       step(hg, candidate)
     end
   end
@@ -42,6 +42,12 @@ module Ww::Rack::Misc
         end
 
         targets.present? ? D7.patches(targets, {2, nil}) : nil
+      end
+
+      matchpi %{[latest @edge_]}, %{[latest @edge_ _]} do
+        return unless cell = Rack.cell?(hg, hg.resolve(node.addr, edge))
+
+        D7.patch(node, {2, cell.value?})
       end
 
       matchpi %{[feed _*]} do

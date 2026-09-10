@@ -6028,3 +6028,35 @@
        (device (cell @x (qux 101)) (cell @state 3) _*)
        (device (cell @x (qyx 201)) (cell @state 3) _*)))))
   ;; ...
+
+;; latest
+(group
+  (rack
+    (frame
+      (cell @x 100)
+      (latest @x))
+
+    (frame
+      (cell @x 100)
+      (latest @x 100))
+
+    end)
+
+  (rack
+    (frame
+      (backsys @x ±n <> {n: ^(+ n 1)})
+      (cell @x 100)
+      (latest @x))
+
+    (frame/tail
+      (cell @x 101)
+      (latest @x 100))
+
+    (frame/tail
+      (cell @x 102)
+      (latest @x 101))
+
+    (frame/tail
+      (cell @x 103)
+      (latest @x 102))))
+    ;; ...
