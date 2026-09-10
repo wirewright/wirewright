@@ -1,4 +1,5 @@
 require "./lang/pigment"
+require "./lang/duration_language"
 require "./lang/http_language"
 require "./lang/http_request_language"
 require "./lang/http_response_language"

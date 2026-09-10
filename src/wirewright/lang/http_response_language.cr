@@ -223,7 +223,7 @@ module Ww::HttpResponseLanguage
       secure: cookie.secure?,
       "http-only": cookie.http_only || nil,
       extension: cookie.extension?,
-      max_age: encode(cookie.max_age?),
+      max_age: DurationLanguage.encode(cookie.max_age?),
       "same-site": encode(cookie.same_site?),
     )
   end
@@ -294,9 +294,9 @@ module Ww::HttpResponseLanguage
     # |@key extension
     # An optional *string* containing unparsed attributes. E.g. `Partitioned`, `Priority=High`.
     #
-    # |@key max-age http.duration
+    # |@key max-age duration
     # The span of time to wait for until the cookie expires. It is expressed in the duration
-    # sublanguage. A zero or negative duration will expire the cookie immediately.
+    # language. A zero or negative duration will expire the cookie immediately.
     #
     # |@block
     # Describes a response cookie.
@@ -323,7 +323,7 @@ module Ww::HttpResponseLanguage
         http_only: decode?(term[:"http-only"]?, Bool) || false,
         same_site: decode?(term[:"same-site"]?, SameSite),
         extension: decode?(term[:extension]?, String),
-        max_age: decode?(term[:"max-age"]?, Time::Span),
+        max_age: DurationLanguage.decode?(term[:"max-age"]?),
       )
     end
   end
