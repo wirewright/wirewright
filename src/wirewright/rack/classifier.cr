@@ -2470,11 +2470,89 @@ module Ww::Rack
       # |@ rack.log
       #
       # |@pattern
-      # [log
-      #   (@all_ @last_ ⍊
-      #     limit_: (%optional 10 (%number +i32))
-      #     edges⋮ false)
-      #   log_dict]
+      # [log (@edge_ ⍊ limit_: (%optional 10 (%number +i32))) history_*]
+      #
+      # |@key edge rack.edge
+      # The edge to observe.
+      #
+      # |@key limit
+      # The maximum number of items in *history*. When *history* reaches the limit,
+      # the first item is removed. This causes *history* to "scroll" as new values
+      # get added to it.
+      #
+      # |@key history
+      # A sliding window of at most *limit* samples of the value at *edge*. A value
+      # is only appended to history if it is different from the previous value.
+      # Absences are not recorded. The previous value is retrieved from *history* itself.
+      #
+      # |@summary
+      # Keeps a log of values at a place.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 100)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (log (@x limit: 2))
+      #
+      # ;; Frame 1
+      #
+      # (cell @x 101)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (log (@x limit: 2) 100)
+      #
+      # ;; Frame 2
+      #
+      # (cell @x 102)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (log (@x limit: 2) 100 101)
+      #
+      # ;; Frame 3
+      #
+      # (cell @x 103)
+      # (backsys @x ±n <> {n: ^(+ n 1)})
+      # (log (@x limit: 2) 101 102)
+      #
+      # ;; And so on...
+      # ```
+      #
+      # You can use `rack.frag` to reference the log or its *history*:
+      #
+      # ```wwml
+      # (frag (@history (log _ history_*))
+      #   (log (@x limit: 2)))
+      # ```
+      matchpi %{[log (@edge_ ⍊ limit_: (%optional 10 (%number +i32))) _*]}, limit: Int32 do
+        history = node.items.move(2)
+
+        mix0 = Term.of(:latest, edge)
+        D7.mixture(node, mix0) do |mix1|
+          Term.case(mix1) do
+            matchpi %{(latest @_ value_)} do
+              continue if history.last? == value
+
+              if limit.zero?
+                node
+              elsif history.size + 1 > limit
+                # (log (@x limit: 2) 100 200)    300
+                # (log (@x limit: 2) ⏏100⏏ 200)  300
+                # (log (@x limit: 2) ⏏⏏ 200)     300
+                # (log (@x limit: 2) 200 300)  <-/
+                Term.of(node.replace(2, Term.rep).append(value))
+              else
+                Term.of(node.append(value))
+              end
+            end
+
+            otherwise do
+              node # Leave the node as-is if @edge is absent or unchanged.
+            end
+          end
+        end
+      end
+
+      # TODO: remove
       matchpi %{[log (@all_ @last_ ⍊ limit_: (%optional 10 (%number +i32)) edges⋮ false) log0_dict]}, limit: Int32, log0: Term::Dict do
         tail = log0.items.tail(limit)
         tip0 = tail.last?

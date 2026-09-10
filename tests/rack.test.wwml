@@ -3584,6 +3584,38 @@
 
 ;; log
 (group
+  ;; Basic variant
+  (rack
+    (frame
+      (backsys @x ±n <> {n: ^(+ n 1)})
+      (cell @x 100)
+      (log (@x limit: 3)))
+
+    (frame/tail
+      (cell @x 101)
+      (log (@x limit: 3) 100))
+
+    (frame/tail
+      (cell @x 102)
+      (log (@x limit: 3) 100 101))
+
+    (frame/tail
+      (cell @x 103)
+      (log (@x limit: 3) 100 101 102))
+
+    (frame/tail
+      (cell @x 104)
+      (log (@x limit: 3) 101 102 103))
+
+    (frame/tail
+      (cell @x 105)
+      (log (@x limit: 3) 102 103 104))
+
+    (frame/tail
+      (cell @x 106)
+      (log (@x limit: 3) 103 104 105)))
+    ;; ...
+
   ;; Elementary & truncate
   (rack
     (frame
