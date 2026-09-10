@@ -101,7 +101,7 @@ module Testtool
 
       success = false
 
-      if after == Term.of(:wait)
+      if after.in?(Term.of(:wait), Term.of(:"wait-deadline"))
         loop do
           seed, action = automaton.next(seed)
 
@@ -117,12 +117,23 @@ module Testtool
               got: action.content,
             )
           in Rack::Automaton::Wait
-            if deadline = action.deadline?
-              automaton.wait(deadline)
-              next
-            end
+            if after == Term.of(:"wait-deadline")
+              unless action.deadline?
+                complaints << complaint("A deadline wait was expected but got an indefinite wait",
+                  before: before.as(Term),
+                  after: after,
+                )
+              end
 
-            success = true
+              success = true
+            else
+              if deadline = action.deadline?
+                automaton.wait(deadline)
+                next
+              end
+
+              success = true
+            end
           in Rack::Automaton::End
             complaints << complaint("An indefinite wait was expected but Rack produced `end`",
               before: before.as(Term),

@@ -69,7 +69,6 @@ module MuSoma
       @rack : RackAgent,
       @mouse : MouseAgent,
       @keyboard : KeyboardAgent,
-      @scheduler : SchedulerAgent,
     )
     end
 
@@ -99,7 +98,6 @@ module MuSoma
     def observe(workspace : Workspace, hg : D7::Hypergraph, plan : Plan) : Nil
       # In no particular order.
       @keyboard.observe(workspace, hg, plan)
-      @scheduler.observe(workspace, hg, plan)
     end
 
     def receive(workspace : Workspace, request : AppRequest) : Nil
@@ -276,16 +274,17 @@ module MuSoma
 
     console.send(Console::InfoLog.new("Initializing and booting agents"))
 
+    automaton = Rack::Automaton.new(ws.parser, alarm: ws.alarm, display_mask: Rack::Automaton::DisplayMask::Subframe)
+
     agents = AgentPopulation.new(
       app: AppAgent.new,
       codex: CodexAgent.new(codex_ref),
       editor: EditorAgent.new(editR_ref),
       pretty: PrettyAgent.new,
       distill: DistillAgent.new,
-      rack: RackAgent.new(library_ref, input_ref),
+      rack: RackAgent.new(automaton, library_ref, input_ref),
       mouse: MouseAgent.new,
       keyboard: KeyboardAgent.new,
-      scheduler: SchedulerAgent.new,
     )
 
     agents.boot(ws)
@@ -304,7 +303,17 @@ module MuSoma
       next if Var.pending?(ws.state, ws.codex, ws.mu_codex, ws.library)
       next if ws.msgq.present?
 
-      epoch = ws.alarm.wait_until(epoch, ws.scheduler.timeout?)
+      timeout = nil
+
+      if deadline = automaton.deadline?
+        timeout = deadline - Time.instant
+      end
+
+      if scheduler_timeout = ws.scheduler.timeout?
+        timeout = timeout ? Math.min(timeout, scheduler_timeout) : scheduler_timeout
+      end
+
+      epoch = ws.alarm.wait_until(epoch, timeout)
     end
   end
 end

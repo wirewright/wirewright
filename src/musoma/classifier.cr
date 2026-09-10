@@ -64,16 +64,6 @@ module MuSoma
           D7.gnd(node)
         end
 
-        # Setting duration to zero makes the sequencer step on every cycle.
-        matchpi %{[sequencer _ _+]} do
-          D7.gnd(node)
-        end
-
-        # Setting duration to zero makes the ticker step on every cycle.
-        matchpi %{[ticker _ _number]} do
-          D7.gnd(node)
-        end
-
         # |@ musoma.node.site
         #
         # |@pattern

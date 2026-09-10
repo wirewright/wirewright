@@ -1,0 +1,18 @@
+(section "Animation"
+  (node (@mod (lfo _ ±mod))
+    (lfo ((100 ms) (sin (0.1 hz)))))
+  (window width: 500 height: 500
+    (limit max-w: 50 max-h: 50
+      (node @tf
+        (transform dl: 0 dt: 0 origin-l: 0.5 origin-t: 0.5
+          (rect
+            fill: (oklch 0.4 0.1 0)
+            radius-bl: (100 %)
+            radius-br: (100 %)
+            radius-tl: (100 %)
+            radius-tr: (100 %))))))
+  (backsys
+    {¦ ±mod tf: ⟪(rect ⍊ fill: (oklch _ _ ±h)) ⍊ ±dl ±dt⟫}
+      <> {h: ^(* mod 360), dl: ^(* mod 500), dt: ^(* mod 500)}))
+
+((I compose: true modify: true multiline: true structural: true) ("" * "") 0)

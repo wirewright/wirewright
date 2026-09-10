@@ -3922,6 +3922,191 @@ module Ww::Rack
         D7.gnd(node, values, pool)
       end
 
+      # |@ rack.sequencer
+      #
+      # |@pattern
+      # [sequencer period_ steps_+]
+      #
+      # |@key period duration
+      # The length of one cycle, expressed in the duration language. For example:
+      # `(1 s)` (or `(1 second)`), `(100 ms)` (or `(100 milliseconds)`).
+      #
+      # Setting *period* to a value corresponding to `0` (e.g. `(0 ms)`) makes
+      # the sequencer step on every cycle.
+      #
+      # |@key steps
+      # One or more sequencer *steps*. The current step is highlighted using `(> _)`,
+      # which is called *the needle*. There can be zero or more needles in *steps*.
+      #
+      # |@summary
+      # Selects the next item on every cycle, with wraparound, based on the global clock.
+      #
+      # |@block
+      # The sequencer node uses the global clock to step through a sequence of items,
+      # holding an item selected for a given period, then switching to the next, and
+      # finally wrapping back.
+      #
+      # Do note that all time is with respect to the global clock. This means that
+      # a `sequencer` will not "start" when you insert it into the circuit. Instead,
+      # a nice way to visualize it is to think of `sequencer` and other global clock
+      # nodes as filtered "views" of a single timeline maintained by Rack -- highlighting
+      # different "portions" of it, repeated into the past and the future. No matter how
+      # many sequencers you insert, and no matter *when* you insert one wrt. real time,
+      # the sequencers will all trigger in concert; and a sequencer will trigger only
+      # when its "portion" is (or recently was) active.
+      #
+      # Note also that Rack gives no real-time guarantees. Think of all periods
+      # as approximate.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      # (sequencer (1 s)
+      #   (> true)
+      #   false)
+      #
+      # ;; Frame 1 (after roughly 1 second)
+      # (sequencer (1 s)
+      #   true
+      #   (> false))
+      #
+      # ;; Frame 2 (after roughly 1 second)
+      # (sequencer (1 s)
+      #   (> true)
+      #   false)
+      #
+      # ;; And so on...
+      # ```
+      matchpi %{[sequencer _ _+]} do
+        D7.gnd(node)
+      end
+
+      # |@ rack.ticker
+      #
+      # |@pattern
+      # [ticker (%layer period_ {| step⋮ 1}) ±state]
+      #
+      # |@key period duration
+      # The length of one cycle, expressed in the duration language. For example:
+      # `(1 s)` (or `(1 second)`), `(100 ms)` (or `(100 milliseconds)`).
+      #
+      # Setting *period* to a value corresponding to `0` (e.g. `(0 ms)`) makes
+      # the ticker increment or decrement on every cycle.
+      #
+      # |@key step
+      # Delta to increment or decrement *state* for every period.
+      #
+      # |@key state
+      # The current state, to be incremented or decremented by the ticker.
+      #
+      # |@summary
+      # Increments or decrements a number on every cycle, based on the global clock.
+      #
+      # |@block
+      # The ticker node uses the global clock to increment or decrement
+      # a number.
+      #
+      # See `rack.sequencer` for general info on how most of Rack handles time.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      # (ticker (500 ms step: 0.5) 10)
+      #
+      # ;; Frame 1 (roughly after 500ms)
+      # (ticker (500 ms step: 0.5) 10.5)
+      #
+      # ;; Frame 2 (roughly after 500ms)
+      # (ticker (500 ms step: 0.5) 11)
+      #
+      # ;; Frame 3 (roughly after 500ms)
+      # (ticker (500 ms step: 0.5) 11.5)
+      #
+      # ;; And so on...
+      # ```
+      matchpi %{[ticker _dict _number]} do
+        D7.gnd(node)
+      end
+
+      # |@ rack.lfo
+      #
+      # |@pattern
+      # [lfo (period_ waveform_)]
+      # [lfo (period_ waveform_) ±readout]
+      #
+      # |@key period duration
+      # The length of one cycle, expressed in the duration language. This determines
+      # how often the *waveform* is sampled (the sampling period).
+      #
+      # Setting *period* to a value corresponding to `0` (e.g. `(0 ms)`) makes
+      # the `lfo` sample on every cycle.
+      #
+      # |@key waveform rack.lfo.waveform
+      # The waveform to sample.
+      #
+      # |@key readout
+      # The latest sampled output. This will often be an approximate number,
+      # since we use approximate math under the hood (e.g. `sin`, see also
+      # `nitrene.sin`.)
+      #
+      # |@summary
+      # Samples a waveform on every cycle, based on the global clock.
+      #
+      # |@block
+      # The LFO node (short for low-frequency oscillator) can be used for time-based
+      # modulation of values based on *waveform*.
+      #
+      # |@example
+      # Do note that in examples related to the clock, your numbers are highly likely
+      # going to be different.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (node (@readout (lfo _ ±readout))
+      #   (lfo ((100 ms) (sin (0.5 hz)))))
+      # (log (@readout limit: 3))
+      #
+      # ;; Frame 1
+      #
+      # (node (@readout (lfo _ ±readout))
+      #   (lfo ((100 ms) (sin (0.5 hz)))
+      #     ≈3.5979825e-5))
+      # (log (@readout limit: 3))
+      #
+      # ;; Frame 2
+      #
+      # (node (@readout (lfo _ ±readout))
+      #   (lfo ((100 ms) (sin (0.5 hz)))
+      #     ≈0.99689716))
+      # (log (@readout limit: 3)
+      #   ≈3.5979825e-5)
+      #
+      # ;; Frame 3
+      #
+      # (node (@readout (lfo _ ±readout))
+      #   (lfo ((100 ms) (sin (0.5 hz)))
+      #     ≈0.59998876))
+      # (log (@readout limit: 3)
+      #   ≈3.5979825e-5
+      #   ≈0.99689716)
+      #
+      # ;; Frame 4
+      #
+      # (node (@readout (lfo _ ±readout))
+      #   (lfo ((100 ms) (sin (0.5 hz)))
+      #     ≈0.003257661))
+      # (log (@readout limit: 3)
+      #   ≈3.5979825e-5
+      #   ≈0.99689716
+      #   ≈0.59998876)
+      #
+      # ;; And so on...
+      # ```
+      matchpi %{[lfo (_ _) _?]} do
+        D7.gnd(node)
+      end
+
       otherwise do
         D7.inert(node)
       end

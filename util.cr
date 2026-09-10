@@ -2698,6 +2698,10 @@ class BlockingSignal
     @cv = Sync::ConditionVariable.new(@mutex)
   end
 
+  def current_epoch
+    @mutex.synchronize { @epoch }
+  end
+
   def wait(epoch : UInt64) : UInt64
     @mutex.synchronize do
       loop do

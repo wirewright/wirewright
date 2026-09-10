@@ -618,9 +618,12 @@ module MuSoma
   class RackAgent
     @seen_seed : Bytes?
     @seen_library : Bytes?
-    @automaton : Rack::Automaton?
 
-    def initialize(@library_ref : ExtrinsicMap::ReadingRef, @seed_ref : ExtrinsicMap::ReadingRef)
+    def initialize(
+      @automaton : Rack::Automaton,
+      @library_ref : ExtrinsicMap::ReadingRef,
+      @seed_ref : ExtrinsicMap::ReadingRef,
+    )
       @epoch = 0u64
       @vantages = VarHash(D7::NodeAddr, Term).new
     end
@@ -629,11 +632,6 @@ module MuSoma
       ws.extrinsics.add(@library_ref)
       ws.extrinsics.add(@seed_ref)
       ws.state.update(&.with(:"seed-path", @seed_ref.path))
-
-      @automaton = Rack::Automaton.new(ws.parser,
-        alarm: ws.alarm,
-        display_mask: Rack::Automaton::DisplayMask::Subframe,
-      )
     end
 
     def sync(ws : Workspace)
@@ -724,76 +722,6 @@ module MuSoma
       @vantages.sync(reflections)
     end
 
-    private def perturb(node : D7::Node, event : Scheduler::Tick) : D7::Patch?
-      nodeQ = node.term
-
-      Term.case(nodeQ) do
-        matchpi %{[ticker duration-term_ ±ticks]} do
-          return unless duration = MuSoma.duration?(duration_term)
-          return if duration.negative? # ?!
-          return unless event.period == duration
-
-          D7.patch(node, {2, ticks + event.crossings})
-        end
-
-        matchpi %{[sequencer duration-term_ seq_+]} do
-          return unless duration = MuSoma.duration?(duration_term)
-          return if duration.negative? # ?!
-          return unless event.period == duration
-
-          bits = [] of Bool
-
-          seq.items.each do |item|
-            Term.case(item) do
-              matchpi %{(> _)} { bits << true }
-              otherwise { bits << false }
-            end
-          end
-
-          bits.rotate!(-event.crossings) # shl()
-
-          result = nodeQ.transaction do |commit|
-            seq.items.zip(bits, 2...nodeQ.itemsize) do |item, active, key|
-              if active
-                Term.case(item) do
-                  matchpi %{(> _)} { }
-
-                  otherwise do
-                    commit.with(key, Term.of(:>, item))
-                  end
-                end
-              else
-                Term.case(item) do
-                  matchpi %{(> arg_)} do
-                    commit.with(key, arg)
-                  end
-
-                  otherwise { item }
-                end
-              end
-            end
-          end
-
-          D7.replace(node, Term.of(result))
-        end
-
-        otherwise { }
-      end
-    end
-
-    def receive(ws, plan, msg : Scheduler::Tick)
-      perturbation = Perturbation.new do |hg|
-        hg.propose(:ticker, :sequencer) do |candidate|
-          perturb(candidate, msg)
-        end
-      end
-
-      plan << perturbation
-    end
-
-    def receive(ws, plan, msg : Scheduler::Expire)
-    end
-
     def receive(ws, plan, msg)
     end
 
@@ -809,9 +737,7 @@ module MuSoma
     end
 
     def step(ws : Workspace)
-      return unless automaton = @automaton
-
-      epoch = automaton.epoch
+      epoch = @automaton.epoch
       if @epoch == epoch
         return unless Var.pending?({ws.state, :timeline}, {ws.state, :hide}, ws.codex, ws.library) || @vantages.pending?
       end
@@ -825,7 +751,7 @@ module MuSoma
           matchpiT %{{¦ hide_boolean timeline: (behind_dict I ahead_ status←(%any . ...) draft_)}} do |behind, ahead|
             single_step = status == Term.of(:".")
 
-            subframes = next_subframes(automaton, ws.library.get, draft)
+            subframes = next_subframes(@automaton, ws.library.get, draft)
             draft1 = subframes.last
 
             # The ... (proceed to evaluate) continues into the next frame, but . (single step)
@@ -864,7 +790,7 @@ module MuSoma
             32.times do
               break if deduped_subframes.present?
 
-              subframes = next_subframes(automaton, ws.library.get, draft)
+              subframes = next_subframes(@automaton, ws.library.get, draft)
               draft1 = subframes.last
               dedupe_cons(behind, subframes, deduped_subframes)
             end
@@ -1210,49 +1136,6 @@ module MuSoma
     # NOTE: *node* must be `input` or `keyboard`!
     private def perturb(node : D7::Node, action : UpdateFocus) : D7::Patch?
       D7.patch(node, {:focus, action.focus == Term.of(false) ? nil : action.focus})
-    end
-  end
-
-  class SchedulerAgent
-    def initialize
-      @periods = Set(Time::Span).new
-    end
-
-    def observe(ws : Workspace, hg : D7::Hypergraph, plan : Plan) : Nil
-      return unless Var.pending?({ws.state, :timeline})
-
-      seen = Set(Time::Span).new
-
-      hg.each_node_with_head(Term.of(:sequencer), Term.of(:ticker)) do |node|
-        nodeQ = node.term
-
-        Term.case(nodeQ) do
-          matchpi %{[sequencer duration-term_ _+]} do
-            next unless duration = MuSoma.duration?(duration_term)
-            next if duration.negative? # ?!
-
-            seen << duration
-          end
-
-          matchpi %{[ticker duration-term_ _number]} do
-            next unless duration = MuSoma.duration?(duration_term)
-            next if duration.negative? # ?!
-
-            seen << duration
-          end
-
-          otherwise { }
-        end
-      end
-
-      (@periods - seen).each do |duration|
-        ws.scheduler.delete(Scheduler::Period.new(duration))
-      end
-      (seen - @periods).each do |duration|
-        ws.scheduler.add(Scheduler::Period.new(duration))
-      end
-
-      @periods = seen
     end
   end
 

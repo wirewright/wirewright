@@ -89,28 +89,7 @@ class Ww::Rack::Automaton
     Subframe
   end
 
-  class Epoch
-    def initialize(@alarm : BlockingSignal)
-      @value = Atomic(UInt64).new(0u64)
-    end
-
-    def get : UInt64
-      @value.get(:relaxed)
-    end
-
-    def call : Nil
-      @value.add(1, :relaxed)
-      @alarm.call
-    end
-
-    def wait(epoch : UInt64) : UInt64
-      @alarm.wait(epoch)
-    end
-
-    def wait_until(epoch : UInt64, timeout : Time::Span) : UInt64
-      @alarm.wait_until(epoch, timeout)
-    end
-  end
+  alias Epoch = BlockingSignal
 
   # Constructs a Rack automaton.
   #
@@ -131,7 +110,7 @@ class Ww::Rack::Automaton
     @fuse_parser = D7::Parser.new(@parser.clf)
 
     # Automaton state.
-    @epoch = Epoch.new(@alarm)
+    @epoch = @alarm
     @display = Deque(DisplayAction).new
 
     # Auxiliary state.
@@ -149,6 +128,7 @@ class Ww::Rack::Automaton
     @assembler_state = Assembler.state
     @rewriter_state = Rewriter.state(@epoch)
     @backsys_state = Backsys.state
+    @timekeeper_state = Timekeeper.state
   end
 
   # Constructs an automaton using the standard classifier `Rack.clf`.
@@ -179,7 +159,7 @@ class Ww::Rack::Automaton
   end
 
   def epoch : UInt64
-    @epoch.get
+    @epoch.current_epoch
   end
 
   # Returns `true` if the underlying asynchronous subsystems are busy. This
@@ -190,7 +170,8 @@ class Ww::Rack::Automaton
   def pending? : Bool
     Parser.pending?(@parser_state) || Extrinsics.pending?(@extrinsic_state) ||
       Database.pending?(@database_state) || Accord.pending?(@accord_state) ||
-      FS.pending?(@fs_state) || Rewriter.pending?(@rewriter_state)
+      FS.pending?(@fs_state) || Rewriter.pending?(@rewriter_state) ||
+      Timekeeper.pending?(@timekeeper_state)
   end
 
   # Returns the smallest deadline among deadlines for asynchronous subsystems.
@@ -207,10 +188,95 @@ class Ww::Rack::Automaton
   # after or at the deadline. No further guarantees as to how soon that will
   # happen are given.
   def deadline? : Time::Instant?
-    Accord.deadline?(@accord_state)
+    candidates = {
+      Accord.deadline?(@accord_state),
+      Timekeeper.deadline?(@timekeeper_state),
+    }
+
+    deadline = nil
+
+    # Find min candidate, skipping nils.
+    candidates.each do |candidate|
+      next if candidate.nil?
+      next unless deadline.nil? || candidate < deadline
+
+      deadline = candidate
+    end
+
+    deadline
   end
 
-  # FIXME: this method is a mess
+  private def contribute_nest(proposes0, &)
+    yield proposes0
+  end
+
+  private def contribute_nest(proposes0, contributor : Class, *contributors, &)
+    contributor.step do |propose|
+      contribute_nest({*proposes0, propose}, *contributors) do |proposes1|
+        yield proposes1
+      end
+    end
+  end
+
+  private def contribute_nest(proposes0, contributor : Tuple, *contributors, &)
+    contributor[0].step(contributor[1]) do |propose|
+      contribute_nest({*proposes0, propose}, *contributors) do |proposes1|
+        yield proposes1
+      end
+    end
+  end
+
+  private def contribute(circuit : Term, prepass, *contributors)
+    contribute_nest(Tuple.new, *contributors) do |proposes|
+      D7.step(@parser, circuit) do |hg|
+        prepass.call(hg) do |hg|
+          proposals = [] of D7::Patch
+          proposes.each &.call(hg, proposals)
+          D7.merge(hg, proposals)
+        end
+      end
+    end
+
+    # Extrinsics.step(@extrinsic_state) do |extrinsics|
+    #   Database.step(@database_state) do |database|
+    #     Parser.step(@parser_state) do |parser|
+    #       Accord.step(@accord_state) do |accord|
+    #         Supervisor.step do |supervisor|
+    #           FS.step(@fs_state) do |fs|
+    #             Rewriter.step(@rewriter_state) do |rewriter|
+    #               Backsys.step(@backsys_state) do |backsys|
+    #                 Timekeeper.step(@timekeeper_state) do |timekeeper|
+    #                   Misc.step do |misc|
+    #                     D7.step(@parser, subframes.last) do |hg|
+    #                       prepass.call(hg) do |hg|
+    #                         proposals = [] of D7::Patch
+
+    #                         extrinsics.call(hg, proposals)
+    #                         parser.call(hg, proposals)
+    #                         database.call(hg, proposals)
+    #                         accord.call(hg, proposals)
+    #                         supervisor.call(hg, proposals)
+    #                         fs.call(hg, proposals)
+    #                         rewriter.call(hg, proposals)
+    #                         backsys.call(hg, proposals)
+    #                         timekeeper.call(hg, proposals)
+    #                         misc.call(hg, proposals)
+
+    #                         D7.merge(hg, proposals)
+    #                       end
+    #                     end
+    #                   end
+    #                 end
+    #               end
+    #             end
+    #           end
+    #         end
+    #       end
+    #     end
+    #   end
+    # end
+  end
+
   private def step(subframes, frames, circuit : Term, prepass, library) : Nil
     # HACK: This is a "shadow step" to make sure rigs execute in the same tick
     # invisibly from the main Rack pass. From the latter's point of view, rigs
@@ -241,41 +307,20 @@ class Ww::Rack::Automaton
       end
     end
 
-    subframes.concat(Extrinsics.step(@extrinsic_state) do |extrinsics|
-      Database.step(@database_state) do |database|
-        Parser.step(@parser_state) do |parser|
-          Accord.step(@accord_state) do |accord|
-            Supervisor.step do |supervisor|
-              FS.step(@fs_state) do |fs|
-                Rewriter.step(@rewriter_state) do |rewriter|
-                  Backsys.step(@backsys_state) do |backsys|
-                    Misc.step do |misc|
-                      D7.step(@parser, subframes.last) do |hg|
-                        prepass.call(hg) do |hg|
-                          proposals = [] of D7::Patch
-
-                          extrinsics.call(hg, proposals)
-                          parser.call(hg, proposals)
-                          database.call(hg, proposals)
-                          accord.call(hg, proposals)
-                          supervisor.call(hg, proposals)
-                          fs.call(hg, proposals)
-                          rewriter.call(hg, proposals)
-                          backsys.call(hg, proposals)
-                          misc.call(hg, proposals)
-
-                          D7.merge(hg, proposals)
-                        end
-                      end
-                    end
-                  end
-                end
-              end
-            end
-          end
-        end
-      end
-    end)
+    subframes.concat(
+      contribute(subframes.last, prepass,
+        {Extrinsics, @extrinsic_state},
+        {Database, @database_state},
+        {Parser, @parser_state},
+        {Accord, @accord_state},
+        Supervisor,
+        {FS, @fs_state},
+        {Rewriter, @rewriter_state},
+        {Backsys, @backsys_state},
+        {Timekeeper, @timekeeper_state},
+        Misc,
+      )
+    )
 
     # Execute manipulate again to fix inconsistencies.
     frames << Rack.manipulate(@parser, subframes.last, prepass).last

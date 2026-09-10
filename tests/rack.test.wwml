@@ -6092,3 +6092,68 @@
       (cell @x 103)
       (latest @x 102))))
     ;; ...
+
+;; sequencer
+(group
+  ;; Elementary
+  (rack
+    (frame
+      (sequencer (10 ms) (> true) false))
+
+    (frame/tail fast-forward: true
+      (sequencer (10 ms) true (> false)))
+
+    (frame/tail fast-forward: true
+      (sequencer (10 ms) (> true) false)))
+    ;; ...
+
+  ;; Many needles
+  (rack
+    (frame
+      (sequencer (10 ms) (> 1) 2 (> 3)))
+
+    (frame/tail fast-forward: true
+      (sequencer (10 ms) (> 1) (> 2) 3))
+
+    (frame/tail fast-forward: true
+      (sequencer (10 ms) 1 (> 2) (> 3)))
+
+    (frame/tail fast-forward: true
+      (sequencer (10 ms) (> 1) 2 (> 3))))
+    ;; ...
+
+  ;; No needles
+  (rack
+    (frame
+      (sequencer (10 ms) 1 2 3))
+
+    wait-deadline))
+
+;; ticker
+;; Since the actual count is heavily time-dependent (the duration of each Rack
+;; time-step matters to how much the counter is incremented), we can only do
+;; relational comparisons.
+(rack
+  (frame
+    (node (@state (ticker _ state_))
+      (ticker (10 ms step: 0.5) 10))
+
+    (log (@state limit: 2)))
+
+  (frame pattern: true fast-forward: true
+    (_*
+     (log (@state limit: 2) 10)))
+
+  (frame pattern: true fast-forward: true
+    (_*
+     (log (@state limit: 2) 10 (%number _ > 10))))
+
+  (frame pattern: true fast-forward: true
+    (_*
+     (log (@state limit: 2)
+       a←(%number _ > 10)
+       (%number _ > (var a))))))
+  ;; ...
+
+;; TODO: lfo
+;; I don't know how we can test this because it's all continuous...
