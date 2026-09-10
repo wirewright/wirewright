@@ -78,7 +78,7 @@ module InteractiveRack
       puts
     end
 
-    puts ML.display(seed, maxwidth: 80)
+    puts ML.display(seed, maxwidth: 80, style: ML::Style::Document)
 
     if single_step
       gets
