@@ -593,7 +593,8 @@ history-limit: 128
 ;; Section widget
 
 (open-section-widget addr_ title_string node_)
-  => (group detail: col multiline: true
+  => (group detail: col
+            multiline: true
        (group detail: seq
          (atom type: (expander ^addr icon: "expand_more" center: true) mass: 0)
          (group detail: (section ^title)))
@@ -682,54 +683,62 @@ history-limit: 128
 (⸨root,group⸩ …⟨{¦ -?mode_}⟩°… ⍊ ?mode: M_ -mode_)
   <> {?mode: ^M, mode: ^M, (M): ()}
 
-;; The `inline` node forces inline mode on its element, then removes itself.
-node←(inline child←{¦ -?mode_} ⍊ ?mode)
-  <> {node: ^(up child), ?mode: inline}
+;; The `inline` node forces inline mode on its element.
+(inline child←{¦ -?mode_} ⍊ ?mode)
+  <> {?mode: inline}
 
 
 --- pretty/style-up ;; Styles go up
 
+;; Remove inline nodes.
+[inline child_] => ^child
+
+;; Calculate the "mass" of an atom based on the size of the atom's caption.
 (atom caption_string ⍊ -mass_)
   <> {mass: ^(charcount caption)}
 
+;; An atom that knows its mass knows its style, regardless of mode.
 (atom _* ⍊ ±mass -style_ ?mode_)
-  <> {(?mode): (), style: (inline ^:mass children: ())}
+  <> {(?mode): (), style: (inline ^:mass)}
 
+;; An empty group is always inline, regardless of mode.
 (group ⍊ -style_ ?mode_)
-  <> {(?mode): (), style: (inline mass: 0 children: ())}
+  <> {(?mode): (), style: (inline mass: 0)}
 
+;; Find the styles we're going to borrow from entries.
 (group entries_+ ⍊ -borrowing-styles_)
-  <> {borrowing-styles:
-        ((^each (entries as {¦ style: entry-style_})
-           ^entry-style))}
+  <> {borrowing-styles: ((^each (entries as {¦ style_}) ^style))}
 
+;; Clear entry styles once we know them. This completes the "borrow".
 (group …⟨{¦ style_}⟩°… ⍊ borrowing-styles_ -styles_)
   <> {(style): (), styles: ^borrowing-styles, (borrowing-styles): ()}
 
 ;; Forced multiline groups immediately promote styles to multiline.
 (group _* ⍊ mode_: content multiline styles_ -style_)
-  <> {(mode): (), style: (multiline children: ^styles), (styles): ()}
+  <> {(mode): (), style: (multiline ^*styles), (styles): ()}
 
 ;; ... otherwise we must calculate the mass.
 (group _* ⍊ styles_ -mass_)
   <> {mass: ^(sum (select styles {¦ mass: ±value}))}
 
 ;; If some styles are multiline, we can't be inline unless forced inline.
-(group _* ⍊ styles: ⟨[multiline]⟩ -styles-multiline_)
+(group _* ⍊ styles: ⟨[multiline _*]⟩ -styles-multiline_)
   <> {styles-multiline: true}
 
 ;; Forced inline nodes are ready.
 (group _* ⍊ mode_: inline styles_ mass_ -style_)
   <> {(mode): (),
       (mass): (),
-      style: (inline ^:mass children: ^styles), (styles): ()}
+      style: (inline ^*styles ^:mass),
+      (styles): ()}
 
 ;; Content nodes are ready, too, if we're multiline.
 (group _* ⍊ mode_: content styles-multiline_ styles_ -style_)
   <> {(mode): (),
       (mass): (),
       (styles-multiline): (),
-      style: (multiline children: ^styles), (styles): ()}
+      style: (multiline ^*styles),
+      (styles): ()}
 
 ;; ... while other nodes continue. If the mass is less than some
 ;; heuristic threshold, pick inline style.
@@ -737,14 +746,14 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 ;; TODO: un-hardcode threshold.
 (group _* ⍊ mode_: content -styles-multiline mass_: (%number _ <= 50) styles_ -style_)
   <> {(mode): (),
-      style: (inline ^:mass children: ^styles),
+      style: (inline ^*styles ^:mass),
       (mass): (),
       (styles): ()}
 
 ;; ... otherwise, pick multiline style.
 (group _* ⍊ mode_: content mass_ styles_ -style_)
   <> {(mode): (),
-      style: (multiline children: ^styles),
+      style: (multiline ^*styles),
       (mass): (),
       (styles): ()}
 
@@ -754,8 +763,8 @@ node←(inline child←{¦ -?mode_} ⍊ ?mode)
 (atom _* ⍊ style_ -form_)
   <> {(style): (), form: inline}
 
-(group _* ⍊ style_: (tag_ ⍊ children_dict) -styles_ -form_)
-  <> {(children): (), styles: ^children, form: ^tag, (style): ()}
+(group _* ⍊ style_: [tag_ children_*] -styles_ -form_)
+  <> {styles: ^children, form: ^tag, (style): ()}
 
 (group elements_* ⍊ styles_dict)
   <> {elements:
@@ -1146,6 +1155,10 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
 ;; Set to `true` while the circuit is loading.
 circuit-loading: true
 
+;; Set to `true` to show circuit-µ as code instead of rendering it. This is useful
+;; to debug prettyR.
+circuit-debug: false
+
 ;; Window size.
 width: 1200
 height: 800
@@ -1394,6 +1407,11 @@ scroll: {}
 ;; Move the pane divider right.
 {¦ mode: normal input: ⟨& (key (shift _)) K←(key "l")⟩ ±pane-divider-l}
   <> {(K): (), pane-divider-l: ^(+ pane-divider-l 30)}
+
+;; \control (key normal "F1")
+;; Enable circuit pretty print debug mode.
+{¦ mode: normal input: ⟨K←(key (fn 1))⟩ circuit-debug_boolean}
+  <> {(K): (), circuit-debug: ^(not circuit-debug)}
 
 ;; \control (action "Scroll down over the circuit pane")
 ;; Zoom out.
@@ -2096,7 +2114,10 @@ scroll: {}
              (gate
                (transform scale: ^scale
                  (box style: "p-7 content"
-                   ^(view circuit-µ))))))))
+                   (^br circuit-debug
+                     (p style: "text-theme-text font-mono text-sm"
+                       ^\circuit-µ)
+                     ^(view circuit-µ)))))))))
 
 ;;
 ;; Help
