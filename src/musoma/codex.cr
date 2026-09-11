@@ -82,7 +82,9 @@ module MuSoma
         Alloy.rewrite(@sema, repr, cache: @render_cache)
       end
 
-      Rho.rewrite(@prettyR, sema_out, cache: @rho_cache)
+      @rho_cache.epoch do
+        Rho.rewrite(@prettyR, sema_out, cache: @rho_cache)
+      end
     end
   end
 
