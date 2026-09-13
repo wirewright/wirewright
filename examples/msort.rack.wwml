@@ -1,66 +1,78 @@
-(comment
-  "Merge sort. The goal here isn't efficiency, just use `sort` in Nitrene to do \
-   actual sorting. The goal is to demo how a sorting algorithm can be a symbolic machine.")
-
-(rewriter ((rulesetR) - {@:unsorted, @:sorted, @:workspace, @:busy})
-  ;; Move singletons into the workspace.
-  {¦ unsorted: (±n _*) workspace: (_* `dst)}
-    <> {dst: (^n), (n): ()}
-  ;; Move pairs into the workspace (ordered).
-  {¦ unsorted: (±n ±m _*) workspace: (_* `dst)}
-    <> {dst: (^n ^m), (n): (), (m): ()}
-  ;; Move pairs into the workspace (unordered).
-  {¦ unsorted: (±n m←(%number _ < (var n)) _*) workspace: (_* `dst)}
-    <> {dst: (^m ^n), (n): (), (m): ()}
-  ;; Detect termination & report to `@sorted`.
-  {¦ busy: 0 unsorted_: () -sorted_ workspace: (a_dict)}
-    <> {(a): (), (unsorted): (), sorted: ^a})
-
-(cell @workspace ())
-(cell @busy 0)
+;; sort(1000)
+;; 1: 8593
+;; 2: 5215
+;; 4: 4039
+;; 8: 3341
 
 (comment
-  "This is the merging-machine. It can be duplicated as many times as you \
-   want, increasing the \"parallelism\" of sorting (currently only simulated \
-   parallelism; Rack is still synchronous under the hood). That is, the more \
-   of these modules you have, the more merging you can do per tick. Therefore, \
-   you end up spending less ticks to sort. However, the cost of each tick increases, \
-   as does the communication & conflict overhead, which, despite not being observable, \
-   ends up taking a chunk of time under the hood. For example, on my machine, at the time\
-   of writing, the numbers are as follows:\n\
-   sort(n=1000):\n \
-   - 1: 9893 frames  ~293µs  ~3s\n \
-   - 2: 5779 frames  ~330µs  ~2s\n \
-   - 3: 4747 frames  ~367µs  ~1.7s\n \
-   - 4: 4157 frames  ~357µs  ~1.4s\n \
-   - 8: 3535 frames  ~513µs  ~1.8s")
-(module {:@workspace, :@busy}
-  (cell @l)
-  (cell @r)
-  (cell @out ())
-  (rewriter ((rulesetR) - {@:workspace, @:busy, @:l, @:r, @:out})
-    ;; Take work.
-    {¦ workspace: (a_dict b_dict _*) -l_ -r_ ±busy}
-      <> {(a): (), (b): (), l: ^a, r: ^b, busy: ^(+ busy 1)}
-    ;; Post results.
-    {¦ workspace: (_* `dst) l_: () r_: () out_: (_*) ±busy}
-      <> {dst: ^out, (l): (), (r): (), out: (), busy: ^(- busy 1)}
-    ;; Left is min.
-    {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
-      <> {(a): (), dst: ^a}
-    ;; Right is min.
-    {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
-      <> {(b): (), dst: ^b}
-    ;; Only left left, concat.
-    {¦ l_: (_+) r: () out: (_* `dst)}
-      <> {l: (), (dst): ^l}
-    ;; Only right left, concat.
-    {¦ l: () r_: (_+) out: (_* `dst)}
-      <> {r: (), (dst): ^r}))
+  "Merge sort. The goal here isn't efficiency, just use `sort` in Nitrene to do actual \
+   sorting. The goal is to demo how a sorting algorithm can be implemented as \
+   a symbolic machine.")
+
+(rewriter ((rulesetR) - {@:unsorted, @:sorted, @:run, @:tasks, @:pool})
+  ;; Append inorder numbers to run.
+  {¦ unsorted: (±n _*) run: (_* (%number _ <= (var n)) `dst)}
+    <> {(n): (), dst: ^n}
+  ;; Prepend inorder numbers to run.
+  {¦ unsorted: (±n _*) run: (`dst (%number _ >= (var n)) _*)}
+    <> {(n): (), dst: ^n}
+  ;; Append singletons to run.
+  {¦ unsorted: (±n _*) run: (`dst)}
+    <> {(n): (), dst: ^n}
+  ;; Move runs to tasks.
+  {¦ run_: (_+) tasks: (_* `>run)}
+    <> {(n): (), run: (), >run: ^run}
+  ;; Announce completion.
+  {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () (device (cell @l _) _*) min: 0)}
+    <> {(unsorted): (), sorted: ^run, (run): ()})
+
+(comment
+  "NOTE: One feature of `axis: _` is that it \"threads\" modifications \
+   to the tasks \"through\". In other words, each device has access \
+   to the *modified* tasks (perhaps after a preceding device popped \
+   work off it or published work). This means that sometimes work does \
+   not \"leave\" this rewriter and make it into `tasks`; a preceding \
+   device could publish its completed result for the next free device \
+   to take it immediately.")
+(rewriter ((scanR (rulesetR) axis: pool) - {@:tasks, @:pool})
+  ;; Give work from the tasks to each device in the pool.
+  {¦ pool: (device (cell @l `>l) (cell @r `>r) (cell @out `out) _*)
+     tasks: (l_ r_ _*)}
+    <> {>l: ^l, >r: ^r, out: (), (l): (), (r): ()}
+  ;; Collect completed work from each device into the tasks.
+  {¦ pool: (device (cell @l l←()) (cell @r r←()) (cell @out result_) _*)
+     tasks: (_* `>result)}
+    <> {(l): (), (r): (), (result): (), >result: ^result})
+
+(cell @run ())
+(cell (arena @tasks) ())
+
+(pool @pool
+  (device
+    (cell @l)
+    (cell @r)
+    (cell @out)
+
+    (rewriter ((rulesetR) - {@:l, @:r, @:out})
+      ;; Left is min.
+      {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+        <> {(a): (), dst: ^a}
+      ;; Right is min.
+      {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+        <> {(b): (), dst: ^b}
+      ;; Only left left, concat.
+      {¦ l_: (_+) r: () out: (_* `dst)}
+        <> {l: (), (dst): ^l}
+      ;; Only right left, concat.
+      {¦ l: () r_: (_+) out: (_* `dst)}
+        <> {r: (), (dst): ^r}
+      ;; All in left definitely less than all in right, concat.
+      {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+        <> {l: (), r: (), (dst): (^*l ^*r)})))
 
 (cell @sorted)
 
-;(cell @unsorted (1 0 2 93 27 3248 294 2 49 7 3 0))
+;(cell @unsorted (1 0 2 93 27 3248 294 2 49 7 3 0 1 8 1 11 12))
 
 ;; 100 numbers (for a visual demo in MuSoma)
 (cell @unsorted

@@ -519,9 +519,7 @@
         (cell @z 100)))
     end)
 
-  ;; Conflicts like this one rely on lexicographic comparison of participants deep in
-  ;; the guts of D7 to remain deterministic. The comparison is a method of last resort
-  ;; when it comes to sorting solutions. Here we exercise it.
+  ;; A conflict should immediately end the whole thing.
   (rack
     (frame
       (cell @x a)
@@ -530,72 +528,7 @@
       (feed @y @sink)
       (cell @sink)
       (discard @sink))
-    (frame
-      (cell @x) ;; < (cell @x) is lexicographically smaller than @y
-      (cell @y b)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink a)
-      (discard @sink))
-    (frame
-      (cell @x)
-      (cell @y b)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink)
-      (discard @sink))
-    (frame
-      (cell @x)
-      (cell @y)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink b)
-      (discard @sink))
-    (frame
-      (cell @x)
-      (cell @y)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink)
-      (discard @sink))
-    end)
 
-  (rack
-    (frame
-      (cell @y b)
-      (cell @x a)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink)
-      (discard @sink))
-    (frame
-      (cell @y b)
-      (cell @x) ;; < ditto, (cell @x) is lexicographically smaller than @y
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink a)
-      (discard @sink))
-    (frame
-      (cell @y b)
-      (cell @x)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink)
-      (discard @sink))
-    (frame
-      (cell @y)
-      (cell @x)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink b)
-      (discard @sink))
-    (frame
-      (cell @y)
-      (cell @x)
-      (feed @x @sink)
-      (feed @y @sink)
-      (cell @sink)
-      (discard @sink))
     end))
 
 ;; Single tick parallelism.
@@ -960,6 +893,56 @@
       (feed @front @preview)
       (cell @preview)
       (discard @preview))
+    end)
+
+  ;; Make sure enqueues are seq
+  (rack
+    (frame
+      (queue (@x @xs) ())
+      (cell @a 100)
+      (cell @b 200)
+      (feed @a @xs)
+      (feed @b @xs))
+
+    (frame
+      (queue (@x @xs) (100))
+      (cell @a)
+      (cell @b 200)
+      (feed @a @xs)
+      (feed @b @xs))
+
+    (frame
+      (queue (@x @xs) (100 200))
+      (cell @a)
+      (cell @b)
+      (feed @a @xs)
+      (feed @b @xs))
+
+    end)
+
+  ;; Make sure dequeues are seq.
+  (rack
+    (frame
+      (queue (@x @xs) (100 200))
+      (cell @a)
+      (cell @b)
+      (feed @x @a)
+      (feed @x @b))
+
+    (frame
+      (queue (@x @xs) (200))
+      (cell @a 100)
+      (cell @b)
+      (feed @x @a)
+      (feed @x @b))
+
+    (frame
+      (queue (@x @xs) ())
+      (cell @a 100)
+      (cell @b 200)
+      (feed @x @a)
+      (feed @x @b))
+
     end)
 
   ;; Queue should not enqueue if destination is occupied -- this is the basic
@@ -2568,82 +2551,92 @@
 
 ;; Handling of disjoint and non-disjoint writes to the same location.
 (group
-  ;; Disjoint writes must all succeed.
+  ;; Disjoint writes to a basic cell must conflict.
   (rack
     (frame
-      (cell @x {"A": 100, "B": 200, "C": 300})
       (backsys @x
         {¦ "A": ±n} <> {n: ^(- n 1)})
       (backsys @x
         {¦ "B": ±n} <> {n: ^(* n 2)})
       (backsys @x
-        {¦ "C": ±n} <> {n: ^(+ n 1)}))
+        {¦ "C": ±n} <> {n: ^(+ n 1)})
+      (cell @x {"A": 100, "B": 200, "C": 300}))
+
+    end)
+
+  ;; Disjoint writes to arena must all succeed.
+  (rack
     (frame
-      (cell @x {"A": 99, "B": 400, "C": 301})
       (backsys @x
         {¦ "A": ±n} <> {n: ^(- n 1)})
       (backsys @x
         {¦ "B": ±n} <> {n: ^(* n 2)})
       (backsys @x
-        {¦ "C": ±n} <> {n: ^(+ n 1)}))
-    (frame
-      (cell @x {"A": 98, "B": 800, "C": 302})
-      (backsys @x
-        {¦ "A": ±n} <> {n: ^(- n 1)})
-      (backsys @x
-        {¦ "B": ±n} <> {n: ^(* n 2)})
-      (backsys @x
-        {¦ "C": ±n} <> {n: ^(+ n 1)})))
+        {¦ "C": ±n} <> {n: ^(+ n 1)})
+      (cell (arena @x) {"A": 100, "B": 200, "C": 300}))
+
+    (frame/tail
+      (cell (arena @x) {"A": 99, "B": 400, "C": 301}))
+
+    (frame/tail
+      (cell (arena @x) {"A": 98, "B": 800, "C": 302})))
     ;; ...
 
-  ;; Insertions in the middle conflict with other write(s).
-  ;;
-  ;; NOTE: Here we see the unconditional suppression of insertion which
-  ;; is supposed to be a deterministic, but not exactly human-
-  ;; comprehensible choice.
+  ;; Insertions in the middle with other write(s) while using arena must succeed.
   (rack
     (frame
-      (cell @x (+ 1 2))
       (backsys @x  {¦ -qux_} <> {qux: true})
       (backsys @x  ⟨±n⟩° <> {n: ^(+ n 1)})
-      (backsys @x  [+ `x _ _] <> {x: "foo"}))
-    (frame
-      (cell @x (+ 2 3 qux: true))
-      (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n⟩° <> {n: ^(+ n 1)})
-      (backsys @x  [+ `x _ _] <> {x: "foo"}))
-    (frame
-      (cell @x (+ 3 4 qux: true))
-      (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n⟩° <> {n: ^(+ n 1)})
-      (backsys @x  [+ `x _ _] <> {x: "foo"})))
+      (backsys @x  [+ `x _ _] <> {x: "foo"})
+      (cell (arena @x) (+ 1 2)))
+
+    (frame/tail
+      (cell (arena @x) (+ "foo" 2 3 qux: true)))
+
+    (frame/tail
+      (cell (arena @x) (+ "foo" 3 4 qux: true))))
     ;; ...
 
-  ;; We can "fix" conflicts like these with explicit staging. Rack
-  ;; won't be able to do anything about them on its own, because the
-  ;; conflicts above are, in a sense, as "pure" as conflicts go.
+  ;; We can "fix" conflicts like these with explicit staging. `arena` must
+  ;; be used regardless since multiple backsystems are writing to
+  ;; the same node.
   (rack
     (frame
-      (cell @x (+ 1 2))
       (backsys @x  {¦ -qux_} <> {qux: true})
       (backsys @x  ⟨±n ⍊ qux⟩° <> {n: ^(+ n 1)})
-      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
-    (frame
-      (cell @x (+ "foo" 1 2 qux: true))
-      (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ⍊  qux⟩° <> {n: ^(+ n 1)})
-      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
-    (frame
-      (cell @x (+ "foo" 2 3 qux: true))
-      (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ⍊ qux⟩° <> {n: ^(+ n 1)})
-      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))
-    (frame
-      (cell @x (+ "foo" 3 4 qux: true))
-      (backsys @x  {¦ -qux_} <> {qux: true})
-      (backsys @x  ⟨±n ⍊ qux⟩° <> {n: ^(+ n 1)})
-      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"}))))
+      (backsys @x  (+ `x _ _ ⍊ -qux) <> {x: "foo"})
+      (cell (arena @x) (+ 1 2)))
+
+    (frame/tail
+      (cell (arena @x) (+ "foo" 1 2 qux: true)))
+
+    (frame/tail
+      (cell (arena @x) (+ "foo" 2 3 qux: true)))
+
+    (frame/tail
+      (cell (arena @x) (+ "foo" 3 4 qux: true))))
     ;; ...
+
+  ;; Deeper modifications conflict with `arena`.
+  (rack
+    (frame
+      (cell (arena @x) ((1) (2) (3)))
+      (backsys @x ({¦ -x_} _*) <> {x: 100})
+      (backsys @x ({¦ -y_} _*) <> {y: 200}))
+
+    end)
+
+  ;; For such cases, `space` cells can be used.
+  (rack
+    (frame
+      (backsys @x ({¦ -x_} _*) <> {x: 100})
+      (backsys @x ({¦ -y_} _*) <> {y: 200})
+      (cell (space @x) ((1) (2) (3))))
+
+    (frame/tail
+      (cell (space @x) ((1 x: 100 y: 200) (2) (3))))
+
+    end))
 
 ;; Instantiation
 (group
@@ -3170,48 +3163,32 @@
       (cell @x (a b))
       (backsys @x  (front_ _*) <> {(front): ()})
       (backsys @x  (_* `back) <> {back: 200}))
-    (frame
-      (cell @x (b)) ;; < nodes whose addr is smaller win
-      (backsys @x  (front_ _*) <> {(front): ()})
-      (backsys @x  (_* `back) <> {back: 200}))
-    (frame
-      (cell @x ())
-      (backsys @x  (front_ _*) <> {(front): ()})
-      (backsys @x  (_* `back) <> {back: 200}))
-    (frame
-      (cell @x (200))
-      (backsys @x  (front_ _*) <> {(front): ()})
-      (backsys @x  (_* `back) <> {back: 200}))
-    (frame
-      (cell @x ())
-      (backsys @x  (front_ _*) <> {(front): ()})
-      (backsys @x  (_* `back) <> {back: 200})))
-    ;; ...
+
+    end)
 
   (rack
     (frame
-      (cell @x (a b))
+      (backsys @x  (front_ _*) <> {(front): ()})
       (backsys @x  (_* `back) <> {back: 200})
-      (backsys @x  (front_ _*) <> {(front): ()}))
-    (frame
-      (cell @x (a b 200)) ;; < nodes whose addr is smaller win
-      (backsys @x  (_* `back) <> {back: 200})
-      (backsys @x  (front_ _*) <> {(front): ()}))
-    (frame
-      (cell @x (a b 200 200))
-      (backsys @x  (_* `back) <> {back: 200})
-      (backsys @x  (front_ _*) <> {(front): ()})))
-    ;; ...
+      (cell (arena @x) (a b)))
+
+    (frame/tail
+      (cell (arena @x) (b 200)))
+
+    (frame/tail
+      (cell (arena @x) (200 200)))
+
+    end)
 
   (rack
     (frame
-      (cell @x (a b))
       (backsys @x  (_* `back) <> {back: 200})
-      (backsys @x  {¦ -flag_} <> {flag: true}))
-    (frame
-      (cell @x (a b 200 flag: true)) ;; < since the flag backsys doesn't modify itemsize it's merged!
-      (backsys @x  (_* `back) <> {back: 200})
-      (backsys @x  {¦ -flag_} <> {flag: true}))
+      (backsys @x  {¦ -flag_} <> {flag: true})
+      (cell (arena @x) (a b)))
+
+    (frame/tail
+      (cell (arena @x) (a b 200 flag: true)))
+
     end))
 
 ;; Cell rewriting
@@ -3344,26 +3321,103 @@
       (backsys @count ±n <> {n: ^(+ n 1)}))))
   ;; ...
 
-;; BUG: only one participant must be allowed to change itemsize;
-;; all of its changes must be rolled back in case of failure.
-(rack
-  (frame
-    (backsys {@:xs @:a} {¦ xs: (_* `dst) a_} <> {dst: ^a, (a): ()})
-    (backsys {@:xs @:b} {¦ xs: (_* `dst) b_} <> {dst: ^b, (b): ()})
-    (cell @xs ())
-    (cell @a 1)
-    (cell @b 2))
+;; Appends (inserts) on `arena` cell.
+(group
+  (rack
+    (frame
+      (backsys {@:xs @:a} {¦ xs: (_* `dst) a_} <> {dst: ^a, (a): ()})
+      (backsys {@:xs @:b} {¦ xs: (_* `dst) b_} <> {dst: ^b, (b): ()})
+      (cell (arena @xs) ())
+      (cell @a 1)
+      (cell @b 2))
 
-  (frame/tail
-    (cell @xs (1))
-    (cell @a)
-    (cell @b 2))
+    (frame/tail
+      (cell (arena @xs) (1 2))
+      (cell @a)
+      (cell @b))
 
-  (frame/tail
-    (cell @xs (1 2))
-    (cell @a)
-    (cell @b))
-  end)
+    end)
+
+  ;; ... independent of backsys order
+  (rack
+    (frame
+      (backsys {@:xs @:b} {¦ xs: (_* `dst) b_} <> {dst: ^b, (b): ()})
+      (backsys {@:xs @:a} {¦ xs: (_* `dst) a_} <> {dst: ^a, (a): ()})
+      (cell (arena @xs) ())
+      (cell @a 1)
+      (cell @b 2))
+
+    (frame/tail
+      (cell (arena @xs) (1 2))
+      (cell @a)
+      (cell @b))
+
+    end)
+
+  ;; ... independent of cell order
+  (rack
+    (frame
+      (backsys {@:xs @:b} {¦ xs: (_* `dst) b_} <> {dst: ^b, (b): ()})
+      (backsys {@:xs @:a} {¦ xs: (_* `dst) a_} <> {dst: ^a, (a): ()})
+      (cell (arena @xs) ())
+      (cell @b 2)
+      (cell @a 1))
+
+    (frame/tail
+      (cell (arena @xs) (1 2))
+      (cell @b)
+      (cell @a))
+
+    end)
+
+  ;; Batch inserts preserve batch order
+  (rack
+    (frame
+      (backsys {¦ xs: (_* `dst) as_} <> {(dst): ^as, (as): ()})
+      (backsys {¦ xs: (_* `dst) bs_} <> {(dst): ^bs, (bs): ()})
+      (cell (arena @xs) (7 8 9))
+      (cell @as (1 2 3))
+      (cell @bs (4 5 6)))
+
+    (frame/tail
+      (cell (arena @xs) (7 8 9 1 2 3 4 5 6))
+      (cell @as)
+      (cell @bs))
+
+    end)
+
+  ;; ... independent of backsys order
+  (rack
+    (frame
+      (backsys {¦ xs: (_* `dst) bs_} <> {(dst): ^bs, (bs): ()})
+      (backsys {¦ xs: (_* `dst) as_} <> {(dst): ^as, (as): ()})
+      (cell (arena @xs) (7 8 9))
+      (cell @as (1 2 3))
+      (cell @bs (4 5 6)))
+
+    (frame/tail
+      (cell (arena @xs) (7 8 9 1 2 3 4 5 6))
+      (cell @as)
+      (cell @bs))
+
+    end)
+
+  ;; ... independent of cell order
+  (rack
+    (frame
+      (backsys {¦ xs: (_* `dst) bs_} <> {(dst): ^bs, (bs): ()})
+      (backsys {¦ xs: (_* `dst) as_} <> {(dst): ^as, (as): ()})
+      (cell (arena @xs) (7 8 9))
+      (cell @bs (4 5 6))
+      (cell @as (1 2 3)))
+
+    (frame/tail
+      (cell (arena @xs) (7 8 9 1 2 3 4 5 6))
+      (cell @bs)
+      (cell @as))
+
+    end)
+)
 
 ;; Bubble sort
 (rack
@@ -3378,7 +3432,7 @@
        (13 14 169 179 189 214 237 376 392 403 463 519 626 856 906 936 949 983 985))⟩)
   end)
 
-;; Merge sort (one module)
+;; Legacy: Merge sort (one module)
 (rack
   (frame
     (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:workspace, @:busy})
@@ -3390,8 +3444,8 @@
         <> {dst: (^m ^n), (n): (), (m): ()}
       {¦ busy: 0 unsorted_: () -sorted_ workspace: (a_dict)}
         <> {(a): (), (unsorted): (), sorted: ^a})
-    (cell @workspace ())
-    (cell @busy 0)
+    (cell (arena @workspace) ())
+    (cell (seq @busy) 0)
     (module {:@workspace, :@busy}
       (cell @l)
       (cell @r)
@@ -3416,7 +3470,7 @@
        (cell @sorted (13 14 169 179 189 214 237 376 392 403 463 519 626 856 906 936 949 983 985))⟩)
   end)
 
-;; Merge sort (four modules). Having four modules exposed some bugs in D7
+;; Legacy: Merge sort (four modules). Having four modules exposed some bugs in D7
 ;; so let's have them in tests!
 (rack
   (frame
@@ -3429,8 +3483,8 @@
         <> {dst: (^m ^n), (n): (), (m): ()}
       {¦ busy: 0 unsorted_: () -sorted_ workspace: (a_dict)}
         <> {(a): (), (unsorted): (), sorted: ^a})
-    (cell @workspace ())
-    (cell @busy 0)
+    (cell (arena @workspace) ())
+    (cell (seq @busy) 0)
     (module {:@workspace, :@busy}
       (cell @l)
       (cell @r)
@@ -6157,3 +6211,417 @@
 
 ;; TODO: lfo
 ;; I don't know how we can test this because it's all continuous...
+
+;; Make sure circuit policy overloads work.
+(rack
+  (frame
+    (feed @a (@xs back))
+    (feed @b (@xs back))
+    (circuit (arena @xs)
+      (cell @x "lorea"))
+    (cell @a (feed @x @y))
+    (cell @b (cell @y)))
+
+  (frame/tail
+    (circuit (arena @xs)
+      (cell @x)
+      (cell @y "lorea")
+      (feed @x @y))
+    (cell @a)
+    (cell @b))
+
+  end)
+
+;; Make sure node policy overloads work.
+(rack
+  (frame
+    (feed @a (@xs back))
+    (feed @b (@xs back))
+    (node (arena @xs)
+      (group
+        (cell @x "lorea")))
+    (cell @a (cell @y))
+    (cell @b (feed @x @y)))
+
+  (frame/tail
+    (node (arena @xs)
+      (group
+        (cell @x)
+        (cell @y "lorea")
+        (feed @x @y)))
+    (cell @a)
+    (cell @b))
+
+  end)
+
+;; Make sure frag policy overloads work.
+(rack
+  (frame
+    (feed @a (@xs back))
+    (feed @b (@xs back))
+    (frag (arena @xs)
+      (group
+        (cell @x "lorea")))
+    (cell @a (cell @y))
+    (cell @b (feed @x @y)))
+
+  (frame/tail
+    (frag (arena @xs)
+      (group
+        (cell @x "lorea")
+        (cell @y)
+        (feed @x @y)))
+    (cell @a)
+    (cell @b))
+
+  (frame/tail
+    (frag (arena @xs)
+      (group
+        (cell @x)
+        (cell @y "lorea")
+        (feed @x @y)))
+    (cell @a)
+    (cell @b))
+
+  end)
+
+;; Make sure pool policy overloads work.
+(rack
+  (frame
+    (feed @a (@xs back))
+    (feed @b (@xs back))
+    (pool (arena @xs)
+      (cell @x "lorea"))
+    (cell @a (feed @x @y))
+    (cell @b (cell @y)))
+
+  (frame/tail
+    ;; NOTE: The underlying lexicographical order changes here so the cells
+    ;; and feeds are rearranged.
+    (pool (arena @xs)
+      (cell @x)
+      (feed @x @y)
+      (cell @y "lorea"))
+    (cell @a)
+    (cell @b))
+
+  end)
+
+;; New mergesort example (1x device).
+(rack
+  (frame
+    (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:run, @:tasks, @:pool})
+      {¦ unsorted: (±n _*) run: (_* (%number _ <= (var n)) `dst)}
+        <> {(n): (), dst: ^n}
+      {¦ unsorted: (±n _*) run: (`dst (%number _ >= (var n)) _*)}
+        <> {(n): (), dst: ^n}
+      {¦ unsorted: (±n _*) run: (`dst)}
+        <> {(n): (), dst: ^n}
+      {¦ run_: (_+) tasks: (_* `>run)}
+        <> {(n): (), run: (), >run: ^run}
+      {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () (device (cell @l _) _*) min: 0)}
+        <> {(unsorted): (), sorted: ^run, (run): ()})
+
+    (rewriter ((scanR (rulesetR) axis: pool) - {@:tasks, @:pool})
+      ;; Give work from the tasks to each device in the pool.
+      {¦ pool: (device (cell @l `>l) (cell @r `>r) (cell @out `out) _*)
+         tasks: (l_ r_ _*)}
+        <> {>l: ^l, >r: ^r, out: (), (l): (), (r): ()}
+      ;; Collect completed work from each device into the tasks.
+      {¦ pool: (device (cell @l l←()) (cell @r r←()) (cell @out result_) _*)
+         tasks: (_* `>result)}
+        <> {(l): (), (r): (), (result): (), >result: ^result})
+
+    (cell @run ())
+    (cell (arena @tasks) ())
+
+    (pool @pool
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)})))
+
+    (cell @sorted)
+    (cell @unsorted (54 51 40 87 41 82 82 26 34 76 72 31 56 65 81 97 30 21 35 0 82 56 52 51 66 11 60 85 76 24 70 22 11 21 63 76 58 32 93 53 81 81 3 67 81 48 17 75 45 56 74 83 91 9 26 77 51 10 84 15 89 22 77 10 12 32 70 73 65 6 76 53 45 73 61 67 6 25 74 33 76 84 38 32 69 16 56 22 41 83 18 53 98 19 74 86 80 39 17 83)))
+
+  (frame/tail fast-forward: true
+    (cell @sorted (0 3 6 6 9 10 10 11 11 12 15 16 17 17 18 19 21 21 22 22 22 24 25 26 26 30 31 32 32 32 33 34 35 38 39 40 41 41 45 45 48 51 51 51 52 53 53 53 54 56 56 56 56 58 60 61 63 65 65 66 67 67 69 70 70 72 73 73 74 74 74 75 76 76 76 76 76 77 77 80 81 81 81 81 82 82 82 83 83 83 84 84 85 86 87 89 91 93 97 98))
+    (cell @unsorted)))
+
+;; New mergesort example (4x devices).
+(rack
+  (frame
+    (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:run, @:tasks, @:pool})
+      {¦ unsorted: (±n _*) run: (_* (%number _ <= (var n)) `dst)}
+        <> {(n): (), dst: ^n}
+      {¦ unsorted: (±n _*) run: (`dst (%number _ >= (var n)) _*)}
+        <> {(n): (), dst: ^n}
+      {¦ unsorted: (±n _*) run: (`dst)}
+        <> {(n): (), dst: ^n}
+      {¦ run_: (_+) tasks: (_* `>run)}
+        <> {(n): (), run: (), >run: ^run}
+      {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () (device (cell @l _) _*) min: 0)}
+        <> {(unsorted): (), sorted: ^run, (run): ()})
+
+    (rewriter ((scanR (rulesetR) axis: pool) - {@:tasks, @:pool})
+      ;; Give work from the tasks to each device in the pool.
+      {¦ pool: (device (cell @l `>l) (cell @r `>r) (cell @out `out) _*)
+         tasks: (l_ r_ _*)}
+        <> {>l: ^l, >r: ^r, out: (), (l): (), (r): ()}
+      ;; Collect completed work from each device into the tasks.
+      {¦ pool: (device (cell @l l←()) (cell @r r←()) (cell @out result_) _*)
+         tasks: (_* `>result)}
+        <> {(l): (), (r): (), (result): (), >result: ^result})
+
+    (cell @run ())
+    (cell (arena @tasks) ())
+
+    (pool @pool
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)})))
+
+    (cell @sorted)
+    (cell @unsorted (54 51 40 87 41 82 82 26 34 76 72 31 56 65 81 97 30 21 35 0 82 56 52 51 66 11 60 85 76 24 70 22 11 21 63 76 58 32 93 53 81 81 3 67 81 48 17 75 45 56 74 83 91 9 26 77 51 10 84 15 89 22 77 10 12 32 70 73 65 6 76 53 45 73 61 67 6 25 74 33 76 84 38 32 69 16 56 22 41 83 18 53 98 19 74 86 80 39 17 83)))
+
+  (frame/tail fast-forward: true
+    (cell @sorted (0 3 6 6 9 10 10 11 11 12 15 16 17 17 18 19 21 21 22 22 22 24 25 26 26 30 31 32 32 32 33 34 35 38 39 40 41 41 45 45 48 51 51 51 52 53 53 53 54 56 56 56 56 58 60 61 63 65 65 66 67 67 69 70 70 72 73 73 74 74 74 75 76 76 76 76 76 77 77 80 81 81 81 81 82 82 82 83 83 83 84 84 85 86 87 89 91 93 97 98))
+    (cell @unsorted)))
+
+;; New mergesort example (8x devices).
+(rack
+  (frame
+    (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:run, @:tasks, @:pool})
+      {¦ unsorted: (±n _*) run: (_* (%number _ <= (var n)) `dst)}
+        <> {(n): (), dst: ^n}
+      {¦ unsorted: (±n _*) run: (`dst (%number _ >= (var n)) _*)}
+        <> {(n): (), dst: ^n}
+      {¦ unsorted: (±n _*) run: (`dst)}
+        <> {(n): (), dst: ^n}
+      {¦ run_: (_+) tasks: (_* `>run)}
+        <> {(n): (), run: (), >run: ^run}
+      {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () (device (cell @l _) _*) min: 0)}
+        <> {(unsorted): (), sorted: ^run, (run): ()})
+
+    (rewriter ((scanR (rulesetR) axis: pool) - {@:tasks, @:pool})
+      ;; Give work from the tasks to each device in the pool.
+      {¦ pool: (device (cell @l `>l) (cell @r `>r) (cell @out `out) _*)
+         tasks: (l_ r_ _*)}
+        <> {>l: ^l, >r: ^r, out: (), (l): (), (r): ()}
+      ;; Collect completed work from each device into the tasks.
+      {¦ pool: (device (cell @l l←()) (cell @r r←()) (cell @out result_) _*)
+         tasks: (_* `>result)}
+        <> {(l): (), (r): (), (result): (), >result: ^result})
+
+    (cell @run ())
+    (cell (arena @tasks) ())
+
+    (pool @pool
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)}))
+      (device
+        (cell @l)
+        (cell @r)
+        (cell @out)
+
+        (rewriter ((rulesetR) - {@:l, @:r, @:out})
+          {¦ l: (±a _*) r: (_number _*) out: (_* `dst)}
+            <> {(a): (), dst: ^a}
+          {¦ l: (±a _*) r: (b←(%number _ < (var a)) _*) out: (_* `dst)}
+            <> {(b): (), dst: ^b}
+          {¦ l_: (_+) r: () out: (_* `dst)}
+            <> {l: (), (dst): ^l}
+          {¦ l: () r_: (_+) out: (_* `dst)}
+            <> {r: (), (dst): ^r}
+          {¦ l_: (_* ±a) r_: ((%number _ >= (var a)) _*) out: (_* `dst)}
+            <> {l: (), r: (), (dst): (^*l ^*r)})))
+
+    (cell @sorted)
+    (cell @unsorted (54 51 40 87 41 82 82 26 34 76 72 31 56 65 81 97 30 21 35 0 82 56 52 51 66 11 60 85 76 24 70 22 11 21 63 76 58 32 93 53 81 81 3 67 81 48 17 75 45 56 74 83 91 9 26 77 51 10 84 15 89 22 77 10 12 32 70 73 65 6 76 53 45 73 61 67 6 25 74 33 76 84 38 32 69 16 56 22 41 83 18 53 98 19 74 86 80 39 17 83)))
+
+  (frame/tail fast-forward: true
+    (cell @sorted (0 3 6 6 9 10 10 11 11 12 15 16 17 17 18 19 21 21 22 22 22 24 25 26 26 30 31 32 32 32 33 34 35 38 39 40 41 41 45 45 48 51 51 51 52 53 53 53 54 56 56 56 56 58 60 61 63 65 65 66 67 67 69 70 70 72 73 73 74 74 74 75 76 76 76 76 76 77 77 80 81 81 81 81 82 82 82 83 83 83 84 84 85 86 87 89 91 93 97 98))
+    (cell @unsorted)))

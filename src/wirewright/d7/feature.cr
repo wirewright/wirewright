@@ -52,7 +52,8 @@ module Ww::D7
     node : Term,
     defn : Term,
     head : Term,
-    edges : Set(Term)
+    edges : Set(Term),
+    merge_policy : D7::MergePolicy
 
   # Constructs a grounded node from an enumerable of *edges*.
   #
@@ -60,12 +61,12 @@ module Ww::D7
   #
   # NOTE: If *edges* is a `Set`, it will be reused! Make sure to not mutate it;
   # if you will, create a copy and pass the copy instead.
-  def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node) : Gnd
+  def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node, merge_policy : D7::MergePolicy = D7::MergeDiff.new(0u32)) : Gnd
     unless head = defn.as_d?.try(&.items.first?)
       raise ArgumentError.new("could not determine the head of node")
     end
 
-    Gnd.new(node, defn, head, edges.as?(Set(Term)) || edges.to_set)
+    Gnd.new(node, defn, head, edges.as?(Set(Term)) || edges.to_set, merge_policy)
   end
 
   # Constructs a grounded node with the given *edges*.

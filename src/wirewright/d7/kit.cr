@@ -46,221 +46,198 @@ module Ww::D7
     patches(objects)
   end
 
-  private def compatible?(a : Tpath, b : Tpath) : Bool
-    if a.size == b.size
-      return a != b # if different, then they're compatible
-    end
+  # :nodoc:
+  defrecord MergeNode,
+    reference : Term,
+    policy : MergePolicy,
+    successors : Array(MergeNodeSuccessor)
 
-    sm, lg = a.size < b.size ? {a, b} : {b, a}
-    !lg.starts_with?(sm) # E.g. Tpath[2] and Tpath[2—1] are incompatible.
-  end
+  # :nodoc:
+  defrecord MergeNodeSuccessor,
+    term : Term,
+    proposal_index : UInt32
 
-  private def compatible?(ref : Term, successor : Term, &predicate : Tpath -> Bool) : Bool
-    compatible?(ref, successor, Tpath[], predicate)
-  end
+  alias MergePolicy = MergeDiff | MergeSeq
 
-  private def compatible?(ref : Term, successor : Term, path, predicate) : Bool
-    if ref == successor
-      return true # compatible
-    end
+  defrecord MergeDiff, depth_limit : UInt32
+  defrecord MergeSeq
 
-    unless (ref = ref.as_d?) && (successor = successor.as_d?)
-      return predicate.call(path)
-    end
-
-    if ref.itemsize == successor.itemsize
-      # Visit items recursively.
-      successor.items.each_with_index do |item1, index|
-        subpath = path.append(Tpath.value(index))
-        item0 = ref[index]
-        return false unless compatible?(item0, item1, subpath, predicate)
-      end
-    else
-      # Itemsize change (adding or removing an item) is treated holistically:
-      # only one participant is allowed to modify it. To achieve this we mark
-      # all items as having been modified.
-      target = {ref, successor}.max_by(&.itemsize)
-      target.items.each_with_index do |target, index|
-        subpath = path.append(Tpath.value(index))
-        return false unless predicate.call(subpath)
-      end
-    end
-
-    ref.each_entry(in: Term::Dict.pairspart) do |key, value0|
-      subpath = path.append(Tpath.value(key))
-      unless value1 = successor[key]?
-        # Successor removed *key*.
-        return false unless predicate.call(subpath)
-        next
-      end
-
-      # Successor possibly modified *key*.
-      unless compatible?(value0, value1, subpath, predicate)
-        return false
-      end
-    end
-
-    successor.each_entry(in: Term::Dict.pairspart) do |key, _|
-      next if key.in?(ref)
-
-      # Successor added *key*.
-      subpath = path.append(Tpath.value(key))
-      return false unless predicate.call(subpath)
-    end
-
-    true # compatible
-  end
-
-  private def compatible?(orig : Term, rep0 : Term, rep1 : Term) : Bool
-    affected0 = Pf::Kit.stack_array(Tpath)
-
-    _ = compatible?(orig, rep0) do |path|
-      affected0 << path
-
-      true # continue
-    end
-
-    compatible?(orig, rep1) do |path1|
-      affected0.all? { |path0| compatible?(path0, path1) }
-    end
-  end
-
-  # Accumulates changes made by *successor* into *acc*. Changes are found
-  # by comparing *ref* and *successor*.
+  # :nodoc:
   #
-  # WARNING: This method assumes implicitly that the changes of all *successors*
-  # accumulated into *acc* are disjoint. If they conflict, this method will
-  # break. You are expected to guard calls to this method with a disjointedness check.
-  private def overlay(acc : Term, ref : Term, successor : Term) : Term
-    unless (acc_dict = acc.as_d?) && (successor_dict = successor.as_d?)
-      return successor
-    end
-
-    assert ref_dict = ref.as_d?
-
-    result = acc_dict.transaction do |commit|
-      ref_dict.each_entry do |key, ref_value|
-        unless successor_value = successor_dict[key]?
-          # Successor removed *key*.
-          commit.without(key)
-          next
-        end
-
-        # We'd like to keep acc's values unless the successor modifies
-        # the entry.
-        next if successor_value == ref_value
-
-        # Successor modified *key*.
-        commit.with(key, overlay(acc_dict[key], ref_value, successor_value))
-      end
-
-      successor.each_entry do |key, successor_value|
-        next if key.in?(ref_dict)
-
-        # Successor created *key*.
-        commit.with(key, successor_value)
-      end
-    end
-
-    Term.of(result)
-  end
-
-  def merge(hg : Hypergraph, proposals : Indexable(Patch)) : Patch
+  # Implementation of the merge algorithm used by D7.
+  def merge(proposals : Indexable(Patch), & : NodeId -> {Term, MergePolicy}) : Patch
+    # Fast path for when there are no proposals whatsoever.
     if proposals.empty?
       return Patch.new
     end
 
-    # A table from node id to replacement proposals for that node along
-    # with proposal index (used for ranking).
-    #
-    # NOTE: Proposals are sorted by soln, and iteration is inorder, thus
-    # the arrays here are sorted as well by proposal index, asc, and
-    # therefore by soln, asc.
-    patchtab = {} of NodeId => Array({Term, UInt32})
+    # Fast path for when there is just one proposal.
+    if patch = proposals.single?
+      return patch
+    end
 
-    probably_conflicts = false
+    # Optimistic fast path: construct a Patch, bail out if on conflict.
+    if patch = optimistic_merge?(proposals)
+      return patch
+    end
+
+    nodetab = {} of NodeId => MergeNode
 
     proposals.each_with_index do |proposal, proposal_index|
       proposal.each do |node_id, rep|
-        reps = patchtab.put_if_absent(node_id) { [] of {Term, UInt32} }
-        reps << {rep, proposal_index.to_u32}
+        node = nodetab.put_if_absent(node_id) do
+          node_reference, node_policy = yield node_id
+          node_successors = [] of MergeNodeSuccessor
+          MergeNode.new(node_reference, node_policy, node_successors)
+        end
 
-        if reps.size > 1
-          probably_conflicts = true
+        # Filter out proposals that are exactly the same as the original node. Sloppy
+        # callers can give us those, and much of this code [logically] relies on
+        # the fact the proposals are actually different.
+        next if node.reference == rep
+
+        node.successors << MergeNodeSuccessor.new(rep, proposal_index.to_u32)
+      end
+    end
+
+    proposals_rejected = Pf::USet32.new
+
+    nodetab.each do |node_id, merge_node|
+      next unless merge_node.policy.is_a?(MergeSeq)
+      next unless merge_node.successors.size >= 2
+
+      winner = merge_node.successors.min_by(&.term) # lexicographical minimum
+
+      # Reject all proposals but the winning one.
+      merge_node.successors.each do |successor|
+        next if successor == winner
+
+        proposals_rejected = proposals_rejected.add(successor.proposal_index)
+      end
+    end
+
+    # Do a round of cleaning rejected proposals.
+    if proposals_rejected.present?
+      nodetab.each do |_, merge_node|
+        merge_node.successors.reject!(&.proposal_index.in?(proposals_rejected))
+      end
+    end
+
+    difftab = {} of NodeId => Array({Array(Term::Diff::Action), UInt32})
+
+    nodetab.each do |node_id, merge_node|
+      next unless policy = merge_node.policy.as?(MergeDiff)
+      next unless merge_node.successors.size >= 2
+
+      diffs = [] of {Array(Term::Diff::Action), UInt32}
+
+      merge_node.successors.each do |successor|
+        next if successor.proposal_index.in?(proposals_rejected) # Rejected by ourselves on past iterations.
+
+        unless actions = Term.diff?(merge_node.reference, successor.term, depth_limit: policy.depth_limit)
+          proposals_rejected = proposals_rejected.add(successor.proposal_index)
+          next
+        end
+
+        compatible = true
+
+        diffs.each do |(accepted_actions, accepted_proposal_index)|
+          next if Term::Diff.compatible?(accepted_actions, actions)
+
+          # Reject both of them if they conflict. Go on to reject more if we
+          # conflict with more. No two conflicting proposals must make it into
+          # the difftab.
+          proposals_rejected = proposals_rejected.add(accepted_proposal_index).add(successor.proposal_index)
+          compatible = false
+        end
+
+        next unless compatible
+
+        diffs << {actions, successor.proposal_index}
+      end
+
+      difftab[node_id] = diffs
+    end
+
+    # Do a round of cleanup to get rid of rejected proposals in nodetab and difftab.
+    if proposals_rejected.present?
+      nodetab.each do |_, merge_node|
+        merge_node.successors.reject!(&.proposal_index.in?(proposals_rejected))
+      end
+
+      difftab.each do |_, diffs|
+        diffs.reject! do |_, proposal_index|
+          proposal_index.in?(proposals_rejected)
         end
       end
     end
 
-    proposals_declined = Pf::USet32[]
-    if probably_conflicts
-      proposals_declined = decline_set(hg, patchtab)
-    end
-
     Patch.transaction do |patch|
-      patchtab.each do |node_id, reps|
-        if entry = reps.single? # Fast path
-          rep, proposal_index = entry
-          next if proposal_index.in?(proposals_declined)
+      # Computing the rank of a proposal is rather expensive, so we cache it.
+      proposal_rank_cache = {} of UInt32 => Slice(Term)
 
-          patch.assoc(node_id, rep)
+      nodetab.each do |node_id, merge_node|
+        # Changes to this node were all eliminated.
+        next if merge_node.successors.empty?
+
+        # We managed to narrow down on one successor without applying the diff.
+        if successor = merge_node.successors.single?
+          patch.assoc(node_id, successor.term)
           next
         end
 
-        ref = hg[node_id].term
-        acc = ref
+        # NOTE: Assume multi-successor nodes are *all* handled by difftab.
+        diffs = difftab[node_id]
 
-        reps.each do |rep, proposal_index|
-          next if proposal_index.in?(proposals_declined)
-
-          acc = overlay(acc, ref, rep)
+        # Sort by proposal rank for deterministic insertion.
+        diffs.sort_by! do |_, proposal_index|
+          proposal_rank_cache.put_if_absent(proposal_index) do
+            proposal_rank(proposals[proposal_index])
+          end
         end
 
-        patch.assoc(node_id, acc)
+        mutation = nil
+        diffs.each do |actions, proposal_index|
+          # Actions are flattened in the same way the diff algorithm tells us to
+          # execute them. The greater order is that of *proposal ranks*, though.
+          actions.each do |action|
+            mutation ||= Term::Diff::Mutation.new
+            mutation << action
+          end
+        end
+
+        next unless mutation
+
+        patch.assoc(node_id, Term.of(mutation.apply(merge_node.reference.as_d))) # ?!
       end
     end
   end
 
-  # Computes the proposal decline set for *patchtab*: declines proposals
-  # that conflict.
-  def decline_set(hg : Hypergraph, patchtab : Hash(NodeId, Array({Term, UInt32}))) : Pf::USet32
-    Pf::USet32.transaction do |declined|
-      patchtab.each do |node_id, reps|
-        orig = hg[node_id].term
+  # Attempts to merge *proposals*. Only succeeds if all proposals were disjoint.
+  # Returns `nil` otherwise.
+  private def optimistic_merge?(proposals : Indexable(Patch)) : Patch?
+    Patch.transaction do |txn|
+      proposals.each do |proposal|
+        proposal.each do |node_id, rep|
+          return if node_id.in?(txn)
 
-        reps.each_with_index do |(rep0, proposal_index0), i|
-          next if proposal_index0.in?(declined)
-
-          abstains = false
-
-          reps.each_with_index do |(rep1, proposal_index1), j|
-            next if i == j
-            next if proposal_index1.in?(declined)
-
-            # If our (rep0's) proposal index is smaller, then we are more preferred,
-            # and thus we won't disable ourselves in case of conflict with rep1. This
-            # means there is little point in checking for conflict in the first place.
-            # rep1, who is less preferred, will do that instead.
-            next if proposal_index0 < proposal_index1
-
-            # We shouldn't have the same rule propose two versions for the same node.
-            # This can't happen because all rules return a Patch, which is a hash table;
-            # its keys cannot repeat.
-            assert proposal_index0 != proposal_index1
-
-            next if compatible?(orig, rep0, rep1)
-
-            # We (rep0) are less preferred than rep1 and are also incompatible with
-            # it. We are in conflict with rep1. We must abstain in favor of rep1
-            # because we are less preferred.
-            abstains = true
-            break
-          end
-
-          next unless abstains
-
-          declined << proposal_index0
+          txn.assoc(node_id, rep)
         end
       end
+    end
+  end
+
+  private def proposal_rank(proposal : Patch) : Slice(Term)
+    rank = Pf::Kit.stack_array(Term, 8)
+    proposal.each { |(_, rep)| rank << rep }
+    rank.sort! # lexicographically
+    rank.to_unsafe_readonly_slice!
+  end
+
+  def merge(hg : Hypergraph, proposals : Indexable(Patch)) : Patch
+    merge(proposals) do |node_id|
+      node = hg[node_id]
+      {node.term, node.merge_policy}
     end
   end
 

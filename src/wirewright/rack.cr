@@ -53,24 +53,42 @@ module Ww::Rack
     candidates = Pf::Kit.stack_array(Cell, 4)
 
     hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
-      # Since cell has only one edge, `memberof:` above already covers
-      # the edge check.
+      # Since cell has only one edge, `memberof:` above already covers the edge
+      # check (i.e. whether *input* is at a syntactically valid position).
       Term.case(node.term) do
+        matchpi %{[cell @_]} do
+          candidates << Cell.new(node, value: nil)
+        end
+
         matchpi %{[cell @_ value_]} do
           candidates << Cell.new(node, value)
         end
 
-        matchpi %{[cell @_]} do
+        matchpi %{[cell (_symbol @_)]} do
           candidates << Cell.new(node, value: nil)
+        end
+
+        matchpi %{[cell (_symbol @_) value_]} do
+          candidates << Cell.new(node, value)
         end
 
         matchpi %{[cell (pool @_)]} do
           candidates << Cell.new(node, value: nil)
         end
 
-        matchpi %{[cell (pool @_) contents_dict]} do
-          candidates << Cell.new(node, contents)
+        matchpi %{[cell (pool @_) value_]} do
+          candidates << Cell.new(node, value)
         end
+
+        matchpi %{[cell (pool (_symbol @_))]} do
+          candidates << Cell.new(node, value: nil)
+        end
+
+        matchpi %{[cell (pool (_symbol @_)) value_]} do
+          candidates << Cell.new(node, value)
+        end
+
+        otherwise { }
       end
     end
 
@@ -95,8 +113,15 @@ module Ww::Rack
     pools = Pf::Kit.stack_array(Pool, 1)
 
     hg.each_node_with_head(Term.of(:cell), memberof: {edge}) do |node|
-      Term.matchpiT?(node.term, %{[cell (pool @_) contents_dict]}) do
-        pools << Pool.new(node, contents)
+      Term.case(node.term) do
+        matchpiT(
+          %{[cell (pool @_) contents_dict]},
+          %{[cell (pool (_symbol @_)) contents_dict]},
+        ) do
+          pools << Pool.new(node, contents)
+        end
+
+        otherwise { }
       end
     end
 

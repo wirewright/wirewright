@@ -89,9 +89,9 @@ module Ww::Rack::Part
 
             case element
             in WPart
-              D7.gnd(Term.of(:cell, part.rel_part_edge), part.rel_part_edge)
+              D7.gnd(Term.of(:cell, {:seq, part.rel_part_edge}), part.rel_part_edge)
             in RWPart, IntermediateRWPart
-              D7.gnd(Term.of(:cell, part.rel_part_edge, element.matchee), part.rel_part_edge)
+              D7.gnd(Term.of(:cell, {:seq, part.rel_part_edge}, element.matchee), part.rel_part_edge)
             end
           end
         end
@@ -131,7 +131,7 @@ module Ww::Rack::Part
           backspec = nil
 
           Term.case(replacement) do
-            matchpi %{[cell @_ value_]} do
+            matchpi %{[cell _ value_]} do
               if value.type.dict? || value.type.symbol?
                 backspec = Term[].with(capture, {:"^verbatim", value})
               else
@@ -141,7 +141,7 @@ module Ww::Rack::Part
               end
             end
 
-            matchpi %{[cell @_ ]} do
+            matchpi %{[cell _]} do
               backspec = Term[].with({capture}, Term[])
             end
 

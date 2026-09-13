@@ -9,9 +9,10 @@ module Ww::D7
     getter addr : NodeAddr
     getter head : Term
     getter term : Term
+    getter merge_policy : MergePolicy
 
     # :nodoc:
-    def initialize(@id, @addr, @head, @term)
+    def initialize(@id, @addr, @head, @term, @merge_policy)
     end
   end
 
@@ -458,7 +459,7 @@ module Ww::D7
 
         # Use Gnd#defn (the node's definition) rather than #node here.
         # The hypergraph should only ever see the defn.
-        node = Node.new(id, addr, feature.head, feature.defn)
+        node = Node.new(id, addr, feature.head, feature.defn, feature.merge_policy)
         fn.call(node, feature.edges)
       end
 
@@ -589,7 +590,11 @@ module Ww::D7
 
       # Use Gnd#defn (the node's definition) rather than #node here.
       # The hypergraph should only ever see the defn.
-      node = Node.new(id_zero, addr, tree.feature.head, tree.feature.defn)
+      node = Node.new(id_zero, addr,
+        tree.feature.head,
+        tree.feature.defn,
+        tree.feature.merge_policy,
+      )
       ctx.fn.call(node)
     end
 

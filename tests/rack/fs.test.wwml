@@ -2,13 +2,13 @@
 (rack
   (frame
     ;; File system manipulation.
-    (cell @fs-in)
+    (cell (seq @fs-in))
     (cell @fs-out)
     (discard @fs-out (ok _))
     (fs @fs-in @fs-out)
 
     ;; Basic test infrastructure.
-    (node @readings (group))
+    (node (arena @readings) (group))
     (backsys
       {¦ plan: (action←((%any create delete overwrite) _*) _*) -fs-in_}
         <> {(action): (), fs-in: ^action}

@@ -217,7 +217,7 @@
 ;; Legacy: Dyn mismatch manipulate
 (rack
   (frame
-    (cell @top (foo 0 0))
+    (cell (arena @top) (foo 0 0))
     (part (@top @a) (foo a←(%number 3 <= _ <= 7) _))
     (part (@top @b) (foo _ b←(%number 7 <= _ <= 11)))
     (backsys {@:top @:a @:b}
@@ -531,7 +531,7 @@
 
   end)
 
-;; Root modified, parts modified, patches are merged
+;; Conflict if root modified.
 (rack
   (frame
     (part (@root @a) (+ a_ _))
@@ -539,9 +539,7 @@
     (backsys @root (+ _ ±n) <> {n: ^(+ n 1)})
     (cell @root (+ 1 2)))
 
-  (frame/tail (cell @root (+ 2 3)))
-  (frame/tail (cell @root (+ 3 4))))
-  ;; ...
+  end)
 
 ;; Part with missing capture
 (rack

@@ -61,7 +61,10 @@ module MuSoma
         end
 
         matchpi %{[mouse _*]}, %{[input _*]}, %{[keyboard _*]} do
-          D7.gnd(node)
+          # The default `exclusive` merge policy is too restrictive! We must be able to
+          # have different patches add/remove keys/buttons, and set pairs, so use
+          # the `surface` policy.
+          D7.gnd(node, merge_policy: D7::MergeDiff.new(1u32))
         end
 
         # |@ musoma.node.site

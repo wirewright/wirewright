@@ -1820,7 +1820,7 @@
     (server (@pool ((text @in) -> (ws local 9813) -> (text @out)))
       (feed (@in front) (@out back)))
 
-    (pool @pool)
+    (pool (seq @pool))
 
     (cell @in "Kaixo mundua")
     (cell @out)
@@ -1828,7 +1828,7 @@
       (client ((text @in) -> (ws local 9813) -> (text @out)))))
 
   (frame/tail fast-forward: true
-    (pool @pool)
+    (pool (seq @pool))
 
     (cell @in)
     (cell @out "Kaixo mundua")

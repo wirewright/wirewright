@@ -3,6 +3,94 @@ module Ww::Rack
   defrecord GuardAnnotation, addr : D7::NodeAddr, includes: {D7::Hypergraph::Annotation}
 
   # :nodoc:
+  SYM_SEQ = Term[:seq]
+  # :nodoc:
+  SYM_EXCLUSIVE = Term[:exclusive]
+  # :nodoc:
+  SYM_SURFACE = Term[:surface]
+  # :nodoc:
+  SYM_ARENA = Term[:arena]
+  # :nodoc:
+  SYM_SPACE = Term[:space]
+
+  private def merge_policy(name : Term::Sym) : D7::MergePolicy
+    # |@ rack.[merge-policy]
+    #
+    # |@summary
+    # Ways to handle conflicting patches to `rack.cell`s and some other nodes.
+    #
+    # |@block
+    # A node's *merge policy* is its preferred way of handling many simultaneous
+    # patches to itself (i.e., when two or more patches are made to the same node
+    # within the same tick).
+    #
+    # The simplest merge policy (and the default one for most nodes) is `exclusive`,
+    # which basically forbids making many simultaneous patches to a node.
+    #
+    # The smarest merge strategies involve the term diff algorithm. Do note that
+    # *conflicting inserts* in particular (inserts at the same spot made by different
+    # parties) can be problematic: batch order is retained; but batches are ordered
+    # among themselves lexicographically.
+
+    case name
+    when SYM_SEQ
+      # |@ rack.[merge-policy]
+      #
+      # |@pattern
+      # seq
+      #
+      # |@block
+      # Accepts the lexicographical minimum patch among competing patches.
+      D7::MergeSeq.new
+    when SYM_EXCLUSIVE
+      # |@ rack.[merge-policy]
+      #
+      # |@pattern
+      # exclusive
+      #
+      # |@block
+      # Accepts a single patch. If there are two or more competing patches, rejects
+      # all of them.
+      #
+      # NOTE: This policy is the default policy for the vast majority of nodes,
+      # and the fallback policy for all nodes (e.g. if you misspell a policy).
+      D7::MergeDiff.new(depth_limit: 0u32)
+    when SYM_SURFACE
+      # |@ rack.[merge-policy]
+      #
+      # |@pattern
+      # surface
+      #
+      # |@block
+      # Smart (diff-based) merge of competing patches to the node itself (e.g. `(foo 1 2)` ->
+      # `(foo 1 2 ⏏3⏏)`; its "surface"). Deeper dictionaries are treated atomically.
+      D7::MergeDiff.new(depth_limit: 1u32)
+    when SYM_ARENA
+      # |@ rack.[merge-policy]
+      #
+      # |@pattern
+      # arena
+      #
+      # |@block
+      # Smart (diff-based) merge of competing patches to the node itself (e.g. `(foo 1 2)` ->
+      # `(foo 1 2 ⏏3⏏)`; its "surface"), or to its immediate dictionary children (e.g. `(foo (1 2))` ->
+      # `(foo (1 2 ⏏3⏏))`). Deeper dictionaries are treated atomically.
+      D7::MergeDiff.new(depth_limit: 2u32)
+    when SYM_SPACE
+      # |@ rack.[merge-policy]
+      #
+      # |@pattern
+      # space
+      #
+      # |@block
+      # Smart (diff-based) effectively unlimited deep merge of patches.
+      D7::MergeDiff.new(depth_limit: UInt32::MAX)
+    else
+      D7::MergeDiff.new(depth_limit: 0u32) # atom
+    end
+  end
+
+  # :nodoc:
   def classify!(node : Term) : D7::Feature
     M1::PatternSet.case(node, block_type: :proc) do
       # |@ rack.cell
@@ -15,11 +103,16 @@ module Ww::Rack
       # |@pattern
       # [cell @edge_]
       # [cell @edge_ value_]
+      # [cell (policy_symbol @edge_)]
+      # [cell (policy_symbol @edge_) value_]
       #
       # |@key edge rack.edge
       # The hyperedge ("group") the cell should be a member of.
       #
-      # |@key value term
+      # |@key policy rack.[merge-policy]
+      # Optionally, the merge policy to use.
+      #
+      # |@key value
       # The term stored in the cell. If absent, the cell is *empty* and does not
       # participate in *edge*.
       #
@@ -53,6 +146,10 @@ module Ww::Rack
       # ```
       matchpi %{[cell @edge_ _?]} do
         D7.gnd(node, edge)
+      end
+
+      matchpiT %{[cell (policy_symbol @edge_) _?]} do
+        D7.gnd(node, edge, merge_policy: merge_policy(policy))
       end
 
       # |@ rack.cell
@@ -737,7 +834,7 @@ module Ww::Rack
       # a self-contained unit, which does not speak with the outside world except
       # through termspaces (`rack.tspace`, `rack.sensor`, `rack.appearance`), or
       # observation and manipulation (when placed in a `rack.circuit`,
-      # `rack.frag`, etc.).
+      # `rack.frag`, etc.)
       #
       # |@example
       # ```wwml
@@ -851,16 +948,21 @@ module Ww::Rack
       # |@pattern
       # [node @edge_]
       # [node @edge_ child_]
-      matchpi %{[node @edge_ _?]} do
+      # [node (policy_symbol @edge_)]
+      # [node (policy_symbol @edge_) child_]
+      matchpi(
+        %{[node @header_ _?]},
+        %{[node header←(_symbol @_) _?]},
+      ) do
         if child = node[2]?
-          mix0 = Term.of(:cell, edge, child)
+          mix0 = Term.of(:cell, header, child)
         else
-          mix0 = Term.of(:cell, edge)
+          mix0 = Term.of(:cell, header)
         end
 
         leaf = D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{(cell @_ child1_)} { Term.morph(node, {2, child1}) }
+            matchpi %{(cell _ child1_)} { Term.morph(node, {2, child1}) }
             otherwise { Term.morph(node, {2, nil}) }
           end
         end
@@ -907,16 +1009,20 @@ module Ww::Rack
       #
       # |@pattern
       # [circuit @edge_ children_*]
-      matchpi %{[circuit @edge_ children0_*]} do
+      # [circuit (policy_symbol @edge_) children_*]
+      matchpi(
+        %{[circuit @header_ children0_*]},
+        %{[circuit header←(_symbol @_) children0_*]},
+      ) do
         if children0.empty?
-          mix0 = Term.of(:cell, edge)
+          mix0 = Term.of(:cell, header)
         else
-          mix0 = Term.of(:cell, edge, children0)
+          mix0 = Term.of(:cell, header, children0)
         end
 
         leaf = D7.mixture(node, mix0) do |mix1|
           Term.of_case(mix1) do
-            matchpi %{(cell @_ children1←[_*])} do
+            matchpi %{(cell _ children1←[_*])} do
               node.replace(2...node.itemsize, Term.rep(children1.items))
             end
 
@@ -933,9 +1039,15 @@ module Ww::Rack
       #
       # |@pattern
       # [pool @edge_ children_*]
+      # [pool (policy_symbol @edge_) children_*]
       #
       # |@key edge rack.edge
       # The edge the pool should be a member of.
+      #
+      # |@key policy rack.[merge-policy]
+      # Optionally, the merge policy to use. By default, a pool's merge policy
+      # is to smart-merge patches adding or removing *children*, but treat each
+      # *child* atomically.
       #
       # |@key children rack
       # Zero or more child nodes. Most often, for `pool`, the nodes are `rack.device`.
@@ -970,8 +1082,11 @@ module Ww::Rack
       # (server (@pool (tcp local 5000)))
       # (pool @pool)
       # ```
-      matchpi %{[pool @edge_ children0_*]} do
-        mix0 = Term.of(:cell, {:pool, edge}, children0)
+      matchpi(
+        %{[pool @header_ children0_*]},
+        %{[pool header←(_symbol @_) children0_*]},
+      ) do
+        mix0 = Term.of(:cell, {:pool, header}, children0)
         leaf = D7.mixture(node, mix0) do |mix1|
           Term.matchpi(mix1, %{(cell _ children1←[_*])}) do
             Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
@@ -982,8 +1097,19 @@ module Ww::Rack
       end
 
       # Internal
-      matchpi %{[cell (pool @edge_)]}, %{[cell (pool @edge_) _]} do
-        D7.gnd(node, edge)
+      matchpi(
+        %{[cell (pool @edge_)]},
+        %{[cell (pool @edge_) _]},
+      ) do
+        D7.gnd(node, edge, merge_policy: D7::MergeDiff.new(1u32))
+      end
+
+      # Internal
+      matchpiT(
+        %{[cell (pool (policy_symbol @edge_))]},
+        %{[cell (pool (policy_symbol @edge_)) _]},
+      ) do
+        D7.gnd(node, edge, merge_policy: merge_policy(policy))
       end
 
       # |@ rack.circuit
@@ -1028,11 +1154,16 @@ module Ww::Rack
       # |@pattern
       # [frag @edge_]
       # [frag @edge_ child_]
+      # [frag (policy_symbol @edge_)]
+      # [frag (policy_symbol @edge_) child_]
       #
       # |@key edge rack.edge
       # The edge at which to expose a snapshot of *child* at the start of the frame.
       # Writes to this edge propose a new *child*. Writes take precedence over evolution
       # of the *child*.
+      #
+      # |@key policy rack.[merge-policy]
+      # Optionally, the merge policy to use.
       #
       # |@key child rack
       # The child node.
@@ -1148,20 +1279,23 @@ module Ww::Rack
       #
       # ;; And so on until you reach Rack's maximum rewrite depth...
       # ```
-      matchpi %{[frag @edge_ child0_]} do
-        mix0 = Term.of(:group, {:cell, edge, child0}, {:group, child0})
+      matchpi(
+        %{[frag @header_ child0_]},
+        %{[frag header←(_symbol @_) child0_]},
+      ) do
+        mix0 = Term.of(:group, {:cell, header, child0}, {:group, child0})
 
         D7.mixture(node, mix0) do |mix1|
           Term.case(mix1) do
             # New child arrived. Higher priority.
-            matchpi %{(group (cell @_ child1_) _)} do
+            matchpi %{(group (cell _ child1_) _)} do
               continue if child0 == child1
 
               Term.morph(node, {2, child1})
             end
 
             # Cell was erased. Higher priority.
-            matchpi %{(group (cell @_) _)} do
+            matchpi %{(group (cell _) _)} do
               Term.morph(node, {2, nil})
             end
 
@@ -1173,11 +1307,11 @@ module Ww::Rack
         end
       end
 
-      matchpi %{[frag @edge_]} do
-        D7.mixture(node, Term.of(:cell, edge)) do |view|
+      matchpi %{[frag @header_]}, %{[frag header←(_symbol @_)]} do
+        D7.mixture(node, Term.of(:cell, header)) do |view|
           Term.of_case(view) do
-            matchpi %{(cell @_)} { node }
-            matchpi %{(cell @_ value1_)} { Term.morph(node, {2, value1}) }
+            matchpi %{(cell _)} { node }
+            matchpi %{(cell _ value1_)} { Term.morph(node, {2, value1}) }
           end
         end
       end
@@ -1659,7 +1793,7 @@ module Ww::Rack
       #
       # Edges in the itemspart are required and cannot be erased by the backmap
       # (because this would leave "holes" in the itemspart which confuse
-      # the `backsys` node.)
+      # the `backsys` node).
       #
       # Edges in the pairspart can be removed, in turn clearing their respective cell.
       #
@@ -1726,12 +1860,12 @@ module Ww::Rack
 
           # Check if we can dequeue.
           if 0 < min <= buffer0.itemsize
-            commit << Term.of(:cell, front, buffer0.items.first, front: true)
+            commit << Term.of(:cell, {:seq, front}, buffer0.items.first, front: true)
           end
 
           # Check if we can enqueue.
           if max == Term.of(:∞) || buffer0.itemsize < max.to(Int32)
-            commit << Term.of(:cell, back, back: true)
+            commit << Term.of(:cell, {:seq, back}, back: true)
           end
         end
 
@@ -1740,19 +1874,19 @@ module Ww::Rack
 
           Term.case(view) do
             # Dequeue.
-            matchpi %{⟨(cell @_ ⍊ front)⟩} do
+            matchpi %{⟨(cell _ ⍊ front)⟩} do
               buffer1 = buffer1.rest
               continue
             end
 
             # Sync.
-            matchpi %{⟨(cell @_ x_ ⍊ front)⟩} do
+            matchpi %{⟨(cell _ x_ ⍊ front)⟩} do
               buffer1 = Term.morph(buffer1, {0, x})
               continue
             end
 
             # Enqueue.
-            matchpi %{⟨(cell @_ x_ ⍊ back)⟩} do
+            matchpi %{⟨(cell _ x_ ⍊ back)⟩} do
               buffer1 = buffer1.append(x)
               continue
             end
@@ -2789,7 +2923,7 @@ module Ww::Rack
       # Your first impression might be that this is a very baroque way of
       # doing things. However, this example actually demonstrates how Wirewright
       # wants you to think (even if the example itself is not particularly elegant
-      # in writing.)
+      # in writing).
       #
       # In the above, the `@reports` circuit is effectively a nested symbolic world.
       # The ruleset in the rewriter defines some "laws" for the world. The rewriter
@@ -3619,7 +3753,7 @@ module Ww::Rack
       # | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
       # | *Missing*                 | The status is indeterminate.                                                                                                                                                                                                                                                                            |
       # | `pending`                 | The client is connecting.                                                                                                                                                                                                                                                                               |
-      # | `(pending detail_string)` | The client failed to connect, another attempt will be made with backoff (*detail* explains the failure.)                                                                                                                                                                                                |
+      # | `(pending detail_string)` | The client failed to connect, another attempt will be made with backoff (*detail* explains the failure).                                                                                                                                                                                                |
       # | `up`                      | The client is connected.                                                                                                                                                                                                                                                                                |
       # | `dn`                      | The client is not connected and will not reconnect automatically. To reconnect, you should remove this status. This status signifies client-initiated disconnect: if you replace the current `up` status with `dn`, this is the same as calling `close()` on the client-side in traditional languages.  |
       # | `(dn detail_string)`      | The client failed to connect with *detail*, or connection was closed with *detail*; no attempts to reconnect will be made. To reconnect, you should remove this status.                                                                                                                                 |
@@ -4047,7 +4181,7 @@ module Ww::Rack
       # |@key readout
       # The latest sampled output. This will often be an approximate number,
       # since we use approximate math under the hood (e.g. `sin`, see also
-      # `nitrene.sin`.)
+      # `nitrene.sin`).
       #
       # |@summary
       # Samples a waveform on every cycle, based on the global clock.
