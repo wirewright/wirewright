@@ -28,6 +28,7 @@ $ ./irack --single-step seed.wwml
 (cell @x ())
 (cell @y (1 2 3))
 (feed (@x front) (@y back))
+<Press Enter>
 
 $
 ```
@@ -118,7 +119,7 @@ And again... But this time, things are different.  The dict at `@x` does not hav
 
 Remember *quiescence* from Guide 0? Rack notices there was no change, notices there are no background tasks, so nothing can possibly trigger a change from the outside. The circuit has reached quiescence, so Rack wraps things up and quits.
 
-I think it is time now that we encounter our first *conflict*. A conflict occurs when two or more nodes try to modify the same third node (or each other!) in an incompatible way. What *incompatible* means evolved to be a concept rather hard to explain. It is best understood intuitively. Do note, by the way, that conflicts are rather rare in practical circuits; still, there is a point in understanding them.
+I think it is time now that we encounter our first *conflict*. A conflict occurs when two or more nodes try to modify the same third node. Viewed reciprocally, a conflict is when a node is modified by two or more nodes. 
 
 Open `seed.wwml` and write:
 
@@ -150,50 +151,10 @@ $ ./irack --single-step seed.wwml
 (feed (@y front) (@z back))
 <Press Enter>
 
-# Frame 2
-(cell @x (3))
-(cell @y (1 2))
-(cell @z ())
-(feed (@x front) (@y back))
-(feed (@y front) (@z back))
-<Press Enter>
-
-# Frame 3
-(cell @x ())
-(cell @y (1 2 3))
-(cell @z ())
-(feed (@x front) (@y back))
-(feed (@y front) (@z back))
-<Press Enter>
-
-# Frame 4
-(cell @x ())
-(cell @y (2 3))
-(cell @z (1))
-(feed (@x front) (@y back))
-(feed (@y front) (@z back))
-<Press Enter>
-
-# Frame 5
-(cell @x ())
-(cell @y (3))
-(cell @z (1 2))
-(feed (@x front) (@y back))
-(feed (@y front) (@z back))
-<Press Enter>
-
-# Frame 6
-(cell @x ())
-(cell @y ())
-(cell @z (1 2 3))
-(feed (@x front) (@y back))
-(feed (@y front) (@z back))
-<Press Enter>
-
 $
 ```
 
-So where is the conflict? Well, perhaps you expected the `1` in Frame 2 to be moved down from `@y` into `@z`. Why was it not? All preconditions of both `feed`s are — apparently — met.
+`irack` stopped quite abruptly here. So where is the conflict? Well, the conflict occurs when Rack is trying to calculate Frame 2 from Frame 1. Perhaps you expected the `1` in Frame 1 to be moved down from `@y` into `@z`. Why was it not? All preconditions of both `feed`s are — apparently — met.
 
 They *are* met, *and that's the problem*. Let's take the point of view of the first feed when Rack asks it to compute its contribution to Frame 2. What the feed sees at that point, remember, is the complete previous frame, Frame 1:
 
@@ -235,19 +196,21 @@ Its preconditions are satisfied, so it computes:
 (feed (@y front) (@z back)) ;; < We are this feed now!
 ```
 
-Everything looks alright for the second feed, too. But look at what happens from *Rack*'s point of view when it tries to reconcile the two changes, called *patches*:
+Everything looks alright for the second feed, too. But look at what happens from *Rack*'s point of view when it tries to reconcile the two changes:
 
-| Frame 1           | Patches by<br>`(feed (@x front) (@y back))` | Patches by<br>`(feed (@y front) (@z back))` |
-| ----------------- | ------------------------------------------- | ------------------------------------------- |
-| `(cell @x (2 3))` | `(cell @x (3))`                             | *Not changed*                               |
-| `(cell @y (1))`   | `(cell @y (1 2))`                           | `(cell @y ())`                              |
-| `(cell @z ())`    | *Not changed*                               | `(cell @z (1))`                             |
+| Frame 1           | Proposals by<br>`(feed (@x front) (@y back))` | Proposals by<br>`(feed (@y front) (@z back))` |
+| ----------------- | --------------------------------------------- | --------------------------------------------- |
+| `(cell @x (2 3))` | `(cell @x (3))`                               | *Not changed*                                 |
+| `(cell @y (1))`   | `(cell @y (1 2))`                             | `(cell @y ())`                                |
+| `(cell @z ())`    | *Not changed*                                 | `(cell @z (1))`                               |
 
-The `@x` and `@z` cells are fine. There is no conflict. But look at `@y`. From Rack's point of view, they're entirely different dictionaries. It has no way to "merge" them. So it rejects *all* patches from one of the `feed`s. Which one is deterministic but undefined (if you want to know the exact mechanism, here it is: on conflict, we sort nodes lexicographically, and the first one is the winner. That's why rearranging nodes won't help affect the winner; Rack fully commits to node order-freedom here.)
+The `@x` and `@z` cells are fine. There is no conflict. But look at `@y`. From Rack's point of view, the nodes are entirely different. So it rejects *all* proposals concerning `(cell @y (1))`. Doing this causes *both* `feed`s to retract *all* of their proposals, since each `feed` either wants all of their proposals merged, or none.
 
-When you want complex transformations like the one we attempted to do with our `feed`, you need something more "surgical". Feeds aren't it because they treat the dictionary as if it was opaque, indivisible. They have no notion of "reconciling an append with a dequeue", which would otherwise be perfectly possible.
+All of this results in a circuit which is effectively quiet: nobody can make any progress. So Rack announces quiescence, causing `irack` to quit.
 
-Similarly, there is a conflict in the circuit:
+As a bit of look-ahead, when you want complex transformations like the one we attempted to do with our pair of `feed`s, you generally have two choices: use something more "surgical" and centralize all change, or define a different *merge policy* for your shared cell(s).
+
+To demonstrate this, consider the following slightly simpelr circuit. There is a conflict in it:
 
 ```wwml
 (cell @x (1 2 3))
@@ -257,11 +220,11 @@ Similarly, there is a conflict in the circuit:
 (feed (@x back) (@z back))
 ```
 
-If you run it, it just moves all values from `@x` to `@y` and then terminates. The reason is, the `feed`s clash over `@x`; and Rack decides the first `feed` should win. 
+If you run it, it just exits immediately, unable to move any progress. The reason is that the `feed`s clash over `@x`, and so retract all their patches; and there is nothing else going on besides that. Quiescence.
 
-Your intuitive expectation might have been that values are "peeled off" of both sides of `@x` into `@y` and `@z`. But this can't be done with just a pair of `feed` nodes, because they will fight with each other over who gets to modify the dictionary in `@x`. Only one of them will win — as described above, the lexicographically first node will.
+Your intuitive expectation might have been that values should be "peeled off" of both sides of `@x` and appended into `@y` and `@z`, correspondingly. But this can't be done with just a pair of `feed` nodes and a simple `cell`. The `feed`s will fight with  each other over who gets to modify the cell. 
 
-As a sneak peek into how you'd "peel" values off `@x` this way, try this circuit:
+To fix this, there is the more surgical approach of using a `backsys`:
 
 ```wwml
 (cell @x (1 2 3 4))
@@ -303,11 +266,51 @@ $ ./irack --single-step seed.wwml
 $
 ```
 
-`backsys` (short for *backsystem*) is a node you will meet later in this guide. Think of it as the Swiss-army knife of term (and node) transformation. An important aspect is that a `backsys`tem is a system of *simultaneous* rewrite rules. Backsystems work a bit like Rack works: all *backmaps* `... <> ...` in a backsystem are given a view  of the complete previous state to match on (in our case, the most interesting bit of that state being the dict at `@x`).
+`backsys` (short for *backsystem*) is a node you will meet later in this guide. Think of it as the Swiss-army knife of term (and node) transformation. An important aspect is that a `backsys`tem is a system of *simultaneous* rewrite rules. Backsystems work a bit like Rack works: all *backmaps* `... <> ...` in a backsystem are given a view  of the complete previous state to match on and rewrite (in our case, the most interesting bit of that state being the dict at `@x`).
 
 Feel free to modify the circuit above by adding more numbers to `@x`. An especially interesting thing to try out is to have an odd count of numbers.
 
-So, as you can see, it *is* possible to peel off the values here, but you need a more "surgical" tool rather than the blunt `feed`. We will stick with `feed` for now anyway, though, due to its simplicity.
+The other way to achieve the same result is to make our shared `cell` (`@x`) handle conflicts better. This is done through *merge policies*. A cell's default merge policy is *exclusive*: it only accepts one modification at a time. But we have a pair of `feed`s, so they produce *two* modifications: the first feed wants to remove the first item, and the second feed wants to remove the last item of the cell's dict.
+
+The merge policy we are interested in here is called *arena*. I won't go into the details, because they are irrelevant at this point in the guide. But to make our original example work, you can simply make the cell's merge policy to be `arena`:
+
+```wwml
+(cell (arena @x) (1 2 3 4))
+(cell @y ())
+(cell @z ())
+(feed (@x front) (@y back))
+(feed (@x back) (@z back))
+```
+
+If you run this, you'd get the expected "peeling off" of items into `@y` and `@z`:
+
+```bash session
+$ ./irack --single-step seed.wwml
+(cell (arena @x) (1 2 3 4))
+(cell @y ())
+(cell @z ())
+(feed (@x front) (@y back))
+(feed (@x back) (@z back))
+<Press Enter>
+
+(cell (arena @x) (2 3))
+(cell @y (1))
+(cell @z (4))
+(feed (@x front) (@y back))
+(feed (@x back) (@z back))
+<Press Enter>
+
+(cell (arena @x) ())
+(cell @y (1 2))
+(cell @z (4 3))
+(feed (@x front) (@y back))
+(feed (@x back) (@z back))
+<Press Enter>
+
+$
+```
+
+Again, feel free to experiment with this circuit. Especially important is the experiment of making the number of items in `@x` odd. Observe what happens and try to explain why using all that you know.
 
 The variant of `feed` we have been working with is called the *transfer* variant. It *transfers* (moves) a value from one place (cell) to another (1:1, one-to-one).  There are other variants of `feed`, and it is time for us to take a look at them.
 
@@ -502,7 +505,7 @@ As you can see, `100` was moved to both `@y` and `@z` (the destination places of
 
 `feed` allows you to do some extra things, but it is not necessary to know about them to proceed with this guide. If you are interested and want to experiment with `feed` a little bit more, feel free to check out the docs for `feed` in the doctool.
 
-To do so, open the doctool and navigate to `rack`, then to `feed`. What you should see is a page listing the *overloads* of `feed`, and describing each of them in detail. *Overloads* is `doctool` vocabulary; do not confuse it with *variants*, which is vocabulary coming from Rack.
+To do so, open the doctool and navigate to `rack`, then to `feed`. What you should see is a page listing the *overloads* of `feed`, and describing each of them in detail. *Overloads* is `doctool` vocabulary; do not confuse them with *variants*, which is the vocabulary of Rack.
 
 All variants of `feed` can be *inhibited*: you can attach a list of one or more edges that must *all* be empty (or not have a cell at them) for the `feed` to fire:
 
@@ -542,7 +545,7 @@ The `100` was moved to `@y` just fine. But in the circuit below, the `@inhibitor
 (cell @inhibitor "A value")
 ```
 
-It can contain any value at all. The important condition is its *presence*, not what value it is. Running this circuit, we get:
+It can contain any value at all. The important condition is the value's *presence*, and thus the inhibitor cell's nonemptiness; not what the value is. Running this circuit, we get:
 
 ```bash session
 $ ./irack --single-trace seed.wwml
@@ -604,7 +607,7 @@ Rack exits after the second frame because `@z` is now occupied, so `feed` has no
 
 **Experiment 3.** Find another way to reverse a list, as in Experiment 2. Hint: there are only two such ways and they are symmetrical.
 
-**Experiment 4.** How many numbers at a time would *move* in this circuit? Try to reason through it, then run using `irack` to observe:
+**Experiment 4.** How many numbers at a time would *move* ("fall down") in this circuit? Try to reason through it, then run using `irack` to observe:
 `
 ```wwml
 (cell @xs (1 2 3 4 5))
