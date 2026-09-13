@@ -236,13 +236,16 @@ module Ww::ML
     end
   end
 
+  # We reach this cache so rarely that it can be fairly small.
+  @@symbol_bare_cache = SyncLRU(String, Bool).new(32)
+
   # Returns `true` if a symbol with the given *name* must be represented without using
   # the raw symbol literal, `⸍...⸝`. Returns `false` if the raw string literal must be used.
   def symbol_bare?(name : String) : Bool
     # NOTE: Unfortunately, in WwML, symbols are *very* ambiguous in terms of parsing.
-    # So we have to resort to a series of fast paths which are hit maybe in 90% of
-    # the cases, if not more; followed by a general slow path: parse *name* and see
-    # if the result is a symbol with the same name.
+    # So we have to resort to a cascade of fast paths which catch the majority of symbols,
+    # followed by a general slow path. The slow path is to parse *name* and see if
+    # the result is a symbol with the same name.
 
     case name
     when .empty?
@@ -251,9 +254,7 @@ module Ww::ML
          .prefixed_by?('\''),
          .starts_with?('0'..'9')
       false
-    when "$", "%", "+", "-", "^", "<", ">", "="
-      true
-    when "%-", "$my", "$up", "$down", "$once"
+    when "$", "%", "+", "-", "^", "<", ">", "=", "<=", ">=", "%-"
       true
     else
       reader = Char::Reader.new(name)
@@ -267,8 +268,10 @@ module Ww::ML
         reader.pos = 0
       end
 
-      # If it starts with '%' and consists of symbolic strong, use bare.
-      if reader.current_char == '%'
+      # If it starts with any of these characters, and consists solely of symbolic
+      # strong, use bare. This catches symbols like `%not`, `^a` (Alloy splice),
+      # `>foo` (often used as a destination slot name).
+      if reader.current_char.in?('%', '^', '>')
         reader.next_char
         if reader.all? { |chr| Rune.new(chr).symbolic_strong? }
           return true
@@ -278,14 +281,15 @@ module Ww::ML
       end
 
       # Slow path.
-      begin
-        term = term(name)
-      rescue e : SyntaxError
-        # Lexical error, can't go bare.
-        return false
+      @@symbol_bare_cache.put_if_absent(name) do
+        begin
+          term = term(name)
+          term.type.symbol? && term.to(String) == name
+        rescue e : SyntaxError
+          # Lexical error, can't go bare.
+          false
+        end
       end
-
-      term.type.symbol? && term.to(String) == name
     end
   end
 end
