@@ -1,6 +1,6 @@
 (section "Animation"
   (node (@mod (lfo _ ±mod))
-    (lfo ((100 ms) (sin (0.1 hz)))))
+    (lfo ((33 ms) (sin (0.1 hz)))))
   (window width: 500 height: 500
     (limit max-w: 50 max-h: 50
       (node @tf
