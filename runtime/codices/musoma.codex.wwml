@@ -56,6 +56,8 @@ history-limit: 128
    "theme-muted": ^muted,
    "theme-subtle": ^subtle,
    "theme-text": ^text,
+   "theme-checked": ^foam,
+   "theme-accent": ^iris,
    "theme-highlight-low": ^highlight-low,
    "theme-highlight-med": ^highlight-med,
    "theme-highlight-high": ^highlight-high,
@@ -297,7 +299,7 @@ history-limit: 128
 ;; (x (a b c)
 ;;   y
 ;;   z)
-(term (l0_symbol l1_dict m_* r_))
+(term ((%all l0_symbol (%not section stage group)) l1_dict m_* r_))
   => (group detail: (dict block)
        (term ^l0)
        (term ^l1)
@@ -2045,16 +2047,26 @@ scroll: {}
            (WindowTab ^id ^"⸢title⸣ (⸢id⸣)" active: ^(= active-window-spec (some id))))))
 
 (WindowView (spec content_ ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false))
-  => (box style: "content-clip border-sm border-theme-highlight-low in-focused:input \
-                  -input-enabled:-input in-focused:border-theme-grab-bg"
-          input-enabled: ^input
-       (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
-         ;; `content` is Scenery already, so let's save Microfold a whole bunch
-         ;; of work by marking this node as `leaf`.
-         (box style: "leaf"
-              µ-bg: ^backdrop
-              µ-cursor: (^unless (= cursor arrow) ^cursor)
-           ^*content)))
+  => (box style: "p-2 border-xs border-transparent rounded-lg in-focused:border-theme-grab-bg"
+       (group style: "flow-col border border-2px border-theme-overlay rounded-sm"
+         (group style: "floating-x rounded-t-sm px-1 py-1/2 flow-row gap-1 bg-theme-overlay \
+                        text-theme-muted in-focused:text-theme-text item-center-y"
+           (group style: "fr-1 content clip flow-row gap-1 item-center-y"
+             (icon "view_quilt" style: "font-base")
+             (p ^title style: "fr-1 font-medium text-sm leading-5"))
+           (group style: "flow-row gap-1 text-sm text-theme-muted"
+             (icon "minimize")
+             (icon "open_in_full")
+             (icon "close")))
+         (box style: "fr-1 content-clip in-focused:input -input-enabled:-input"
+              input-enabled: ^input
+           (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
+             ;; `content` is Scenery already, so let's save Microfold a whole bunch
+             ;; of work by marking this node as `leaf`.
+             (box style: "leaf"
+                  µ-bg: ^backdrop
+                  µ-cursor: (^unless (= cursor arrow) ^cursor)
+               ^*content)))))
 
 (WindowViewPane)
   => (vantage id: (state window-view-vantage) active: if-hit
@@ -2063,7 +2075,7 @@ scroll: {}
            (group style: "flow-col"
              (WindowTabList)
              (box style: "fr-1 p-2"
-               (pane style: "clip p-5 mode/grab:cue-focused" ^:mode
+               (pane style: "clip px-3 py-1 mode/grab:cue-focused" ^:mode
                  (^match (window-specs active-window-spec)
                    (when (⟨spec←{¦ id_}⟩ (some id_))
                      (box style: "content"
