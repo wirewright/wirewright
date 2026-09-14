@@ -546,7 +546,7 @@ vantage: ""
 
 ;; E.g. beam-thin
 (for text-box
-  (utility (prefix "beam-" (one-of cursor-thicknesses thickness))
+  (utility (prefix "beam-" (one-of beam-thicknesses thickness))
     {selection-thickness: ^thickness}))
 
 (for text-box
@@ -593,7 +593,7 @@ vantage: ""
     {selection-radius: ^radius}))
 
 (for x-sel-box
-  (utility (prefix "x-beam-" (one-of cursor-thicknesses thickness))
+  (utility (prefix "x-beam-" (one-of beam-thicknesses thickness))
     {selection-thickness: ^thickness}))
 
 (for x-sel-box
@@ -1584,7 +1584,7 @@ vantage: ""
 "9xl": 1
 
 
---- (table cursor-thicknesses)
+--- (table beam-thicknesses)
 
 "transparent": 0
 "thin": 1
