@@ -426,7 +426,7 @@ module Ww::Scenery
 
               @selections << DrawRoundedRect.new(
                 rect: RoundedRect.new(
-                  bounds: Rect.map(bounds, unit: decoration.extents),
+                  bounds: Rect.scale(bounds, unit: decoration.extents),
                   radius: decoration.radius,
                 ),
                 fill: Paint::Solid.new(decoration.fill),

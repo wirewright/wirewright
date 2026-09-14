@@ -49,8 +49,7 @@ module Ww::Scenery
       a.translate(a.denormalize(point) - b.denormalize(point))
     end
 
-    # Maps a *unit* rect into *rect*.
-    def self.map(rect : Rect, unit : Rect) : Rect
+    def self.scale(rect : Rect, unit : Rect) : Rect
       new(tl: rect.map(unit.tl), br: rect.map(unit.br))
     end
 
