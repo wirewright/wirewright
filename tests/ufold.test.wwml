@@ -183,6 +183,11 @@
   (el "A" style: "upcase strip")
   (el (text caption: "A" case: upcase transform: strip)))
 
+;; color-okl
+(µfold=
+  (el "A" style: "text-white text-okl-10%")
+  (el (text caption: "A" color: (okl (oklch 1 0 0) 0.1))))
+
 ;; Properties
 
 (µfold=

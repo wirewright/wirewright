@@ -358,6 +358,10 @@ vantage: ""
   (utility (prefix "text-" (one-of colors color))
     {^:color}))
 
+(for text-box
+  (utility (circumfix "text-okl-" (number value) "%")
+    {color-okl: ^(/ value 100)}))
+
 ;;
 ;; Letter spacing utilities.
 ;;
@@ -1332,11 +1336,17 @@ vantage: ""
 
 (defn text-box
   (box ((parent_ caption_string) settings_dict)
-    (^match parent
-      (when [icon _*]
-        (icon name: ^caption ^… settings))
-      (when _
-        (text ^:caption ^… settings)))))
+    (^let settings':
+            (morph settings
+              ;; Wrap color in `pigment.okl` if color-okl is provided
+              ;; (e.g. text-okl-10%).
+              {¦ color_ ±color-okl}
+                <> {color: (okl ^color ^color-okl), (color-okl): ()})
+      (^match parent
+        (when [icon _*]
+          (icon name: ^caption ^… settings'))
+        (when _
+          (text ^:caption ^… settings'))))))
 
 (defn self-box
   (box (children_dict settings_dict)
