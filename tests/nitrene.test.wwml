@@ -577,12 +577,21 @@
 ;; filter
 
 ;; morph
+(nitrene
+  (morph x
+    ±n <> {n: ^(+ n 1)}
+    ;; Doc comment
+    x_string <> {x: (seen ^x)})
+
+  (= {x: 100} 101)
+  (= {x: "kaixo"} (seen "kaixo")))
 
 ;; reduce
 (nitrene
   (reduce (0 xs)
     (fn (±n m←(%pipe (mod 2) 0))
       (+ n m)))
+
   (= {xs: ()} 0)
   (= {xs: (1)} 0)
   (= {xs: (1 2 3)} 2)

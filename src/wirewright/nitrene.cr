@@ -563,10 +563,9 @@ module Ww::Nitrene
 
         subexprs = expr.items.move(2)
         backsys = subexprs.to_compact_readonly_slice do |subexpr|
-          # (backmap pattern_ backspec_)
+          # [backmap pattern_ backspec_]
           next unless subexpr = subexpr.as_d?
-          next unless subexpr.size == 3
-          next unless subexpr.itemsonly?
+          next unless subexpr.itemsize == 3
           head, pattern, backspec = subexpr
           next unless head == Term[:backmap]
 
