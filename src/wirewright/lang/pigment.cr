@@ -576,6 +576,43 @@ module Ww::Pigment
         end
       end
 
+      # |@ pigment.okl
+      #
+      # |@pattern
+      # (okl color_ ±l)
+      #
+      # |@key color pigment
+      # The color to manipulate the lightness of.
+      #
+      # |@key l
+      # The target lightness.
+      #
+      # |@block
+      # Manipulates the OkLCH lightness of an arbitrary *color*. This is done by converting
+      # the color to OkLCH first, then changing its lightness.
+      #
+      # |@example
+      # ```wwml
+      # (okl (rgb 255 0 0) 0.3)
+      # ```
+      matchpi %{(okl arg_ ±l1)}, l1: Float32 do |l1|
+        Outcome.accumulate do |acc|
+          unless l1.in?(0.0..1.0)
+            l1 = acc.unwrap(ok_clamp(l1, 0.0f32..1.0f32, despite: {2, "lightness out of range 0-1"}))
+          end
+
+          color = acc.unwrap(eval(arg).at(1)) { }
+
+          if color
+            l0, c, h = Oklch.from_lrgb(color.r, color.g, color.b)
+            r, g, b = Oklch.to_lrgb(l1.to_f64, c, h)
+            ok(RGBA.new(r.to_f32, g.to_f32, b.to_f32, color.a))
+          else
+            ok(nil)
+          end
+        end
+      end
+
       otherwise { rej }
     end
   end

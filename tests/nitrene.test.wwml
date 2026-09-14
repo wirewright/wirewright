@@ -561,6 +561,11 @@
 
 ;; pigment: mix
 
+;; pigment: okl
+(group
+  (ni= (pigment (okl black 0.5)) (pigment (oklch 0.5 0 0)))
+  (ni= (pigment (okl white 0.5)) (pigment (oklch 0.5 0 0))))
+
 ;; literal
 
 ;; fn

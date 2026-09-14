@@ -193,10 +193,13 @@ module Ww::Oklch
      (b*255).round.to_i.clamp(0..255).to_u8}
   end
 
-  # Returns L, C, H for the given RGB color.
-  #
-  # - *r*, *g*, and *b* are 0-255.
+  # Returns L, C, H for the given RGB (0-255) color.
   def from_rgb(r : UInt8, g : UInt8, b : UInt8) : {Float64, Float64, Float64}
     urgb2oklch({r/255.0, g/255.0, b/255.0})
+  end
+
+  # Returns L, C, H for the given linear (0-1) RGB color.
+  def from_lrgb(r : Float, g : Float, b : Float) : {Float64, Float64, Float64}
+    urgb2oklch({r.to_f64, g.to_f64, b.to_f64})
   end
 end
