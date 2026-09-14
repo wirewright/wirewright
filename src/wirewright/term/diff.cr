@@ -251,7 +251,7 @@ struct Ww::Term
       in {WithItem, DeleteItem}, {DeleteItem, WithItem}
         overwrites?(lpath, rpath) || lpath == rpath
       in {DeleteItem, DeleteItem}
-        overwrites?(lpath, rpath)
+        overwrites?(lpath, rpath) && lpath != rpath # Deletes of the same item do not conflict
       in {WithPair, WithPair}
         overwrites?(lpath, rpath) || (lpath == rpath && l.value != r.value)
       in {WithPair, WithoutPair}, {WithoutPair, WithPair}

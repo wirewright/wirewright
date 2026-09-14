@@ -1,12 +1,121 @@
 module Ww::D7
   # An immutable map of node ids to replacement terms.
-  #
-  # Disjoint changes to the same node are supported and will be properly merged.
-  alias Patch = Pf::Map(NodeId, Term)
+  struct Patch
+    include Enumerable({NodeId, Term})
+
+    # :nodoc:
+    def initialize(@keys : Pf::USet32, @valuesptr : Term*)
+    end
+
+    # :nodoc:
+    def self.new(keys : Pf::USet32, values : Slice(Term)) : Patch
+      assert keys.size == values.size
+
+      new(keys, values.to_unsafe)
+    end
+
+    # Constructs an empty patch.
+    def self.new : Patch
+      new(keys: Pf::USet32.new, valuesptr: Pointer(Term).null)
+    end
+
+    # Constructs a patch replacing one *id* with *rep*.
+    def self.assoc(id : NodeId, rep : Term) : Patch
+      new.assoc(id, rep)
+    end
+
+    # Returns `true` if *a* and *b* are *definitely* compatible. Returns `false` if
+    # they are *probably* incompatible.
+    def self.compatible?(a : Patch, b : Patch) : Bool
+      !a.@keys.intersects?(b.@keys)
+    end
+
+    # Returns `true` if all of *patches* are *definitely* compatible, and thus can
+    # be safely merged. Returns `false` if they are *probably* incompatible.
+    def self.compatible?(patches : Indexable(Patch)) : Bool
+      patches.each_with_index do |patch0, i|
+        patches.each_with_index do |patch1, j|
+          next if i == j
+          next if compatible?(patch0, patch1)
+          return false # probably incompatible
+        end
+      end
+
+      true # compatible
+    end
+
+    protected def values : Slice(Term)
+      @valuesptr.to_slice(@keys.size)
+    end
+
+    # Returns `true` if this patch includes a replacement for a node with the given *id*.
+    def includes?(id : NodeId) : Bool
+      @keys.includes?(id)
+    end
+
+    def size : Int32
+      @keys.size
+    end
+
+    # Returns the replacement term associated with the given *id*.
+    def []?(id : NodeId) : Term?
+      return unless id.in?(@keys)
+
+      @valuesptr[@keys.rank(id)]
+    end
+
+    # Yields each node id and replacement term in this patch.
+    def each(& : {NodeId, Term} ->) : Nil
+      @keys.each_with_index do |id, index|
+        yield({id, @valuesptr[index]})
+      end
+    end
+
+    # Adds or updates this patch with a new replacement term *rep* for *id*.
+    # Returns the resulting patch.
+    def assoc(id : NodeId, rep : Term) : Patch
+      index = @keys.rank(id)
+
+      if id.in?(@keys) # update at index
+        return Patch.new(@keys, Slice.join({values.trim(index)}, {rep}, {values + index + 1}))
+      end
+
+      # insert at index
+      Patch.new(@keys.add(id), Slice.join({values.trim(index)}, {rep}, {values + index}))
+    end
+
+    # Removes the replacement for *id* from this patch, if any. Returns
+    # the resulting patch.
+    def dissoc(id : NodeId) : Patch
+      unless id.in?(@keys)
+        return self
+      end
+
+      index = @keys.rank(id)
+      assert index < @keys.size
+
+      Patch.new(@keys.delete(id), Slice.join({values.trim(index)}, Tuple.new, {values + index + 1}))
+    end
+
+    def pretty_print(pp)
+      pp.list("D7::Patch[", self, "]") do |id, rep|
+        pp.group do
+          id.pretty_print(pp)
+          pp.text " =>"
+          pp.nest do
+            pp.breakable
+            rep.pretty_print(pp)
+          end
+        end
+      end
+    end
+
+    def_equals_and_hash @keys, values
+  end
 
   # Constructs a patch that replaces all nodes in *object* with *term*.
   def replace(object : Node, term : Term) : Patch
-    Pf::Map.assoc(object.id, term)
+    Patch.assoc(object.id, term)
   end
 
   # Constructs a patch that morphs node terms in *object* according
@@ -24,11 +133,16 @@ module Ww::D7
   # win over former ones.
   def patches(objects : Enumerable(T), & : T, Int32 -> Patch?) : Patch forall T
     patch = Patch.new
+
     objects.each_with_index do |object, index|
       contrib = yield object, index
       next if contrib.nil?
-      patch = patch.merge(contrib)
+
+      contrib.each do |key, value|
+        patch = patch.assoc(key, value)
+      end
     end
+
     patch
   end
 
@@ -76,8 +190,15 @@ module Ww::D7
       return patch
     end
 
-    # Optimistic fast path: construct a Patch, bail out if on conflict.
-    if patch = optimistic_merge?(proposals)
+    if Patch.compatible?(proposals)
+      patch = Patch.new
+
+      proposals.each do |proposal|
+        proposal.each do |node_id, rep|
+          patch = patch.assoc(node_id, rep)
+        end
+      end
+
       return patch
     end
 
@@ -172,59 +293,47 @@ module Ww::D7
       end
     end
 
-    Patch.transaction do |patch|
-      # Computing the rank of a proposal is rather expensive, so we cache it.
-      proposal_rank_cache = {} of UInt32 => Slice(Term)
+    patch = Patch.new
 
-      nodetab.each do |node_id, merge_node|
-        # Changes to this node were all eliminated.
-        next if merge_node.successors.empty?
+    # Computing the rank of a proposal is rather expensive, so we cache it.
+    proposal_rank_cache = {} of UInt32 => Slice(Term)
 
-        # We managed to narrow down on one successor without applying the diff.
-        if successor = merge_node.successors.single?
-          patch.assoc(node_id, successor.term)
-          next
-        end
+    nodetab.each do |node_id, merge_node|
+      # Changes to this node were all eliminated.
+      next if merge_node.successors.empty?
 
-        # NOTE: Assume multi-successor nodes are *all* handled by difftab.
-        diffs = difftab[node_id]
-
-        # Sort by proposal rank for deterministic insertion.
-        diffs.sort_by! do |_, proposal_index|
-          proposal_rank_cache.put_if_absent(proposal_index) do
-            proposal_rank(proposals[proposal_index])
-          end
-        end
-
-        mutation = nil
-        diffs.each do |actions, proposal_index|
-          # Actions are flattened in the same way the diff algorithm tells us to
-          # execute them. The greater order is that of *proposal ranks*, though.
-          actions.each do |action|
-            mutation ||= Term::Diff::Mutation.new
-            mutation << action
-          end
-        end
-
-        next unless mutation
-
-        patch.assoc(node_id, Term.of(mutation.apply(merge_node.reference.as_d))) # ?!
+      # We managed to narrow down on one successor without applying the diff.
+      if successor = merge_node.successors.single?
+        patch = patch.assoc(node_id, successor.term)
+        next
       end
-    end
-  end
 
-  # Attempts to merge *proposals*. Only succeeds if all proposals were disjoint.
-  # Returns `nil` otherwise.
-  private def optimistic_merge?(proposals : Indexable(Patch)) : Patch?
-    Patch.transaction do |txn|
-      proposals.each do |proposal|
-        proposal.each do |node_id, rep|
-          return if node_id.in?(txn)
+      # NOTE: Assume multi-successor nodes are *all* handled by difftab.
+      diffs = difftab[node_id]
 
-          txn.assoc(node_id, rep)
+      # Sort by proposal rank for deterministic insertion.
+      diffs.sort_by! do |_, proposal_index|
+        proposal_rank_cache.put_if_absent(proposal_index) do
+          proposal_rank(proposals[proposal_index])
         end
       end
+
+      mutation = nil
+      diffs.each do |actions, proposal_index|
+        # Actions are flattened in the same way the diff algorithm tells us to
+        # execute them. The greater order is that of *proposal ranks*, though.
+        actions.each do |action|
+          mutation ||= Term::Diff::Mutation.new
+          mutation << action
+        end
+      end
+
+      next unless mutation
+
+      patch = patch.assoc(node_id, Term.of(mutation.apply(merge_node.reference.as_d))) # ?!
     end
+
+    patch
   end
 
   private def proposal_rank(proposal : Patch) : Slice(Term)

@@ -434,7 +434,7 @@ module Ww::Rack::Feed
     return unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, edge(feed.to)))
     return unless dst_patch = put?(feed.to, dst_cell, src_value)
 
-    D7.patches(src_patch, dst_patch)
+    D7.merge(hg, {src_patch, dst_patch})
   end
 
   # (feed (@x @y) @z)
@@ -458,7 +458,7 @@ module Ww::Rack::Feed
 
     patches << dst_patch
 
-    D7.patches(patches)
+    D7.merge(hg, patches)
   end
 
   # (feed (@x items) (@y @z))
@@ -480,7 +480,7 @@ module Ww::Rack::Feed
       patches << dst_patch
     end
 
-    D7.patches(patches)
+    D7.merge(hg, patches)
   end
 
   # (feed (@x @y) (@a @b))
@@ -499,7 +499,7 @@ module Ww::Rack::Feed
       patches << dst_patch
     end
 
-    D7.patches(patches)
+    D7.merge(hg, patches)
   end
 
   # (feed @x (@y @z))
@@ -519,7 +519,7 @@ module Ww::Rack::Feed
       patches << dst_patch
     end
 
-    D7.patches(patches)
+    D7.merge(hg, patches)
   end
 
   def step(hg : D7::Hypergraph, node : D7::Node, feed : WithoutInhibitors) : D7::Patch?

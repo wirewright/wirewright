@@ -147,18 +147,14 @@ module MuSoma
       # discard. For Rack, reflection acts as a kind of "infinite source", replenished
       # immediately regardless of what Rack does to it.
       if figure_node_ids.size < patch.size
-        patch = patch.transaction do |txn|
-          figure_node_ids.each do |node_id|
-            txn.dissoc(node_id)
-          end
+        figure_node_ids.each do |node_id|
+          patch = patch.dissoc(node_id)
         end
       else
-        patch = patch.transaction do |txn|
-          patch.each do |node_id, value|
-            next unless node_id.in?(figure_node_ids)
+        patch.each do |node_id, value|
+          next unless node_id.in?(figure_node_ids)
 
-            txn.dissoc(node_id)
-          end
+          patch = patch.dissoc(node_id)
         end
       end
 

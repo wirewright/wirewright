@@ -529,7 +529,64 @@
       (cell @sink)
       (discard @sink))
 
-    end))
+    end)
+
+  ;; Arena rotate
+  (rack
+    (frame
+      (feed (@xs front) (@xs back))
+      (cell (arena @xs) (1 2 3 4 5)))
+
+    (frame/tail
+      (cell (arena @xs) (2 3 4 5 1)))
+
+    (frame/tail
+      (cell (arena @xs) (3 4 5 1 2))))
+    ;; ...
+
+  ;; Arena peel even
+  (rack
+    (frame
+      (feed (@x front) (@y back))
+      (feed (@x back) (@z back))
+      (cell (arena @x) (1 2 3 4))
+      (cell @y ())
+      (cell @z ()))
+
+    (frame/tail
+      (cell (arena @x) (2 3))
+      (cell @y (1))
+      (cell @z (4)))
+
+    (frame/tail
+      (cell (arena @x) ())
+      (cell @y (1 2))
+      (cell @z (4 3))))
+
+  ;; Arena peel odd
+  (rack
+    (frame
+      (feed (@x front) (@y back))
+      (feed (@x back) (@z back))
+      (cell (arena @x) (1 2 3 4 5))
+      (cell @y ())
+      (cell @z ()))
+
+    (frame/tail
+      (cell (arena @x) (2 3 4))
+      (cell @y (1))
+      (cell @z (5)))
+
+    (frame/tail
+      (cell (arena @x) (3))
+      (cell @y (1 2))
+      (cell @z (5 4)))
+
+    ;; 3 is duplicated
+    (frame/tail
+      (cell (arena @x) ())
+      (cell @y (1 2 3))
+      (cell @z (5 4 3)))))
 
 ;; Single tick parallelism.
 (rack

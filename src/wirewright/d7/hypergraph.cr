@@ -409,15 +409,13 @@ module Ww::D7
       Hypergraph.new(D7.gnd_map(@tree, replacements), @level_query)
     end
 
-    def propose(*heads : Symbol, &fn : Node -> Patch?) : Indexable(Patch)
-      # FIXME: stack_array miscompiles for some reason... We *really* need
-      # to rewrite Pf::Map, its representation is too hard for Crystal
-      # to compile...
+    def propose(*heads : Symbol, &fn : Node -> Patch?) : Array(Patch)
       proposals = [] of Patch
       propose(proposals, *heads, &fn)
       proposals
     end
 
+    # NOTE: *proposals* must respond to `<<(Patch)`.
     def propose(proposals : Array(Patch), *heads : Symbol, &fn : Node -> Patch?) : Nil
       heads.each do |head|
         each_node_with_head(Term.of(head)) do |node|

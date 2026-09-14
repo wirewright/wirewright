@@ -102,7 +102,7 @@ module Ww::Rack::Part
     updates = D7::Patch.new
 
     forest.each do |whole, tree|
-      next if patch.has_key?(whole)
+      next if whole.in?(patch)
 
       proposals = {} of M1::Log::SealedOne => Array({Term, Term::Dict})
       changed = Pf::USet32.new
@@ -228,15 +228,15 @@ module Ww::Rack::Part
     end
 
     # Remove `part` -> `cell` replacements from the resulting patch.
-    patch = patch.transaction do |txn|
-      if replaced.size <= patch.size
-        replaced.each { |id| txn.dissoc(id) }
-      else
-        patch.each do |id, _|
-          next unless id.in?(replaced)
+    if replaced.size <= patch.size
+      replaced.each do |id|
+        patch = patch.dissoc(id)
+      end
+    else
+      patch.each do |id, _|
+        next unless id.in?(replaced)
 
-          txn.dissoc(id)
-        end
+        patch = patch.dissoc(id)
       end
     end
 
