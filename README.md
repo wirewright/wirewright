@@ -24,9 +24,11 @@ Wirewright is different. A Wirewright program is effectively a serialized snapsh
 (feed @x @y)
 ```
 
-This snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions and there is no machine that can "execute" it. Instead, it is a description a symbolic world, frozen in time. In this world, there are three *things*, called *nodes*: two `cell`s and one `feed`. One of the cells holds the number `100`.
+In this snippet, there are three *things*, called *nodes*: two `cell`s and one `feed`. One of the cells holds the number `100`.
 
-The snippet above is what Wirewright calls *a seed*, borrowing from terminology used in the field of cellular automata. Cellular automata is a good reference point for understanding what Wirewright is. Roughly speaking, Wirewright is an automaton which uses *symbols*, *numbers*, *strings* etc. instead of *on/off* for state, and *trees* instead of grids for spatial arrangement. Importantly, trees can also be used for state.
+The snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions, and there is no machine that can "execute" it. Instead, it is a description of a symbolic world frozen in time — a *seed*. So instead of telling an existing general-purpose machine how to do things, you build specialized machines to do each one of those things. As a consequence, machine-building machines become possible; as machine-controlling machines, and so on.
+
+The terminology of *seed*s, *evolution*, and so on is borrowed primarily from the field of cellular automata. Cellular automata is a good reference point for understanding what Wirewright is. Roughly speaking, Wirewright is an automaton which uses *symbols*, *numbers*, *strings* etc. instead of *on/off* for state, and *trees* instead of grids for spatial arrangement. Importantly, trees can also be used for state. Do note that cellular automata and Wirewright are as similar to each other as a stickman and a real human being.
 
 Wirewright can also be seen through the lens of a game analogy. Imagine Wirewright as implementing a game, but instead of entities you have data structures, and instead of graphics you have extended S-expressions; and physics is not about boxes and vectors and collisions and other kinds of math, but about making data structures interact with each other in various ways through rewrite rules.
 
