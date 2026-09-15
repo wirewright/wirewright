@@ -1,3 +1,8 @@
+;; FIXME: A lot of these components must be rewritten as they are written
+;; in a horribly convoluted way. Especially `Scroll` which is very bad and
+;; buggy and basically unusable. Do note that I'm discovering the "righter"
+;; ways of writing these things as I go. It's not that I know anything, either.
+
 ;; |@ musoma.button
 ;;
 ;; |@pattern
@@ -179,6 +184,9 @@
          ;; Mouse down while hovered and not focused makes the input ask for focus.
          {¦ mouse: [mouse left] node: {¦ hover} input: {¦ -focus_}}
            <> {focus: wanted}
+         ;; State can also ask for focus.
+         {¦ state: {¦ focus_: true} input: {¦ -focus: >focus}}
+           <> {(focus): (), >focus: wanted}
          ;; Pressing left button while hovered makes the input active.
          {¦ mouse: [mouse left] node: {¦ hover -active_}}
            <> {active: true}
@@ -376,28 +384,27 @@
 ;;
 ;; |@block
 ;; Stock view/styling for an Input field based on the current MuSoma theme.
-(Input @state_ ¦ props_ label⋮ "" placeholder⋮ "")
+(Input @state_ ¦ props_ label⋮ "" label-style⋮ "" placeholder⋮ "" placeholder-style⋮ "" content-style⋮ "" box-style⋮ "")
   => (slot
        (Input ^state
          (box style: "flow-col gap-2/3 membrane hover:cue-hover active:cue-active \
                       focus:cue-focus focus:input empty:cue-empty"
            ;; Render the label, if any.
            (^when (label (%string nonempty))
-             (p style: "content upcase font-condensed text-sm leading-none \
-                        text-theme-muted in-hover:text-theme-subtle \
-                        in-focus:text-theme-selection-bg"
+             (p style: ^"content upcase font-condensed text-sm leading-none text-theme-muted \
+                         in-hover:text-theme-subtle in-focus:text-theme-selection-bg ⸢label-style⸣"
                ^label))
-           (box style: "fr-1 flow-none content-clip border-sm border-theme-highlight-low rounded \
-                        px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
-                        in-focus:border-theme-selection-bg"
+           (box style: ^"fr-1 flow-none content-clip border-sm border-theme-highlight-low rounded \
+                         px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
+                         in-focus:border-theme-selection-bg ⸢box-style⸣"
              ;; Display placeholder, but only in an empty field.
-             (p style: "absent in-empty:present text-theme-muted leading-none"
+             (p style: ^"absent in-empty:present text-theme-muted leading-none ⸢placeholder-style⸣"
                ^placeholder)
-             (p style: "content-y sel sel-endl sel-aim sel-clearance-x-3 sel-clearance-line sel-text-theme-muted \
-                        in-focus:sel-text-theme-selection-fg sel-theme-highlight-low \
-                        in-hover:sel-theme-highlight-med text-theme-text leading-tight \
-                        beam-transparent in-hover:beam-thick in-focus:beam-thick \
-                        in-focus:sel-theme-selection-bg"
+             (p style: ^"content-y sel sel-endl sel-aim sel-clearance-x-3 sel-clearance-line \
+                         sel-text-theme-muted in-focus:sel-text-theme-selection-fg sel-theme-highlight-low \
+                         in-hover:sel-theme-highlight-med text-theme-text leading-tight \
+                         beam-transparent in-hover:beam-thick in-focus:beam-thick \
+                         in-focus:sel-theme-selection-bg ⸢content-style⸣"
                 value: true
                "")))
          ^… props))
@@ -611,3 +618,60 @@
          (align x: 1
            (slot (YScrollbar @thumb-offset @thumb-size @track-size @show))))
        (slot (Scroll (bar @thumb-offset @thumb-size @track-size @show) (view @desc @node) (axis y))))
+
+;; ---- DIRTY STUFF ENDS (sort of) ----
+
+(Checkbox @state_ view_)
+  => (component {@:state}
+       (reflection {@:desc, @:node}
+         (template ^view))
+
+       (frag @mouse
+         (mouse))
+
+       (rewriter ((stageR (rulesetR exh: true)) - {@:state, @:desc, @:node, @:mouse})
+         (stage
+           ;; The user's mouse has entered our visuals. Treat that as hover.
+           {¦ -hover_ mouse: [mouse] desc: [reflection {¦ hit-hover}]}
+             <> {hover: true}
+           ;; The user's mouse had previously entered and remains within our visuals.
+           ;; Treat that as hover.
+           {¦ -hover_ node: {¦ hover} desc: [reflection {¦ hit-hover}]}
+             <> {hover: true}
+           ;; Find out whether the user just pressed the left mouse button over
+           ;; our visuals.
+           {¦ -active_ hover mouse: [mouse left]}
+             <> {active: true}
+           ;; Find out whether we just transitioned not(active) -> active, and
+           ;; interpret that as a click.
+           {¦ -clicked_ active node: {¦ -active}}
+             <> {clicked: true})
+         (stage
+           ;; The checkbox's "brain" is just this one tiny rule.
+           {¦ clicked state_boolean} <> {state: ^(not state)})
+         (stage
+           ;; Place checked, hover, and active on the node, but only if state
+           ;; exists (i.e., only if the checkbox is enabled).
+           {¦ state_boolean node: {¦ ⋮checked ⋮enabled}}
+             <> {checked: ^state, enabled: true}
+           {¦ state hover node: {¦ ⋮hover}} <> {hover: true}
+           {¦ state -hover node: {¦ hover_}} <> {(hover): ()}
+           {¦ state active node: {¦ ⋮active}} <> {active: true}
+           {¦ state -active node: {¦ active_}} <> {(active): ()}
+           ;; When there is no state, style the checkbox as disabled.
+           {¦ -state node: {¦ enabled_}} <> {(enabled): ()})))
+
+;; Design reference: https://m3.material.io/components/checkbox/specs
+(Checkbox header_)
+  => (slot
+       (Checkbox ^header
+         (box style: "flow-none content hover:cursor-pointer membrane checked:cue-checked \
+                      hover:cue-hover enabled:cue-enabled"
+               ;; The circle thing around the checkbox on hover.
+               (box style: "bg-theme-subtle in-hover:bg-theme-checked scale-5/3 pivot-center \
+                            floating rounded-full transparent in-enabled:in-hover:opacity-20%")
+               ;; The check and the box.
+               (box style: "rounded-xs border-sm border-theme-highlight-high in-enabled:border-theme-subtle \
+                            text-sm text-theme-text in-checked:bg-theme-highlight-high in-enabled:in-checked:border-theme-checked \
+                            in-enabled:in-checked:bg-theme-checked in-enabled:text-theme-checked in-enabled:text-okl-10%"
+                 (icon "check" style: "transparent in-checked:opaque")))))
