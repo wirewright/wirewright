@@ -553,6 +553,12 @@ vantage: ""
   (utility (prefix "beam-" (one-of beam-thicknesses thickness))
     {selection-thickness: ^thickness}))
 
+;; E.g. sel-tall
+(for text-box
+  (utility (prefix "sel-" (one-of sel-sizes size))
+    {selection-t: ^(value size t),
+     selection-b: ^(value size b)}))
+
 (for text-box
   (utility "sel-aim" {selection-aim: true}))
 
@@ -1327,6 +1333,12 @@ vantage: ""
 
 ;; Designations that target boxes listed here participate in the cascade,
 ;; i.e., are inherited by child boxes of the same type.
+;;
+;; NOTE: Utilities can be given cascade: _ individually, and it'd override
+;; the more general box-cascade. Similarly one can say cascade: (except _*)
+;; which would be a list of node exceptions for a given utility (e.g. `(except icon)`);
+;; nodes falling into the exception list do not participate in the cascade
+;; (most importantly they do not accept cascaded settings).
 (box-cascade
   text-box)
 
@@ -1600,6 +1612,12 @@ vantage: ""
 "thin": 1
 "thick": 2
 "thicker": 3
+
+
+--- (table sel-sizes)
+
+"short": {t: 0.15, b: 0.85}
+"tall": {t: 0, b: 1}
 
 
 --- (table gap-sizes)
