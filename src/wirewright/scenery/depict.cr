@@ -353,7 +353,10 @@ module Ww::Scenery
 
     private def process(item : IBeam) : Nil
       selection = item.selection
+      # Determine initial I-beam bounds.
       bounds = Rect[@x, @y, selection.thickness, @node.line_height]
+      # Then scale using extents.
+      bounds = Rect.scale(bounds, unit: selection.extents)
 
       @cursors << DrawRect.new(bounds, fill: Paint::Solid.new(selection.fill))
     end
