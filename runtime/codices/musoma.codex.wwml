@@ -552,6 +552,21 @@ history-limit: 128
        (atom type: (expander ^addr icon: "chevron_right") mass: 0)
        (term ^call))
 
+;; Device widget
+
+(open-device-widget addr_ node_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       ^(view node))
+
+(closed-device-widget addr_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (inline
+         (group detail: (dict generic lbr: "(" rbr: ")")
+           (atom "device" type: symbol)
+           (atom "…" type: punct))))
+
 ;; Rewriter widget
 
 (open-rewriter-widget addr_ node_)

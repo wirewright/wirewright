@@ -80,14 +80,14 @@ module MuSoma
     #
     # Some nodes are classified differently during pretty-printing / fbR compared
     # with step. For example, some visually closed parent nodes (e.g. `section`)
-    # are classified as ground nodes to avoid pointless processing their insides.
+    # are classified as ground nodes to avoid pointless processing of their children.
     #
     # Moreover, some nodes are mixtures, so they are "ephemeral": they aren't actual
     # nodes, just "bidi macros". That's a problem if we want to deliver something
     # to such a node, or, more importantly, to something inside it; and not the thing(s)
     # it expands to. For this reason fbclf re-classifies such nodes as ground or
-    # parent nodes, if possible. If this is impossible, then that node can't be
-    # interactive; it's as simple as that.
+    # parent nodes, if possible. If this is impossible, then you can't interact with
+    # that node; it's as simple as that.
     def self.fbclf : D7::Classifier
       successor = MuSoma.clf
 
@@ -139,6 +139,13 @@ module MuSoma
 
           matchpi %{[rewriter _*]} do
             continue if feature.is_a?(D7::Inert)
+
+            D7.gnd(node)
+          end
+
+          matchpi %{(device _* ⍊ -open)} do
+            continue if feature.is_a?(D7::Inert)
+            continue if MuSoma.editing?(node)
 
             D7.gnd(node)
           end
@@ -216,6 +223,10 @@ module MuSoma
           Term.of(:"open-rewriter-widget", addr, node)
         end
 
+        matchpi %{(device _* ⍊ -open)} do
+          Term.of(:"closed-device-widget", addr)
+        end
+
         matchpi %{(slot call_ _ ⍊ -open)} do
           Term.of(:"closed-slot-widget", addr, call)
         end
@@ -288,6 +299,10 @@ module MuSoma
 
         matchpi %{(rule _ _ ⍊ doc⋮ () open)} do
           Term.of(:"open-rule-widget", addr, doc, repr)
+        end
+
+        matchpi %{(device _* ⍊ open)} do
+          Term.of(:"open-device-widget", addr, repr)
         end
 
         otherwise do
