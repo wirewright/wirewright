@@ -2617,7 +2617,10 @@ module Ww::Rack
       # |@key history
       # A sliding window of at most *limit* samples of the value at *edge*. A value
       # is only appended to history if it is different from the previous value.
-      # Absences are not recorded. The previous value is retrieved from *history* itself.
+      # Absences are not recorded.
+      #
+      # NOTE: The previous value (the value to check difference against) is retrieved
+      # from *history* itself.
       #
       # |@summary
       # Keeps a log of values at a place.
@@ -3965,24 +3968,23 @@ module Ww::Rack
       # The edge where the node should search for the cell with a list of values.
       #
       # |@key value rack.edge
-      # The edge of the cell containing the item assigned by the supervisor. Each
-      # member device is instantiated with such a cell. For example, if the list
-      # `(1 2 3)` is at the *values* edge, and *value* is `@x`, the *pool* will
-      # contain the following devices:
+      # The edge of the cell containing the item assigned by the supervisor to a member
+      # device. For example, if the list `(1 2 3)` is at the *values* edge, and *value*
+      # is `@x`, the *pool* will contain the following devices:
       #
       # ```wwml
-      # (device {}
+      # (device
       #   (cell @x 1)
       #   ...)
-      # (device {}
+      # (device
       #   (cell @x 2)
       #   ...)
-      # (device {}
+      # (device
       #   (cell @x 3)
       #   ...)
       # ```
       #
-      # In the above, `...` contains all of *children*.
+      # In the above, `...` denotes all of *children*.
       #
       # |@key pattern m1.operator
       # The pattern used to extract the *key* for each item in the *values* list.
@@ -3991,8 +3993,8 @@ module Ww::Rack
       #
       # The set of keys determines the population of the pool. For each unique key,
       # a member device is created; when the key disappears, the corresponding device
-      # is removed. Keys must uniquely identify items. Otherwise, the item(s) and
-      # device(s) are ignored -- the supervisor node is "confused" by them.
+      # is removed. Keys must uniquely identify items. Otherwise, the respective item(s)
+      # and device(s) are ignored -- the supervisor node is "confused" by them.
       #
       # |@key pool rack.edge
       # The edge of the pool where member devices are maintained.
