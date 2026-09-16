@@ -179,15 +179,18 @@ module Ww::D7
   # :nodoc:
   #
   # Implementation of the merge algorithm used by D7.
-  def merge(proposals : Indexable(Patch), & : NodeId -> {Term, MergePolicy}) : Patch
+  #
+  # Returns the merged Patch and a boolean indicating whether one or more *proposals*
+  # were rejected.
+  def merge(proposals : Indexable(Patch), & : NodeId -> {Term, MergePolicy}) : {Patch, Bool}
     # Fast path for when there are no proposals whatsoever.
     if proposals.empty?
-      return Patch.new
+      return Patch.new, false # nothing rejected
     end
 
     # Fast path for when there is just one proposal.
     if patch = proposals.single?
-      return patch
+      return patch, false # nothing rejected
     end
 
     if Patch.compatible?(proposals)
@@ -199,7 +202,7 @@ module Ww::D7
         end
       end
 
-      return patch
+      return patch, false # nothing rejected
     end
 
     nodetab = {} of NodeId => MergeNode
@@ -333,7 +336,7 @@ module Ww::D7
       patch = patch.assoc(node_id, Term.of(mutation.apply(merge_node.reference.as_d))) # ?!
     end
 
-    patch
+    {patch, proposals_rejected.present?}
   end
 
   private def proposal_rank(proposal : Patch) : Slice(Term)
@@ -344,10 +347,11 @@ module Ww::D7
   end
 
   def merge(hg : Hypergraph, proposals : Indexable(Patch)) : Patch
-    merge(proposals) do |node_id|
+    patch, _ = merge(proposals) do |node_id|
       node = hg[node_id]
       {node.term, node.merge_policy}
     end
+    patch
   end
 
   # Performs *frame fusion*.
