@@ -3,447 +3,447 @@ module Ww::Rack::Part
   extend self
 
   # :nodoc:
-  defcase PartNode,
-    node : D7::Node,
-    abs_whole : D7::AbsEdge,
-    rel_part_edge : Term,
-    abs_part_edge : D7::AbsEdge,
-    pattern : M1::Op::Any
-
-  # :nodoc:
-  #
-  # For example:
-  #
-  #   (cell @xs (1 (2) 3))       < part source
-  #
-  #   (part (@xs @a) (_ a_ _))   < IntermediateRWPart
-  #   (part (@xs @xt) (_* `xt))  < WPart
-  #
-  #   (part (@a @val) (val_))    < IntermediateRWPart -> RWPart
-  #   (part (@a @yt) (_* `yt))   < IntermediateRWPart -> WPart
-  alias PartChain = IntermediateRWPart | RWPart | WPart
-
-  # :nodoc:
-  defcase IntermediateRWPart,
-    part : PartNode,
-    log : M1::Log::SealedOne,
-    matchee : Term,
-    successor : PartChain
-
-  # :nodoc:
-  defcase RWPart,
-    part : PartNode,
-    log : M1::Log::SealedOne,
-    matchee : Term
-
-  # :nodoc:
-  defcase WPart,
-    part : PartNode,
-    log : M1::Log::SealedOne
-
-  private def each(chain : PartChain, & : PartChain ->) : Nil
-    while chain.is_a?(IntermediateRWPart)
-      yield chain
-      chain = chain.successor
-    end
-
-    yield chain
-  end
-
-  defrecord PartTree,
-    source_node : D7::Node,
-    source_value : Term,
-    chains : Array(PartChain)
+  SYM_PART = Term.of(:part)
 
   def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
     # Fast path.
-    unless graph = graph?(hg)
+    unless hg.has_head?(SYM_PART)
       return fn.call(hg)
     end
 
-    rgraph = reverse_graph(graph)
-
-    forest = {} of D7::AbsEdge => PartTree
-    graph.each do |whole, children|
-      next unless source_cell = Rack.cell?(hg, whole)
-      next unless source_value = source_cell.value?
-
-      chains = [] of PartChain
-      each_chain(graph, rgraph, whole, source_value) do |chain|
-        chains << chain
-      end
-
-      forest[whole] = PartTree.new(source_cell.node, source_value, chains)
-    end
-
-    replacements = {} of D7::NodeAddr => D7::Gnd
-    replaced = Set(D7::NodeId).new
-
-    forest.each do |_, tree|
-      tree.chains.each do |chain|
-        each(chain) do |element|
-          part = element.part
-
-          replacements.put_if_absent(part.node.addr) do
-            replaced << part.node.id
-
-            case element
-            in WPart
-              D7.gnd(Term.of(:cell, {:seq, part.rel_part_edge}), part.rel_part_edge)
-            in RWPart, IntermediateRWPart
-              D7.gnd(Term.of(:cell, {:seq, part.rel_part_edge}, element.matchee), part.rel_part_edge)
-            end
-          end
-        end
-      end
-    end
-
+    roots, forms, layers, rejected_abs_parts = collect(hg)
+    replacements, replaced = submit(forms, rejected_abs_parts)
     patch = fn.call(hg.gnd_map(replacements))
-    updates = D7::Patch.new
+    updates = absorb(layers, rejected_abs_parts, patch)
+    merge(patch, replaced, roots, updates)
+  end
 
-    forest.each do |whole, tree|
-      next if whole.in?(patch)
+  # :nodoc:
+  alias Form = ReadWriteForm | WriteOnlyForm
 
-      proposals = {} of M1::Log::SealedOne => Array({Term, Term::Dict})
-      changed = Pf::USet32.new
+  # :nodoc:
+  defrecord ReadWriteForm,
+    id : D7::NodeId,
+    addr : D7::NodeAddr,
+    abs_whole : D7::AbsEdge,
+    abs_part : D7::AbsEdge,
+    rel_part : Term,
+    update : Term::Rep -> Term::Rep?,
+    reference : Term,
+    value : Term
 
-      tree.chains.each do |chain|
-        # Go from root-most to leaf-most part. If a part changes, then all parts
-        # below it must be ignored -- their changes, if any, were overwritten:
-        #
-        #   (cell @xs (1 (2) 3))
-        #   (part (@xs @x) (_ x_ _))
-        #   (part (@x @y) (y_))
-        #   (discard @x)
-        #   (backsys @y ±n <> {n: ^(+ n 1)})
-        #
-        # Here, no matter what happens to @y (which comes later in the chain), we should
-        # just remove @x and move on.
-        each(chain) do |element|
-          part = element.part
-          next unless replacement = patch[part.node.id]?
+  # :nodoc:
+  defrecord WriteOnlyForm,
+    id : D7::NodeId,
+    addr : D7::NodeAddr,
+    abs_whole : D7::AbsEdge,
+    abs_part : D7::AbsEdge,
+    rel_part : Term,
+    update : Term::Rep -> Term::Rep?,
+    reference : Term
 
-          unless element.is_a?(WPart)
-            break if changed.includes?(part.node.id)
+  # :nodoc:
+  alias Variant = PatternVariant | BacksysVariant
+
+  # :nodoc:
+  defcase PatternVariant,
+    whole_edge : Term,
+    part_edge : Term,
+    whole_capture : Term,
+    part_capture : Term,
+    pattern : M1::Op::Any
+
+  # :nodoc:
+  defcase BacksysVariant,
+    whole_edge : Term,
+    part_edge : Term,
+    whole_capture : Term,
+    part_capture : Term,
+    backsys : Slice({M1::Op::Any, Term::Dict})
+
+  private def recognize?(term : Term) : Variant?
+    Term.case(term) do
+      matchpi %{[part (whole←(%'edge input_) part←(%'edge output_)) [backmap _ _] _*]} do
+        backmaps = term.items.move(2)
+        backsys = backmaps.to_compact_readonly_slice do |backmap|
+          Term.matchpiT?(backmap, %{[backmap pattern_ backspec_dict]}) do
+            {M1.operator(pattern), backspec}
           end
-
-          _, capture = part.rel_part_edge
-          backspec = nil
-
-          Term.case(replacement) do
-            matchpi %{[cell _ value_]} do
-              if value.type.dict? || value.type.symbol?
-                backspec = Term[].with(capture, {:"^verbatim", value})
-              else
-                # Do not waste time doing ^verbatim stuff on terms that cannot cause
-                # us trouble: booleans, numbers, etc.
-                backspec = Term[].with(capture, value)
-              end
-            end
-
-            matchpi %{[cell _]} do
-              backspec = Term[].with({capture}, Term[])
-            end
-
-            otherwise { }
-          end
-
-          next if backspec.nil?
-
-          bucket = proposals.put_if_absent(element.log) { [] of {Term, Term::Dict} }
-          bucket << {capture, backspec}
-          changed = changed.add(part.node.id)
-          break
         end
+
+        BacksysVariant.new(whole, part, input, output, backsys)
       end
 
-      staging = [] of {M1::Log::SealedOne, Term, Term::Dict}
-
-      # Filter conflicting proposals or "horizontal conflicts" out.
-      #
-      #   (cell @xs (1 2 3))
-      #   (part (@xs @x) (x_ _ _))
-      #   (part (@xs @y) (x_ _ _))
-      #   ;; modify @x
-      #   ;; modify @y
-      #   ;; => bucket contains two changes for the same spot!
-      #   ;; => both eliminated
-      proposals.each do |log, bucket|
-        next unless row = bucket.single?
-
-        capture, backspec = row
-        staging << {log, capture, backspec}
+      matchpi %{[part (whole←(%'edge input_) part←(%'edge output_)) pattern_]} do
+        PatternVariant.new(whole, part, input, output, M1.operator(pattern))
       end
 
-      # Here we do something very important.
-      #
-      # Backmaps will consider it a conflict when a nested mutation is stomped over
-      # by an outer mutation from a different backmap agent. That is, e.g., if one
-      # agent wants to mutate a list item, and another one wants to destroy or completely
-      # rewrite the list, that's a conflict to the backmap engine. It will use the standard
-      # conflict resolution procedure of kicking out agents one after another in
-      # the order we write them in the backsystem. The closer an agent is to
-      # the beginning of the backsystem, the earlier will it be kicked out.
-      #
-      # What `part`s should do is not blindly block things, but instead allow
-      # specifically the *parent* mutation to succeed -- parts should allow
-      # the parent `part` to overwrite a child `part`'s mutation:
-      #
-      #   (cell @xs (1 (2) 3))
-      #   (part (@xs @x) (_ x_ _))
-      #   (part (@x @y) (y_))
-      #   ;; modify @x
-      #   ;; modify @y
-      #   ;; => @y modification should be stomped over by @x
-      #
-      # Whether this is a sane default is a different question; but the other simple
-      # way to resolve something like this -- toggling what's from the user's point of
-      # view a random part off -- is *definitely* worse. The third, and possibly correct
-      # solution, is to kick out all conflicting parts like we do above for "horizontal"
-      # conflicts. The problem with this is that the circuit *already run* under
-      # the assumption that some values were removed etc. We have to preserve that
-      # at least logically. Allowing parents to win is the best choice, I think.
-      #
-      # Not that any of this is commonly met in practice!
-      staging.unstable_sort_by! do |log, capture, _|
-        {-M1::Log.size(log.seq), capture}
-      end
-
-      backsys = [] of {M1::EnvLogList, Term::Dict}
-      staging.each do |log, capture, backspec|
-        log_list = Slice[{capture, log}]
-        env_log_list = Slice[{Term[], log_list}]
-        backsys << {env_log_list, backspec}
-      end
-
-      update = M1.backmapR(backsys, tree.source_value)
-      if update.empty?
-        # (cell @x (1 2 3))
-        # (part (@x @y) y_)
-        # (discard @y)
-        updates = D7.patches(updates, D7.patch(tree.source_node, {2, nil}))
-      else
-        updates = D7.patches(updates, D7.patch(tree.source_node, {2, Term.collapse(update)}))
-      end
-    end
-
-    # Remove `part` -> `cell` replacements from the resulting patch.
-    if replaced.size <= patch.size
-      replaced.each do |id|
-        patch = patch.dissoc(id)
-      end
-    else
-      patch.each do |id, _|
-        next unless id.in?(replaced)
-
-        patch = patch.dissoc(id)
-      end
-    end
-
-    D7.merge(hg, {patch, updates})
-  end
-
-  # Finds all `part` nodes and builds a graph of them.
-  #
-  # For example:
-  #
-  #   (part (@xs @x))
-  #   (part (@xs @y))
-  #   (part (@y @z))
-  #   (part (@ys @x))
-  #
-  # ...produces:
-  #
-  #   @xs: @x @y
-  #   @ys: @x
-  #   @y: @z
-  private def graph?(hg : D7::Hypergraph) : Hash(D7::AbsEdge, Array(PartNode))?
-    graph = nil
-
-    hg.each_node_with_head(Term.of(:part)) do |candidate|
-      Term.matchpi?(candidate.term, %{[part (@whole_ @part_) pattern_]}) do
-        abs_whole = hg.resolve(candidate.addr, whole)
-        abs_part = hg.resolve(candidate.addr, part)
-        node = PartNode.new(candidate, abs_whole, part, abs_part, M1.operator(pattern))
-
-        graph ||= {} of D7::AbsEdge => Array(PartNode)
-        children = graph.not_nil!.put_if_absent(abs_whole) { [] of PartNode }
-        children << node
-      end
-    end
-
-    graph
-  end
-
-  # Builds a graph associating *parts* with *wholes*. Effectively, this is the reverse
-  # of the part `graph?` (which associates *wholes* with their *parts*).
-  #
-  # For example:
-  #
-  #   (part (@xs @x))
-  #   (part (@xs @y))
-  #   (part (@y @z))
-  #   (part (@ys @x))
-  #
-  # ...produces:
-  #
-  #   @x: @xs @ys
-  #   @y: @xs
-  #   @z: @y
-  private def reverse_graph(graph : Hash(D7::AbsEdge, Array(PartNode))) : Hash(D7::AbsEdge, Array(D7::AbsEdge))
-    rgraph = {} of D7::AbsEdge => Array(D7::AbsEdge)
-
-    graph.each do |whole, parts|
-      parts.each do |part|
-        wholes = rgraph.put_if_absent(part.abs_part_edge) { [] of D7::AbsEdge }
-        wholes << whole
-      end
-    end
-
-    rgraph
-  end
-
-  # (cell @xs (1 2 3))          < root
-  #   (part (@xs @a) (a_ _ _))  }
-  #   (part (@xs @b) (_ b_ _))  } children
-  #   (part (@xs @c) (_ _ c_))  }
-  private def each_chain(graph, rgraph, root : D7::AbsEdge, matchee : Term, &fn : PartChain ->) : Nil
-    return unless children = graph[root]?
-
-    children.each do |part|
-      each_chain(graph, rgraph, part, matchee, M1::Log.root, fn)
+      otherwise { }
     end
   end
 
-  private def each_chain(graph, rgraph, part : PartNode, matchee : Term, prefix : M1::Log::SeqOne, fn) : Nil
-    #                                          This part is invalid and should be ignored, along with
-    #                                          all of its children (if any).
-    #                                          ------------
-    #   (cell @cell0 ...) - (part @cell0 @x) - (part @x @y) - ...
-    #   (cell @cell1 ...) - (part @cell1 @x) /
-    sources = rgraph[part.abs_whole]?
-    return unless sources.nil? || sources.size == 1
+  private def value_of_cell?(patch : D7::Patch, id : D7::NodeId) : Term::Rep?
+    return unless rep = patch[id]?
 
-    return unless env_log_lists = M1.matches_and_logs(Term[], part.pattern, matchee)
-    return if env_log_lists.empty?
-
-    # (part (@xs @⏏a⏏) (a_ _ _))
-    _, capture = part.rel_part_edge
-
-    continuations = continue(prefix, env_log_lists, capture)
-    continuation0 = continuations.next
-    return unless continuation0.is_a?(Continuation)
-    continuation1 = continuations.next
-
-    # If matches has size 1, the we can put it in a cell:
-    #
-    #   (cell @whole (1 2 3))
-    #   (part (@whole @n) ⟨±n⟩)
-    #
-    # ... should turn into:
-    #
-    #   (cell @whole (1 2 3))
-    #   (cell @n 1)
-    #
-    # However if there are many matches:
-    #
-    #   (cell @whole (1 2 3))
-    #   (part (@whole @n) ⟨±n⟩°)
-    #
-    # ... it makes no sense to have multiple cells; nor can we have just one cell,
-    # because it is not clear what to put there. Instead, we create an empty cell:
-    #
-    #   (cell @whole (1 2 3))
-    #   (cell @n)
-    #
-    # ... and allow *replacements* to occur. So if I write `100` to @n:
-    #
-    #   (cell @whole (1 2 3))
-    #   (cell @n 100)
-    #
-    # ... we would need to "unpack" this like so:
-    #
-    #   (cell @whole (100 100 100))
-    #   (part (@whole @n) ⟨±n⟩°)
-    #
-    # Notice how this treatment (part_value : Nil) is similar to the treatment
-    # of %slots:
-    #
-    #   (cell @whole (1 2 3))
-    #   (part (@whole @a) (_* `a))
-    if continuation1.is_a?(Continuation)
-      fn.call(WPart.new(part, M1::Log.seal(continuation0.log)))
-      fn.call(WPart.new(part, M1::Log.seal(continuation1.log)))
-      continuations.each do |continuation|
-        fn.call(WPart.new(part, M1::Log.seal(continuation.log)))
-      end
-      return
-    end
-
-    # There is only one continuation, *continuation0*. That is, between:
-    #
-    #   (cell @whole (1 2 3))
-    #   (part (@whole @n) ⟨±n⟩°)
-    #
-    # ... and:
-    #
-    #   (cell @whole (1 2 3))
-    #   (part (@whole @n) (n_ _ _))
-    #
-    # ... we are in the *latter*.
-
-    log = continuation0.log
-    sealed_log = M1::Log.seal(log)
-
-    # Write-only part. Such parts cannot have children (even if they do
-    # in the circuit):
-    #
-    #   (cell @whole ())
-    #   (part (@whole @tail) (_* `tail))
-    unless submatchee = continuation0.env[capture]?
-      fn.call(WPart.new(part, sealed_log))
-      return
-    end
-
-    # Readable and writable part.
-    fn.call(RWPart.new(part, sealed_log, submatchee))
-
-    return unless children = graph[part.abs_part_edge]?
-
-    children.each do |child|
-      sink = ->(chain : PartChain) do
-        fn.call(IntermediateRWPart.new(part, sealed_log, submatchee, successor: chain))
-      end
-
-      each_chain(graph, rgraph, child, submatchee, log, sink)
+    Term.case(rep) do
+      matchpi %{[cell _]} { Term.rep }
+      matchpi %{[cell _ value_]} { Term.rep(value) }
+      otherwise { }
     end
   end
 
   # :nodoc:
-  defrecord Continuation, env : Term::Dict, log : M1::Log::SeqOne
+  MAX_COLLECT_ITERATIONS = 128
 
-  private def continue(prefix : M1::Log::SeqOne, env_log_list : M1::EnvLogList, capture : Term) : Iterator(Continuation)
-    env_log_list.each.compact_map do |row|
-      # Find the log corresponding to *capture*.
-      env, log_list = row
-      next unless row = log_list.find { |name, _| name == capture }
+  private def collect(hg : D7::Hypergraph)
+    forms = {} of D7::AbsEdge => Form
+    staging_forms = {} of D7::AbsEdge => Form
+    rejected_abs_parts = Set(D7::AbsEdge).new
+    roots = {} of D7::NodeId => {D7::AbsEdge, Cell}
+    layers = [] of Array(Form)
+    seen = Set(D7::NodeId).new
 
-      _, suffix = row
+    MAX_COLLECT_ITERATIONS.times do
+      hg.each_node_with_head(SYM_PART) do |node|
+        next if seen.includes?(node.id)
+        next unless variant = recognize?(node.term)
 
-      # The log for *capture* is a *suffix*. We need to append it to *prefix* to
-      # obtain the full log.
-      log = prefix
-      suffix_seq = M1::Log::SeqSlice.new(suffix.seq)
-      suffix_seq.each do |action|
-        log = M1::Log.append(log, action)
+        abs_part = hg.resolve(node.addr, variant.part_edge)
+        next if rejected_abs_parts.includes?(abs_part)
+        abs_whole = hg.resolve(node.addr, variant.whole_edge)
+
+        whole_form = forms[abs_whole]?
+
+        case whole_form
+        in Nil
+          root = Rack.cell?(hg, abs_whole)
+          unless matchee = root.try(&.value?)
+            # An unconditional skip:
+            #
+            #   (cell @root)
+            #   ⏏(part (@root @a) (+ a_ _))⏏
+            #
+            # There's no way the pattern can match -- neither in the backsys, nor in
+            # the pattern variant.
+            next
+          end
+
+          # (cell @root (+ 1 2))
+          # ⏏(part (@root @a) (+ a_ _))⏏
+        in ReadWriteForm
+          # Parts from previous layers are treated as cells. For example:
+          #
+          #   (cell @root (+ (1) 2))
+          #   (part (@root @lhs) (+ a_ _))
+          #   ⏏(part (@lhs @x) (x_))⏏
+          #
+          # Here, the first `part` is already transformed to:
+          #
+          #   (cell @root (+ (1) 2))
+          #   (cell @lhs (1))
+          #              ---
+          #              whole_form.value
+          #   ⏏(part (@lhs @x) (x_))⏏
+          #
+          # via `forms`, which we read here and treat as the matchee.
+          matchee = whole_form.value
+        in WriteOnlyForm
+          # In the following:
+          #
+          #   (cell @root ())
+          #   (part (@root @tail) (_* `tail))
+          #   ⏏(part (@tail @a) (+ a_ _))⏏
+          #
+          # @tail does not actually exist. It is a write-only form:
+          #
+          #   (cell @root ())
+          #   (cell @tail)
+          #   ⏏(part (@tail @a) (+ a_ _))⏏
+          #
+          # So we skip it immediately. There is no way a pattern or backsys variant
+          # can match.
+          next
+        end
+
+        # Mark as seen parts that had a chance to examine a value.
+        seen << node.id
+
+        case variant
+        in BacksysVariant
+          # Ask the backsystem {whole: _}, it should reply with at least {part: _}, but usually
+          # it will reply with {whole: _, part: _} (i.e. extend our query).
+          query = Term.of(Term[].with(variant.whole_capture, matchee))
+          reply = M1.backmap(variant.backsys, query)
+          next unless output = reply.as_d?
+
+          update = updatef(variant, matchee)
+
+          if value = reply[variant.part_capture]?
+            part_form = ReadWriteForm.new(node.id, node.addr, abs_whole, abs_part, variant.part_edge, update, matchee, value)
+          else
+            part_form = WriteOnlyForm.new(node.id, node.addr, abs_whole, abs_part, variant.part_edge, update, matchee)
+          end
+        in PatternVariant
+          env_log_lists = M1.matches_and_logs(Term[], variant.pattern, matchee)
+          # Skip this `part` if there are no matches whatsoever.
+          next if env_log_lists.empty?
+
+          update = updatef(variant, matchee, env_log_lists)
+
+          part_form = pass do
+            next unless env_log_list = env_log_lists.single?
+
+            env, _ = env_log_list
+            next unless value = env[variant.part_capture]?
+
+            # We can only make a read-write cell if there's just one match.
+            #
+            #   (cell @root (+ 1 2))
+            #   (part (@root @a) (+ a_ _))
+            ReadWriteForm.new(node.id, node.addr, abs_whole, abs_part, variant.part_edge, update, matchee, value)
+          end
+
+          # Otherwise we're confused so we make a write-only cell.
+          #
+          #   (cell @root (1 2 3 4 5))
+          #   (part (@root @n) ⟨±n⟩°)
+          #
+          # In this example, we'd like writes to @n to succeed and replace numbers
+          # in @root, but allowing *reads* from @n does not make any sense.
+          part_form ||= WriteOnlyForm.new(node.id, node.addr, abs_whole, abs_part, variant.part_edge, update, matchee)
+        end
+
+        # If the pattern matches, only then do we reject conflicting parts, i.e.,
+        # we reject *conflicting matching parts*, and not e.g. mutually exclusive
+        # parts sitting on the same part edge. That is:
+        #
+        #   (part (@xs @x) (`x))
+        #   (part (@xs @x) (x_))
+        #
+        # ... is valid, whereas:
+        #
+        #   (part (@xs @x) (x_ _))
+        #   (part (@xs @x) (_ x_))
+        #
+        # ... is not.
+        if forms.has_key?(abs_part) || staging_forms.has_key?(abs_part)
+          rejected_abs_parts << abs_part
+          next
+        end
+
+        staging_forms[abs_part] = part_form
+
+        if root
+          roots[root.node.id] = {abs_whole, root}
+        end
       end
 
-      # If the log reaches into something that can't be reached, it'd be None,
-      # so we reject it. Think (%pipe size ±n). A reference to `n` would be None,
-      # because it's "virtual" -- it doesn't make sense to independently change `n`.
-      next if log.is_a?(M1::Log::None)
+      break if staging_forms.empty?
 
-      Continuation.new(env, log)
+      # Merge
+      layer = [] of Form
+      staging_forms.each do |addr, form|
+        layer << form
+        forms[addr] = form
+      end
+      layers << layer
+    ensure
+      staging_forms.clear
     end
+
+    {roots, forms, layers, rejected_abs_parts}
+  end
+
+  private def updatef(variant : BacksysVariant, matchee : Term)
+    ->(rep : Term::Rep) do
+      query = Term.of(
+        Term[]
+          .with(variant.whole_capture, matchee)
+          .with(variant.part_capture, Term.collapse(rep))
+      )
+      reply = M1.backmap(variant.backsys, query)
+      return unless output = reply.as_d?
+
+      value = output[variant.whole_capture]?
+
+      # If we query:
+      #
+      #   {whole: _, part: _}
+      #
+      # ... and the backsystem responds with something that lacks `whole`, this means,
+      # from our point-of-view, that the backsystem removed whole in response to part.
+      # We map this to clearing of the corresponding cell.
+      value ? Term.rep(value) : Term.rep
+    end
+  end
+
+  private def updatef(variant : PatternVariant, matchee : Term, env_log_lists : M1::EnvLogList)
+    ->(rep : Term::Rep) do
+      backspec = pass do
+        # This should remove `1`:
+        #
+        #   (cell @root (+ 1 2))
+        #   (part (@root @a) (+ a_ _))
+        #   (discard @a)
+        #
+        # like so:
+        #
+        #   (cell @root (+ 2))
+        if rep.empty?
+          next Term[].with({variant.part_capture}, Term[])
+        end
+
+        value = Term.collapse(rep)
+
+        if value.type.dict? || value.type.symbol?
+          Term[].with(variant.part_capture, {:"^verbatim", value})
+        else
+          # Do not waste time doing ^verbatim stuff on terms that cannot cause
+          # us trouble: booleans, numbers, etc.
+          Term[].with(variant.part_capture, value)
+        end
+      end
+
+      backmap = {env_log_lists, backspec}
+      M1.backmapR({backmap}, matchee).as(Term::Rep?)
+    end
+  end
+
+  private def submit(forms : Hash(D7::AbsEdge, Form), rejected_abs_parts)
+    replacements = {} of D7::NodeAddr => D7::Gnd
+    replaced = Set(D7::NodeId).new
+
+    forms.each do |_, form|
+      next if form.abs_part.in?(rejected_abs_parts)
+
+      case form
+      in WriteOnlyForm
+        replacements[form.addr] = D7.gnd(Term.of(:cell, form.rel_part), form.rel_part)
+      in ReadWriteForm
+        replacements[form.addr] = D7.gnd(Term.of(:cell, form.rel_part, form.value), form.rel_part)
+      end
+
+      replaced << form.id
+    end
+
+    {replacements, replaced}
+  end
+
+  # `part`s must now "absorb" their corresponding changes bottom-up.
+  private def absorb(layers : Array(Array(Form)), rejected_abs_parts, patch : D7::Patch) : Hash(D7::AbsEdge, Term::Rep)
+    updates = {} of D7::AbsEdge => Term::Rep
+
+    staging_updates = {} of D7::AbsEdge => {Term, Array(Term::Rep)}
+    staging_updates_clash = false
+
+    layers.reverse_each do |layer|
+      layer.each do |form|
+        next if form.abs_part.in?(rejected_abs_parts)
+
+        rep = value_of_cell?(patch, form.id) || updates[form.abs_part]?
+        next if rep.nil?
+        next unless update = form.update.call(rep)
+
+        reference, bucket = staging_updates.put_if_absent(form.abs_whole) { {form.reference, [] of Term::Rep} }
+        assert reference == form.reference
+
+        bucket << update
+        if bucket.size > 1
+          staging_updates_clash = true
+        end
+      end
+
+      # Fast path: merge immediately if all buckets contain just one replacement.
+      unless staging_updates_clash
+        staging_updates.each do |abs_whole, (_, bucket)|
+          updates[abs_whole] = bucket.single
+        end
+        next
+      end
+
+      # Here we "cheat" a little and just use our new Term diff algorithm and D7.merge
+      # to do the hard work of reconciling the changes.
+      #
+      # NOTE: I'm not sure this much machinery is justified... On one hand we do backmaps,
+      # on another we do a full-blown `D7.merge`... I suspect we'll use the term diff
+      # algorithm in backmaps at some point in the future, though. The current impementation
+      # of backmaps is rather... strange, to say the least, and I find it just barely
+      # comprehensible.
+
+      staging_updates.each do |abs_whole, (reference, bucket)|
+        if rep = bucket.single? # Fast path
+          updates[abs_whole] = rep
+          next
+        end
+
+        # We translate the change bucket to a list of conflicting patches to a virtual
+        # `(wrapper _?)` node. We need a wrapper node to represent erasure (`rep.empty?`)
+        proposals = bucket.map do |member_rep|
+          if member_rep.empty?
+            D7::Patch.assoc(0u32, Term.of(:wrapper, nil))
+          else
+            D7::Patch.assoc(0u32, Term.of(:wrapper, Term.collapse(member_rep)))
+          end
+        end
+
+        merged_patch, _ = D7.merge(proposals) do |id|
+          assert id == 0u32
+
+          # Use the `space` merge policy to merge deeply.
+          {Term.of(:wrapper, reference), D7::MergeDiff.new(UInt32::MAX)}
+        end
+
+        next unless wrapper_rep = merged_patch[0u32]?
+
+        Term.case(wrapper_rep) do
+          matchpi %{(wrapper)} do
+            updates[abs_whole] = Term.rep
+          end
+
+          matchpi %{(wrapper value_)} do
+            updates[abs_whole] = Term.rep(value)
+          end
+        end
+      end
+    ensure
+      staging_updates.clear
+    end
+
+    updates
+  end
+
+  private def merge(
+    patch : D7::Patch,
+    replaced : Set(D7::NodeId),
+    roots : Hash(D7::NodeId, {D7::AbsEdge, Cell}),
+    updates : Hash(D7::AbsEdge, Term::Rep),
+  ) : D7::Patch
+    # Remove patches to `cell`s we've replaced `part`s with.
+    replaced.each do |id|
+      patch = patch.dissoc(id)
+    end
+
+    # Update roots.
+    roots.each do |_, (edge, root)|
+      next unless update = updates[edge]?
+
+      # Map empty term replacements to clearing of the root cell. E.g.:
+      #
+      #   (cell @root (+ 1 2))
+      #   (part (@root @x) x_)
+      #   (discard @x)
+      #
+      # ... should result in:
+      #
+      #   (cell @root)
+      value = nil
+      if update.present?
+        value = Term.collapse(update)
+      end
+
+      patch = D7.patches(patch, D7.patch(root.node, {2, value}))
+    end
+
+    patch
   end
 end

@@ -506,7 +506,8 @@ module Ww::Rack
       #
       # |@pattern
       # [part (@src_ @dst_) pattern_]
-      matchpi %{[part (@src_ @dst_) _]} do
+      # [part (@src_ @dst_) [backmap _ _] _*]
+      matchpi %{[part (@src_ @dst_) _*]} do
         D7.gnd(node, src, dst)
       end
 
