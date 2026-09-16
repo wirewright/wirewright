@@ -23,7 +23,7 @@
   {¦ run_: (_+) tasks: (_* `>run)}
     <> {(n): (), run: (), >run: ^run}
   ;; Announce completion.
-  {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () (device (cell @l _) _*) min: 0)}
+  {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () [device (cell @l _) _*] min: 0)}
     <> {(unsorted): (), sorted: ^run, (run): ()})
 
 (comment
@@ -36,11 +36,11 @@
    to take it immediately.")
 (rewriter ((scanR (rulesetR) axis: pool) - {@:tasks, @:pool})
   ;; Give work from the tasks to each device in the pool.
-  {¦ pool: (device (cell @l `>l) (cell @r `>r) (cell @out `out) _*)
+  {¦ pool: [device (cell @l `>l) (cell @r `>r) (cell @out `out) _*]
      tasks: (l_ r_ _*)}
     <> {>l: ^l, >r: ^r, out: (), (l): (), (r): ()}
   ;; Collect completed work from each device into the tasks.
-  {¦ pool: (device (cell @l l←()) (cell @r r←()) (cell @out result_) _*)
+  {¦ pool: [device (cell @l l←()) (cell @r r←()) (cell @out result_) _*]
      tasks: (_* `>result)}
     <> {(l): (), (r): (), (result): (), >result: ^result})
 

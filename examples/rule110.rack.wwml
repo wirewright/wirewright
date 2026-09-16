@@ -1,11 +1,8 @@
 ;; You can run this using MuSoma or irack. If you zoom out you'll see
 ;; the standard rule 110 pattern.
 
-(cell @worlds
-  ())
-
+(log (@world limit: 64))
 (cell @world (. . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . O))
-(feed (copy @world) (@worlds back))
 
 ;; Rule 110
 ;;  0 -> .
