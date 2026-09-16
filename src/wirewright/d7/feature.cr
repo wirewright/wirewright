@@ -308,6 +308,9 @@ module Ww::D7
 
   struct TreeSummary
     # :nodoc:
+    #
+    # NOTE: levels are stored in reverse (current/shallowest is last, deepest is first).
+    # I don't remember why.
     def initialize(@levels : Slice(LevelSummary))
       assert @levels.present?
     end
@@ -330,6 +333,9 @@ module Ww::D7
       end
 
       maxlevel = objects.max_of { |object| (yield object).maxlevel }
+      if maxlevel.zero? # ?!
+        return EMPTY
+      end
 
       # a b c      a b c       a b c
       # d e    ->    d e   ->  ∪ ∪ ∪
@@ -341,9 +347,7 @@ module Ww::D7
       levels = (0...maxlevel).to_readonly_slice do |depth|
         objects.reduce(LevelSummary.new) do |memo, object|
           summary = yield object
-          level_index = -(maxlevel - depth)
-          level = summary.level?(level_index)
-          level ||= LevelSummary.new
+          level = summary.level?(maxlevel - depth - 1) || LevelSummary.new
           LevelSummary.union(memo, level)
         end
       end
@@ -351,18 +355,19 @@ module Ww::D7
       new(levels)
     end
 
-    def level?(index : Int32) : LevelSummary?
-      @levels[index]?
+    # NOTE: `0` refers to the current level, `1` to the child level, and so on.
+    def level?(index : Int) : LevelSummary?
+      @levels[-(index.to_i + 1)]?
     end
 
     # Returns the summary of the child level, if any.
     def child_level? : LevelSummary?
-      @levels[-2]?
+      @levels[-2]? # level?(1)
     end
 
     # Returns the summary of the current level.
     def current_level : LevelSummary
-      @levels[-1]
+      @levels[-1] # level?(0)
     end
 
     def maxlevel : Int32

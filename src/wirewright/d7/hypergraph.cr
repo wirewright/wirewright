@@ -93,6 +93,23 @@ module Ww::D7
       end
     end
 
+    # Returns `true`if the current level contains a node with the given *head*
+    # (or if the entire hypergraph does, for `AnyLevel`).
+    def has_head?(head : Term) : Bool
+      summary = D7.summary(@tree)
+
+      case query = @level_query
+      in AnyLevel
+        summary.has_head?(head)
+      in SingleLevel
+        unless level = summary.level?(query.level)
+          return false
+        end
+
+        level.has_head?(head)
+      end
+    end
+
     # Returns `true` if there are no nodes below the current level (i.e., increasing `level`
     # will not expose more nodes).
     #
