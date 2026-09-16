@@ -394,7 +394,7 @@
              (p style: ^"content upcase font-condensed text-sm leading-none text-theme-muted \
                          in-hover:text-theme-subtle in-focus:text-theme-selection-bg ⸢label-style⸣"
                ^label))
-           (box style: ^"fr-1 flow-none content-clip border-sm border-theme-highlight-low rounded \
+           (box style: ^"fr-1 flow-none content-clip border-xs border-theme-highlight-low rounded-sm \
                          px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
                          in-focus:border-theme-selection-bg ⸢box-style⸣"
              ;; Display placeholder, but only in an empty field.
