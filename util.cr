@@ -323,11 +323,18 @@ end
 module Enumerable(T)
   # FIXME: Maybe more idiomatically: first_of? / last_of?
 
-  def leftmost?(& : T -> U?) : U? forall U
-    each do |object0|
+  def leftmost_with_index?(& : T -> U?) : {U, Int32}? forall U
+    each_with_index do |object0, index|
       next unless object1 = yield object0
-      return object1
+      return object1, index
     end
+  end
+
+  def leftmost?(& : T -> U?) : U? forall U
+    return unless row  = leftmost_with_index? { |object| yield object }
+
+    result, _ = row
+    result
   end
 
   def leftmost?(cls : U.class) : U? forall U

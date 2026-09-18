@@ -3963,69 +3963,92 @@ module Ww::Rack
       # |@ rack.supervisor
       #
       # |@pattern
-      # [supervisor (@values_ @value_ pattern_ - @pool_) children_*]
+      # [supervisor (@tasks_ @task_ pattern_ - @pool_) children_*]
       #
-      # |@key values rack.edge
-      # The edge where the node should search for the cell with a list of values.
+      # |@key tasks rack.edge
+      # The edge identifying the place with a list of tasks.
       #
-      # |@key value rack.edge
-      # The edge of the cell containing the item assigned by the supervisor to a member
-      # device. For example, if the list `(1 2 3)` is at the *values* edge, and *value*
+      # |@key task rack.edge
+      # When a supervisor associates a task with a device, it equips the device with
+      # a cell storing the task. The cell is at the edge specified by *task*.
+      #
+      # For example, if the list `(1 2 3)` is the tasks list, at *tasks*, and *task*
       # is `@x`, the *pool* will contain the following devices:
       #
       # ```wwml
       # (device
+      #   ...
       #   (cell @x 1)
       #   ...)
       # (device
+      #   ...
       #   (cell @x 2)
       #   ...)
       # (device
+      #   ...
       #   (cell @x 3)
       #   ...)
       # ```
       #
-      # In the above, `...` denotes all of *children*.
-      #
       # |@key pattern m1.operator
-      # The pattern used to extract the *key* for each item in the *values* list.
-      # Items not matching this pattern are skipped. The value associated with
-      # the first capture is used as the key; its name is irrelevant.
+      # The pattern used to extract the *key* of a task from *tasks*. Items of *tasks*
+      # not matching this pattern are skipped (i.e., not managed or interacted with
+      # by the supervisor). The value associated with the first capture is used as
+      # the key; the name of the capture is irrelevant.
       #
       # The set of keys determines the population of the pool. For each unique key,
-      # a member device is created; when the key disappears, the corresponding device
-      # is removed. Keys must uniquely identify items. Otherwise, the respective item(s)
-      # and device(s) are ignored -- the supervisor node is "confused" by them.
+      # a managed device is created; when the key disappears, the corresponding device
+      # is removed. Keys must uniquely identify tasks. Otherwise, the respective tasks(s)
+      # and device(s) are ignored -- the supervisor node is "confused" by them so it
+      # chooses not to interact with them in any way.
       #
       # |@key pool rack.edge
-      # The edge of the pool where member devices are maintained.
+      # The edge of the pool where member devices should be maintained.
       #
       # |@key children rack
-      # Supplies nodes for member device. It must not contain cells with the edge
-      # `@key` and *value*; otherwise you risk a name clash.
+      # Supplies nodes for each member device. Do note that it must not contain cells
+      # at the edges *task* and  `@reference` (where `@reference` is a special cell
+      # introduced by `supervisor` to help tracking device and task changes).
       #
       # |@summary
-      # Maintains a dynamic population of devices based on a list at a cell.
+      # Maintains a dynamic population of devices following a list of task terms.
       #
       # |@block
-      # Maintains a population of *member devices* for each keyed item in
-      # the list at *values*.
+      # Maintains a population of *member devices* for each keyed item in list of
+      # tasks at *tasks*.
       #
-      # "Recruits" a device for each new key and its corresponding item, and
-      # places it in the *pool*.
+      # Assigns tasks from *tasks* to a dynamic pool of devices. Creates devices
+      # based on *template* as necessary, and puts them in the *pool*. Each device
+      # contains a cell at *task*, which stores the device's copy of its assigned task.
       #
-      # When a key is removed, the corresponding device is removed from the *pool*.
+      # The supervisor maintains a bidirectional relation between this copy and the task
+      # in *tasks*: whenever the task in *tasks* changes, the associated device's *task*
+      # changes, and vice versa. When *both* change in the same tick, the supervisor
+      # merges the changes using the term diff algorithm. If there is a conflict that the diff
+      # algorithm cannot resolve (e.g. `100` replaced by `200` -- there is simply nothing we
+      # can do about conflicts like these), the change from *tasks* is preferred, since devices
+      # are ultimately thought to be (largely autonomous) projections of *tasks*.
       #
-      # The key of an item should be a stable part of it. A device's state
-      # (i.e., the device itself) is preserved while its key is stable. If
-      # keys are unstable, you'll see a lot of "device churn". If keys collide
-      # within the same generation, the corresponding device(s) are removed
-      # and the keys ignored. If keys collide across generations, the device
-      # from the previous generation is reused (along with its state).
+      # When a task is removed from *tasks*, the corresponding device is removed from the *pool*.
+      # The reverse is not true; if a device is removed from *pool*, it simply respawns
+      # (with all state lost, of course).
       #
-      # Devices have *read-only* access to items in the *values* list: they
-      # cannot write back. As the item changes, the *value* cell in
-      # the corresponding device will be updated.
+      # We identify tasks by keys. The key of a task should be a stable part of it. A device's
+      # state is preserved while the task's key remains the same; the rest of the task can be
+      # changed by both the device itself, and by the outside world through whatever means possible
+      # (e.g. by modifying *tasks* in-place).
+      #
+      # If keys are unstable, you'll see a lot of "device churn", meaning many devices
+      # will be created and removed per tick. For example, if a device modifies its
+      # task's key, it will be removed and replaced with another device the next tick.
+      #
+      # If two or more tasks share the same kes, this is called a *collision*.
+      # The supervisor will remove *all* colliding devices, and ignore *all*
+      # colliding tasks, until the collision is resolved.
+      #
+      # When a key collides across generations, meaning one task's key flows into
+      # the next one's as the next one disappears, there will be a transition
+      # and the state of the next task will be retained.
       #
       # |@example
       # The following circuit:
@@ -4053,10 +4076,10 @@ module Ww::Rack
       #     (cell @x (c 3))
       #     (p "Hello World")))
       # ```
-      matchpi %{[supervisor (@values_ @_ _ - @pool_) _*]} do
-        # NOTE: the other edge, @values_ ⏏@value_⏏, is an interior edge, it
-        # is not exposed to the outside world.
-        D7.gnd(node, values, pool)
+      matchpi %{[supervisor (@tasks_ @_ _ - @pool_) _*]} do
+        # NOTE: the other edge, @tasks_ ⏏@task_⏏, is an interior edge; it is
+        # not exposed to the outside world.
+        D7.gnd(node, tasks, pool)
       end
 
       # |@ rack.sequencer

@@ -236,45 +236,6 @@ class Ww::Rack::Automaton
         end
       end
     end
-
-    # Extrinsics.step(@extrinsic_state) do |extrinsics|
-    #   Database.step(@database_state) do |database|
-    #     Parser.step(@parser_state) do |parser|
-    #       Accord.step(@accord_state) do |accord|
-    #         Supervisor.step do |supervisor|
-    #           FS.step(@fs_state) do |fs|
-    #             Rewriter.step(@rewriter_state) do |rewriter|
-    #               Backsys.step(@backsys_state) do |backsys|
-    #                 Timekeeper.step(@timekeeper_state) do |timekeeper|
-    #                   Misc.step do |misc|
-    #                     D7.step(@parser, subframes.last) do |hg|
-    #                       prepass.call(hg) do |hg|
-    #                         proposals = [] of D7::Patch
-
-    #                         extrinsics.call(hg, proposals)
-    #                         parser.call(hg, proposals)
-    #                         database.call(hg, proposals)
-    #                         accord.call(hg, proposals)
-    #                         supervisor.call(hg, proposals)
-    #                         fs.call(hg, proposals)
-    #                         rewriter.call(hg, proposals)
-    #                         backsys.call(hg, proposals)
-    #                         timekeeper.call(hg, proposals)
-    #                         misc.call(hg, proposals)
-
-    #                         D7.merge(hg, proposals)
-    #                       end
-    #                     end
-    #                   end
-    #                 end
-    #               end
-    #             end
-    #           end
-    #         end
-    #       end
-    #     end
-    #   end
-    # end
   end
 
   private def step(subframes, frames, circuit : Term, prepass, library) : Nil
@@ -307,13 +268,17 @@ class Ww::Rack::Automaton
       end
     end
 
+    # To achieve the immediacy of `rack.supervisor`, we have to "repair" the circuit
+    # before and after the main pass. This is more of a hack than a feature on
+    # the implementation side, though...
+    subframes.concat(Supervisor.step(@parser, subframes.last, prepass))
+
     subframes.concat(
       contribute(subframes.last, prepass,
         {Extrinsics, @extrinsic_state},
         {Database, @database_state},
         {Parser, @parser_state},
         {Accord, @accord_state},
-        Supervisor,
         {FS, @fs_state},
         {Rewriter, @rewriter_state},
         {Backsys, @backsys_state},
@@ -321,6 +286,8 @@ class Ww::Rack::Automaton
         Misc,
       )
     )
+
+    subframes.concat(Supervisor.step(@parser, subframes.last, prepass))
 
     # Execute manipulate again to fix inconsistencies.
     frames << Rack.manipulate(@parser, subframes.last, prepass).last

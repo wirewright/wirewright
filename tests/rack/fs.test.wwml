@@ -100,8 +100,7 @@
 ;; Recursive watching example from docs, also tests many `rack.fs` requests.
 (rack
   (frame
-    (circuit @reports
-      (path ("/tmp/wirewright-path1" report) root: true))
+    (circuit @reports)
 
     (rewriter ((scanR (rulesetR)) - @reports)
       ;; Remove reports that are absent, except the root report.
@@ -132,14 +131,31 @@
     (fs @in @out)
 
     (backsys
-      {¦ plan: (action_ _*) -in_ -out}
+      ;; Redirect file system actions to our `fs` node.
+      {¦ plan: (action←[(%any create delete) _*] _*) -in_ -out}
         <> {(action): (), in: ^action}
-      {¦ plan: (action←(expect entries_*) _*) journal: ((%plural/max) (%plural/min entries)) out_: (ok _)}
-        <> {(action): (), (out): ()})
+      ;; Implement `(expect _*)`, clog on failure.
+      {¦ plan: (action←(expect entries_*) _*) journal: (sensor _ entries_*) out_: (ok _)}
+        <> {(action): (), (entries): (), (out): ()}
+      ;; Implement `(any _ _)` when lhs wins.
+      {¦ plan: (action←(any entries_dict (_*)) _*) journal: (sensor _ entries_*) out_: (ok _)}
+        <> {(action): (), (entries): (), (out): ()}
+      ;; Implement `(any _ _)` when rhs wins.
+      {¦ plan: (action←(any (_*) entries_dict) _*) journal: (sensor _ entries_*) out_: (ok _)}
+        <> {(action): (), (entries): (), (out): ()}
+      ;; Wait until an fs action is ok.
+      {¦ plan: (action←(wait) _*) out_: (ok _)}
+        <> {(action): (), (out): ()}
+      ;; Initialize @reports.
+      {¦ -reports_ plan: (action←(initialize contents_*) _*)}
+        <> {reports: ^contents, (action): ()})
 
     (cell @plan
       ((delete dir if exists "/tmp/wirewright-path1" recursive: true)
-       (expect)
+       (wait)
+
+       (initialize
+         (path ("/tmp/wirewright-path1" report) root: true))
 
        (create dir "/tmp/wirewright-path1")
        (expect (appeared "/tmp/wirewright-path1"))
@@ -187,9 +203,13 @@
        (expect (disappeared "/tmp/wirewright-path1/subdir/x"))
 
        (delete dir "/tmp/wirewright-path1/subdir" recursive: true)
-       (expect
-         (disappeared "/tmp/wirewright-path1/subdir")
-         (disappeared "/tmp/wirewright-path1/subdir/y"))
+       ;; They can be removed in any order, we don't know that ahead of time, it's the outside
+       ;; world we're dealing with after all...!
+       (any
+         ((disappeared "/tmp/wirewright-path1/subdir")
+          (disappeared "/tmp/wirewright-path1/subdir/y"))
+         ((disappeared "/tmp/wirewright-path1/subdir/y")
+          (disappeared "/tmp/wirewright-path1/subdir")))
 
        (delete file "/tmp/wirewright-path1/a")
        (expect (disappeared "/tmp/wirewright-path1/a"))
@@ -198,9 +218,12 @@
        (expect (appeared "/tmp/wirewright-path1/kaixo"))
 
        (delete dir "/tmp/wirewright-path1" recursive: true)
-       (expect
-         (disappeared "/tmp/wirewright-path1/b")
-         (disappeared "/tmp/wirewright-path1/kaixo")))))
+       ;; ditto
+       (any
+         ((disappeared "/tmp/wirewright-path1/b")
+          (disappeared "/tmp/wirewright-path1/kaixo"))
+         ((disappeared "/tmp/wirewright-path1/kaixo")
+          (disappeared "/tmp/wirewright-path1/b"))))))
 
   ;; If it didn't clog this means we've executed successfully.
   (frame/tail fast-forward: true

@@ -49,7 +49,7 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 
 (test "rack/part.test.wwml"
   color: (oklch 0.7 0.1 violet)
-  tags: (d7 delta7 rack rack-essential rack-part))
+  tags: (d7 delta7 rack rack-part))
 
 (test "rack/rewriter.test.wwml"
   color: (oklch 0.7 0.1 violet)
@@ -58,6 +58,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
 (test "rack/tspace.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-tspace))
+
+(test "rack/supervisor.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-supervisor))
 
 (test "rack/fs.test.wwml"
   color: (oklch 0.7 0.1 violet)
