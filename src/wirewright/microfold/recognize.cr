@@ -237,7 +237,17 @@ module Ww::Microfold
     in {UncuedFeatureEvaluation, Slice(UncuedStyleNode)}
       UncuedStyleNode.new(evaln.present, evaln.features, children)
     in {UncuedFeatureEvaluation, Slice(StyleNode)}
-      CuedStyleNode.new(features.cue_membrane?, evaln.features.map(&.as(CuedFeature)), children)
+      if evaln.present
+        cued_features = evaln.features.map(&.as(CuedFeature))
+      else
+        # In UncuedStyleNode, we represent present/absent with a Bool, because everything
+        # is resolved at that point. But Cued nodes are more general, so we represent
+        # present/absent with the Present/Absent utilities. (This is because a cued node
+        # in general may not actually know whether it is present or not -- the cues
+        # can change that!)
+        cued_features = evaln.features.map(&.as(CuedFeature)).append(Absent.new)
+      end
+      CuedStyleNode.new(features.cue_membrane?, cued_features, children)
     in {CuedFeatureEvaluation, Slice(UncuedStyleNode)}
       CuedStyleNode.new(features.cue_membrane?, evaln.features, children.map(&.as(StyleNode)))
     in {CuedFeatureEvaluation, Slice(StyleNode)}

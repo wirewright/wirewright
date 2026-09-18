@@ -1016,3 +1016,25 @@
   (el
     (viewport page-x: 10
       (text caption: "Kaixo"))))
+
+;; Absent and present correctly handled during Uncued->CuedStyleNode conversion
+(group
+  (µfold=
+    (container
+      (foo style: "absent visible:present" visible: false
+        (bar "Content" style: "in-x:y")))
+    (container
+      (foo style: "absent"
+        (bar "Content" style: "in-x:y")))
+    (container))
+
+  (µfold=
+    (container
+      (foo style: "absent cue-foo has-bar:present"
+        (bar "Content" style: "in-foo:is-bar")))
+    (container
+      (foo style: "absent has-foo:present"
+        (bar "Content" style: "is-foo")))
+    (container
+      (foo
+        (bar (text caption: "Content"))))))
