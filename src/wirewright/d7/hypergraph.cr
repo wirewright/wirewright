@@ -1,8 +1,66 @@
 module Ww::D7
-  # An integer used to identify a node in a hypergraph. Node ids are usually
-  # a (hypergraph lifetime)-bounded rendition of the (circuit frame lifetime)-
-  # bounded `NodeAddr`.
+  # An integer used to identify a node in a hypergraph. Node ids are a more
+  # lightweight alternative to a `NodeAddr`; the drawback being more complex
+  # lookup code on `Hypergraph`'s end.
   alias NodeId = UInt32
+
+  # Represents the address of a node in a circuit.
+  #
+  # Node addresses are sequences of item keys to follow to reach the referenced
+  # node in the circuit term.
+  struct NodeAddr
+    include Indexable(UInt32)
+
+    # :nodoc:
+    def initialize(@addr : Pf::UPath32)
+    end
+
+    def self.new(objects : Enumerable(T), & : T -> UInt32) : NodeAddr forall T
+      objects.reduce(empty) { |addr, object| addr.append(yield object) }
+    end
+
+    def self.empty : NodeAddr
+      NodeAddr.new(Pf::UPath32[])
+    end
+
+    def self.[](*keys : UInt32) : NodeAddr
+      new(keys, &.itself)
+    end
+
+    # Lexicographical comparison of two node addresses.
+    def <=>(other : NodeAddr)
+      compare(other) { |key0, key1| key0 <=> key1 }
+    end
+
+    def size : Int32
+      @addr.size
+    end
+
+    def unsafe_fetch(index : Int) : UInt32
+      @addr[index]
+    end
+
+    def append(key : UInt32) : NodeAddr
+      NodeAddr.new(@addr.append(key))
+    end
+
+    def trim(newsize : Int32) : NodeAddr
+      assert newsize <= size
+
+      newaddr = @addr
+      (size - newsize).times do
+        newaddr = newaddr.prior
+      end
+
+      NodeAddr.new(newaddr)
+    end
+  end
+
+  # Node addresses emitted by a `Hypergraph` are *local* to that hypergraph,
+  # meaning the empty address refers to that hypergraph's subtree. `Hypergraph`s
+  # can be asked to convert the address to a *global* one (and back), which
+  # refers to a node from the viewpoint of the rootmost hypergraph.
+  defrecord GlobalNodeAddr, wrapped : NodeAddr
 
   struct Node
     getter id : NodeId
@@ -49,30 +107,35 @@ module Ww::D7
     module Annotation
     end
 
-    alias TargetLevel = AnyLevel | SingleLevel
+    alias TargetLevel = AnyLevel | CurrentLevel
 
     # Queries are made against all levels in the hypergraph.
     defrecord AnyLevel
 
-    # Queries are made only against the given *level* of the hypergraph.
-    defrecord SingleLevel, level : UInt32
+    # Queries are made only against the current (topmost) level of the hypergraph.
+    # That is, nested circuits are not visited.
+    defrecord CurrentLevel
+
+    struct CurrentLevel
+      # FIXME: ?!
+      def level : UInt32
+        0u32
+      end
+    end
+
+    # Returns the node address of this hypergraph's wrapped parse tree.
+    getter addr : D7::NodeAddr
 
     # Returns the wrapped `ParseTree`.
     getter tree : ParseTree
 
-    # Constructs a hypergraph of nodes at the given *level*.
-    def initialize(@tree : ParseTree, @level_query : TargetLevel)
+    def initialize(@addr : D7::NodeAddr, @tree : ParseTree, @level_query : TargetLevel)
       @annotations = Set(Annotation).new
-    end
-
-    # Constructs a hypergraph of nodes at a specific *level*.
-    def initialize(tree : ParseTree, level : UInt32)
-      initialize(tree, SingleLevel.new(level))
     end
 
     # Constructs a hypergraph of nodes at all levels.
     def initialize(tree : ParseTree)
-      initialize(tree, AnyLevel.new)
+      initialize(D7::NodeAddr.empty, tree, AnyLevel.new)
     end
 
     # Returns `true` if this hypergraph is currently annotated with *ann*.
@@ -101,7 +164,7 @@ module Ww::D7
       case query = @level_query
       in AnyLevel
         summary.has_head?(head)
-      in SingleLevel
+      in CurrentLevel
         unless level = summary.level?(query.level)
           return false
         end
@@ -119,7 +182,7 @@ module Ww::D7
       case query = @level_query
       in AnyLevel
         raise AssertionError.new("the notion of bottom does not exist for hypergraphs querying any level")
-      in SingleLevel
+      in CurrentLevel
       end
 
       maxlevel = D7.maxlevel(@tree)
@@ -166,7 +229,14 @@ module Ww::D7
     # the underlying structure indexes heads, and this method makes sure to
     # skip as much work as possible if the head is definitely absent in a subtree.
     def each_node_with_head(head : Term, &fn : Node ->) : Nil
-      guide = Guide.new(&.has_head?(head))
+      guide = Guide.new do |summary|
+        case @level_query
+        in CurrentLevel
+          summary.current_level.has_head?(head)
+        in AnyLevel
+          summary.has_head?(head)
+        end
+      end
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node, edges : Set(Term)) do
@@ -217,7 +287,14 @@ module Ww::D7
       addr = edge.module
       id_zero, origin = row
 
-      guide = Guide.new(&.has_head?(head))
+      guide = Guide.new do |summary|
+        case @level_query
+        in CurrentLevel
+          summary.current_level.has_head?(head)
+        in AnyLevel
+          summary.has_head?(head)
+        end
+      end
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node) do
@@ -262,7 +339,12 @@ module Ww::D7
       id_zero, origin = row
 
       guide = Guide.new do |summary|
-        heads.empty? || heads.any? { |head| summary.has_head?(head) }
+        case @level_query
+        in CurrentLevel
+          heads.empty? || heads.any? { |head| summary.current_level.has_head?(head) }
+        in AnyLevel
+          heads.empty? || heads.any? { |head| summary.has_head?(head) }
+        end
       end
 
       needle = edge.term
@@ -310,6 +392,39 @@ module Ww::D7
     def [](node_id : NodeId) : Node
       node, _ = single(node_id)
       node
+    end
+
+    # Converts a local *addr* from this hypergraph to a global one (based on
+    # this hypergraph's prefix `addr`).
+    def to_global(addr : NodeAddr) : GlobalNodeAddr
+      global = @addr
+      addr.each do |key|
+        global = global.append(key)
+      end
+
+      GlobalNodeAddr.new(global)
+    end
+
+    # Converts a global *addr* to a local one with respect to this hypergraph.
+    def to_local(addr : GlobalNodeAddr) : NodeAddr
+      global = addr.wrapped
+      if global.size < @addr.size
+        raise KeyError.new("global addr not in the hypergraph")
+      end
+
+      local = NodeAddr.empty
+      global.zip?(@addr) do |key, expected|
+        if expected
+          unless key == expected
+            raise KeyError.new("global addr not in the hypergraph")
+          end
+          next
+        end
+
+        local = local.append(key)
+      end
+
+      local
     end
 
     # Resolves *edge* with respect to the node at *addr*.
@@ -404,7 +519,7 @@ module Ww::D7
     end
 
     def gnd_map(replacements : Hash(NodeAddr, Gnd)) : Hypergraph
-      Hypergraph.new(D7.gnd_map(@tree, replacements), @level_query)
+      Hypergraph.new(@addr, D7.gnd_map(@tree, replacements), @level_query)
     end
 
     def propose(*heads : Symbol, &fn : Node -> Patch?) : Array(Patch)
@@ -470,7 +585,7 @@ module Ww::D7
     private def self.walk(ctx, addr, tree : GndLeaf, target, level, id_zero) : WalkFlow
       case target
       in AnyLevel
-      in SingleLevel
+      in CurrentLevel
         unless target.level == level
           return WalkFlow::Continue
         end
@@ -486,7 +601,7 @@ module Ww::D7
     private def self.walk(ctx, addr, tree : CircuitNode, target, level, id_zero) : WalkFlow
       case target
       in AnyLevel
-      in SingleLevel
+      in CurrentLevel
         if target.level == level
           return walk(ctx, addr, tree.leaf, target, level, id_zero)
         end
@@ -504,7 +619,7 @@ module Ww::D7
     private def self.walk(ctx, addr, tree : GroupNode, target, level, id_zero) : WalkFlow
       case target
       in AnyLevel
-      in SingleLevel
+      in CurrentLevel
         unless level <= target.level <= level + D7.maxlevel(tree)
           # This branch cannot possibly contain circuits at the target level.
           return WalkFlow::Continue

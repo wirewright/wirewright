@@ -1,8 +1,8 @@
 module MuSoma
   alias UpdateInput = UpdateFocus | UpdateKeyboardState
 
-  defrecord UpdateFocus, addr : D7::NodeAddr, focus : Term
-  defrecord UpdateKeyboardState, addr : D7::NodeAddr, keys : Pf::Set(Term)
+  defrecord UpdateFocus, addr : D7::GlobalNodeAddr, focus : Term
+  defrecord UpdateKeyboardState, addr : D7::GlobalNodeAddr, keys : Pf::Set(Term)
 
   alias Input = InputModel | KeyboardModel
 
@@ -60,14 +60,14 @@ module MuSoma
 
   struct InputExchange
     # :nodoc:
-    def initialize(@inputs : Slice({D7::NodeAddr, Input}))
+    def initialize(@inputs : Slice({D7::GlobalNodeAddr, Input}))
     end
 
     def initialize
-      @inputs = Slice({D7::NodeAddr, Input}).empty
+      @inputs = Slice({D7::GlobalNodeAddr, Input}).empty
     end
 
-    def register(addr : D7::NodeAddr, model : Input) : InputExchange
+    def register(addr : D7::GlobalNodeAddr, model : Input) : InputExchange
       InputExchange.new(@inputs.append({addr, model}))
     end
 

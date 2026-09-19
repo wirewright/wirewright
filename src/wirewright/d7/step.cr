@@ -1,56 +1,4 @@
 module Ww::D7
-  # Represents the address of a node in a circuit.
-  #
-  # Node addresses are sequences of item keys to follow to reach the referenced
-  # node in the circuit term.
-  struct NodeAddr
-    include Indexable(UInt32)
-
-    # :nodoc:
-    def initialize(@addr : Pf::UPath32)
-    end
-
-    def self.new(objects : Enumerable(T), & : T -> UInt32) : NodeAddr forall T
-      objects.reduce(empty) { |addr, object| addr.append(yield object) }
-    end
-
-    def self.empty : NodeAddr
-      NodeAddr.new(Pf::UPath32[])
-    end
-
-    def self.[](*keys : UInt32) : NodeAddr
-      new(keys, &.itself)
-    end
-
-    # Lexicographical comparison of two node addresses.
-    def <=>(other : NodeAddr)
-      compare(other) { |key0, key1| key0 <=> key1 }
-    end
-
-    def size : Int32
-      @addr.size
-    end
-
-    def unsafe_fetch(index : Int) : UInt32
-      @addr[index]
-    end
-
-    def append(key : UInt32) : NodeAddr
-      NodeAddr.new(@addr.append(key))
-    end
-
-    def trim(newsize : Int32) : NodeAddr
-      assert newsize <= size
-
-      newaddr = @addr
-      (size - newsize).times do
-        newaddr = newaddr.prior
-      end
-
-      NodeAddr.new(newaddr)
-    end
-  end
-
   # Applies *patch* to *hg*'s tree. Returns the resulting patched circuit.
   def apply(hg : Hypergraph, patch : Patch) : Term
     trie = {} of {UInt32, UInt32} => UInt32
@@ -136,6 +84,115 @@ module Ww::D7
     unchanged(tree.child)
   end
 
+  alias GatherLevel = Array({D7::NodeAddr, D7::GroupNode})
+
+  def gather(level : GatherLevel, tree : D7::ParseTree, target_depth : UInt32) : Nil
+    addr = NodeAddr.empty
+    gather(level, addr, tree, target_depth)
+  end
+
+  # :nodoc:
+  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::GndLeaf | D7::InertLeaf, target_depth : UInt32) : Nil
+  end
+
+  # :nodoc:
+  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::MixtureNode | D7::ScopeNode, target_depth : UInt32) : Nil
+    gather(level, addr, tree.child, target_depth)
+  end
+
+  # :nodoc:
+  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::GroupNode, target_depth : UInt32) : Nil
+    if target_depth.zero?
+      level << {addr, tree}
+      return
+    end
+
+    # Maxlevel is never 0. It is at least one. More than one if there are subcircuits.
+    # We need to simulate subcircuits only if there are subcircuits!
+    return if D7.maxlevel(tree) <= 1
+
+    tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
+      gather(level, addr.append(key), child, target_depth)
+    end
+  end
+
+  # :nodoc:
+  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::CircuitNode, target_depth : UInt32) : Nil
+    if target_depth.zero?
+      level << {addr, tree.to_group}
+      return
+    end
+
+    gather(level, addr, tree.to_group, target_depth - 1)
+  end
+
+  # :nodoc:
+  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::GndLeaf | D7::InertLeaf, target_depth : UInt32) : Term
+    tree.feature.node # unchanged
+  end
+
+  # :nodoc:
+  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::MixtureNode, target_depth : UInt32) : Term
+    tree.feature.mix.call(broadcast(changes, tree.child, target_depth))
+  end
+
+  # :nodoc:
+  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::ScopeNode, target_depth : UInt32) : Term
+    broadcast(changes, tree.child, target_depth)
+  end
+
+  # :nodoc:
+  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::GroupNode, target_depth : UInt32) : Term
+    # If there are no changes left, we can safely unwind and ignore the rest of nodes.
+    unless change = changes.first?
+      return Term.of(tree.feature.node) # unchanged
+    end
+
+    change_group, change_term = change
+
+    if target_depth.zero?
+      if change_group.same?(tree)
+        changes.shift
+        return change_term
+      end
+      return Term.of(tree.feature.node) # unchanged
+    end
+
+    # Maxlevel is never 0. It is at least one. More than one if there are subcircuits.
+    # We need to simulate subcircuits only if there are subcircuits!
+    if D7.maxlevel(tree) < target_depth
+      return Term.of(tree.feature.node) # unchanged
+    end
+
+    result = tree.feature.node.transaction do |commit|
+      tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
+        commit.with(key, broadcast(changes, child, target_depth))
+      end
+    end
+
+    Term.of(result)
+  end
+
+  # :nodoc:
+  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::CircuitNode, target_depth : UInt32) : Term
+    # If there are no changes left, we can safely unwind and ignore the rest of nodes.
+    unless change = changes.first?
+      return Term.of(tree.feature.node) # unchanged
+    end
+
+    change_group, change_term = change
+
+    if target_depth.zero?
+      if change_group.same?(tree)
+        changes.shift
+        return change_term
+      end
+      return Term.of(tree.feature.node) # unchanged
+    end
+
+    broadcast(changes, tree.to_group, target_depth - 1)
+  end
+
   # :nodoc:
   #
   # The iterative deepening process in `step` is restricted because in theory,
@@ -149,52 +206,59 @@ module Ww::D7
   # as `cell`s, in Rack terms).
   MAX_SUBSTEPS = 512u32
 
-  # Executes one time-step on *circuit* (the *previous frame*). Returns
-  # the resulting sequence of substeps, the last of which is the *next frame* --
-  # *circuit* at t+1.
+  # Evolves *circuit* (the *previous frame*) by one time-step  Returns the resulting
+  # sequence of substeps, the last of which is the *next frame* -- the *circuit* at t+1.
   #
   # The `step` algorithm runs a top-down iterative-deepening circuit traversal in
   # which ground nodes at each consecutive *level* are assembled into a hypergraph.
   #
-  # The hypergraph is then solved by the block to obtain a patch (see `Regime#solve`
-  # for relevant code).
+  # The hypergraph is then inspected by *fn* to obtain a patch.
   #
-  # The `step` algorithm applies the patch, producing a *level*-patched *circuit*.
-  # It then deepens. Each level-patched circuit is recorded as a substep, forming
-  # the resulting sequence of substeps.
-  #
-  # Replacement proceeds top-down (see `D7` for reasoning).
-  #
-  # See `D7` for terminology (e.g. subframe vs. substep).
-  def step(parser : Parser, circuit : Term, required_heads : Indexable(Term) = Slice(Term).empty, &) : Slice(Term)
+  # The `step` algorithm applies the patch to *circuit*, producing a *level-patched
+  # circuit*. It then deepens. The sequence of ever so deeply level-patched circuits
+  # forms the returned sequence of substeps.
+  def step(parser : D7::Parser, circuit : Term, required_heads : Indexable(Term) = Slice(Term).empty, &fn : D7::Hypergraph -> D7::Patch) : Slice(Term)
     tree = parser.parse(circuit)
-    hg = Hypergraph.new(tree, 0)
-    if required_heads.present? && required_heads.none? { |head| D7.summary(hg.tree).has_head?(head) }
+    if required_heads.present? && required_heads.none? { |head| D7.summary(tree).has_head?(head) }
       return Slice[circuit]
     end
 
     substeps = Pf::Kit.stack_array(Term, 8)
     substeps << circuit
 
-    MAX_SUBSTEPS.times do |level|
-      patch = yield hg
+    level = [] of {D7::NodeAddr, D7::GroupNode}
+    changes = Deque({D7::GroupNode, Term}).new
 
-      pass do
+    MAX_SUBSTEPS.times do |target_depth|
+      assert level.empty?
+      assert changes.empty?
+
+      gather(level, tree, target_depth)
+      break if level.empty?
+
+      # TODO: in my sweetest dreams this is a parallel each. Currently though fn()
+      # is not guaranteed to be thread-safe, nor is the choice of whether to go
+      # parallel so easy. We'd need heuristics since it's not always cheap.
+      level.each do |(addr, tree)|
+        hg = D7::Hypergraph.new(addr, tree, D7::Hypergraph::CurrentLevel.new)
+        patch = fn.call(hg)
         next if patch.empty?
 
-        circuit = apply(hg, patch)
-        next if substeps.last == circuit
-
-        substeps << circuit
-        tree = parser.parse(circuit)
+        changes << {tree, D7.apply(hg, patch)}
       end
 
-      hg = Hypergraph.new(tree, level + 1)
+      level.clear
+      next if changes.empty?
 
-      # No nodes found at the next *level* => We're done.
-      break if hg.bottom?
+      circuit = broadcast(changes, tree, target_depth)
+      substeps << circuit
+      assert changes.empty?, "broadcast() should have cleared changes"
+
+      # If the patch changed something, reparse to obtain the new tree. This heavily
+      # relies on the parser's cache for performance.
+      tree = parser.parse(circuit)
     end
 
-    substeps.to_readonly_slice(&.itself)
+    substeps.to_unsafe_readonly_slice!
   end
 end

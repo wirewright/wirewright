@@ -640,7 +640,7 @@ module MuSoma
       @seed_ref : ExtrinsicMap::ReadingRef,
     )
       @epoch = 0u64
-      @vantages = VarHash(D7::NodeAddr, Term).new
+      @vantages = VarHash(D7::GlobalNodeAddr, Term).new
     end
 
     def boot(ws : Workspace)
@@ -705,7 +705,7 @@ module MuSoma
       # TODO: What do we need to do if the window is closed?
       return unless description = msg.description?
 
-      reflections = {} of D7::NodeAddr => Term
+      reflections = {} of D7::GlobalNodeAddr => Term
       reflection_hover = false
 
       description.vantages.each do |vantage|
@@ -713,7 +713,7 @@ module MuSoma
           indices = path.items.compact_map(&.to?(UInt32))
           assert indices.size == path.size
 
-          addr = D7::NodeAddr.new(indices, &.itself)
+          addr = D7::GlobalNodeAddr.new(D7::NodeAddr.new(indices, &.itself))
           reflection = Term.morph(vantage, {0, :reflection}, {:id, nil})
           reflections[addr] = reflection
 
@@ -989,14 +989,14 @@ module MuSoma
             next unless focus = InputFocus.parse?(focus)
 
             keys = nodeQ.items.move(1)
-            @exchange = @exchange.register(node.addr, InputModel.new(focus, keys.to_pf_set))
+            @exchange = @exchange.register(hg.to_global(node.addr), InputModel.new(focus, keys.to_pf_set))
           end
 
           matchpi %{(keyboard _* ⍊ focus_⋮ false)} do |focus|
             next unless focus = InputFocus.parse?(focus)
 
             keys = nodeQ.items.move(1)
-            @exchange = @exchange.register(node.addr, KeyboardModel.new(focus, keys.to_pf_set))
+            @exchange = @exchange.register(hg.to_global(node.addr), KeyboardModel.new(focus, keys.to_pf_set))
           end
 
           otherwise { }
@@ -1112,7 +1112,7 @@ module MuSoma
 
         InputExchange.sync(exchange0, @exchange, input_sync, keyboard_sync) do |action|
           perturbation = ->(hg : D7::Hypergraph) do
-            unless row = D7.follow?(hg.tree, action.addr)
+            unless row = D7.follow?(hg.tree, hg.to_local(action.addr))
               return [D7::Patch.new]
             end
 

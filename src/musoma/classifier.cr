@@ -115,7 +115,7 @@ module MuSoma
   end
 
   struct ReflectionPrepass(Prepass)
-    def initialize(@vantages : VarHash(D7::NodeAddr, Term), @successor : Prepass)
+    def initialize(@vantages : VarHash(D7::GlobalNodeAddr, Term), @successor : Prepass)
     end
 
     def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
@@ -124,7 +124,8 @@ module MuSoma
       figure_node_ids = Pf::USet32.transaction do |txn|
         hg.each_node_with_head(Term.of(:reflection)) do |node|
           Term.matchpi?(node.term, %{[reflection @edge_]}) do
-            observation = @vantages.get?(node.addr)
+            global_addr = hg.to_global(node.addr)
+            observation = @vantages.get?(global_addr)
             replacements[node.addr] = D7.gnd(Term.of(:cell, edge, observation), edge)
             txn << node.id
           end

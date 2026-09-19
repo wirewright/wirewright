@@ -280,7 +280,8 @@ module Ww::D7
         return group
       end
 
-      group = GroupNode.new(D7.parent(feature.node, feature.range), children, summary)
+      # `summary.prior` basically gets rid of the append() above.
+      group = GroupNode.new(D7.parent(feature.node, feature.range), children, summary.prior)
       @group.set(group, :release)
     end
   end
@@ -400,6 +401,10 @@ module Ww::D7
     # Updates the summary of the current level.
     def update_current(& : LevelSummary -> LevelSummary) : TreeSummary
       TreeSummary.new(@levels.prior.append(yield current_level))
+    end
+
+    def prior : TreeSummary
+      TreeSummary.new(@levels.trim(@levels.size - 1))
     end
 
     def append(summary : LevelSummary) : TreeSummary
