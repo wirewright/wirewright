@@ -162,13 +162,54 @@ module MuSoma
     end
   end
 
+  # A post-processing step on distilled markup to replacespairs that have
+  # an edge value with that value (or to remove them if there is no value):
+  #
+  # ```wwml
+  # (cell @visible true)
+  # (p "Kaixo!" style: "absent visible:present" @:visible)
+  # ```
+  #
+  # ... distills to:
+  #
+  # ```wwml
+  # (p "Kaixo!" style: "absent visible:present" visible: false)
+  # ```
+  private def resolve_pairs(hg : D7::Hypergraph, addr : D7::NodeAddr, rep : Term::Rep) : Term::Rep
+    return rep unless node0 = rep.single?
+    return rep unless node0 = node0.as_d?
+
+    node1 = node0.transaction do |commit|
+      node0.each_entry(in: Term::Dict.pairspart) do |key, value|
+        next unless Term.edge?(value)
+        next unless cell = Rack.cell?(hg, hg.resolve(addr, value))
+
+        # Compare:
+        #
+        #   (cell @visible)
+        #   (p "Kaixo!" style: "absent visible:present" @:visible)
+        #
+        # ... with:
+        #
+        #   (cell @visible false)
+        #   (p "Kaixo!" style: "absent visible:present" @:visible)
+        #
+        # Generally, absence should map to absence. It is up to Microfold how to
+        # interpret `false` vs. absence (in this case they are interpreted the same).
+        commit.with(key, cell.value?)
+      end
+    end
+
+    Term.rep_of(node1)
+  end
+
   # :nodoc:
   def distill(µ, hg, addr, tree : D7::InertLeaf, sites, site_zero) : {Term::Rep, UInt32}
     node = tree.feature.node
 
     Term.case(node) do
       matchpi %{{¦ style}} do
-        {curate(node), site_zero}
+        {resolve_pairs(hg, addr, curate(node)), site_zero}
       end
 
       matchpi %{[head_]} do
@@ -215,7 +256,7 @@ module MuSoma
       end
 
       matchpi %{{¦ style}} do
-        {curate(node), site_zero}
+        {resolve_pairs(hg, addr, curate(node)), site_zero}
       end
 
       otherwise do
@@ -269,7 +310,7 @@ module MuSoma
 
       matchpi %{[window _*]}, %{{¦ style}} do
         children, site_zero = distill(µ, hg, addr, tree.children, tree.feature.range, sites, site_zero)
-        {curate(tree, children), site_zero}
+        {resolve_pairs(hg, addr, curate(tree, children)), site_zero}
       end
 
       matchpi %{[head_ _*]} do
