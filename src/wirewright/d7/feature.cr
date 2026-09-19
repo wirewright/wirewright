@@ -247,26 +247,42 @@ module Ww::D7
     children : Slice(ParseTree),
     summary : TreeSummary
 
+  class GroupNode
+    # Smart constructor for `GroupNode`.
+    def self.new(feature : Parent, children : Slice(ParseTree)) : GroupNode
+      summary = TreeSummary.union(children) { |child| D7.summary(child) }
+      new(feature, children, summary)
+    end
+  end
+
   defcase CircuitNode,
     feature : Circuit,
     children : Slice(ParseTree),
     leaf : ParseTree,
     summary : TreeSummary
 
-  # Smart constructor for `GroupNode`.
-  def GroupNode.new(feature : Parent, children : Slice(ParseTree)) : GroupNode
-    summary = TreeSummary.union(children) { |child| D7.summary(child) }
-    GroupNode.new(feature, children, summary)
-  end
+  class CircuitNode
+    # Smart constructor for `CircuitNode`.
+    def self.new(feature : Circuit, children : Slice(ParseTree), leaf) : CircuitNode
+      # NOTE: We could merge prior levels of the leaf with children, but this would
+      # make very little sense because `Circuit#leaf`s never contain subcircuits,
+      # and they wouldn't work either way; so I doubt it's worth spending the effort here.
+      leaf_level = D7.summary(leaf).current_level
+      summary = TreeSummary.union(children) { |child| D7.summary(child) }.append(leaf_level)
+      new(feature, children, leaf, summary)
+    end
 
-  # Smart constructor for `CircuitNode`.
-  def CircuitNode.new(feature : Circuit, children : Slice(ParseTree), leaf) : CircuitNode
-    # NOTE: We could merge prior levels of the leaf with children, but this would
-    # make very little sense because `Circuit#leaf`s never contain subcircuits,
-    # and they wouldn't work either way; so I doubt it's worth spending the effort here.
-    leaf_level = D7.summary(leaf).current_level
-    summary = TreeSummary.union(children) { |child| D7.summary(child) }.append(leaf_level)
-    CircuitNode.new(feature, children, leaf, summary)
+    @group : Atomic(GroupNode?) = Atomic(GroupNode?).new(nil)
+
+    # Converts this `CircuitNode` to a `GroupNode`.
+    def to_group : GroupNode
+      if group = @group.get(:acquire)
+        return group
+      end
+
+      group = GroupNode.new(D7.parent(feature.node, feature.range), children, summary)
+      @group.set(group, :release)
+    end
   end
 
   struct LevelSummary
@@ -291,13 +307,11 @@ module Ww::D7
       EMPTY
     end
 
-    # Returns the union of two level summaries.
-    def self.union(a : LevelSummary, b : LevelSummary) : LevelSummary
-      new(
-        a.population + b.population,
-        a.heads | b.heads,
-        a.edges | b.edges,
-      )
+    # Mutably unions *b* into *a*.
+    def self.union!(a : LevelSummary, b : LevelSummary) : LevelSummary
+      a.heads.concat(b.heads)
+      a.edges.concat(b.edges)
+      LevelSummary.new(a.population + b.population, a.heads, a.edges)
     end
 
     # Returns `true` if *term* is a head of one of the ground nodes in this level.
@@ -348,7 +362,7 @@ module Ww::D7
         objects.reduce(LevelSummary.new) do |memo, object|
           summary = yield object
           level = summary.level?(maxlevel - depth - 1) || LevelSummary.new
-          LevelSummary.union(memo, level)
+          LevelSummary.union!(memo, level)
         end
       end
 

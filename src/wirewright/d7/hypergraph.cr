@@ -166,14 +166,7 @@ module Ww::D7
     # the underlying structure indexes heads, and this method makes sure to
     # skip as much work as possible if the head is definitely absent in a subtree.
     def each_node_with_head(head : Term, &fn : Node ->) : Nil
-      guide = Guide.new do |summary|
-        case @level_query
-        in AnyLevel
-          summary.has_head?(head)
-        in SingleLevel
-          summary.current_level.has_head?(head)
-        end
-      end
+      guide = Guide.new(&.has_head?(head))
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node, edges : Set(Term)) do
@@ -224,14 +217,7 @@ module Ww::D7
       addr = edge.module
       id_zero, origin = row
 
-      guide = Guide.new do |summary|
-        case @level_query
-        in AnyLevel
-          summary.has_head?(head)
-        in SingleLevel
-          summary.current_level.has_head?(head)
-        end
-      end
+      guide = Guide.new(&.has_head?(head))
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node) do
@@ -276,12 +262,7 @@ module Ww::D7
       id_zero, origin = row
 
       guide = Guide.new do |summary|
-        case @level_query
-        in AnyLevel
-          heads.empty? || heads.any? { |head| summary.has_head?(head) }
-        in SingleLevel
-          heads.empty? || heads.any? { |head| summary.current_level.has_head?(head) }
-        end
+        heads.empty? || heads.any? { |head| summary.has_head?(head) }
       end
 
       needle = edge.term
@@ -516,7 +497,7 @@ module Ww::D7
         end
       end
 
-      treatment = GroupNode.new(D7.parent(tree.feature.node, tree.feature.range), tree.children)
+      treatment = tree.to_group
       walk(ctx, addr, treatment, target, level + 1, id_zero)
     end
 
@@ -529,10 +510,7 @@ module Ww::D7
           return WalkFlow::Continue
         end
 
-        # The guide must only apply to the level we're searching for, because
-        # all important metrics are level-local and will likely block our descent
-        # down to *level* incorrectly.
-        if target.level == level && !ctx.guide.call(tree.summary)
+        unless ctx.guide.call(tree.summary)
           return WalkFlow::Continue
         end
       end

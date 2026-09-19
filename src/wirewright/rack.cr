@@ -53,42 +53,35 @@ module Ww::Rack
     candidates = Pf::Kit.stack_array(Cell, 4)
 
     hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
-      # Since cell has only one edge, `memberof:` above already covers the edge
-      # check (i.e. whether *input* is at a syntactically valid position).
-      Term.case(node.term) do
-        matchpi %{[cell @_]} do
-          candidates << Cell.new(node, value: nil)
-        end
+      dict = node.term.as_d
 
-        matchpi %{[cell @_ value_]} do
-          candidates << Cell.new(node, value)
-        end
+      # Since `cell?` is called extremely frequently, we cannot afford M1 here, so
+      # we hand-write the matching code.
 
-        matchpi %{[cell (_symbol @_)]} do
-          candidates << Cell.new(node, value: nil)
-        end
+      # At this point we know that [cell _*], and *input* is somewhere in it.
+      #
+      # We also know that *node* is a Gnd node, which means it was accepted by
+      # the classifier.
+      #
+      # Since cell has only one edge, `memberof:` above already covers the edge check.
 
-        matchpi %{[cell (_symbol @_) value_]} do
-          candidates << Cell.new(node, value)
-        end
+      if dict.itemsize == 2
+        # [cell fst_]
+        #
+        # *input* is somewhere in *fst* and the classifier accepted it, so we're
+        # fine with recognizing the whole thing as an empty cell.
+        candidates << Cell.new(node, value: nil)
+        next
+      end
 
-        matchpi %{[cell (pool @_)]} do
-          candidates << Cell.new(node, value: nil)
-        end
-
-        matchpi %{[cell (pool @_) value_]} do
-          candidates << Cell.new(node, value)
-        end
-
-        matchpi %{[cell (pool (_symbol @_))]} do
-          candidates << Cell.new(node, value: nil)
-        end
-
-        matchpi %{[cell (pool (_symbol @_)) value_]} do
-          candidates << Cell.new(node, value)
-        end
-
-        otherwise { }
+      if dict.itemsize == 3
+        # [cell fst_ snd_]
+        #
+        # *input* can be inside *fst* or *snd*, but we know that the classifier is
+        # happy, so it must be in *fst*. We're fine with recognizing the whole thing
+        # as a nonempty cell, *snd* being its value.
+        candidates << Cell.new(node, value: dict[2])
+        next
       end
     end
 
@@ -99,11 +92,9 @@ module Ww::Rack
 
   def cell?(hg : D7::Hypergraph, input : D7::AbsEdge) : Cell?
     candidates = Pf::Kit.stack_array(Cell, 1)
-
     each_cell(hg, input) do |cell|
       candidates << cell
     end
-
     candidates.single?
   end
 

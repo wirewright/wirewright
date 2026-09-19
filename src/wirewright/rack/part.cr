@@ -96,36 +96,45 @@ module Ww::Rack::Part
   MAX_COLLECT_ITERATIONS = 128
 
   private def collect(hg : D7::Hypergraph)
+    pending = [] of {D7::Node, Variant}
+
+    # Walking the hypergraph this way is rather expensive and we're going to do it
+    # wost-case MAX_COLLECT_ITERATIONS times. So let's "cache" the walk by doing it
+    # once and recording it in its entirety to *variants*.
+    hg.each_node_with_head(SYM_PART) do |node|
+      next unless variant = recognize?(node.term)
+
+      pending << {node, variant}
+    end
+
     forms = {} of D7::AbsEdge => Form
     staging_forms = {} of D7::AbsEdge => Form
     rejected_abs_parts = Set(D7::AbsEdge).new
     roots = {} of D7::NodeId => {D7::AbsEdge, Cell}
     layers = [] of Array(Form)
-    seen = Set(D7::NodeId).new
 
     MAX_COLLECT_ITERATIONS.times do
-      hg.each_node_with_head(SYM_PART) do |node|
-        next if seen.includes?(node.id)
-        next unless variant = recognize?(node.term)
-
+      pending.select! do |node, variant|
         abs_part = hg.resolve(node.addr, variant.part_edge)
-        next if rejected_abs_parts.includes?(abs_part)
+        if rejected_abs_parts.includes?(abs_part)
+          next false # do not process it in the future
+        end
+
         abs_whole = hg.resolve(node.addr, variant.whole_edge)
 
-        whole_form = forms[abs_whole]?
-
-        case whole_form
+        case whole_form = forms[abs_whole]?
         in Nil
           root = Rack.cell?(hg, abs_whole)
           unless matchee = root.try(&.value?)
-            # An unconditional skip:
-            #
             #   (cell @root)
             #   ⏏(part (@root @a) (+ a_ _))⏏
             #
             # There's no way the pattern can match -- neither in the backsys, nor in
             # the pattern variant.
-            next
+            #
+            # We want to *keep* it in `pending` for now because a later `part` may create
+            # the cell eventually, which would get us to the cases below.
+            next true
           end
 
           # (cell @root (+ 1 2))
@@ -162,11 +171,8 @@ module Ww::Rack::Part
           #
           # So we skip it immediately. There is no way a pattern or backsys variant
           # can match.
-          next
+          next false # do not process it in the future
         end
-
-        # Mark as seen parts that had a chance to examine a value.
-        seen << node.id
 
         case variant
         in BacksysVariant
@@ -174,7 +180,9 @@ module Ww::Rack::Part
           # it will reply with {whole: _, part: _} (i.e. extend our query).
           query = Term.of(Term[].with(variant.whole_capture, matchee))
           reply = M1.backmap(variant.backsys, query)
-          next unless output = reply.as_d?
+          unless output = reply.as_d?
+            next false # do not process it in the future
+          end
 
           update = updatef(variant, matchee)
 
@@ -186,7 +194,9 @@ module Ww::Rack::Part
         in PatternVariant
           env_log_lists = M1.matches_and_logs(Term[], variant.pattern, matchee)
           # Skip this `part` if there are no matches whatsoever.
-          next if env_log_lists.empty?
+          if env_log_lists.empty?
+            next false # do not process it in the future
+          end
 
           update = updatef(variant, matchee, env_log_lists)
 
@@ -228,7 +238,7 @@ module Ww::Rack::Part
         # ... is not.
         if forms.has_key?(abs_part) || staging_forms.has_key?(abs_part)
           rejected_abs_parts << abs_part
-          next
+          next false # do not process it in the future
         end
 
         staging_forms[abs_part] = part_form
@@ -236,6 +246,8 @@ module Ww::Rack::Part
         if root
           roots[root.node.id] = {abs_whole, root}
         end
+
+        false # do not process it in the future
       end
 
       break if staging_forms.empty?

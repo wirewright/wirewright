@@ -116,7 +116,7 @@ module Ww::D7
       return repair(tree.leaf, guidance)
     end
 
-    treatment = GroupNode.new(parent(tree.feature.node, tree.feature.range), tree.children)
+    treatment = tree.to_group
     repair(treatment, guidance)
   end
 
