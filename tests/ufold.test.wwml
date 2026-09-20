@@ -438,6 +438,13 @@
             end-t: 1))
       (text caption: "A"))))
 
+;; bg-okl
+(µfold=
+  (el style: "bg-white bg-okl-10%")
+  (z-stack
+    (rect fill: (okl (oklch 1 0 0) 0.1))
+    (el)))
+
 ;;
 ;; Transform
 ;;

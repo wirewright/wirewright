@@ -187,6 +187,10 @@ vantage: ""
     {min-w: 0, min-h: 0}))
 
 (for bg-box
+  (utility (prefix "bg-min-" (number value))
+    {min-w: ^(* value spacing), min-h: ^(* value spacing)}))
+
+(for bg-box
   (utility (circumfix "bg-min-" (number value) "px")
     {min-w: ^value, min-h: ^value}))
 
@@ -194,6 +198,11 @@ vantage: ""
 (for bg-box
   (utility (prefix "bg-" (one-of colors fill))
     {^:fill}))
+
+;; Change lightness of bg.
+(for bg-box
+  (utility (circumfix "bg-okl-" (number value) "%")
+    {bg-okl: ^(/ value 100)}))
 
 ;; Linear gradient paint.
 (for bg-box
@@ -1414,6 +1423,8 @@ vantage: ""
                  begin-t: ^gradient-begin-t
                  end-l: ^gradient-end-l
                  end-t: ^gradient-end-t))
+            (when {¦ fill_ ±bg-okl}
+              (okl ^fill ^bg-okl))
             (when {¦ fill_}
               ^fill))
         ^… (pluck settings
