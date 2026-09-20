@@ -108,13 +108,13 @@
 ;;   (slot (Button (@actions inc) "Increment"))
 ;;   (slot (Button (@actions dec) "Decrement")))
 ;; ```
-(Button head←(@_ _) caption_string ¦ props_)
+(Button head←(@_ _) caption_string ¦ props_ style⋮ "")
   => (slot
        (Button ^head
-         (box style: "bg-theme-surface px-3 py-2 content-center text-theme-subtle rounded \
-                      enabled:hover:text-theme-text enabled:active:text-theme-text \
-                      enabled:hover:cursor-pointer enabled:hover:bg-theme-overlay \
-                      enabled:active:bg-theme-highlight-med -enabled:hover:cursor-not-allowed"
+         (box style: ^"bg-theme-surface px-5 py-2 content-center text-theme-subtle rounded-full \
+                       enabled:hover:text-theme-text enabled:active:text-theme-text \
+                       enabled:hover:cursor-pointer enabled:hover:bg-theme-overlay \
+                       enabled:active:bg-theme-highlight-med -enabled:hover:cursor-not-allowed ⸢style⸣"
            ^caption)))
 
 ;; |@ musoma.input
@@ -187,6 +187,9 @@
          ;; State can also ask for focus.
          {¦ state: {¦ focus_: true} input: {¦ -focus: >focus}}
            <> {(focus): (), >focus: wanted}
+         ;; It can release focus as well.
+         {¦ state: {¦ focus_: false} input: {¦ focus: >focus_}}
+           <> {(focus): (), (>focus): ()}
          ;; Pressing left button while hovered makes the input active.
          {¦ mouse: [mouse left] node: {¦ hover -active_}}
            <> {active: true}
@@ -621,6 +624,13 @@
 
 ;; ---- DIRTY STUFF ENDS (sort of) ----
 
+;; NOTE: Most of these designs are simplified versions of the corresponding
+;; component in Material Design 3. Due to implementation limitations we cannot
+;; (yet?) do "fancy" visual things like press animations, etc.; nor should we,
+;; perhaps. We largely ignore keyboard focus/control on mouse-driven components
+;; as well (and the corresponding focus states). This isn't particularly nice
+;; of course.
+
 (Checkbox @state_ view_)
   => (component {@:state}
        (reflection {@:desc, @:node}
@@ -642,9 +652,9 @@
            ;; our visuals.
            {¦ -active_ hover mouse: [mouse left]}
              <> {active: true}
-           ;; Find out whether we just transitioned not(active) -> active, and
-           ;; interpret that as a click.
-           {¦ -clicked_ active node: {¦ -active}}
+           ;; Find out whether we just transitioned active -> not(active), with
+           ;; mouse over us, and interpret that as a click.
+           {¦ -clicked_ hover mouse: [mouse] node: {¦ active}}
              <> {clicked: true})
          (stage
            ;; The checkbox's "brain" is just this one tiny rule.
@@ -662,16 +672,150 @@
            {¦ -state node: {¦ enabled_}} <> {(enabled): ()})))
 
 ;; Design reference: https://m3.material.io/components/checkbox/specs
-(Checkbox header_)
+(Checkbox @state_)
   => (slot
-       (Checkbox ^header
+       (Checkbox ^state
          (box style: "flow-none content hover:cursor-pointer membrane checked:cue-checked \
-                      hover:cue-hover enabled:cue-enabled"
+                      hover:cue-hover active:cue-active enabled:cue-enabled"
                ;; The circle thing around the checkbox on hover.
-               (box style: "bg-theme-subtle in-hover:bg-theme-checked scale-5/3 pivot-center \
-                            floating rounded-full transparent in-enabled:in-hover:opacity-20%")
+               (box style: "bg-theme-subtle in-hover:bg-ui-checked scale-5/3 pivot-center \
+                            floating rounded-full transparent in-enabled:in-hover:opacity-25%
+                            in-active:bg-okl-95%")
                ;; The check and the box.
                (box style: "rounded-xs border-sm border-theme-highlight-high in-enabled:border-theme-subtle \
-                            text-sm text-theme-text in-checked:bg-theme-highlight-high in-enabled:in-checked:border-theme-checked \
-                            in-enabled:in-checked:bg-theme-checked in-enabled:text-theme-checked in-enabled:text-okl-10%"
+                            text-sm text-theme-text in-checked:bg-theme-highlight-high in-enabled:in-checked:border-ui-checked \
+                            in-enabled:in-checked:bg-ui-checked in-enabled:text-ui-checked in-enabled:text-okl-10%"
                  (icon "check" style: "transparent in-checked:opaque")))))
+
+;; Design reference: https://m3.material.io/components/switch/specs
+(Switch @state_)
+  => (slot
+       (Checkbox ^state
+         (group style: "content flow-row border-sm border-ui-subtle bg-ui-surface rounded-full \
+                        membrane checked:border-ui-accent checked:bg-ui-accent checked:cue-checked \
+                        hover:cue-hover hover:cursor-pointer -enabled:opacity-50%"
+           ;; The disabled half.
+           (box style: "opaque in-checked:transparent content p-1"
+             (box style: "rounded-full bg-min-4 bg-ui-subtle")
+             ;; The circle thing for hovering when disabled.
+             (box style: "bg-ui-subtle scale-5/2 pivot-center rounded-full transparent \
+                          in-hover:opacity-20% in-checked:transparent"))
+           ;; The checked half.
+           (box style: "transparent in-checked:opaque content p-1 bg-ui-accent bg-okl-20% \
+                        text-ui-accent rounded-full"
+             (icon "check")
+             ;; The circle thing for hovering when checked.
+             (box style: "bg-ui-accent bg-okl-30% scale-5/2 pivot-center rounded-full \
+                          transparent in-checked:in-hover:opacity-20%")))))
+
+;; A Switch with a title, looking like so:
+;;
+;; ```text
+;; Title                [switch]
+;; ```
+(Setting @state_ title_string)
+  => (group style: "flow-row item-center-y content-y px-3 py-3"
+       (p ^title style: "fr-1 text-ui-content text-base/6")
+       (slot (Switch ^state)))
+
+;; A switch with a title and a common subtitle for both the toggled and the untoggled
+;; state. It looks like so:
+;;
+;; ```text
+;; Title
+;;                        [switch]
+;; Subtitle
+;; ```
+(Setting @state_ title_string subtitle_string)
+  => (group style: "flow-row item-center-y content-y px-3 py-1"
+       (group style: "flow-col fr-1"
+         (p ^title style: "text-ui-content text-base/6")
+         (p ^subtitle style: "text-ui-supplementary text-sm/5"))
+       (slot (Switch ^state)))
+
+;; A switch with a title and a custom subtitle for the two states: *subtitle0*
+;; for the OFF state, and *subtitle1* for the ON state. It looks like so:
+;;
+;; ```text
+;; Title
+;;                        [switch]
+;; Subtitle
+;; ```
+(Setting @state_ title_string (subtitle0_string subtitle1_string))
+  => (group style: "flow-row item-center-y content-y px-3 py-1"
+       (group style: "flow-col fr-1"
+         (p ^title style: "text-ui-content text-base/6")
+         (guard (^state false)
+           (p ^subtitle0 style: "text-ui-supplementary text-sm/5"))
+         (guard (^state true)
+           (p ^subtitle1 style: "text-ui-supplementary text-sm/5")))
+       (slot (Switch ^state)))
+
+;; This is an internal component used by `SegmentedButton`.
+(SegmentedOption (@state_ id_) view_dict)
+  => (component {@:state}
+       (template (cell @id ^id))
+
+       (reflection {@:desc, @:node}
+         (template ^view))
+
+       (frag @mouse (mouse))
+
+       (rewriter ((stageR (rulesetR exh: true)) - {@:id, @:state, @:desc, @:node, @:mouse})
+         (stage
+           ;; The user's mouse has entered our visuals. Treat that as hover.
+           {¦ -hover_ mouse: [mouse] desc: [reflection {¦ hit-hover}]}
+             <> {hover: true}
+           ;; The user's mouse had previously entered and remains within our visuals.
+           ;; Treat that as hover.
+           {¦ -hover_ node: {¦ hover} desc: [reflection {¦ hit-hover}]}
+             <> {hover: true}
+           ;; Find out whether the user just pressed the left mouse button over
+           ;; our visuals.
+           {¦ -active_ hover mouse: [mouse left]}
+             <> {active: true}
+           ;; Find out whether we just transitioned active -> not(active), with
+           ;; mouse over us, and interpret that as a click.
+           {¦ -clicked_ hover mouse: [mouse] node: {¦ active}}
+             <> {clicked: true})
+         (stage
+           ;; If we're the "reigning" option and someone asks us for a turnover, we do
+           ;; the turnover.
+           {¦ id_ state_: (turnover id_ -> successor_)}
+             <> {state: ^successor}
+           ;; If the user clicks on us and we're already active, just consume their click
+           ;; and move on. Do nothing.
+           {¦ clicked_ id_ state: id_}
+             <> {(clicked): ()}
+           ;; If the user clicks on us and we're not already active, we have to initiate
+           ;; a turnover.
+           {¦ clicked_ id_ state_}
+             <> {(clicked): (), state: (turnover ^state -> ^id)})
+         (stage
+           {¦ id_ state_ node: {¦ ⋮checked ⋮disabled}} <> {checked: ^(= id state), disabled: false}
+           {¦ -state node: {¦ ⋮checked ⋮disabled}} <> {checked: false, disabled: true}
+           {¦ state hover node: {¦ ⋮hover}} <> {hover: true}
+           {¦ state -hover node: {¦ hover_}} <> {(hover): ()}
+           {¦ state active node: {¦ ⋮active}} <> {active: true}
+           {¦ state -active node: {¦ active_}} <> {(active): ()})))
+
+;; Ditto.
+(SegmentedOption header_ title_string)
+  => (slot
+       (SegmentedOption ^header
+         (box style: "flow-row item-center-y gap-2 border-l @last:border-r border-y \
+                      @first:rounded-l-full @last:rounded-r-full border-ui-subtle \
+                      content-center text-ui-content hover:bg-ui-surface hover:cursor-pointer \
+                      checked:bg-ui-overlay text-sm/5 font-medium px-8 py-2 disabled:opacity-50% \
+                      membrane checked:cue-checked active:bg-okl-30%"
+           (icon "check" style: "floating-x -dl-3 absent in-checked:present")
+           (p ^title style: "fr-1"))))
+
+;; Presents one or more *options*, of the form `(label_string id_)`, as a segmented
+;; button, allowing only one choice.
+;;
+;; Reference: https://m3.material.io/components/segmented-buttons/specs
+(SegmentedButton @state_ options_+)
+  => (group style: "flow-row item-fr-1"
+       (^each (options as (label_string id_))
+         (slot (SegmentedOption (^state ^id) ^label))))

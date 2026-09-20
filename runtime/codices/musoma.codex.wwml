@@ -50,14 +50,13 @@ history-limit: 128
 (var highlight-high): "#524f67"
 
 (table colors):
+  ;; theme-* is mostly about how MuSoma itself looks.
   {"theme-base": ^base,
    "theme-surface": ^surface,
    "theme-overlay": ^overlay,
    "theme-muted": ^muted,
    "theme-subtle": ^subtle,
    "theme-text": ^text,
-   "theme-checked": ^foam,
-   "theme-accent": ^iris,
    "theme-highlight-low": ^highlight-low,
    "theme-highlight-med": ^highlight-med,
    "theme-highlight-high": ^highlight-high,
@@ -80,8 +79,24 @@ history-limit: 128
    "theme-normal-fg": ^base,
    "theme-insert-bg": ^gold,
    "theme-insert-fg": ^base,
-   "theme-attention-fg": ^gold
-   "theme-info-fg": ^foam}
+   "theme-attention-fg": ^gold,
+   "theme-info-fg": ^foam,
+
+   ;; ui-* is the preferred color palette for user apps.
+   "ui-base": ^base,
+   "ui-surface": ^surface,
+   "ui-overlay": ^overlay,
+
+   "ui-muted": ^muted,
+   "ui-subtle": ^subtle,
+
+   "ui-content": ^text,
+   "ui-supplementary": ^subtle,
+
+   "ui-checked": ^foam
+   "ui-accent": ^iris,
+
+}
 
 
 --- (theme "Rose Pine Moon") ;; [Rose Pine](https://rosepinetheme.com)
