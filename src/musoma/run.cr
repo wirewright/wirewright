@@ -295,9 +295,9 @@ module MuSoma
 
     loop do
       sync(ws, agents)
-      present(ws, agents)
       entangle(ws, agents)
       step(ws, agents)
+      present(ws, agents)
 
       # WAIT
       next if Var.pending?(ws.state, ws.codex, ws.mu_codex, ws.library)
