@@ -1300,6 +1300,9 @@ vantage: ""
 (for limit-box
   (property µ-h as: max-h))
 
+(for vantage-box
+  (property µ-vantage as: id))
+
 (for root-box
   (property µ-cursor as: cursor))
 
@@ -1326,6 +1329,7 @@ vantage: ""
   viewport-box
   floating-box
   overlay-box
+  vantage-box
   tag-box        ;; < virtual
   outermost-box) ;; < virtual
   ;; ...
@@ -1428,6 +1432,10 @@ vantage: ""
 (defn ⸨aim,overlay⸩-box
   (box (children_dict {¦ ⸨aim,overlay⸩: true})
     ((⸨aim,overlay⸩ ^*children))))
+
+(defn vantage-box
+  (box (children_dict {¦ id_})
+    ((vantage ^*children ^:id))))
 
 (defn composite-box
   (box (children_dict {¦ opacity_: (%number _ < 1)})

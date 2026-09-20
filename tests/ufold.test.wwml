@@ -1038,3 +1038,10 @@
     (container
       (foo
         (bar (text caption: "Content"))))))
+
+;; vantage-box
+(µfold=
+  (container "hi" style: "" µ-vantage: (a b c))
+  (container
+    (vantage id: (a b c)
+      (text caption: "hi"))))
