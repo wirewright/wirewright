@@ -116,13 +116,6 @@ module Ww::D7
     # That is, nested circuits are not visited.
     defrecord CurrentLevel
 
-    struct CurrentLevel
-      # FIXME: ?!
-      def level : UInt32
-        0u32
-      end
-    end
-
     # Returns the node address of this hypergraph's wrapped parse tree.
     getter addr : D7::NodeAddr
 
@@ -162,52 +155,9 @@ module Ww::D7
       summary = D7.summary(@tree)
 
       case query = @level_query
-      in AnyLevel
-        summary.has_head?(head)
-      in CurrentLevel
-        unless level = summary.level?(query.level)
-          return false
-        end
-
-        level.has_head?(head)
+      in AnyLevel     then summary.has_head?(head)
+      in CurrentLevel then summary.current_level.has_head?(head)
       end
-    end
-
-    # Returns `true` if there are no nodes below the current level (i.e., increasing `level`
-    # will not expose more nodes).
-    #
-    # NOTE: The notion of "bottom" does not exist for hypergraphs querying *any level*.
-    # Raises on that.
-    def bottom? : Bool
-      case query = @level_query
-      in AnyLevel
-        raise AssertionError.new("the notion of bottom does not exist for hypergraphs querying any level")
-      in CurrentLevel
-      end
-
-      maxlevel = D7.maxlevel(@tree)
-
-      if query.level < maxlevel
-        return false # Definitely some nodes.
-      end
-
-      if query.level > maxlevel
-        return true # Definitely no nodes.
-      end
-
-      # When exactly at maxlevel, we have to actually iterate to see if
-      # there's anything.
-      guide = Guide.new { true }
-
-      empty = true
-      sink = ->(node : Node, edges : Set(Term)) do
-        empty = false
-        WalkFlow::Break
-      end
-
-      Hypergraph.walk(self, guide, sink)
-
-      empty
     end
 
     # Traverses nodes at the target level.
@@ -575,59 +525,34 @@ module Ww::D7
       end
 
       ctx = WalkContext.new(hg, guide, ids, sink)
-      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level_query, level: 0u32, id_zero: 0u32)
+      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level_query, id_zero: 0u32)
     end
 
-    private def self.walk(ctx, addr, tree : InertLeaf, target, level, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : InertLeaf, target, id_zero) : WalkFlow
       WalkFlow::Continue
     end
 
-    private def self.walk(ctx, addr, tree : GndLeaf, target, level, id_zero) : WalkFlow
-      case target
-      in AnyLevel
-      in CurrentLevel
-        unless target.level == level
-          return WalkFlow::Continue
-        end
-      end
-
+    private def self.walk(ctx, addr, tree : GndLeaf, target, id_zero) : WalkFlow
       ctx.sink.call(id_zero, addr, tree.feature)
     end
 
-    private def self.walk(ctx, addr, tree : ScopeNode | MixtureNode, target, level, id_zero) : WalkFlow
-      walk(ctx, addr, tree.child, target, level, id_zero)
+    private def self.walk(ctx, addr, tree : ScopeNode | MixtureNode, target, id_zero) : WalkFlow
+      walk(ctx, addr, tree.child, target, id_zero)
     end
 
-    private def self.walk(ctx, addr, tree : CircuitNode, target, level, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : CircuitNode, target, id_zero) : WalkFlow
       case target
       in AnyLevel
+        treatment = tree.to_group
+        walk(ctx, addr, treatment, target, id_zero)
       in CurrentLevel
-        if target.level == level
-          return walk(ctx, addr, tree.leaf, target, level, id_zero)
-        end
-
-        unless level <= target.level <= level + D7.maxlevel(tree)
-          # This branch cannot possibly contain circuits at the target level.
-          return WalkFlow::Continue
-        end
+        walk(ctx, addr, tree.leaf, target, id_zero)
       end
-
-      treatment = tree.to_group
-      walk(ctx, addr, treatment, target, level + 1, id_zero)
     end
 
-    private def self.walk(ctx, addr, tree : GroupNode, target, level, id_zero) : WalkFlow
-      case target
-      in AnyLevel
-      in CurrentLevel
-        unless level <= target.level <= level + D7.maxlevel(tree)
-          # This branch cannot possibly contain circuits at the target level.
-          return WalkFlow::Continue
-        end
-
-        unless ctx.guide.call(tree.summary)
-          return WalkFlow::Continue
-        end
+    private def self.walk(ctx, addr, tree : GroupNode, target, id_zero) : WalkFlow
+      unless ctx.guide.call(tree.summary)
+        return WalkFlow::Continue
       end
 
       predicate = tree.feature.passable
@@ -642,7 +567,7 @@ module Ww::D7
         break if ctx.ids.end <= id_zero
 
         if ctx.ids.begin < id_zero + id_width
-          case walk(ctx, addr.append(key), child, target, level, id_zero)
+          case walk(ctx, addr.append(key), child, target, id_zero)
           in .continue?
           in .break?
             return WalkFlow::Break
