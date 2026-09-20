@@ -305,7 +305,14 @@ module Ww::Scenery
     rasterize_add_rrect(canvas, inner)
     PlutoVG.canvas_clip_preserve(canvas)
     rasterize_set_paint(canvas, command.fill, outer.bounds)
-    PlutoVG.canvas_fill(canvas)
+
+    # HACK: I'm not going to pretend I know what I'm doing here. We fill, but that might
+    # produce ugly borders when they are very thin and rounded. Doing a stroke on top should
+    # fix or at least smoothen the ugliness. As an aside, the history of my fight with
+    # rounded rectangles is a long one and this is but another chapter in it!
+    PlutoVG.canvas_fill_preserve(canvas)
+    PlutoVG.canvas_stroke(canvas)
+
     PlutoVG.canvas_restore(canvas)
   end
 
