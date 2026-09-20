@@ -289,10 +289,16 @@ module MuSoma
       matchpi %{[group [reflection @_] _*]} do
         children, site_zero = distill(µ, hg, addr, tree.children, tree.feature.range, sites, site_zero)
 
-        distilled = Term::Dict.build do |commit|
-          commit << :vantage
-          commit.with(:id, {:reflection, addr.append(1)})
-          commit.concat(children)
+        vantage_id = Term.of(:reflection, addr.append(1))
+
+        if child = children.single?
+          distilled = Term.morph(child, {:"µ-vantage", vantage_id})
+        else
+          distilled = Term::Dict.build do |commit|
+            commit << :box
+            commit.with(:"µ-vantage", vantage_id)
+            commit.concat(children)
+          end
         end
 
         {Term.rep_of(distilled), site_zero}
