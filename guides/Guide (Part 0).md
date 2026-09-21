@@ -145,6 +145,7 @@ $ ./irack --single-step seed.wwml
 (cell @y)
 (feed @x @y)
 <Press Enter>
+
 (cell @x)
 (cell @y 0)
 (feed @x @y)
@@ -181,19 +182,22 @@ Notice how I have added an `@x` to the `feed`. Intuitively, this forms a loop. L
 $ ./irack --single-step seed.wwml
 (cell @x 0)
 (cell @y)
-(feed @x @y)
+(feed @x @y @x)
 <Press Enter>
+
 (cell @x)
 (cell @y 0)
-(feed @x @y)
+(feed @x @y @x)
 <Press Enter>
+
 (cell @x 0)
 (cell @y)
-(feed @x @y)
+(feed @x @y @x)
 <Press Enter>
+
 (cell @x)
 (cell @y 0)
-(feed @x @y)
+(feed @x @y @x)
 <Ctrl-C>
 
 $
