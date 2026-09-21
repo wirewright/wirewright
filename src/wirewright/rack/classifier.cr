@@ -240,26 +240,24 @@ module Ww::Rack
       #   ±n <> {n: ^(+ n 1)})
       # ```
       matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do
-        next D7.inert(node) unless M1.probably_matches?(pattern, whole0)
-        next D7.inert(node) unless env = M1.match?(pattern, whole0)
-        next D7.inert(node) unless part0 = env[capture]?
+        case replacer = replacer(pattern, capture, whole0)
+        in ZeroReplacer
+          continue
+        in OneReplacer
+          part0 = replacer.part?
+        in ManyReplacer
+        end
 
         D7.mixture(node, Term.of(:cell, edge, part0)) do |mix1|
-          backspec = Term[]
-
           Term.case(mix1) do
             matchpi %{(cell @_)} do
-              backspec = Term.entries({ { {capture}, Term[] } })
+              part0 ? Term.morph(node, {2, replacer.update.call(nil)}) : node
             end
 
             matchpi %{(cell @_ part1_)} do
-              backspec = Term.entries({ {capture, Term.of(:"^verbatim", part1)} })
+              part0 == part1 ? node : Term.morph(node, {2, replacer.update.call(part1)})
             end
           end
-
-          whole1 = M1.backmap(pattern, Term.of(backspec), whole0)
-
-          Term.morph(node, {2, whole1})
         end
       end
 
@@ -1022,29 +1020,28 @@ module Ww::Rack
       # [node (@edge_ pattern_) child_]
       matchpi %{[node (edge←(%'edge capture_) pattern_) child0_]} do
         leaf = pass do
-          next D7.inert(node) unless env = M1.match?(pattern, child0)
+          replacer = replacer(pattern, capture, child0)
+          if replacer.is_a?(ZeroReplacer)
+            next D7.inert(node)
+          end
 
-          if view0 = env[capture]?
-            mix0 = Term.of(:cell, edge, view0)
-          else
+          case replacer
+          in OneReplacer
+            mix0 = Term.of(:cell, edge, replacer.part?)
+          in ManyReplacer
             mix0 = Term.of(:cell, edge)
           end
 
           D7.mixture(node, mix0) do |mix1|
-            backspec = Term[]
-
             Term.case(mix1) do
               matchpi %{(cell @_)} do
-                backspec = Term.entries({ { {capture}, Term[] } })
+                Term.morph(node, {2, replacer.update.call(nil)})
               end
 
-              matchpi %{(cell @_ value_)} do
-                backspec = Term.entries({ {capture, Term.of(:"^verbatim", value)} })
+              matchpi %{(cell @_ part1_)} do
+                Term.morph(node, {2, replacer.update.call(part1)})
               end
             end
-
-            child1 = M1.backmap(pattern, Term.of(backspec), child0)
-            Term.morph(node, {2, child1})
           end
         end
 
@@ -1164,29 +1161,23 @@ module Ww::Rack
       # [circuit (@edge_ pattern_) children_*]
       matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do
         leaf = pass do
-          next D7.inert(node) unless M1.probably_matches?(pattern, children0)
-          next D7.inert(node) unless env = M1.match?(pattern, children0)
+          replacer = replacer(pattern, capture, children0)
+          if replacer.is_a?(ZeroReplacer)
+            next D7.inert(node)
+          end
 
-          if view0 = env[capture]?
-            mix0 = Term.of(:cell, edge, view0)
-          else
+          case replacer
+          in OneReplacer
+            mix0 = Term.of(:cell, edge, replacer.part?)
+          in ManyReplacer
             mix0 = Term.of(:cell, edge)
           end
 
           D7.mixture(node, mix0) do |mix1|
-            backspec = Term[]
-
-            Term.case(mix1) do
-              matchpi %{(cell @_)} do
-                backspec = Term.entries({ { {capture}, Term[] } })
-              end
-
-              matchpi %{(cell @_ value_)} do
-                backspec = Term.entries({ {capture, Term.of(:"^verbatim", value)} })
-              end
+            children1 = Term.case(mix1) do
+              matchpi %{(cell @_)} { replacer.update.call(nil) }
+              matchpi %{(cell @_ part1_)} { replacer.update.call(part1) }
             end
-
-            children1 = M1.backmap(pattern, Term.of(backspec), children0)
 
             Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
           end
