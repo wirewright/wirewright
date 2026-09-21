@@ -296,7 +296,7 @@ class Ww::Rack::Automaton
   # Advances the automaton by one abstract step by evolving *circuit*. Returns
   # the evolved circuit (can be the same as *circuit*) and an action for you
   # to run.
-  def next(circuit : Term, prepass = Rack::Prepass, library = Assembler::RuleLibrary.empty) : {Term, Action}
+  def next(circuit : Term, prepass = Rack::Prepass, library = Assembler.library) : {Term, Action}
     # Exhaust display items.
     if item = @display.shift?
       return circuit, item

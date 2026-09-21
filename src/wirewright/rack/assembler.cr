@@ -2,19 +2,27 @@
 module Ww::Rack::Assembler
   extend self
 
+  # :nodoc:
+  SYM_RULE = Term.of(:rule)
+
+  # :nodoc:
+  SYM_SLOT = Term.of(:slot)
+
   # A *recipe* is an interpretation of a rule body.
-  alias Recipe = AlloyRecipe | ComponentRecipe
+  alias Recipe = AlloyRecipe | ComponentRecipe | CallRecipe
 
   # Represents Alloy recipes, e.g. `(Text caption_string) => (p ^caption)`.
   defrecord AlloyRecipe, template : Term
+
+  # A recipe which works like `AlloyRecipe` but processes the instance as
+  # a slot call immediately, without the need for intermediate slots.
+  defrecord CallRecipe, template : Term
 
   # Represents a component recipe. Component recipes construct a module.
   # Component recipes introduce an auxiliary node, `template`, which can
   # be used anywhere a normal Rack node can be used, for islands of templating
   # (as opposed to Alloy recipes which introduce templating everywhere).
-  defrecord ComponentRecipe,
-    bindings : Term::Dict,
-    tree : D7::ParseTree
+  defrecord ComponentRecipe, bindings : Term::Dict, tree : D7::ParseTree
 
   # Constructs a recipe from a rule *body*.
   #
@@ -28,6 +36,10 @@ module Ww::Rack::Assembler
         ComponentRecipe.new(bindings.as_d, tree)
       end
 
+      matchpi %{[slot template_]} do
+        CallRecipe.new(template)
+      end
+
       otherwise do
         AlloyRecipe.new(body)
       end
@@ -37,13 +49,13 @@ module Ww::Rack::Assembler
   # Holds **mutable** state for the assembler pass.
   #
   # `Assembler` is ultimately a stateful pass. We need to know which rules
-  # have appeared and disappeared and changed at the beginning of each
-  # cycle compared with the previous frame to work in an expected way;
-  # and this requires us to have some kind of memory.
+  # appeared, disappeared, and changed at the beginning of each frame compared
+  # with the previous frame to work in an expected way; and this requires us
+  # to have some kind of memory.
   #
   # Since we have state anyway, we also use it to cache various things,
-  # so that scans on each cycle are as cheap as possible, and scale
-  # roughly with the amount of `Assembler`-related change.
+  # so that scans on each frame are as cheap as possible, and scale roughly
+  # with the amount of `Assembler`-related change.
   defcase State, rules : Array(Rule)
 
   # Constructs a Assembler state object. See `State` for more info.
@@ -53,22 +65,20 @@ module Ww::Rack::Assembler
 
   defrecord RuleLibrary, defns : Slice(RuleDefn)
 
-  def RuleLibrary.empty : RuleLibrary
+  # Constructs an empty rule library.
+  def library : RuleLibrary
     RuleLibrary.new(Slice(RuleDefn).empty)
   end
 
-  def library : RuleLibrary
-    RuleLibrary.empty
-  end
-
+  # Constructs a rule library from a *document* term.
   def library(document : Term) : RuleLibrary
     unless dict = document.as_d?
-      return RuleLibrary.empty
+      return library
     end
 
     defns = dict.items.to_compact_readonly_slice do |item|
       Term.matchpi?(item, %{[rule pattern_ template_]}) do
-        RuleDefn.new(RuleScope[], :none, pattern, template)
+        RuleDefn.new(RuleScope[], pattern, template)
       end
     end
 
@@ -76,10 +86,9 @@ module Ww::Rack::Assembler
   end
 
   # Represents a rule definition such as `x => 100` in the circuit. Such rule
-  # definitions are inert for Rack. We carry over their *annotations* set.
+  # definitions are inert for Rack.
   defrecord RuleDefn,
     scope : RuleScope,
-    annotations : D7::InertAnnotationSet,
     pattern : Term,
     body : Term
 
@@ -113,37 +122,30 @@ module Ww::Rack::Assembler
     each_rule_defn(RuleScope[], RuleScope[], tree, fn)
   end
 
-  private def each_rule_defn(scope, next_scope, tree : D7::InertLeaf, fn) : Nil
-    Term.matchpi?(tree.feature.node, %{[rule pattern_ body_]}) do
-      fn.call(RuleDefn.new(scope, tree.feature.annotations, pattern, body))
-    end
-  end
+  private def each_rule_defn(scope, next_scope, tree : D7::ParseTree, fn) : Nil
+    case tree
+    in D7::InertLeaf
+    in D7::GndLeaf
+      Term.matchpi?(tree.feature.node, %{[rule pattern_ body_]}) do
+        fn.call(RuleDefn.new(scope, pattern, body))
+      end
+    in D7::ScopeNode
+      each_rule_defn(next_scope, next_scope, tree.child, fn)
+    in D7::MixtureNode
+      each_rule_defn(scope, next_scope, tree.child, fn)
+    in D7::ParentNode
+      return unless tree.summary.has_head?(SYM_RULE)
 
-  private def each_rule_defn(scope, next_scope, tree : D7::GndLeaf, fn) : Nil
-  end
-
-  private def each_rule_defn(scope, next_scope, tree : D7::ScopeNode, fn) : Nil
-    each_rule_defn(next_scope, next_scope, tree.child, fn)
-  end
-
-  private def each_rule_defn(scope, next_scope, tree : D7::MixtureNode, fn) : Nil
-    each_rule_defn(scope, next_scope, tree.child, fn)
-  end
-
-  private def each_rule_defn(scope, next_scope, tree : D7::ParentNode, fn) : Nil
-    return unless tree.feature.node.probably_includes?(Term[:rule])
-
-    tree.children.each_with_index do |child, index|
-      each_rule_defn(scope, next_scope.append(index.to_u32), child, fn)
+      tree.children.each_with_index do |child, index|
+        each_rule_defn(scope, next_scope.append(index.to_u32), child, fn)
+      end
     end
   end
 
   # Returns a list of rule definitions found in *tree*.
   def rule_defns(library : RuleLibrary, tree : D7::ParseTree) : Slice(RuleDefn)
     defns = Pf::Kit.stack_array(RuleDefn)
-    each_rule_defn(tree) do |defn|
-      defns << defn
-    end
+    each_rule_defn(tree) { |defn| defns << defn }
     defns.concat(library.defns)
     defns.to_unsafe_readonly_slice!
   end
@@ -168,10 +170,9 @@ module Ww::Rack::Assembler
     end
 
     # Find new rules.
-    # Find rules whose patterns are the same but their bodies are different.
+    # Find rules whose patterns are the same but their bodies are different. That's
+    # an update for us.
     defns.each do |defn|
-      next if defn.annotations.incomplete?
-
       present = false
 
       rules.each_with_index do |rule, index|
@@ -279,8 +280,12 @@ module Ww::Rack::Assembler
       matchpi %{[slot call_]} do
         # An uninitialized slot does not care about invalidations, it wants
         # to initialize itself no matter what.
-        decision = decision(state, scope, call)
-        follow(node, decision)
+        case decision = decision(state, scope, call)
+        in EraseInstance
+          Term.morph(node, {2, nil})
+        in ReplaceInstance
+          Term.morph(node, {2, decision.replacement})
+        end
       end
 
       otherwise do
@@ -290,25 +295,29 @@ module Ww::Rack::Assembler
   end
 
   private def broadcast(state, depth, scope, next_scope, tree : D7::ParentNode, invalidations) : D7::RepairTree
-    node_dict = tree.feature.node
-    node = Term.of(node_dict)
+    node = Term.of(tree.feature.node)
 
     unless depth <= SAFE_SLOT_DEPTH
       return node
     end
 
-    unless node_dict.probably_includes?(Term[:slot])
-      return node
-    end
-
     Term.case(node) do
       matchpi %{[slot call_ _]} do
-        continue unless decision = decision?(state, scope, call, invalidations)
-
-        follow(node, decision)
+        case decision = decision?(state, scope, call, invalidations)
+        in Nil
+          continue
+        in EraseInstance
+          Term.morph(node, {2, nil})
+        in ReplaceInstance
+          Term.morph(node, {2, decision.replacement})
+        end
       end
 
       otherwise do
+        unless tree.summary.has_head?(SYM_SLOT)
+          return node
+        end
+
         D7.repair(tree) do |child, index|
           broadcast(state, depth + 1, scope, next_scope.append(index.to_u32), child, invalidations)
         end
@@ -353,23 +362,23 @@ module Ww::Rack::Assembler
     return unless M1.probe?(Term[], invalidation.op, call)
     return if compatible_scopes?(invalidation.scope, scope)
 
-    # The event invalidationed this slot. Re-evalaute the slot's content.
+    # The event invalidated this slot. Re-evaluate the slot's content.
     propose(state, scope, call)
   end
 
   private def propose?(state : State, scope : RuleScope, call : Term, invalidation : RuleBodyInvalidation) : SlotProposal?
     return unless M1.probe?(Term[], invalidation.op, call)
 
-    # The event invalidationed this slot. Re-evalaute the slot's content.
+    # The event invalidated this slot. Re-evaluate the slot's content.
     propose(state, scope, call)
   end
 
   private def propose(state : State, scope : RuleScope, call : Term) : SlotProposal
-    state.rules.each do |rule|
+    state.rules.zip(0u32...state.rules.size.to_u32) do |rule, rule_id|
       next unless compatible_scopes?(rule.defn.scope, scope)
       next unless vars = M1.match?(Term[], rule.op, call)
 
-      instance = instantiate(vars, rule.recipe)
+      instance = instantiate(state.rules, rule, rule_id, vars)
       return ReplaceInstance.new(instance)
     end
 
@@ -401,22 +410,37 @@ module Ww::Rack::Assembler
     propose(state, scope, call)
   end
 
-  private def follow(node : Term, decision : EraseInstance) : Term
-    Term.morph(node, {2, nil})
+  def instantiate(rules : Array(Rule), rule : Rule, rule_id : UInt32, vars : Term::Dict) : Term
+    instantiate(InstantiateContext.new(rules, rule.defn.scope, path: Pf::USet32[rule_id]), vars, rule.recipe)
   end
 
-  private def follow(node : Term, decision : ReplaceInstance) : Term
-    Term.morph(node, {2, decision.replacement})
-  end
+  defrecord InstantiateContext, rules : Array(Rule), scope : RuleScope, path : Pf::USet32
 
-  # Instantiates the given *recipe*.
-  def instantiate(vars : Term::Dict, recipe : AlloyRecipe) : Term
+  private def instantiate(ctx : InstantiateContext, vars : Term::Dict, recipe : AlloyRecipe) : Term
     Alloy.render(vars, recipe.template)
   end
 
-  # :ditto:
-  def instantiate(vars : Term::Dict, recipe : ComponentRecipe) : Term
-    repair_tree = instantiate(vars, recipe, recipe.tree)
+  private def instantiate(ctx : InstantiateContext, vars : Term::Dict, recipe : CallRecipe) : Term
+    call = Alloy.render(vars, recipe.template)
+
+    ctx.rules.zip(0u32...ctx.rules.size.to_u32) do |rule, rule_id|
+      next if rule_id.in?(ctx.path)
+      next unless compatible_scopes?(rule.defn.scope, ctx.scope)
+      next unless call_vars = M1.match?(Term[], rule.op, call)
+
+      # Prevent infinite recursion by keeping track of the path. Whenever we revisit
+      # the same rule, we skip it. If no other rule matches, we emit `(slot ^call)` --
+      # which *would* continue recursion, but on the *next* tick rather than
+      # on the current one, here, immediately.
+      subctx = InstantiateContext.new(ctx.rules, ctx.scope, ctx.path.add(rule_id))
+      return instantiate(subctx, call_vars, rule.recipe)
+    end
+
+    Term.of(:slot, call)
+  end
+
+  private def instantiate(ctx : InstantiateContext, vars : Term::Dict, recipe : ComponentRecipe) : Term
+    repair_tree = render_component_templates(vars, recipe, recipe.tree)
     interior_instance = D7.collapse(repair_tree)
 
     instance = Term::Dict.build do |commit|
@@ -453,7 +477,7 @@ module Ww::Rack::Assembler
     Term.of(instance)
   end
 
-  private def instantiate(vars, recipe, tree : D7::InertLeaf) : D7::RepairTree
+  private def render_component_templates(vars, recipe, tree : D7::InertLeaf) : D7::RepairTree
     node = tree.feature.node
 
     Term.case(node) do
@@ -492,18 +516,28 @@ module Ww::Rack::Assembler
     end
   end
 
-  private def instantiate(vars, recipe, tree : D7::GndLeaf) : D7::RepairTree
+  private def render_component_templates(vars, recipe, tree : D7::GndLeaf) : D7::RepairTree
     tree.feature.node
   end
 
-  private def instantiate(vars, recipe, tree : D7::ScopeNode | D7::MixtureNode | D7::ParentNode) : D7::RepairTree
-    D7.repair(tree) { |child| instantiate(vars, recipe, child) }
+  private def render_component_templates(vars, recipe, tree : D7::ScopeNode | D7::MixtureNode | D7::ParentNode) : D7::RepairTree
+    D7.repair(tree) { |child| render_component_templates(vars, recipe, child) }
   end
 
-  def step(clf : D7::Classifier, tree : D7::ParseTree, state : State, library : RuleLibrary) : Term
+  def step(state : State, parser : D7::Parser, library : RuleLibrary, circuit : Term) : Slice(Term)
+    tree = parser.parse(circuit)
+
+    summary = D7.summary(tree)
+    unless summary.has_head?(SYM_SLOT)
+      return Slice[circuit]
+    end
+
     # Find rule definitions. This is an unavoidable scan of the tree.
     # Cues help us skip some paths not containing a rule.
-    defns = rule_defns(library, tree)
+    defns = library.defns
+    if summary.has_head?(SYM_RULE)
+      defns = rule_defns(library, tree)
+    end
 
     # See what changed.
     events = diff(state.rules, defns)
@@ -511,7 +545,13 @@ module Ww::Rack::Assembler
     # If anything changed, generate invalidations & sync state.
     invalidations = Slice(SlotInvalidation).empty
     if events.present?
-      invalidations = update(clf, state, events)
+      invalidations = update(parser.clf, state, events)
+    end
+
+    # Skip broadcast if no invalidations -- provided there are no (slot _)s which
+    # we would need to look at regardless of invalidations.
+    if invalidations.empty? && !summary.has_signature?(D7::NodeSignature.new(SYM_SLOT, arity: 2))
+      return Slice[circuit]
     end
 
     # Broadcast invalidations and produce a repair tree. This is another
@@ -519,10 +559,6 @@ module Ww::Rack::Assembler
     # or close to nothing, so we optimize for that. We use cues as well.
     repair_tree = broadcast(state, tree, invalidations)
 
-    D7.collapse(repair_tree)
-  end
-
-  def step(state : State, parser : D7::Parser, library : RuleLibrary, circuit : Term) : Slice(Term)
-    Slice[step(parser.clf, parser.parse(circuit), state, library)]
+    Slice[D7.collapse(repair_tree)]
   end
 end

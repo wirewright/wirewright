@@ -51,9 +51,31 @@ module Ww::D7
   defrecord Gnd,
     node : Term,
     defn : Term,
-    head : Term,
+    signature : NodeSignature,
     edges : Set(Term),
     merge_policy : D7::MergePolicy
+
+  struct NodeSignature
+    getter term : Term
+    getter arity : UInt32
+
+    # :nodoc:
+    def initialize(@term, @arity)
+    end
+
+    def ==(other : Term) : Bool
+      @term == other
+    end
+
+    def ==(other : NodeSignature) : Bool
+      {@term, @arity} == {other.term, other.arity}
+    end
+
+    # NOTE: Only `term` is considered in the hash so that objects with the same
+    # head term but different arities collide and are stored in the same "bucket".
+    # When the lookup algorithm then calls `==`, we get more detailed.
+    def_hash term
+  end
 
   # Constructs a grounded node from an enumerable of *edges*.
   #
@@ -62,11 +84,18 @@ module Ww::D7
   # NOTE: If *edges* is a `Set`, it will be reused! Make sure to not mutate it;
   # if you will, create a copy and pass the copy instead.
   def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node, merge_policy : D7::MergePolicy = D7::MergeDiff.new(0u32)) : Gnd
-    unless head = defn.as_d?.try(&.items.first?)
-      raise ArgumentError.new("could not determine the head of node")
+    signature = pass do
+      next unless dict = defn.as_d?
+      next unless head = dict.items.first?
+
+      NodeSignature.new(head, dict.uitemsize)
     end
 
-    Gnd.new(node, defn, head, edges.as?(Set(Term)) || edges.to_set, merge_policy)
+    unless signature
+      raise ArgumentError.new("could not determine the signature of the node")
+    end
+
+    Gnd.new(node, defn, signature, edges.as?(Set(Term)) || edges.to_set, merge_policy)
   end
 
   # Constructs a grounded node with the given *edges*.
@@ -199,7 +228,7 @@ module Ww::D7
         return TreeSummary.new(Slice(LevelSummary).new(levelsptr, 1, read_only: true))
       end
 
-      levels = Slice[LevelSummary.new(1u32, Set{feature.head}, feature.edges)]
+      levels = Slice[LevelSummary.new(1u32, Set{feature.signature}, feature.edges)]
       @levels.set(levels.to_unsafe, :release)
 
       TreeSummary.new(levels)
@@ -290,18 +319,18 @@ module Ww::D7
     # Returns the number of ground nodes (`GndLeaf`) in this level.
     getter population : UInt32
 
-    # Returns the set of ground node heads (`Gnd#head`) in this level.
-    getter heads : Set(Term)
+    # Returns the set of ground node signatures (`Gnd#signature`) in this level.
+    getter signatures : Set(NodeSignature)
 
     # Returns the set of ground node edges (`Gnd#edges`) in this level.
     getter edges : Set(Term)
 
     # :nodoc:
-    def initialize(@population, @heads : Set(Term), @edges : Set(Term))
+    def initialize(@population, @signatures : Set(NodeSignature), @edges : Set(Term))
     end
 
     # :nodoc:
-    EMPTY = new(population: 0u32, heads: Set(Term).new, edges: Set(Term).new)
+    EMPTY = new(population: 0u32, signatures: Set(NodeSignature).new, edges: Set(Term).new)
 
     # Constructs an empty level summary.
     def self.new : LevelSummary
@@ -310,14 +339,18 @@ module Ww::D7
 
     # Mutably unions *b* into *a*.
     def self.union!(a : LevelSummary, b : LevelSummary) : LevelSummary
-      a.heads.concat(b.heads)
+      a.signatures.concat(b.signatures)
       a.edges.concat(b.edges)
-      LevelSummary.new(a.population + b.population, a.heads, a.edges)
+      LevelSummary.new(a.population + b.population, a.signatures, a.edges)
     end
 
     # Returns `true` if *term* is a head of one of the ground nodes in this level.
     def has_head?(term : Term) : Bool
-      @heads.includes?(term)
+      @signatures.includes?(term)
+    end
+
+    def has_signature?(signature : NodeSignature) : Bool
+      @signatures.includes?(signature)
     end
   end
 
@@ -398,6 +431,10 @@ module Ww::D7
       @levels.any?(&.has_head?(term))
     end
 
+    def has_signature?(signature : NodeSignature) : Bool
+      @levels.any?(&.has_signature?(signature))
+    end
+
     # Updates the summary of the current level.
     def update_current(& : LevelSummary -> LevelSummary) : TreeSummary
       TreeSummary.new(@levels.prior.append(yield current_level))
@@ -440,7 +477,7 @@ module Ww::D7
         end
       end
 
-      LevelSummary.new(level.population, level.heads, edges)
+      LevelSummary.new(level.population, level.signatures, edges)
     end
   end
 

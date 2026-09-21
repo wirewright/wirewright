@@ -2647,6 +2647,14 @@ module Ww::Rack
         edges.empty? ? D7.inert(node) : D7.gnd(node, edges)
       end
 
+      # |@ rack.rule
+      #
+      # |@pattern
+      # [rule _ _]
+      matchpi %{[rule _ _]} do
+        D7.gnd(node)
+      end
+
       # |@ rack.slot
       #
       # |@pattern

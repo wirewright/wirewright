@@ -65,12 +65,12 @@ module Ww::D7
   struct Node
     getter id : NodeId
     getter addr : NodeAddr
-    getter head : Term
+    getter signature : NodeSignature
     getter term : Term
     getter merge_policy : MergePolicy
 
     # :nodoc:
-    def initialize(@id, @addr, @head, @term, @merge_policy)
+    def initialize(@id, @addr, @signature, @term, @merge_policy)
     end
   end
 
@@ -190,7 +190,7 @@ module Ww::D7
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node, edges : Set(Term)) do
-        if node.head == head
+        if node.signature == head
           fn.call(node)
         end
 
@@ -248,7 +248,7 @@ module Ww::D7
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node) do
-        return unless node.head == head
+        return unless node.signature == head
 
         fn.call(node)
       end
@@ -520,7 +520,7 @@ module Ww::D7
 
         # Use Gnd#defn (the node's definition) rather than #node here.
         # The hypergraph should only ever see the defn.
-        node = Node.new(id, addr, feature.head, feature.defn, feature.merge_policy)
+        node = Node.new(id, addr, feature.signature, feature.defn, feature.merge_policy)
         fn.call(node, feature.edges)
       end
 
@@ -624,7 +624,7 @@ module Ww::D7
       # Use Gnd#defn (the node's definition) rather than #node here.
       # The hypergraph should only ever see the defn.
       node = Node.new(id_zero, addr,
-        tree.feature.head,
+        tree.feature.signature,
         tree.feature.defn,
         tree.feature.merge_policy,
       )
