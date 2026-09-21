@@ -90,6 +90,51 @@ module Ww::Rack
     end
   end
 
+  alias Replacer = ZeroReplacer | OneReplacer | ManyReplacer
+
+  defrecord ZeroReplacer
+  defrecord OneReplacer, update : Term? -> Term, part : Term?, smart: true
+  defrecord ManyReplacer, update : Term? -> Term
+
+  private def replacer(pattern : Term, capture : Term, whole : Term) : Replacer
+    env_log_lists = M1.matches_and_logs(Term[], M1.operator(pattern), whole)
+    if env_log_lists.empty?
+      return ZeroReplacer.new
+    end
+
+    if env_log_list = env_log_lists.single?
+      env, log_list = env_log_list
+      part0 = env[capture]?
+    end
+
+    update = ->(part1 : Term?) do
+      case part1
+      in Nil
+        backspec = Term[].with({capture}, Term[]) # {(capture): ()}
+      in Term
+        if part1.type.dict? || part1.type.symbol?
+          backspec = Term[].with(capture, {:"^verbatim", part1})
+        else
+          # Do not waste time doing ^verbatim stuff on terms that cannot cause
+          # us trouble: booleans, numbers, etc.
+          backspec = Term[].with(capture, part1)
+        end
+      end
+
+      backmap = {env_log_lists, backspec}
+      rep = M1.backmapR({backmap}, whole)
+      Term.collapse(rep)
+    end
+
+    if env_log_list.nil?
+      assert part0.nil?
+
+      return ManyReplacer.new(update)
+    end
+
+    OneReplacer.new(update, part0)
+  end
+
   # :nodoc:
   def classify!(node : Term) : D7::Feature
     M1::PatternSet.case(node, block_type: :proc) do
@@ -1152,6 +1197,11 @@ module Ww::Rack
 
       # |@ rack.frag
       #
+      # |@summary
+      # Designates a place in the circuit where a node can be stored.
+
+      # |@ rack.frag
+      #
       # |@pattern
       # [frag @edge_]
       # [frag @edge_ child_]
@@ -1168,9 +1218,6 @@ module Ww::Rack
       #
       # |@key child rack
       # The child node.
-      #
-      # |@summary
-      # Designates a place in the circuit where a node can be stored.
       #
       # |@block
       # The *fragment node* is a relative of the cell node `rack.cell`. It designates
@@ -1313,6 +1360,98 @@ module Ww::Rack
           Term.of_case(view) do
             matchpi %{(cell _)} { node }
             matchpi %{(cell _ value1_)} { Term.morph(node, {2, value1}) }
+          end
+        end
+      end
+
+      # |@ rack.frag
+      #
+      # |@pattern
+      # [frag (edge←(%'edge capture_) pattern_) child_]
+      #
+      # |@key edge rack.edge
+      # The edge where to expose the captured part of *child*.
+      #
+      # |@key capture
+      # The name of the capture of a part of *child* in *pattern*.
+      #
+      # |@key pattern m1.operator
+      # The pattern used to extract a part of *child* (captured by *capture*),
+      # and expose it at *edge*.
+      #
+      # |@key child rack
+      # The child node itself.
+      #
+      # |@block
+      # The pattern variant of the frag node allows you to expose a part of a *child*
+      # node at the given *edge*, instead of exposing the entire child. This variant works
+      # like similar variants of `rack.node`, `rack.cell`, `rack.circuit`, etc.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (frag (@count (appearance _ count_))
+      #   (appearance local 0))
+      #
+      # (backsys @count
+      #   ±n <> {n: ^(+ n 1)})
+      #
+      # (sensor (view local _number))
+      #
+      # ;; Frame 1
+      #
+      # (frag (@count (appearance _ count_))
+      #   (appearance local 1))
+      #
+      # (backsys @count
+      #   ±n <> {n: ^(+ n 1)})
+      #
+      # (sensor (view local _number) 0)
+      #
+      # ;; Frame 2
+      #
+      # (frag (@count (appearance _ count_))
+      #   (appearance local 2))
+      #
+      # (backsys @count
+      #   ±n <> {n: ^(+ n 1)})
+      #
+      # (sensor (view local _number) 1)
+      #
+      # ;; ... and so on.
+      # ```
+      matchpi %{[frag (edge←(%'edge capture_) pattern_) child0_]} do
+        case replacer = replacer(pattern, capture, child0)
+        in ZeroReplacer
+          mix0 = child0
+        in OneReplacer
+          mix0 = Term.of(:group, {:cell, edge, replacer.part?}, child0)
+        in ManyReplacer
+          mix0 = Term.of(:group, {:cell, edge}, child0)
+        end
+
+        D7.mixture(node, mix0) do |mix1|
+          if replacer.is_a?(ZeroReplacer)
+            next Term.morph(node, {2, mix1})
+          end
+
+          Term.case(mix1) do
+            matchpi %{(group (cell _) child1_)} do
+              if replacer.is_a?(OneReplacer) && replacer.part?.nil?
+                Term.morph(node, {2, child1})
+              else
+                Term.morph(node, {2, replacer.update.call(nil)})
+              end
+            end
+
+            matchpi %{(group (cell _ part1_) child1_)} do
+              if replacer.is_a?(OneReplacer) && replacer.part? == part1
+                Term.morph(node, {2, child1})
+              else
+                Term.morph(node, {2, replacer.update.call(part1)})
+              end
+            end
           end
         end
       end

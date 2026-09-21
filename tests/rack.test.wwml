@@ -2281,18 +2281,21 @@
       (cell @y)
       (cell @bridge-src (feed @x @y))
       (feed @bridge-src @bridge-dst))
+
     (frame
       (cell @x 0)
       (frag @bridge-dst (feed @x @y))
       (cell @y)
       (cell @bridge-src)
       (feed @bridge-src @bridge-dst))
+
     (frame
       (cell @x)
       (frag @bridge-dst (feed @x @y))
       (cell @y 0)
       (cell @bridge-src)
       (feed @bridge-src @bridge-dst))
+
     end)
 
   ;; Erase
@@ -2300,9 +2303,11 @@
     (frame
       (frag @x 100)
       (discard @x))
+
     (frame
       (frag @x)
       (discard @x))
+
     end)
 
   (rack
@@ -2311,12 +2316,15 @@
       (backsys @x (cell _ ±n) <> {n: ^(+ n 1)})
       (frag @x (cell @count 0))
       (cell @y))
+
     (frame/tail
       (frag @x (cell @count 1))
       (cell @y "Count: 0"))
+
     (frame/tail
       (frag @x (cell @count 2))
       (cell @y "Count: 1"))
+
     (frame/tail
       (frag @x (cell @count 3))
       (cell @y "Count: 2")))
@@ -2332,6 +2340,7 @@
             ⟨(cell @count ±n)⟩ <> {n: ^(+ n 1)})))
       (view (@count ±n @y) ^"Count: ⸢n⸣")
       (cell @y))
+
     (frame
       (frag @x
         (group
@@ -2340,6 +2349,7 @@
             ⟨(cell @count ±n)⟩ <> {n: ^(+ n 1)})))
       (view (@count ±n @y) ^"Count: ⸢n⸣")
       (cell @y "Count: 0"))
+
     (frame
       (frag @x
         (group
@@ -2358,6 +2368,7 @@
         (module {@parent: @current}
           (feed (copy @parent) @current)
           (frag @current))))
+
     (frame
       (frag @current
         (module {@parent: @current}
@@ -2366,6 +2377,7 @@
             (module {@parent: @current}
               (feed (copy @parent) @current)
               (frag @current))))))
+
     (frame
       (frag @current
         (module {@parent: @current}
@@ -2387,37 +2399,199 @@
       (frag @y)
       (cell @a 100)
       (cell @b))
+
     (frame
       (cell @x)
       (feed @x @y)
       (frag @y (delay 3 (feed @a @b)))
       (cell @a 100)
       (cell @b))
+
     (frame
       (cell @x)
       (feed @x @y)
       (frag @y (delay 2 (feed @a @b)))
       (cell @a 100)
       (cell @b))
+
     (frame
       (cell @x)
       (feed @x @y)
       (frag @y (delay 1 (feed @a @b)))
       (cell @a 100)
       (cell @b))
+
     (frame
       (cell @x)
       (feed @x @y)
       (frag @y (feed @a @b))
       (cell @a 100)
       (cell @b))
+
     (frame
       (cell @x)
       (feed @x @y)
       (frag @y (feed @a @b))
       (cell @a)
       (cell @b 100))
-    end))
+
+    end)
+
+  ;; Pattern
+  (rack
+    (frame
+      (feed (@xs front) @x)
+      (feed @y (@ys back))
+      (cell @xs (1 2 3))
+      (frag (@y (cell _ y_))
+        (cell @x))
+      (cell @ys ()))
+
+    (frame/tail
+      (cell @xs (2 3))
+      (frag (@y (cell _ y_))
+        (cell @x 1))
+      (cell @ys ()))
+
+    (frame/tail
+      (cell @xs (2 3))
+      (frag (@y (cell _ y_))
+        (cell @x))
+      (cell @ys (1)))
+
+    (frame/tail fast-forward: true
+      (cell @xs ())
+      (frag (@y (cell _ y_))
+        (cell @x))
+      (cell @ys (1 2 3)))
+
+    end)
+
+  (rack
+    (frame
+      (feed (@xs front) @x)
+      (cell @xs (1 2 3))
+      (frag (@x (group …⟨(cell _ `x)⟩°…))
+        (group
+          (cell @a)
+          (cell @b)
+          (cell @c))))
+
+    (frame/tail
+      (feed (@xs front) @x)
+      (cell @xs (2 3))
+      (frag (@x (group …⟨(cell _ `x)⟩°…))
+        (group
+          (cell @a 1)
+          (cell @b 1)
+          (cell @c 1))))
+
+    end)
+
+  (rack
+    (frame
+      (feed (@xs front) @x)
+      (feed (@a @b @c) (@ys back))
+      (cell @xs (1 2 3))
+      (frag (@x (group …⟨(cell _ `x)⟩°…))
+        (group
+          (cell @a)
+          (cell @b)
+          (cell @c)))
+      (cell @ys ()))
+
+    (frame/tail
+      (cell @xs (2 3))
+      (frag (@x (group …⟨(cell _ `x)⟩°…))
+        (group
+          (cell @a 1)
+          (cell @b 1)
+          (cell @c 1)))
+      (cell @ys ()))
+
+    (frame/tail
+      (cell @xs (2 3))
+      (frag (@x (group …⟨(cell _ `x)⟩°…))
+        (group
+          (cell @a)
+          (cell @b)
+          (cell @c)))
+      (cell @ys ((1 1 1))))
+
+    (frame/tail fast-forward: true
+      (cell @xs ())
+      (frag (@x (group …⟨(cell _ `x)⟩°…))
+        (group
+          (cell @a)
+          (cell @b)
+          (cell @c)))
+      (cell @ys ((1 1 1) (2 2 2) (3 3 3))))
+
+    end)
+
+  ;; Clear
+  (rack
+    (frame
+      (frag (@snd (queue _ (_ snd_ _*)))
+        (queue (@x @xs) (1 2 3)))
+      (discard @snd))
+
+    (frame/tail
+      (frag (@snd (queue _ (_ snd_ _*)))
+        (queue (@x @xs) (1 3)))
+      (discard @snd))
+
+    (frame/tail
+      (frag (@snd (queue _ (_ snd_ _*)))
+        (queue (@x @xs) (1)))
+      (discard @snd))
+
+    end)
+
+  ;; The underlying backspec is injection proof
+  (rack
+    (frame
+      (frag (@x (x_ y_)) (1 2))
+      (cell @a ^y)
+      (feed @a (over @x)))
+
+    (frame
+      (frag (@x (x_ y_)) (^y 2))
+      (cell @a)
+      (feed @a (over @x)))
+
+    end)
+
+  ;; From docs
+  (rack
+    (frame
+      (frag (@count (appearance _ count_))
+        (appearance local 0))
+      (backsys @count
+        ±n <> {n: ^(+ n 1)})
+      (sensor (view local _number)))
+
+    (frame
+      (frag (@count (appearance _ count_))
+        (appearance local 1))
+      (backsys @count
+        ±n <> {n: ^(+ n 1)})
+      (sensor (view local _number) 0))
+
+    (frame
+      (frag (@count (appearance _ count_))
+        (appearance local 2))
+      (backsys @count
+        ±n <> {n: ^(+ n 1)})
+      (sensor (view local _number) 1))
+
+    (frame
+      (frag (@count (appearance _ count_))
+        (appearance local 3))
+      (backsys @count
+        ±n <> {n: ^(+ n 1)})
+      (sensor (view local _number) 2))))
+    ;; ...
 
 ;; Elementary 1D movement circuit
 (group
