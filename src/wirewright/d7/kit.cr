@@ -97,6 +97,17 @@ module Ww::D7
       Patch.new(@keys.delete(id), Slice.join({values.trim(index)}, Tuple.new, {values + index + 1}))
     end
 
+    # Removes patches to nodes with id in *ids*.
+    def dissoc(ids : Pf::USet32) : Patch
+      if ids.size < size
+        return ids.reduce(self) { |patch, id| patch.dissoc(id) }
+      end
+
+      reduce(self) do |proposal, (id, _)|
+        id.in?(ids) ? proposal.dissoc(id) : proposal
+      end
+    end
+
     def pretty_print(pp)
       pp.list("D7::Patch[", self, "]") do |id, rep|
         pp.group do

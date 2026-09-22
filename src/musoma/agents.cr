@@ -319,9 +319,8 @@ module MuSoma
 
       repr = Term.of # ?!
 
-      _ = Rack::Prepass.call(base_hg) do |base_hg| # ?!
+      Rack::Prepass.call(base_hg, [] of D7::Patch) do |base_hg, _| # ?!
         repr = repr(codex, base_hg, repr_hg, D7::NodeAddr.empty, repr_tree)
-        D7::Patch.new # ?!
       end
 
       # Mark the topmost parent as root for styling in prettyR.

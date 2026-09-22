@@ -228,11 +228,9 @@ class Ww::Rack::Automaton
 
   private def contribute(circuit : Term, prepass, *contributors)
     contribute_nest(Tuple.new, *contributors) do |proposes|
-      D7.step(@parser, circuit) do |hg|
-        prepass.call(hg) do |hg|
-          proposals = [] of D7::Patch
-          proposes.each &.call(hg, proposals)
-          D7.merge(hg, proposals)
+      D7.step(@parser, circuit) do |hg, proposals0|
+        prepass.call(hg, proposals0) do |hg, proposals1|
+          proposes.each &.call(hg, proposals1)
         end
       end
     end

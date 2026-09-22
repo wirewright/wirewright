@@ -5,17 +5,28 @@ module Ww::Rack::Part
   # :nodoc:
   SYM_PART = Term.of(:part)
 
-  def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+  def prepass(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
     # Fast path.
     unless hg.has_head?(SYM_PART)
-      return fn.call(hg)
+      fn.call(hg, proposals)
+      return
     end
 
     roots, forms, layers, rejected_abs_parts = collect(hg)
     replacements, replaced = submit(forms, rejected_abs_parts)
-    patch = fn.call(hg.gnd_map(replacements))
-    updates = absorb(layers, rejected_abs_parts, patch)
-    merge(patch, replaced, roots, updates)
+
+    buffer = [] of D7::Patch
+    fn.call(hg.gnd_map(replacements), buffer)
+    return if buffer.empty?
+
+    buffer.each do |patch|
+      updates = absorb(layers, rejected_abs_parts, patch)
+      merge(patch, replaced, roots, updates, proposals)
+    end
+
+    # Patches are usually small enough that equality and hashing remain cheap.
+    # Terms cache their hash so the hashing we *have* to do is quite shallow.
+    proposals.uniq!
   end
 
   # :nodoc:
@@ -82,7 +93,7 @@ module Ww::Rack::Part
     end
   end
 
-  private def value_of_cell?(patch : D7::Patch, id : D7::NodeId) : Term::Rep?
+  private def value_for_cell?(patch : D7::Patch, id : D7::NodeId) : Term::Rep?
     return unless rep = patch[id]?
 
     Term.case(rep) do
@@ -352,7 +363,7 @@ module Ww::Rack::Part
       layer.each do |form|
         next if form.abs_part.in?(rejected_abs_parts)
 
-        rep = value_of_cell?(patch, form.id) || updates[form.abs_part]?
+        rep = value_for_cell?(patch, form.id) || updates[form.abs_part]?
         next if rep.nil?
         next unless update = form.update.call(rep)
 
@@ -425,18 +436,22 @@ module Ww::Rack::Part
   end
 
   private def merge(
-    patch : D7::Patch,
+    proposal : D7::Patch,
     replaced : Set(D7::NodeId),
     roots : Hash(D7::NodeId, {D7::AbsEdge, Cell}),
     updates : Hash(D7::AbsEdge, Term::Rep),
-  ) : D7::Patch
+    destination : Array(D7::Patch),
+  ) : Nil
     # Remove patches to `cell`s we've replaced `part`s with.
     replaced.each do |id|
-      patch = patch.dissoc(id)
+      proposal = proposal.dissoc(id)
     end
 
+    workspace = [proposal]
+    extras = [] of D7::Patch
+
     # Update roots.
-    roots.each do |_, (edge, root)|
+    roots.each do |root_id, (edge, root)|
       next unless update = updates[edge]?
 
       # Map empty term replacements to clearing of the root cell. E.g.:
@@ -453,9 +468,41 @@ module Ww::Rack::Part
         value = Term.collapse(update)
       end
 
-      patch = D7.patches(patch, D7.patch(root.node, {2, value}))
+      # This "construction" is effectively an "inlined" Cartesian product for:
+      #
+      #   ID   BUCKET
+      #   0 => [a, b]
+      #   1 => [c]
+      #   2 => [d, e]
+      #
+      # ... the above is implied but not directly reified here; we calculate the product
+      # of buckets right away, so the above turns into something like:
+      #
+      #   0 => a  1 => c  2 => d
+      #   0 => a  1 => c  2 => e
+      #   0 => b  1 => c  2 => d
+      #   0 => b  1 => c  2 => e
+
+      workspace.map! do |patch0|
+        patch1 = patch0.assoc(root.node.id, Term.morph(root.node.term, {2, value}))
+        if patch0.includes?(root.node.id)
+          extras << patch0
+        end
+        patch1
+      end
+
+      if extras.present?
+        workspace.concat(extras)
+        extras.clear
+      end
     end
 
-    patch
+    assert extras.empty?
+
+    workspace.each do |proposal|
+      next if proposal.empty? # Reduce the amount of needless work for callers.
+
+      destination << proposal
+    end
   end
 end

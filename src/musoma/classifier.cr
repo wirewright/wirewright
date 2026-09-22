@@ -118,7 +118,7 @@ module MuSoma
     def initialize(@vantages : VarHash(D7::GlobalNodeAddr, Term), @successor : Prepass)
     end
 
-    def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
+    def call(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
       replacements = {} of D7::NodeAddr => D7::Gnd
 
       figure_node_ids = Pf::USet32.transaction do |txn|
@@ -133,12 +133,13 @@ module MuSoma
       end
 
       if replacements.empty?
-        return @successor.call(hg, &fn)
+        @successor.call(hg, proposals, &fn)
+        return
       end
 
-      patch = @successor.call(hg.gnd_map(replacements), &fn)
+      @successor.call(hg.gnd_map(replacements), proposals, &fn)
 
-      # Discard all patches to reflection nodes ,which we've replaced. Such patches make
+      # Discard all patches to reflection nodes, which we've replaced. Such patches make
       # no sense. This covers circuits like:
       #
       #   (reflection @f (p "Hello"))
@@ -147,19 +148,7 @@ module MuSoma
       # Which, as I've said, make no sense, because there isn't *really* anything to
       # discard. For Rack, reflection acts as a kind of "infinite source", replenished
       # immediately regardless of what Rack does to it.
-      if figure_node_ids.size < patch.size
-        figure_node_ids.each do |node_id|
-          patch = patch.dissoc(node_id)
-        end
-      else
-        patch.each do |node_id, value|
-          next unless node_id.in?(figure_node_ids)
-
-          patch = patch.dissoc(node_id)
-        end
-      end
-
-      patch
+      proposals.map! &.dissoc(figure_node_ids)
     end
   end
 
@@ -353,9 +342,8 @@ module MuSoma
 
     markup = Term.rep # ?!
 
-    _ = Rack::Prepass.call(hg) do |hg| # ?!
+    _ = Rack::Prepass.call(hg, [] of D7::Patch) do |hg, _| # ?!
       markup, _ = distill(codex, hg, D7::NodeAddr.empty, tree, sites: Slice(Term).empty, site_zero: 0u32)
-      D7::Patch.new
     end
 
     Term.of(markup)

@@ -478,7 +478,6 @@ module Ww::D7
       proposals
     end
 
-    # NOTE: *proposals* must respond to `<<(Patch)`.
     def propose(proposals : Array(Patch), *heads : Symbol, &fn : Node -> Patch?) : Nil
       heads.each do |head|
         each_node_with_head(Term.of(head)) do |node|

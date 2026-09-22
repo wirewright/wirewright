@@ -84,24 +84,24 @@ module Ww::D7
     unchanged(tree.child)
   end
 
-  alias GatherLevel = Array({D7::NodeAddr, D7::GroupNode})
+  alias GatherLevel = Array({NodeAddr, GroupNode})
 
-  def gather(level : GatherLevel, tree : D7::ParseTree, target_depth : UInt32) : Nil
+  def gather(level : GatherLevel, tree : ParseTree, target_depth : UInt32) : Nil
     addr = NodeAddr.empty
     gather(level, addr, tree, target_depth)
   end
 
   # :nodoc:
-  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::GndLeaf | D7::InertLeaf, target_depth : UInt32) : Nil
+  def gather(level : GatherLevel, addr : NodeAddr, tree : GndLeaf | InertLeaf, target_depth : UInt32) : Nil
   end
 
   # :nodoc:
-  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::MixtureNode | D7::ScopeNode, target_depth : UInt32) : Nil
+  def gather(level : GatherLevel, addr : NodeAddr, tree : MixtureNode | ScopeNode, target_depth : UInt32) : Nil
     gather(level, addr, tree.child, target_depth)
   end
 
   # :nodoc:
-  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::GroupNode, target_depth : UInt32) : Nil
+  def gather(level : GatherLevel, addr : NodeAddr, tree : GroupNode, target_depth : UInt32) : Nil
     if target_depth.zero?
       level << {addr, tree}
       return
@@ -117,7 +117,7 @@ module Ww::D7
   end
 
   # :nodoc:
-  def gather(level : GatherLevel, addr : D7::NodeAddr, tree : D7::CircuitNode, target_depth : UInt32) : Nil
+  def gather(level : GatherLevel, addr : NodeAddr, tree : CircuitNode, target_depth : UInt32) : Nil
     if target_depth.zero?
       level << {addr, tree.to_group}
       return
@@ -127,22 +127,22 @@ module Ww::D7
   end
 
   # :nodoc:
-  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::GndLeaf | D7::InertLeaf, target_depth : UInt32) : Term
+  def broadcast(changes : Deque({GroupNode, Term}), tree : GndLeaf | InertLeaf, target_depth : UInt32) : Term
     tree.feature.node # unchanged
   end
 
   # :nodoc:
-  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::MixtureNode, target_depth : UInt32) : Term
+  def broadcast(changes : Deque({GroupNode, Term}), tree : MixtureNode, target_depth : UInt32) : Term
     tree.feature.mix.call(broadcast(changes, tree.child, target_depth))
   end
 
   # :nodoc:
-  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::ScopeNode, target_depth : UInt32) : Term
+  def broadcast(changes : Deque({GroupNode, Term}), tree : ScopeNode, target_depth : UInt32) : Term
     broadcast(changes, tree.child, target_depth)
   end
 
   # :nodoc:
-  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::GroupNode, target_depth : UInt32) : Term
+  def broadcast(changes : Deque({GroupNode, Term}), tree : GroupNode, target_depth : UInt32) : Term
     # If there are no changes left, we can safely unwind and ignore the rest of nodes.
     unless change = changes.first?
       return Term.of(tree.feature.node) # unchanged
@@ -174,7 +174,7 @@ module Ww::D7
   end
 
   # :nodoc:
-  def broadcast(changes : Deque({D7::GroupNode, Term}), tree : D7::CircuitNode, target_depth : UInt32) : Term
+  def broadcast(changes : Deque({GroupNode, Term}), tree : CircuitNode, target_depth : UInt32) : Term
     # If there are no changes left, we can safely unwind and ignore the rest of nodes.
     unless change = changes.first?
       return Term.of(tree.feature.node) # unchanged
@@ -217,7 +217,7 @@ module Ww::D7
   # The `step` algorithm applies the patch to *circuit*, producing a *level-patched
   # circuit*. It then deepens. The sequence of ever so deeply level-patched circuits
   # forms the returned sequence of substeps.
-  def step(parser : D7::Parser, circuit : Term, required_heads : Indexable(Term) = Slice(Term).empty, &fn : D7::Hypergraph -> D7::Patch) : Slice(Term)
+  def step(parser : Parser, circuit : Term, required_heads : Indexable(Term) = Slice(Term).empty, &fn : Hypergraph, Array(Patch) ->) : Slice(Term)
     tree = parser.parse(circuit)
     if required_heads.present? && required_heads.none? { |head| D7.summary(tree).has_head?(head) }
       return Slice[circuit]
@@ -226,8 +226,11 @@ module Ww::D7
     substeps = Pf::Kit.stack_array(Term, 8)
     substeps << circuit
 
-    level = [] of {D7::NodeAddr, D7::GroupNode}
-    changes = Deque({D7::GroupNode, Term}).new
+    level = [] of {NodeAddr, GroupNode}
+    changes = Deque({GroupNode, Term}).new
+
+    # Reused in different calls to fn.
+    patches = [] of Patch
 
     MAX_SUBSTEPS.times do |target_depth|
       assert level.empty?
@@ -240,8 +243,12 @@ module Ww::D7
       # is not guaranteed to be thread-safe, nor is the choice of whether to go
       # parallel so easy. We'd need heuristics since it's not always cheap.
       level.each do |(addr, tree)|
-        hg = D7::Hypergraph.new(addr, tree, D7::Hypergraph::CurrentLevel.new)
-        patch = fn.call(hg)
+        hg = Hypergraph.new(addr, tree, Hypergraph::CurrentLevel.new)
+        fn.call(hg, patches)
+        next if patches.empty?
+
+        patch = D7.merge(hg, patches)
+        patches.clear
         next if patch.empty?
 
         changes << {tree, D7.apply(hg, patch)}

@@ -251,13 +251,13 @@
     (part (@b @y) (_* y_))
     (backsys @x  ±n <> {n: ^(+ n 1)})
     (backsys @y  ±n <> {n: ^(* n 2)})
-    (cell @top (qux (1 2) (3 4))))
+    (cell (arena @top) (qux (1 2) (3 4))))
 
   (frame/tail
-    (cell @top (qux (2 2) (3 8))))
+    (cell (arena @top) (qux (2 2) (3 8))))
 
   (frame/tail
-    (cell @top (qux (3 2) (3 16)))))
+    (cell (arena @top) (qux (3 2) (3 16)))))
   ;; ...
 
 ;; Legacy: Removal of item
@@ -309,11 +309,11 @@
     (discard @x)
     (discard @y)
     (discard @z)
-    (cell @top (qux 3 x: 100 y: 200 z: 300)))
+    (cell (arena @top) (qux 3 x: 100 y: 200 z: 300)))
 
-  (frame/tail (cell @top (qux 2 x: 100 y: 200)))
-  (frame/tail (cell @top (qux 1 x: 100)))
-  (frame/tail (cell @top (qux 1)))
+  (frame/tail (cell (arena @top) (qux 2 x: 100 y: 200)))
+  (frame/tail (cell (arena @top) (qux 1 x: 100)))
+  (frame/tail (cell (arena @top) (qux 1)))
 
   end)
 
@@ -490,10 +490,10 @@
     (backsys @a ±n <> {n: ^(+ n 1)})
     (backsys @b ±n <> {n: ^(+ n 2)}) ;; <<  notice the 2, so @a and @b propose diff values
     (backsys @c ±n <> {n: ^(+ n 1)})
-    (cell @x (+ 1 2)))
+    (cell (arena @x) (+ 1 2)))
 
   (frame/tail
-    (cell @x (+ 1 3))))
+    (cell (arena @x) (+ 1 3))))
   ;; ...
 
 ;; Legacy: Apparent conflicting write (same keypath), but values agree so it succeeds.
@@ -505,22 +505,17 @@
     (backsys @a ±n <> {n: ^(+ n 1)})
     (backsys @b ±n <> {n: ^(+ n 1)})
     (backsys @c ±n <> {n: ^(+ n 1)})
-    (cell @x (+ 1 2)))
+    (cell (arena @x) (+ 1 2)))
 
   (frame/tail
-    (cell @x (+ 1 3)))
+    (cell (arena @x) (+ 2 3)))
 
   (frame/tail
-    (cell @x (+ 1 4))))
+    (cell (arena @x) (+ 3 4))))
   ;; ...
 
 ;; Conflicting write (keypath prefix)
-;;
-;; FIXME: this doesn't work yet because D7.merge is called too deeply so
-;; parts do partial rejection (i.e. on top of the already merged result),
-;; which is not correct. I don't want to "test the symptoms" here so for
-;; now this test is inactive.
-;(rack
+(rack
   (frame
     (part (@x @l) (foo l_ _))
     (part (@x @r) (foo _ r_))
@@ -534,16 +529,52 @@
 
   end)
 
-;; Conflict if root modified.
-;; FIXME: ditto as above.
-;(rack
-  (frame
-    (part (@root @a) (+ a_ _))
-    (backsys @a ±n <> {n: ^(+ n 1)})
-    (backsys @root (+ _ ±n) <> {n: ^(+ n 1)})
-    (cell @root (+ 1 2)))
+;; Conflict if root is modified
+(group
+  ;; Here we have a conflict, because both things write into the same exclusive cell.
+  (rack
+    (frame
+      (part (@root @a) (+ a_ _))
+      (backsys @a ±n <> {n: ^(+ n 1)})
+      (backsys @root (+ _ ±n) <> {n: ^(+ n 1)})
+      (cell @root (+ 1 2)))
 
-  end)
+    end)
+
+  ;; If we mark the cell as e.g. arena it works because writes are disjoint:
+  (rack
+    (frame
+      (part (@root @a) (+ a_ _))
+      (backsys @a ±n <> {n: ^(+ n 1)})
+      (backsys @root (+ _ ±n) <> {n: ^(+ n 1)})
+      (cell (arena @root) (+ 1 2)))
+
+    (frame/tail
+      (cell (arena @root) (+ 2 3)))
+
+    (frame/tail
+      (cell (arena @root) (+ 3 4))))
+    ;; ...
+
+  ;; If they happen to align with each other it works too, and when they do conflict
+  ;; we bail out.
+  (rack
+    (frame
+      (part (@root @a) (+ a_ _))
+      (backsys @a ±n <> {n: ^(+ n 1)})
+      (backsys @root (+ ±n _) <> {n: ^(* n 2)})
+      (cell (arena @root) (+ 1 2)))
+
+    (frame/tail
+      (cell (arena @root) (+ 2 2)))
+
+    ;; backsys root wants the first arg to become 4 and part wants it
+    ;; to be come 3, that's a conflict.
+    end)
+
+  ;; Conflicts stop progress of e.g. feeds
+
+)
 
 ;; Part with missing capture
 (rack
@@ -561,10 +592,10 @@
     (part (@root @b) (+ a_ b_))
     (backsys @a  ±n <> {n: ^(+ n 1)})
     (backsys @b  ±n <> {n: ^(* n 2)})
-    (cell @root (+ 1 2)))
+    (cell (arena @root) (+ 1 2)))
 
-  (frame/tail (cell @root (+ 2 4)))
-  (frame/tail (cell @root (+ 3 8))))
+  (frame/tail (cell (arena @root) (+ 2 4)))
+  (frame/tail (cell (arena @root) (+ 3 8))))
   ;; ...
 
 ;; More advanced captures
@@ -646,17 +677,14 @@
 
   end)
 
-;; Chain with discard of parent
+;; Chain with discard of parent (conflict)
 (rack
   (frame
     (part (@xs @x) (_ x_ _))
     (part (@x @y) (y_))
     (discard @x)
     (backsys @y ±n <> {n: ^(+ n 1)})
-    (cell @xs (1 (2) 3)))
-
-  (frame/tail
-    (cell @xs (1 3)))
+    (cell (arena @xs) (1 (2) 3)))
 
   end)
 
@@ -718,15 +746,15 @@
     (feed @qux @d)
     (part (@b @foo) (±foo))
     (backsys @foo ±n <> {n: ^(+ n 1)})
-    (cell @xs (1 (2) 3))
+    (cell (arena @xs) (1 (2) 3))
     (cell @qux 100))
 
   (frame/tail
-    (cell @xs (2 (3) 4 100))
+    (cell (arena @xs) (2 (3) 4 100))
     (cell @qux))
 
   (frame/tail
-    (cell @xs (3 (4) 5 100))
+    (cell (arena @xs) (3 (4) 5 100))
     (cell @qux)))
   ;; ...
 

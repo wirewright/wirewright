@@ -3,11 +3,9 @@ module Ww::Rack::Supervisor
   extend self
 
   def step(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    D7.step(parser, circuit) do |hg|
-      prepass.call(hg) do |hg|
-        proposals = [] of D7::Patch
-        step(&.call(hg, proposals))
-        D7.merge(hg, proposals)
+    D7.step(parser, circuit) do |hg, proposals0|
+      prepass.call(hg, proposals0) do |hg, proposals1|
+        step(&.call(hg, proposals1))
       end
     end
   end

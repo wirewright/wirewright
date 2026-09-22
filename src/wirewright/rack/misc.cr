@@ -286,21 +286,21 @@ module Ww::Rack
   module Prepass
     extend self
 
-    def call(hg : D7::Hypergraph, &fn : D7::Hypergraph -> D7::Patch) : D7::Patch
-      Part.prepass(hg, &fn)
+    def call(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
+      Part.prepass(hg, proposals, &fn)
     end
   end
 
   def manipulate(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)
-    D7.step(parser, circuit, required_heads: {Term.of(:manipulable)}) do |hg|
-      prepass.call(hg) do |hg|
-        D7.merge(hg, proposals: manipulate(hg))
+    D7.step(parser, circuit, required_heads: {Term.of(:manipulable)}) do |hg, proposals0|
+      prepass.call(hg, proposals0) do |hg, proposals1|
+        manipulate(hg, proposals1)
       end
     end
   end
 
-  def manipulate(hg : D7::Hypergraph) : Indexable(D7::Patch)
-    hg.propose(:manipulable) do |node|
+  def manipulate(hg : D7::Hypergraph, proposals) : Nil
+    hg.propose(proposals, :manipulable) do |node|
       Term.case(node.term) do
         matchpi %{[manipulable header←(input←(%'edge capture_) -> _*) payload_]} do
           selector = Term.of(:"%let", capture, :_)
