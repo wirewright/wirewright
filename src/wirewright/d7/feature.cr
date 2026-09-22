@@ -165,7 +165,8 @@ module Ww::D7
   defrecord Parent,
     node : Term::Dict,
     range : Range(UInt32, UInt32),
-    passable : Passable.class | PassablePredicate
+    passable : Passable.class | PassablePredicate,
+    signature : NodeSignature?
 
   # Constructs a parent feature.
   #
@@ -178,14 +179,22 @@ module Ww::D7
   def parent(node : Term::Dict, range : Range(UInt32, UInt32)) : Parent
     assert range.exclusive?
 
-    Parent.new(node, range, Passable)
+    if head = node.items.first?
+      signature = NodeSignature.new(head, node.uitemsize)
+    end
+
+    Parent.new(node, range, Passable, signature)
   end
 
   # :ditto:
   def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : PassablePredicate) : Parent
     assert range.exclusive?
 
-    Parent.new(node, range, passable)
+    if head = node.items.first?
+      signature = NodeSignature.new(head, node.uitemsize)
+    end
+
+    Parent.new(node, range, passable, signature)
   end
 
   # Used primarily by the `circuit` node; represents an isolated, nested
@@ -235,20 +244,47 @@ module Ww::D7
     end
   end
 
-  defcase MixtureNode,
-    feature : Mixture,
-    child : ParseTree
+  defcase MixtureNode, feature : Mixture, child : ParseTree
 
   class ScopeNode
+    getter summary : TreeSummary
     getter feature : Scope
     getter child : InertLeaf | GndLeaf | MixtureNode | ParentNode
 
-    def initialize(@feature, child : ParseTree)
+    def initialize(@summary, @feature, child : ParseTree)
       # Our lookup algorithm(s) rely on this so let's make ScopeNode maintain
       # this as an invariant.
       assert ScopeNode.has_addr?(child), "scope node child must have an address"
 
       @child = child.as(InertLeaf | GndLeaf | MixtureNode | ParentNode)
+    end
+
+    def self.new(feature : Scope, child : ParseTree)
+      summary = D7.summary(child).update_current do |level|
+        edges = Set(Term).new
+
+        case scope = feature.scope
+        in ScopeOpenExcept
+          level.edges.each do |edge|
+            # If edge is absent in edges, it's local, so it does not propagate outwards.
+            next if edge.in?(scope.edges)
+
+            edges << edge
+          end
+        in ScopeClosedExcept
+          level.edges.each do |edge|
+            # If no exterior is defined, the edge is local to the scope, and
+            # does not propagate outwards.
+            next unless exterior = scope.bindings[edge]?
+
+            edges << exterior
+          end
+        end
+
+        LevelSummary.new(level.population, level.signatures, edges)
+      end
+
+      new(summary, feature, child)
     end
 
     # :nodoc:
@@ -272,23 +308,26 @@ module Ww::D7
   alias ParentNode = GroupNode | CircuitNode
 
   defcase GroupNode,
+    summary : TreeSummary,
     feature : Parent,
-    children : Slice(ParseTree),
-    summary : TreeSummary
+    children : Slice(ParseTree)
 
   class GroupNode
     # Smart constructor for `GroupNode`.
     def self.new(feature : Parent, children : Slice(ParseTree)) : GroupNode
       summary = TreeSummary.union(children) { |child| D7.summary(child) }
-      new(feature, children, summary)
+      if signature = feature.signature
+        summary.current_level.add!(signature)
+      end
+      new(summary, feature, children)
     end
   end
 
   defcase CircuitNode,
+    summary : TreeSummary,
     feature : Circuit,
     children : Slice(ParseTree),
-    leaf : ParseTree,
-    summary : TreeSummary
+    leaf : ParseTree
 
   class CircuitNode
     # Smart constructor for `CircuitNode`.
@@ -298,7 +337,7 @@ module Ww::D7
       # and they wouldn't work either way; so I doubt it's worth spending the effort here.
       leaf_level = D7.summary(leaf).current_level
       summary = TreeSummary.union(children) { |child| D7.summary(child) }.append(leaf_level)
-      new(feature, children, leaf, summary)
+      new(summary, feature, children, leaf)
     end
 
     @group : Atomic(GroupNode?) = Atomic(GroupNode?).new(nil)
@@ -309,8 +348,8 @@ module Ww::D7
         return group
       end
 
-      # `summary.prior` basically gets rid of the append() above.
-      group = GroupNode.new(D7.parent(feature.node, feature.range), children, summary.prior)
+      # `summary.prior` basically undoes the append() above.
+      group = GroupNode.new(summary.prior, D7.parent(feature.node, feature.range), children)
       @group.set(group, :release)
     end
   end
@@ -329,12 +368,9 @@ module Ww::D7
     def initialize(@population, @signatures : Set(NodeSignature), @edges : Set(Term))
     end
 
-    # :nodoc:
-    EMPTY = new(population: 0u32, signatures: Set(NodeSignature).new, edges: Set(Term).new)
-
     # Constructs an empty level summary.
     def self.new : LevelSummary
-      EMPTY
+      new(population: 0u32, signatures: Set(NodeSignature).new, edges: Set(Term).new)
     end
 
     # Mutably unions *b* into *a*.
@@ -352,6 +388,10 @@ module Ww::D7
     def has_signature?(signature : NodeSignature) : Bool
       @signatures.includes?(signature)
     end
+
+    def add!(signature : NodeSignature) : Nil
+      @signatures << signature
+    end
   end
 
   struct TreeSummary
@@ -363,17 +403,14 @@ module Ww::D7
       assert @levels.present?
     end
 
-    # :nodoc:
-    EMPTY = new(Slice[LevelSummary.new])
-
     # Constructs an empty tree summary.
     def self.new : TreeSummary
-      EMPTY
+      new(Slice[LevelSummary.new])
     end
 
     def self.union(objects : Indexable(T), & : T -> TreeSummary) : TreeSummary forall T
       if objects.empty?
-        return EMPTY
+        return new
       end
 
       if object = objects.single?
@@ -382,7 +419,7 @@ module Ww::D7
 
       maxlevel = objects.max_of { |object| (yield object).maxlevel }
       if maxlevel.zero? # ?!
-        return EMPTY
+        return new
       end
 
       # a b c      a b c       a b c
@@ -456,29 +493,7 @@ module Ww::D7
 
   # :nodoc:
   def summary(tree : ScopeNode) : TreeSummary
-    summary(tree.child).update_current do |level|
-      edges = Set(Term).new
-
-      case scope = tree.feature.scope
-      in ScopeOpenExcept
-        level.edges.each do |edge|
-          # If edge is absent in edges, it's local, so it does not propagate outwards.
-          next if edge.in?(scope.edges)
-
-          edges << edge
-        end
-      in ScopeClosedExcept
-        level.edges.each do |edge|
-          # If no exterior is defined, the edge is local to the scope, and
-          # does not propagate outwards.
-          next unless exterior = scope.bindings[edge]?
-
-          edges << exterior
-        end
-      end
-
-      LevelSummary.new(level.population, level.signatures, edges)
-    end
+    tree.summary
   end
 
   # :nodoc:
