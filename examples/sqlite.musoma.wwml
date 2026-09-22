@@ -7,17 +7,17 @@
              ^name
              (span style: "text-xs leading-none bottom text-theme-subtle"
                ^\age)))
-         (slot (Button (@msg (delete ^name)) "Delete"))))
+         ($Button (@msg (delete ^name)) "Delete")))
 
 (ContactList ())
   => (p "No contacts ..." style: "content-center text-theme-muted")
 
 (ContactList rows_dict)
   => (ensemble
-       (slot (Scroll))
+       ($Scroll)
        (group style: "flow-col gap-1 mb-1 content-y clip"
          (^each (rows as {¦ "name": name_string, "age": ±age})
-           (slot (Contact ^name ^age)))))
+           ($Contact ^name ^age))))
 
 (window title: "MuBook"
         style: "bg-theme-base"
@@ -35,10 +35,10 @@
       (group style: "flow-col gap-2"
         (cell @name ("" ""))
         (cell @age ("" ""))
-        (slot (Input @name label: "Name" placeholder: "John Doe"))
-        (slot (Input @age label: "Age" placeholder: "25"))
+        ($Input @name label: "Name" placeholder: "John Doe")
+        ($Input @age label: "Age" placeholder: "25")
         (frag @err)
-        (slot (Button (@msg insert) "Insert")))
+        ($Button (@msg insert) "Insert"))
       (rect style: "max-h-1px bg-min-none bg-theme-highlight-med")
       (group style: "fr-1"
         (p "Contacts" style: "font-condensed text-theme-text upcase")
@@ -47,7 +47,7 @@
             (p style: "center text-theme-muted"
               "Loading...")
             (frag @contacts)))
-        (slot (Button (@msg refresh) "Refresh"))))))
+        ($Button (@msg refresh) "Refresh")))))
 
 (comment
   "Here we're using a kind of \"centralized\", intrinsically backpressured and \
@@ -70,7 +70,7 @@
   {¦ msg: refresh -query_ -response}
     <> {query: (query "select name, age from contacts")}
   {¦ msg_: refresh -query response_: (ok contacts_*) ⋮contacts}
-    <> {(msg): (), (response): (), contacts: (slot (ContactList ^contacts))}
+    <> {(msg): (), (response): (), contacts: ($ContactList ^contacts)}
   {¦ msg: insert -query_ -response name: [name-l_string name-r_string], age: [age-l_string age-r_string]}
     <> {query: (exec "insert into contacts values (?, ?)" ^(~ name-l name-r) ^(~ age-l age-r))}
   {¦ msg_: insert -query response_: (ok _) name_ age_ ⋮err}

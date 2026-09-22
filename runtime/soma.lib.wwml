@@ -105,8 +105,8 @@
 ;; ```wwml
 ;; (window style: "flow-col center gap-3"
 ;;   (queue (@action @actions) ())
-;;   (slot (Button (@actions inc) "Increment"))
-;;   (slot (Button (@actions dec) "Decrement")))
+;;   ($Button (@actions inc) "Increment")
+;;   ($Button (@actions dec) "Decrement"))
 ;; ```
 (Button head←(@_ _) caption_string ¦ props_ style⋮ "")
   => (slot
@@ -619,8 +619,8 @@
                   here is basically a \"reference\" to the body.")
                (site))))
          (align x: 1
-           (slot (YScrollbar @thumb-offset @thumb-size @track-size @show))))
-       (slot (Scroll (bar @thumb-offset @thumb-size @track-size @show) (view @desc @node) (axis y))))
+           ($YScrollbar @thumb-offset @thumb-size @track-size @show)))
+       ($Scroll (bar @thumb-offset @thumb-size @track-size @show) (view @desc @node) (axis y)))
 
 ;; ---- DIRTY STUFF ENDS (sort of) ----
 
@@ -716,7 +716,7 @@
 (Setting @state_ title_string)
   => (group style: "flow-row item-center-y content-y px-3 py-3"
        (p ^title style: "fr-1 text-ui-content text-base/6")
-       (slot (Switch ^state)))
+       ($Switch ^state))
 
 ;; A switch with a title and a common subtitle for both the toggled and the untoggled
 ;; state. It looks like so:
@@ -731,7 +731,7 @@
        (group style: "flow-col fr-1"
          (p ^title style: "text-ui-content text-base/6")
          (p ^subtitle style: "text-ui-supplementary text-sm/5"))
-       (slot (Switch ^state)))
+       ($Switch ^state))
 
 ;; A switch with a title and a custom subtitle for the two states: *subtitle0*
 ;; for the OFF state, and *subtitle1* for the ON state. It looks like so:
@@ -749,7 +749,7 @@
            (p ^subtitle0 style: "text-ui-supplementary text-sm/5"))
          (guard (^state true)
            (p ^subtitle1 style: "text-ui-supplementary text-sm/5")))
-       (slot (Switch ^state)))
+       ($Switch ^state))
 
 ;; This is an internal component used by `SegmentedButton`.
 (SegmentedOption (@state_ id_) view_dict)
@@ -818,4 +818,4 @@
 (SegmentedButton @state_ options_+)
   => (group style: "flow-row item-fr-1"
        (^each (options as (label_string id_))
-         (slot (SegmentedOption (^state ^id) ^label))))
+         ($SegmentedOption (^state ^id) ^label)))

@@ -4,9 +4,9 @@
       (p 0 style: "center text-6xl text-theme-text font-medium"))
 
     (group style: "flow-wrap gap-3"
-      (slot (Button (@msg (sub 1)) "Decrement"))
-      (slot (Button (@msg (set 0)) "Reset"))
-      (slot (Button (@msg (add 1)) "Increment")))
+      ($Button (@msg (sub 1)) "Decrement")
+      ($Button (@msg (set 0)) "Reset")
+      ($Button (@msg (add 1)) "Increment"))
 
     (cell @msg)
 

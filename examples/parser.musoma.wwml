@@ -17,8 +17,8 @@
     (p style: "text-theme-text font-sans font-lg"
       "Some controls for you :^)")
     (group style: "flow-row gap-3"
-      (slot (Button (@msg feed) "Feed @front to @input"))
-      (slot (Button (@msg clear) "Clear @output")))))
+      ($Button (@msg feed) "Feed @front to @input")
+      ($Button (@msg clear) "Clear @output"))))
 
 (queue (@front @back)
   (⎡"x"⎤
