@@ -14,7 +14,7 @@ module Ww::Rack::Misc
     # to nodes absent in *hg* is entirely pruned, without imposing even the cost of
     # a probably_matches call.
     propose_discard(hg, proposals)
-    propose_latest(hg, proposals)
+    propose_reading(hg, proposals)
     propose_feed(hg, proposals)
     propose_transfer(hg, proposals)
     propose_delay(hg, proposals)
@@ -57,10 +57,10 @@ module Ww::Rack::Misc
     end
   end
 
-  private def propose_latest(hg : D7::Hypergraph, proposals) : Nil
-    hg.propose(proposals, :latest) do |node|
+  private def propose_reading(hg : D7::Hypergraph, proposals) : Nil
+    hg.propose(proposals, :reading) do |node|
       Term.case(node.term) do
-        matchpi %{[latest @edge_]}, %{[latest @edge_ _]} do
+        matchpi %{[reading @edge_]}, %{[reading @edge_ _]} do
           next unless cell = Rack.cell?(hg, hg.resolve(node.addr, edge))
 
           D7.patch(node, {2, cell.value?})

@@ -2678,11 +2678,11 @@ module Ww::Rack
         D7.gnd(node, edge)
       end
 
-      # |@ rack.latest
+      # |@ rack.reading
       #
       # |@pattern
-      # [latest @edge_]
-      # [latest @edge_ value_]
+      # [reading @edge_]
+      # [reading @edge_ value_]
       #
       # |@key edge rack.edge
       # The edge to read from.
@@ -2699,12 +2699,12 @@ module Ww::Rack
       # ;; Frame 0 (seed)
       #
       # (cell @x 100)
-      # (latest @x)
+      # (reading @x)
       #
       # ;; Frame 1
       #
       # (cell @x 100)
-      # (latest @x 100)
+      # (reading @x 100)
       # ```
       #
       # Do note that there is a 1-tick delay, as with many other Rack nodes:
@@ -2714,29 +2714,29 @@ module Ww::Rack
       #
       # (cell @x 100)
       # (backsys @x ±n <> {n: ^(+ n 1)})
-      # (latest @x)
+      # (reading @x)
       #
       # ;; Frame 1
       #
       # (cell @x 101)
       # (backsys @x ±n <> {n: ^(+ n 1)})
-      # (latest @x 100)
+      # (reading @x 100)
       #
       # ;; Frame 2
       #
       # (cell @x 102)
       # (backsys @x ±n <> {n: ^(+ n 1)})
-      # (latest @x 101)
+      # (reading @x 101)
       #
       # ;; Frame 3
       #
       # (cell @x 103)
       # (backsys @x ±n <> {n: ^(+ n 1)})
-      # (latest @x 102)
+      # (reading @x 102)
       #
       # ;; And so on...
       # ```
-      matchpi %{[latest @edge_]}, %{[latest @edge_ _]} do
+      matchpi %{[reading @edge_]}, %{[reading @edge_ _]} do
         D7.gnd(node, edge)
       end
 
@@ -2802,10 +2802,10 @@ module Ww::Rack
       matchpi %{[log (@edge_ ⍊ limit_: (%optional 10 (%number +i32))) _*]}, limit: Int32 do
         history = node.items.move(2)
 
-        mix0 = Term.of(:latest, edge)
+        mix0 = Term.of(:reading, edge)
         D7.mixture(node, mix0) do |mix1|
           Term.case(mix1) do
-            matchpi %{(latest @_ value_)} do
+            matchpi %{(reading @_ value_)} do
               continue if history.last? == value
 
               if limit.zero?

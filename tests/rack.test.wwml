@@ -6159,16 +6159,16 @@
       (queue (@y @ys) (100 200 300)))))
     ;; ...
 
-;; latest
+;; reading
 (group
   (rack
     (frame
       (cell @x 100)
-      (latest @x))
+      (reading @x))
 
     (frame
       (cell @x 100)
-      (latest @x 100))
+      (reading @x 100))
 
     end)
 
@@ -6176,19 +6176,19 @@
     (frame
       (backsys @x ±n <> {n: ^(+ n 1)})
       (cell @x 100)
-      (latest @x))
+      (reading @x))
 
     (frame/tail
       (cell @x 101)
-      (latest @x 100))
+      (reading @x 100))
 
     (frame/tail
       (cell @x 102)
-      (latest @x 101))
+      (reading @x 101))
 
     (frame/tail
       (cell @x 103)
-      (latest @x 102))))
+      (reading @x 102))))
     ;; ...
 
 ;; sequencer
