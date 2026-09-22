@@ -272,7 +272,7 @@ module Ww::Rack::Assembler
   private def broadcast(state, depth, scope, next_scope, tree : D7::GndLeaf, invalidations) : D7::RepairTree
     node = tree.feature.node
 
-    unless depth <= SAFE_SLOT_DEPTH
+    unless depth < SAFE_SLOT_DEPTH
       return node
     end
 
@@ -297,7 +297,7 @@ module Ww::Rack::Assembler
   private def broadcast(state, depth, scope, next_scope, tree : D7::ParentNode, invalidations) : D7::RepairTree
     node = Term.of(tree.feature.node)
 
-    unless depth <= SAFE_SLOT_DEPTH
+    unless depth < SAFE_SLOT_DEPTH
       return node
     end
 
@@ -430,8 +430,8 @@ module Ww::Rack::Assembler
 
       # Prevent infinite recursion by keeping track of the path. Whenever we revisit
       # the same rule, we skip it. If no other rule matches, we emit `(slot ^call)` --
-      # which *would* continue recursion, but on the *next* tick rather than
-      # on the current one, here, immediately.
+      # which *would* delay further recursion until the *next* tick. Such pathological
+      # recursion is forced to stop at the maximum recursion depth.
       subctx = InstantiateContext.new(ctx.rules, ctx.scope, ctx.path.add(rule_id))
       return instantiate(subctx, call_vars, rule.recipe)
     end
@@ -525,40 +525,47 @@ module Ww::Rack::Assembler
   end
 
   def step(state : State, parser : D7::Parser, library : RuleLibrary, circuit : Term) : Slice(Term)
-    tree = parser.parse(circuit)
+    # The only way a slot can create another slot is through deepening (i.e., creating
+    # or containing a child slot). Slot expansion terminates at `SAFE_SLOT_DEPTH`.
+    # So we will need at most `SAFE_SLOT_DEPTH` expansion passes to reach
+    # the bottom with each level growing down.
+    SAFE_SLOT_DEPTH.times do
+      tree = parser.parse(circuit)
 
-    summary = D7.summary(tree)
-    unless summary.has_head?(SYM_SLOT)
-      return Slice[circuit]
+      summary = D7.summary(tree)
+      break unless summary.has_head?(SYM_SLOT)
+
+      # Find rule definitions. This is an unavoidable scan of the tree.
+      # Cues help us skip some paths not containing a rule.
+      defns = library.defns
+      if summary.has_head?(SYM_RULE)
+        defns = rule_defns(library, tree)
+      end
+
+      # See what changed.
+      events = diff(state.rules, defns)
+
+      # If anything changed, generate invalidations & sync state.
+      invalidations = Slice(SlotInvalidation).empty
+      if events.present?
+        invalidations = update(parser.clf, state, events)
+      end
+
+      # Skip broadcast if no invalidations -- provided there are no (slot _)s which
+      # we would need to look at regardless of invalidations.
+      break if invalidations.empty? && !summary.has_signature?(D7::NodeSignature.new(SYM_SLOT, arity: 2))
+
+      # Broadcast invalidations and produce a repair tree. This is another
+      # unavoidable scan & rewrite of the tree. Most often this does nothing
+      # or close to nothing, so we optimize for that. We use cues as well.
+      repair_tree = broadcast(state, tree, invalidations)
+
+      circuit1 = D7.collapse(repair_tree)
+      break if circuit == circuit1
+
+      circuit = circuit1
     end
 
-    # Find rule definitions. This is an unavoidable scan of the tree.
-    # Cues help us skip some paths not containing a rule.
-    defns = library.defns
-    if summary.has_head?(SYM_RULE)
-      defns = rule_defns(library, tree)
-    end
-
-    # See what changed.
-    events = diff(state.rules, defns)
-
-    # If anything changed, generate invalidations & sync state.
-    invalidations = Slice(SlotInvalidation).empty
-    if events.present?
-      invalidations = update(parser.clf, state, events)
-    end
-
-    # Skip broadcast if no invalidations -- provided there are no (slot _)s which
-    # we would need to look at regardless of invalidations.
-    if invalidations.empty? && !summary.has_signature?(D7::NodeSignature.new(SYM_SLOT, arity: 2))
-      return Slice[circuit]
-    end
-
-    # Broadcast invalidations and produce a repair tree. This is another
-    # unavoidable scan & rewrite of the tree. Most often this does nothing
-    # or close to nothing, so we optimize for that. We use cues as well.
-    repair_tree = broadcast(state, tree, invalidations)
-
-    Slice[D7.collapse(repair_tree)]
+    Slice[circuit]
   end
 end

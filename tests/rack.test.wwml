@@ -2887,15 +2887,7 @@
       (Bar ±n) => (group (slot (Qux ^(+ n 1))))
       (Qux n_) => (p ^"Hello, ⸢n⸣")
       (slot (Foo)))
-    (frame/tail
-      (slot (Foo)
-        (group (slot (Bar 0)))))
-    (frame/tail
-      (slot (Foo)
-        (group
-          (slot (Bar 0)
-            (group
-              (slot (Qux 1)))))))
+
     (frame/tail
       (slot (Foo)
         (group
@@ -2903,6 +2895,7 @@
             (group
               (slot (Qux 1)
                 (p "Hello, 1")))))))
+
     end)
 
   ;; Specificity is taken into account
@@ -2916,11 +2909,13 @@
       (slot (Foo qux))
       (slot (Bar 100))
       (slot (Bar qux)))
+
     (frame/tail
       (slot (Foo 100) (cell @x 100))
       (slot (Foo qux) (cell @y qux))
       (slot (Bar 100) (cell @b 100))
       (slot (Bar qux) (cell @a qux)))
+
     end)
 
   ;; Nested components are instantiated in component body
@@ -2936,13 +2931,6 @@
       (Boo) => (cell @y)
 
       (slot (Foo 123)))
-
-    (frame/tail
-      (slot (Foo 123)
-        (module {}
-          (slot (Bar 123))
-          (slot (Baz))
-          (slot (Boo)))))
 
     (frame/tail
       (slot (Foo 123)
@@ -3423,15 +3411,6 @@
       (Bar x_) => (slot (Baz ^x))
       (Baz x_) => (slot (Foo ^x))
       (slot (Foo 100)))
-
-    (frame/tail
-      (slot (Foo 100)
-        (slot (Foo 100))))
-
-    (frame/tail
-      (slot (Foo 100)
-        (slot (Foo 100)
-          (slot (Foo 100)))))
 
     terminates)) ;; due to the expansion depth limi
 
