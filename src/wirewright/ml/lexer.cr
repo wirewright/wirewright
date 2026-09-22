@@ -1100,7 +1100,19 @@ module Ww::ML
       pred = behind
 
       case
-      when past?('(') then return token(:lparen)
+      when past?('(')
+        case ahead
+        when '$'
+          # (⏏$
+          if save { past?('$') && past?(&.chr.uppercase?) }
+            # (⏏$Button)
+            forward
+            # ($⏏Button)
+            return token(:lparen_dollar_upcase)
+          end
+        end
+
+        return token(:lparen)
       when past?(')') then return token(:rparen)
       when ahead == ':'
         if colon_ambiguous?(pred)

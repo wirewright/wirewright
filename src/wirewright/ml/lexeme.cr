@@ -35,6 +35,7 @@ module Ww::ML
         LineComment
         BrokenBar
         Lparen
+        LparenDollarUpcase
         Rparen
         Langle
         LangleAmpersand

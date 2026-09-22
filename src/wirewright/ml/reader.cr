@@ -717,9 +717,9 @@ module Ww::ML
     end
 
     # ⏏(a b c)
-    private def dict
-      unless past?(:lparen)
-        return refusal("expected `(` to start a dict", ahead.text.before_begin)
+    private def dict(lparen : Lexeme::Token::Type, rparen : Lexeme::Token::Type)
+      unless past?(lparen)
+        return refusal("expected `(` or `($` to start a dict", ahead.text.before_begin)
       end
 
       case π = section(allow_empty: true)
@@ -731,7 +731,7 @@ module Ww::ML
         itemside = π
       end
 
-      case π = interfix(:rparen)
+      case π = interfix(rparen)
       when Failure
         return π
       when Refusal
@@ -747,11 +747,16 @@ module Ww::ML
         make = -> { Tree::Dict.new(itemside, pairside: π) }
       end
 
-      unless past?(:rparen)
+      unless past?(rparen)
         return failure("expected `)` to end the dict", ahead.text.before_begin)
       end
 
       make.call
+    end
+
+    private def slot_call_dict
+      call = value! dict(:lparen_dollar_upcase, :rparen)
+      Tree::SlotCallDict.new(call)
     end
 
     # {¦ ⏏:xyz}  {¦ ⏏⋮x}  etc.
@@ -917,7 +922,7 @@ module Ww::ML
 
     private def term : Tree::Expr | Err
       choice(
-        dict,
+        dict(:lparen, :rparen),
         datum,
         symbol,
         stringdq,
@@ -932,6 +937,7 @@ module Ww::ML
         all_item,
         all_leaf,
         shorthand,
+        slot_call_dict,
       )
     end
 

@@ -1280,3 +1280,10 @@
   (= ⎡…⟨x y z ⍊ a b c⟩°…⎤ ⎡(%group ⟨x y z ⍊ a b c⟩° _*)⎤)
   (= ⎡(+ …⟨x y z ⍊ a b c⟩°…)⎤ ⎡(+ (%group ⟨x y z ⍊ a b c⟩° _*))⎤)
   (= ⎡(+ …⟨x y z ⍊ a b c⟩°… …⟨d e f⟩…)⎤ ⎡(+ (%group ⟨x y z ⍊ a b c⟩° _*) (%group ⟨d e f⟩ _*))⎤))
+
+;; Slot call syntax
+(ml
+  (= ⎡($Button "Press me")⎤ ⎡(slot (Button "Press me"))⎤)
+  (= ⎡($Button "Press me" x: 100 y: 200)⎤ ⎡(slot (Button "Press me" x: 100 y: 200))⎤)
+  (= ⎡($Button "Press me" ⍊ x y z)⎤ ⎡(slot (Button "Press me" ⍊ x y z))⎤)
+  (= ⎡($Button "Press me" ^:a ^:b ^… rest)⎤ ⎡(slot (^extend (Button "Press me" ^:a ^:b) rest))⎤))

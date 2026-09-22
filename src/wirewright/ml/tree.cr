@@ -18,6 +18,7 @@ module Ww::ML
                      Split |
                      Dict |
                      DictExtend |
+                     SlotCallDict |
                      Sigil |
                      Placeholder |
                      PatternLet |
@@ -179,6 +180,8 @@ module Ww::ML
     alias PlaceholderContainer = DictRule | DictEntryBlock
 
     defcase Tuck, offsets : Array(Int32), arg : Expr
+
+    defcase SlotCallDict, call : Expr
 
     defcase GroupSplit, arg : Expr
 

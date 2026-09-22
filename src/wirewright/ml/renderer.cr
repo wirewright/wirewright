@@ -764,6 +764,12 @@ module Ww::ML
       tsrc(ctx, {:"^extend", itemside, extra})
     end
 
+    private def render0(ctx : RenderContext, node : Tree::SlotCallDict)
+      call = render(ctx, node.call)
+      # ($Button "Press me") -> (slot (Button "Press me"))
+      tsrc(ctx, {:slot, call})
+    end
+
     # :nodoc:
     @[Flags]
     enum DictCategory

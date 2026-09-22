@@ -1422,7 +1422,7 @@ Which is exactly what we want here.
 
 > [!WARNING]
 > These shorthands are DEPRECATED. They are not used by anything anymore and
-> are scheduled for removal.
+> will be removed.
 
 - `→<term>` is the same as writing `($my <term>)`
 - `↑<term>` is the same as writing `($up <term>)`
@@ -1430,12 +1430,18 @@ Which is exactly what we want here.
 - `$<term>` is the same as writing `($ <term>)`
 - `$'<term>` is the same as writing `($once <term>)`
 
-### Delta7
+### Rack
 
 - `@<term>` is the same as writing `(edge <term>)`.
 - `@:<term>` is the same as writing `<term>: @<term>`. For example, `{@:x @:y @:z}`
-  is the same as writing `{x: @x, y: @y, z: @z}`. Do not confuse with `:@x`, which
+  is the same as writing `{x: @x, y: @y, z: @z}`. This is distinct from `:@x`, which
   expands to `@x: @x`.
+- `($<uppercase letter>...)` is the same as writing `(slot (<uppercase letter>...))`. For example,
+  `($Button "Press me")` is the same as writing `(slot (Button "Press me"))`. You can use pairs
+  (`($X item0 item1 k0: v0 k1: v1)`), Alloy extend (`($X ^:a ^:b ^… rest)`) and so on, just like
+  in dictionaries of the general form. Pairside works as well: `($X _ _ ⍊ a b c)` is the same as
+  writing `(slot (X _ _ ⍊ a b c))`. `$` was picked for its mnemonic value: think `$` (which
+  looks like S) is for *s*lot.
 
 ### Nitrene
 
