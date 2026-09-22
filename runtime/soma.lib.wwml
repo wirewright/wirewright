@@ -803,13 +803,13 @@
 (SegmentedOption header_ title_string)
   => (slot
        (SegmentedOption ^header
-         (box style: "flow-row item-center-y gap-2 border-l @last:border-r border-y \
-                      @first:rounded-l-full @last:rounded-r-full border-ui-subtle \
-                      content-center text-ui-content hover:bg-ui-surface hover:cursor-pointer \
-                      checked:bg-ui-overlay text-sm/5 font-medium px-8 py-2 disabled:opacity-50% \
-                      membrane checked:cue-checked active:bg-okl-30%"
-           (icon "check" style: "floating-x -dl-3 absent in-checked:present")
-           (p ^title style: "fr-1"))))
+         (box style: "clip content-center item-center-y border-l @last:border-r \
+                      border-y @first:rounded-l-full @last:rounded-r-full border-ui-subtle \
+                      text-ui-content hover:bg-ui-surface hover:cursor-pointer checked:bg-ui-overlay \
+                      text-sm/5 font-medium px-8 py-2 disabled:opacity-50% membrane \
+                      checked:cue-checked active:bg-okl-30%"
+           (icon "check" style: "-dl-2 absent in-checked:present")
+           (p ^title style: "in-checked:dl-2"))))
 
 ;; Presents one or more *options*, of the form `(label_string id_)`, as a segmented
 ;; button, allowing only one choice.
