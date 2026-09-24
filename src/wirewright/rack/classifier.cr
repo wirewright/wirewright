@@ -52,8 +52,7 @@ module Ww::Rack
       # Accepts a single patch. If there are two or more competing patches, rejects
       # all of them.
       #
-      # NOTE: This policy is the default policy for the vast majority of nodes,
-      # and the fallback policy for all nodes (e.g. if you misspell a policy).
+      # NOTE: This policy is the default policy for the vast majority of nodes.
       D7::MergeDiff.new(depth_limit: 0u32)
     when SYM_SURFACE
       # |@ rack.[merge-policy]
@@ -3857,8 +3856,8 @@ module Ww::Rack
       # [client (encoder_ -> transport_ -> decoder_) status_]
       #
       # |@key encoder rack.[network].encoder
-      # The encoder description should point to the cell where an outgoing message
-      # is placed. An outgoing message is that which goes from the client toward
+      # The encoder description should point to the cell where the circuit will place
+      # outgoing messages. An outgoing message is that which goes from the client toward
       # the remote endpoint -- the arrows are there to help you remember the order,
       # and for no other purpose. The encoder will *encode* the message, and pass
       # the result to the remote endpoint described by *transport*.
@@ -4431,12 +4430,11 @@ module Ww::Rack
       # termspace(s) of choice; see `rack.sensor`, `rack.appearance`).
       #
       # |@summary
-      # A subcircuit that exposes a projection of the *fields* it contains (`rack.field`
-      # and `rack.outlet`).
+      # Composes a view of the *fields* contained in a subcircuit (`rack.field`, `rack.outlet`).
       #
       # |@block
       # A *form* is a subcircuit that aggregates and exposes the fields in its *children*;
-      # the aggregation forming a live, bidirectional dashboard to facilitate control of them.
+      # the aggregation forming a live, bidirectional dashboard to simplify control.
       #
       # Forms are the third "communication axis" or "connectivity axis" in Rack, the other
       # two being edges (`rack.edge`) and termspaces (`rack.tspace`, `rack.sensor`,
@@ -4468,6 +4466,7 @@ module Ww::Rack
       # (reading @xf)
       #
       # ;; Frame 1
+      #
       # (form @xf
       #   (outlet @x 100)
       #   (outlet @y)
@@ -4498,6 +4497,7 @@ module Ww::Rack
       # (reading @yf)
       #
       # ;; Frame 1
+      #
       # (form @xf
       #   (field @x 100)
       #   (field @y)
@@ -4514,7 +4514,7 @@ module Ww::Rack
       # ```
       #
       # The variant of the `form` node without parentheses around the edge or the edge and
-      # the poicy *collapses* the form: if there is only one outlet field, instead of exposing
+      # the policy *collapses* the form: if there is only one outlet field, instead of exposing
       # a singleton dictionary containing the field's value at *edge* (i.e., a list of fields
       # with only one field's value), it exposes the value directly. For example:
       #
@@ -4634,11 +4634,11 @@ module Ww::Rack
       # ;; Frame 2
       #
       # (form @xf
-      #   (field @in)
+      #   (field @in 3)
       #   (transfer (@in ±n @out) ^(* n n))
       #   (field @out))
       #
-      # (queue (@x @xs) (3 4))
+      # (queue (@x @xs) (4))
       # (queue (@y @ys) (4))
       # ;; (backsys ...)
       #
@@ -4849,17 +4849,14 @@ module Ww::Rack
       # [field @edge_ value_]
       # [field (@edge_ name_)]
       # [field (@edge_ name_) value_]
-      #
       # [field (readonly @edge_)]
       # [field (readonly @edge_) value_]
       # [field (readonly @edge_ name_)]
       # [field (readonly @edge_ name_) value_]
-      #
       # [field (policy_symbol @edge_)]
       # [field (policy_symbol @edge_) value_]
       # [field ((policy_symbol @edge_) name_)]
       # [field ((policy_symbol @edge_) name_) value_]
-      #
       # [field (readonly (policy_symbol @edge_))]
       # [field (readonly (policy_symbol @edge_)) value_]
       # [field (readonly (policy_symbol @edge_) name_)]

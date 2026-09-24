@@ -1163,7 +1163,7 @@ module Ww::Rack::Accord
       # |@ rack.client.transport
       #
       # |@pattern
-      # (wss host_ port_ ⍊ key_⋮ master path⋮ "" link_⋮ stream renew⋮ false)
+      # (wss host_ port_ ⍊ key_⋮ master path⋮ "" link_⋮ stream renew⋮ false verify⋮ true)
       #
       # |@key host rack.[network].host
       # |@key port rack.[network].port
