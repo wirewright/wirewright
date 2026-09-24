@@ -129,7 +129,9 @@ module Ww::D7
       @annotations = Set(Annotation).new
     end
 
-    # Constructs a hypergraph of nodes at all levels.
+    # Constructs a root hypergraph of nodes at all levels.
+    #
+    # A root hypergraph is a hypergraph whose `prefix` address is the empty address.
     def initialize(tree : ParseTree)
       initialize(D7::NodeAddr.empty, tree, AnyLevel.new)
     end
@@ -181,19 +183,22 @@ module Ww::D7
     # This is generally faster than a linear scan with `each_node` because
     # the underlying structure indexes heads, and this method makes sure to
     # skip as much work as possible if the head is definitely absent in a subtree.
-    def each_node_with_head(head : Term, &fn : Node ->) : Nil
+    def each_node_with_head(*heads : Term, noentry : Enumerable(Term) = Slice(Term).empty, &fn : Node ->) : Nil
       guide = Guide.new do |summary|
         case @level_query
         in CurrentLevel
-          summary.current_level.has_head?(head)
+          heads.any? { |head| summary.current_level.has_head?(head) } &&
+            noentry.none? { |head| summary.current_level.has_head?(head) }
         in AnyLevel
-          summary.has_head?(head)
+          heads.any? { |head| summary.has_head?(head) } &&
+            noentry.none? { |head| summary.has_head?(head) }
         end
       end
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node, edges : Set(Term)) do
-        if node.signature == head
+        # == order matters, we want an overload
+        if heads.any? { |head| node.signature == head }
           fn.call(node)
         end
 
@@ -205,7 +210,7 @@ module Ww::D7
 
     # Traverses nodes at the target level, calling *fn* only with nodes that have
     # the given *head*, and participate in *all* edges provided in *memberof*.
-    def each_node_with_head(head : Term, *, memberof : Tuple(AbsEdge), &fn : Node ->) : Nil
+    def each_node_with_head(*heads : Term, memberof : Tuple(AbsEdge), &fn : Node ->) : Nil
       # TODO: The general algorithm (for Indexable(AbsEdge)) would probably look like this:
       #
       # roots = membership.map do |edge|
@@ -234,30 +239,25 @@ module Ww::D7
       guide = Guide.new do |summary|
         case @level_query
         in CurrentLevel
-          summary.current_level.has_head?(head)
+          heads.any? do |head|
+            summary.current_level.has_head?(head)
+          end
         in AnyLevel
-          summary.has_head?(head)
+          heads.any? do |head|
+            summary.has_head?(head)
+          end
         end
       end
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node) do
-        return unless node.signature == head
+        return unless heads.any? { |head| node.signature == head }
 
         fn.call(node)
       end
 
       needle = edge.term
       Hypergraph.resolve(self, origin, addr, guide, pointerof(needle).to_slice(1), id_zero, sink)
-    end
-
-    # Traverses nodes at the target level, calling *fn* only with nodes that
-    # have *any* of the given *heads*.
-    def each_node_with_head(head : Term, *heads : Term, **kwargs, &fn : Node ->) : Nil
-      each_node_with_head(head, **kwargs, &fn)
-      heads.each do |other|
-        each_node_with_head(other, **kwargs, &fn)
-      end
     end
 
     private def single(node_id : NodeId, *, pass_guards : Bool) : {Node, Set(Term)}

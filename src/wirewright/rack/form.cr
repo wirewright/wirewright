@@ -374,8 +374,8 @@ module Ww::Rack::Form
   private def fields(addr : D7::NodeAddr, subtree : D7::GroupNode) : Array(Field)
     fields = [] of Field
 
-    hg = D7::Hypergraph.new(addr, subtree, level_query: D7::Hypergraph::CurrentLevel.new)
-    hg.each_node_with_head(SYM_FIELD, SYM_OUTLET) do |node|
+    hg = D7::Hypergraph.new(addr, subtree, level_query: D7::Hypergraph::AnyLevel.new)
+    hg.each_node_with_head(SYM_FIELD, SYM_OUTLET, noentry: {SYM_FORM}) do |node|
       next unless field = field?(node)
 
       fields << field

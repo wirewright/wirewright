@@ -1261,3 +1261,16 @@
       (reading @x 1))
 
     end))
+
+;; Fields and outlets must pass through circuits on their way to an enclosing form.
+(rack
+  (frame
+    (form @xf
+      (device
+        (outlet @x 100)))
+    (reading @xf))
+
+  (frame/tail
+    (reading @xf 100))
+
+  end)
