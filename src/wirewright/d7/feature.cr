@@ -708,23 +708,31 @@ module Ww::D7
       changed_children << child1
     end
 
-    if changed_indices.empty?
-      return tree # unchanged
-    end
+    if changed_indices.present?
+      # Apply changes to a mutable copy of children.
+      children1 = tree.children.dup
+      changed_children.zip(changed_indices) do |child, child_index|
+        children1[child_index] = child
+      end
 
-    # Apply changes to a mutable copy of children.
-    children1 = tree.children.dup
-    changed_children.zip(changed_indices) do |child, child_index|
-      children1[child_index] = child
+      # Make the copy read-only.
+      children1 = Slice.new(children1.to_unsafe, children1.size, read_only: true)
     end
-
-    # Make the copy read-only.
-    children1 = Slice.new(children1.to_unsafe, children1.size, read_only: true)
 
     case tree
     in CircuitNode
-      CircuitNode.new(tree.feature, children1, gnd_map(addr, tree.leaf, replacements))
+      leaf1 = gnd_map(addr, tree.leaf, replacements)
+
+      if children1.nil? && tree.leaf.same?(leaf1)
+        return tree # unchanged
+      end
+
+      CircuitNode.new(tree.feature, children1 || tree.children, leaf1)
     in GroupNode
+      if children1.nil?
+        return tree # unchanged
+      end
+
       GroupNode.new(tree.feature, children1)
     end
   end
