@@ -1101,10 +1101,9 @@ node←(cat l_ r←[⸨row,col,indent⸩]) <> {node: ^l}
        ^caption)
 
 (group ⍊ detail: (comment caption_string))
-  => (group style: "flow-row pl-1 text-xs/4 text-theme-comment gap-2/3"
-       (icon "comment" style: "pt-1/3")
-       (p style: "font-sans clamp max-w-2xs fr-1"
-         ^caption))
+  => (p style: "font-sans text-xs/4 text-theme-comment clamp max-w-2xs border-l-sm \
+                ml-1 pl-3/2 border-theme-comment"
+       ^caption)
 
 [atom caption_string]
   => (p ^caption style: "text-theme-text")
