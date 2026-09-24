@@ -49,10 +49,17 @@ module Ww::Rack
     end
   end
 
+  # :nodoc:
+  SYM_CELL = Term.of(:cell)
+  # :nodoc:
+  SYM_OUTLET = Term.of(:outlet)
+  # :nodoc:
+  SYM_FIELD = Term.of(:field)
+
   def each_cell(hg : D7::Hypergraph, input : D7::AbsEdge, & : Cell ->) : Nil
     candidates = Pf::Kit.stack_array(Cell, 4)
 
-    hg.each_node_with_head(Term.of(:cell), memberof: {input}) do |node|
+    hg.each_node_with_head(SYM_CELL, SYM_OUTLET, SYM_FIELD, memberof: {input}) do |node|
       dict = node.term.as_d
 
       # Since `cell?` is called extremely frequently, we cannot afford M1 here, so
@@ -67,6 +74,8 @@ module Ww::Rack
 
       if dict.itemsize == 2
         # [cell fst_]
+        # [outlet fst_]
+        # [field fst_]
         #
         # *input* is somewhere in *fst* and the classifier accepted it, so we're
         # fine with recognizing the whole thing as an empty cell.
@@ -76,6 +85,8 @@ module Ww::Rack
 
       if dict.itemsize == 3
         # [cell fst_ snd_]
+        # [outlet fst_ snd_]
+        # [field fst_ snd_]
         #
         # *input* can be inside *fst* or *snd*, but we know that the classifier is
         # happy, so it must be in *fst*. We're fine with recognizing the whole thing
@@ -103,7 +114,7 @@ module Ww::Rack
   def pool?(hg : D7::Hypergraph, edge : D7::AbsEdge) : Pool?
     pools = Pf::Kit.stack_array(Pool, 1)
 
-    hg.each_node_with_head(Term.of(:cell), memberof: {edge}) do |node|
+    hg.each_node_with_head(SYM_CELL, memberof: {edge}) do |node|
       Term.case(node.term) do
         matchpiT(
           %{[cell (pool @_) contents_dict]},
@@ -164,6 +175,7 @@ end
 require "./rack/classifier"
 require "./rack/feed"
 require "./rack/part"
+require "./rack/form"
 require "./rack/tspace"
 require "./rack/assembler"
 require "./rack/backsys"

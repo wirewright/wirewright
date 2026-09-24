@@ -48,13 +48,17 @@ module Ww::D7
       @valuesptr.to_slice(@keys.size)
     end
 
+    def size : Int32
+      @keys.size
+    end
+
     # Returns `true` if this patch includes a replacement for a node with the given *id*.
     def includes?(id : NodeId) : Bool
       @keys.includes?(id)
     end
 
-    def size : Int32
-      @keys.size
+    def intersects?(ids : Pf::USet32) : Bool
+      @keys.intersects?(ids)
     end
 
     # Returns the replacement term associated with the given *id*.
@@ -68,6 +72,20 @@ module Ww::D7
     def each(& : {NodeId, Term} ->) : Nil
       @keys.each_with_index do |id, index|
         yield({id, @valuesptr[index]})
+      end
+    end
+
+    def each(*, in mask : Pf::USet32, & : {NodeId, Term} ->) : Nil
+      if @keys.size < mask.size
+        @keys.each_with_index do |id, index|
+          next unless id.in?(mask)
+          yield({id, @valuesptr[index]})
+        end
+      else
+        mask.each do |id|
+          next unless id.in?(@keys)
+          yield({id, @valuesptr[@keys.rank(id)]})
+        end
       end
     end
 

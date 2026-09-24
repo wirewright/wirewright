@@ -1,0 +1,1263 @@
+(rack
+  (frame
+    (form @form
+      (group
+        (outlet @a 100)
+        (outlet @b 200))
+      (outlet @c 300))
+    (reading @form))
+
+  (frame
+    (form @form
+      (group
+        (outlet @a 100)
+        (outlet @b 200))
+      (outlet @c 300))
+    (reading @form
+      (100 200 300)))
+
+  end)
+
+(rack
+  (frame
+    (part (@form @x) (x_ _ _))
+    (part (@form @y) (y_ _))
+    (part (@form @z) (z_))
+    (discard @x)
+    (delay 1 (discard @y))
+    (delay 2 (discard @z))
+    (form @form
+      (group
+        (outlet @a 100)
+        (outlet @b 200))
+      (outlet @c 300)))
+
+  (frame/tail
+    (form @form
+      (group
+        (outlet @a)
+        (outlet @b 200))
+      (outlet @c 300)))
+
+  (frame/tail
+    (form @form
+      (group
+        (outlet @a)
+        (outlet @b))
+      (outlet @c 300)))
+
+  (frame/tail
+    (form @form
+      (group
+        (outlet @a)
+        (outlet @b))
+      (outlet @c)))
+
+  end)
+
+(rack
+  (frame
+    (feed @x (@ys back))
+    (feed (@ys front) (@z back))
+
+    (form @x
+      (cell @xs (1 2 3))
+      (feed (@xs front) @elevator)
+      (outlet @elevator))
+
+    (cell @ys ())
+
+    (form @z
+      (group
+        (outlet @zs ()))))
+
+  (frame/tail
+    (form @x
+      (cell @xs (2 3))
+      (feed (@xs front) @elevator)
+      (outlet @elevator 1))
+
+    (cell @ys ())
+
+    (form @z
+      (group
+        (outlet @zs ()))))
+
+  (frame/tail
+    (form @x
+      (cell @xs (3))
+      (feed (@xs front) @elevator)
+      (outlet @elevator 2))
+
+    (cell @ys (1))
+
+    (form @z
+      (group
+        (outlet @zs ()))))
+
+  ;; This must halt due to a conflict on the exclusive @ys: both feeds want
+  ;; to modify it.
+  end)
+
+(rack
+  (frame
+    (feed @x (@ys back))
+    (feed (@ys front) (@z back))
+
+    (form @x
+      (cell @xs (1 2 3))
+      (feed (@xs front) @elevator)
+      (outlet @elevator))
+
+    (cell (arena @ys) ())
+
+    (form @z
+      (group
+        (outlet @zs ()))))
+
+  (frame/tail
+    (form @x
+      (cell @xs (2 3))
+      (feed (@xs front) @elevator)
+      (outlet @elevator 1))
+
+    (cell (arena @ys) ())
+
+    (form @z
+      (group
+        (outlet @zs ()))))
+
+  (frame/tail
+    (form @x
+      (cell @xs (3))
+      (feed (@xs front) @elevator)
+      (outlet @elevator 2))
+
+    (cell (arena @ys) (1))
+
+    (form @z
+      (group
+        (outlet @zs ()))))
+
+  (frame/tail
+    (form @x
+      (cell @xs ())
+      (feed (@xs front) @elevator)
+      (outlet @elevator 3))
+
+    (cell (arena @ys) (2))
+
+    (form @z
+      (group
+        (outlet @zs (1)))))
+
+  (frame/tail
+    (form @x
+      (cell @xs ())
+      (feed (@xs front) @elevator)
+      (outlet @elevator))
+
+    (cell (arena @ys) (3))
+
+    (form @z
+      (group
+        (outlet @zs (1 2)))))
+
+  (frame/tail
+    (form @x
+      (cell @xs ())
+      (feed (@xs front) @elevator)
+      (outlet @elevator))
+
+    (cell (arena @ys) ())
+
+    (form @z
+      (group
+        (outlet @zs (1 2 3)))))
+
+  end)
+
+(rack
+  (frame
+    (feed @a @b @a)
+    (form @a (outlet @x true))
+    (form @b (outlet @x)))
+
+  (frame/tail
+    (form @a (outlet @x))
+    (form @b (outlet @x true)))
+
+  (frame/tail
+    (form @a (outlet @x true))
+    (form @b (outlet @x))))
+  ;; ...
+
+(rack
+  (frame
+    (part (@xf @x) (x_ _*))
+    (discard @x)
+    (form @xf
+      (outlet @a 100)
+      (outlet @b 200)
+      (outlet @c 300)
+      (outlet @d 400)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a)
+      (outlet @b 200)
+      (outlet @c 300)
+      (outlet @d 400)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a)
+      (outlet @b)
+      (outlet @c 300)
+      (outlet @d 400)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a)
+      (outlet @b)
+      (outlet @c)
+      (outlet @d 400)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a)
+      (outlet @b)
+      (outlet @c)
+      (outlet @d)))
+
+  end)
+
+(rack
+  (frame
+    (part (@xf @x) (_* x_))
+    (discard @x)
+    (form @xf
+      (outlet @a 100)
+      (outlet @b 200)
+      (outlet @c 300)
+      (outlet @d 400)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a 100)
+      (outlet @b 200)
+      (outlet @c 300)
+      (outlet @d)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a 100)
+      (outlet @b 200)
+      (outlet @c)
+      (outlet @d)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a 100)
+      (outlet @b)
+      (outlet @c)
+      (outlet @d)))
+
+  (frame/tail
+    (form @xf
+      (outlet @a)
+      (outlet @b)
+      (outlet @c)
+      (outlet @d)))
+
+  end)
+
+(rack
+  (frame
+    (backsys @xf
+      {¦ a_} <> {(a): ()}
+      {¦ -a_} <> {a: 100})
+    (form @xf
+      (field @a 100)
+      (field @b 200)))
+
+  (frame/tail
+    (form @xf
+      (field @a)
+      (field @b 200)))
+
+  (frame/tail
+    (form @xf
+      (field @a 100)
+      (field @b 200)))
+
+  (frame/tail
+    (form @xf
+      (field @a)
+      (field @b 200))))
+  ;; ...
+
+(rack
+  (frame
+    (backsys @xf
+      {¦ a_} <> {(a): ()}
+      {¦ -a_} <> {a: 100})
+    (backsys @xf
+      {¦ b_} <> {(b): ()}
+      {¦ -b_} <> {b: 100})
+    (form @xf
+      (field @a 100)
+      (field @b 200)))
+
+  ;; Should not work due to a conflict on @xf, which is exclusive
+  ;; (but both backmaps want to modify it!)
+  end)
+
+(rack
+  (frame
+    (backsys @xf
+      {¦ a_} <> {(a): ()}
+      {¦ -a_} <> {a: 100})
+    (backsys @xf
+      {¦ b_} <> {(b): ()}
+      {¦ -b_} <> {b: 200})
+    (form (arena @xf)
+      (field @a 100)
+      (field @b 200)))
+
+  (frame/tail
+    (form (arena @xf)
+      (field @a)
+      (field @b)))
+
+  (frame/tail
+    (form (arena @xf)
+      (field @a 100)
+      (field @b 200)))
+
+  (frame/tail
+    (form (arena @xf)
+      (field @a)
+      (field @b))))
+  ;; ...
+
+;; Invalid policy on form
+(rack
+  (frame
+    (form (invalid-policy @xf)
+      (cell @x 0)
+      (cell @y)
+      (feed @x @y)))
+
+  end)
+
+(rack
+  (frame
+    (form ((invalid-policy @xf))
+      (cell @x 0)
+      (cell @y)
+      (feed @x @y)))
+
+  end)
+
+;; Outlet with edge
+(rack
+  (frame
+    (form @xf
+      (cell @a 100)
+      (outlet @b)
+      (feed @a @b @a))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (cell @a)
+      (outlet @b 100)
+      (feed @a @b @a))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (cell @a 100)
+      (outlet @b)
+      (feed @a @b @a))
+    (reading @xf 100))
+
+  (frame
+    (form @xf
+      (cell @a)
+      (outlet @b 100)
+      (feed @a @b @a))
+    (reading @xf)))
+  ;; ...
+
+(rack
+  (frame
+    (form @xf
+      (outlet @count 0)
+      (backsys @count ±n <> {n: ^(+ n 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (outlet @count 1)
+      (backsys @count ±n <> {n: ^(+ n 1)}))
+    (reading @xf 0))
+
+  (frame
+    (form @xf
+      (outlet @count 2)
+      (backsys @count ±n <> {n: ^(+ n 1)}))
+    (reading @xf 1))
+
+  (frame
+    (form @xf
+      (outlet @count 3)
+      (backsys @count ±n <> {n: ^(+ n 1)}))
+    (reading @xf 2)))
+  ;; ...
+
+(rack
+  (frame
+    (form @xf
+      (outlet @count 0)
+      (view (@count ±n @count) ^(+ n 1)))
+
+    (form @yf
+      (outlet @input)
+      (view (@input ±n @output) ^(* n 2))
+      (cell @output))
+
+    (feed (copy @xf) (over @yf)))
+
+  (frame
+    (form @xf
+      (outlet @count 1)
+      (view (@count ±n @count) ^(+ n 1)))
+
+    (form @yf
+      (outlet @input 0)
+      (view (@input ±n @output) ^(* n 2))
+      (cell @output 0))
+
+    (feed (copy @xf) (over @yf)))
+
+  (frame
+    (form @xf
+      (outlet @count 2)
+      (view (@count ±n @count) ^(+ n 1)))
+
+    (form @yf
+      (outlet @input 1)
+      (view (@input ±n @output) ^(* n 2))
+      (cell @output 2))
+
+    (feed (copy @xf) (over @yf)))
+
+  (frame
+    (form @xf
+      (outlet @count 3)
+      (view (@count ±n @count) ^(+ n 1)))
+
+    (form @yf
+      (outlet @input 2)
+      (view (@input ±n @output) ^(* n 2))
+      (cell @output 4))
+
+    (feed (copy @xf) (over @yf)))
+
+  (frame
+    (form @xf
+      (outlet @count 4)
+      (view (@count ±n @count) ^(+ n 1)))
+
+    (form @yf
+      (outlet @input 3)
+      (view (@input ±n @output) ^(* n 2))
+      (cell @output 6))
+
+    (feed (copy @xf) (over @yf))))
+  ;; ...
+
+(rack
+  (frame
+    (form @xf
+      (outlet @count (0 0))
+      (backsys @count (±n _) <> {n: ^(+ n 1)})
+      (backsys @count (_ ±m) <> {m: ^(+ m 1)})))
+
+  ;; This one is a conflict: two backsystems trying to modify the same exclusive
+  ;; outlet @count.
+  end)
+
+(rack
+  (frame
+    (form @xf
+      (outlet (arena @count) (0 0))
+      (backsys @count (±n _) <> {n: ^(+ n 1)})
+      (backsys @count (_ ±m) <> {m: ^(+ m 1)})))
+
+  (frame
+    (form @xf
+      (outlet (arena @count) (1 1))
+      (backsys @count (±n _) <> {n: ^(+ n 1)})
+      (backsys @count (_ ±m) <> {m: ^(+ m 1)})))
+
+  (frame
+    (form @xf
+      (outlet (arena @count) (2 2))
+      (backsys @count (±n _) <> {n: ^(+ n 1)})
+      (backsys @count (_ ±m) <> {m: ^(+ m 1)}))))
+  ;; ...
+
+;; Full form field
+(rack
+  (frame
+    (form @xf
+      (field (@a x) 0)
+      (field (@b y) 0)
+      (backsys @a ±n <> {n: ^(+ n 1)})
+      (backsys @b ±n <> {n: ^(+ n 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field (@a x) 1)
+      (field (@b y) 1)
+      (backsys @a ±n <> {n: ^(+ n 1)})
+      (backsys @b ±n <> {n: ^(+ n 1)}))
+    (reading @xf {x: 0, y: 0}))
+
+  (frame
+    (form @xf
+      (field (@a x) 2)
+      (field (@b y) 2)
+      (backsys @a ±n <> {n: ^(+ n 1)})
+      (backsys @b ±n <> {n: ^(+ n 1)}))
+    (reading @xf {x: 1, y: 1})))
+  ;; ...
+
+;; Short form field
+(rack
+  (frame
+    (form @xf
+      (field @x 0)
+      (field @y 0)
+      (backsys @x ±n <> {n: ^(+ n 1)})
+      (backsys @y ±n <> {n: ^(+ n 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field @x 1)
+      (field @y 1)
+      (backsys @x ±n <> {n: ^(+ n 1)})
+      (backsys @y ±n <> {n: ^(+ n 1)}))
+    (reading @xf {x: 0, y: 0}))
+
+  (frame
+    (form @xf
+      (field @x 2)
+      (field @y 2)
+      (backsys @x ±n <> {n: ^(+ n 1)})
+      (backsys @y ±n <> {n: ^(+ n 1)}))
+    (reading @xf {x: 1, y: 1})))
+
+;; Short form with policy
+(rack
+  (frame
+    (form @xf
+      (field (@x qux) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field (@x qux) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf {qux: (0 0)}))
+
+  ;; Conflict
+  end)
+
+(rack
+  (frame
+    (form @xf
+      (field ((arena @x) qux) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field ((arena @x) qux) (1 1))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf {qux: (0 0)}))
+
+  (frame
+    (form @xf
+      (field ((arena @x) qux) (2 2))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf {qux: (1 1)})))
+  ;; ...
+
+;; Short form with policy
+(rack
+  (frame
+    (form @xf
+      (field @x (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field @x (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf {x: (0 0)}))
+
+  ;; Conflict on @x
+  end)
+
+(rack
+  (frame
+    (form @xf
+      (field (arena @x) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field (arena @x) (1 1))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf {x: (0 0)}))
+
+  (frame
+    (form @xf
+      (field (arena @x) (2 2))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf {x: (1 1)})))
+  ;; ...
+
+;; Invalid merge policy, short form
+(rack
+  (frame
+    (form @xf
+      (field (invalid-policy @x) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field (invalid-policy @x) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf ()))
+
+  end)
+
+;; Invalid merge policy, long form
+(rack
+  (frame
+    (form @xf
+      (field ((invalid-policy @x) qux) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (field ((invalid-policy @x) qux) (0 0))
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)}))
+    (reading @xf ()))
+
+  end)
+
+;; Unwrapped form
+(rack
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (delay 1 (outlet @y 200)))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (outlet @y 200))
+    (reading @xf 100))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (outlet @y 200))
+    (reading @xf (100 200)))
+
+  end)
+
+(rack
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (delay 1 (field @y 200)))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (field @y 200))
+    (reading @xf 100))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (field @y 200))
+    (reading @xf (100 y: 200)))
+
+  end)
+
+(rack
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (delay 1 (outlet @y 200))
+      (delay 2 (field @z 300)))
+    (reading @xf))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (outlet @y 200)
+      (delay 1 (field @z 300)))
+    (reading @xf 100))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (outlet @y 200)
+      (field @z 300))
+    (reading @xf (100 200)))
+
+  (frame
+    (form @xf
+      (outlet @x 100)
+      (outlet @y 200)
+      (field @z 300))
+    (reading @xf (100 200 z: 300)))
+
+  end)
+
+;; Wrapped form
+(rack
+  (frame
+    (form (@xf)
+      (outlet @x 100)
+      (delay 1 (outlet @y 200)))
+    (reading @xf))
+
+  (frame
+    (form (@xf)
+      (outlet @x 100)
+      (outlet @y 200))
+    (reading @xf (100)))
+
+  (frame
+    (form (@xf)
+      (outlet @x 100)
+      (outlet @y 200))
+    (reading @xf (100 200)))
+
+  end)
+
+;; Wrapped form with policy
+(rack
+  (frame
+    (form (@xf) (outlet @x (100 200)))
+    (backsys @xf ((±n _)) <> {n: ^(+ n 1)})
+    (backsys @xf ((_ ±m)) <> {m: ^(+ m 1)}))
+
+  ;; Conflict
+  end)
+
+(rack
+  (frame
+    (backsys @xf ((±n _)) <> {n: ^(+ n 1)})
+    (backsys @xf ((_ ±m)) <> {m: ^(+ m 1)})
+    (form ((space @xf)) (outlet @x (100 200))))
+
+  (frame/tail
+    (form ((space @xf)) (outlet @x (101 201))))
+
+  (frame/tail
+    (form ((space @xf)) (outlet @x (102 202)))))
+  ;; ...
+
+(rack
+  (frame
+    (backsys
+      {¦ a_ xf: {¦ -in_}} <> {(a): (), in: ^a}
+      {¦ xf: {¦ out_} yf: {¦ -in_}} <> {in: ^out, (out): ()}
+      {¦ yf: {¦ out_} zf: {¦ -in_}} <> {in: ^out, (out): ()}
+      {¦ zf: {¦ out_} -b_} <> {(out): (), b: ^out})
+    (cell @a 100)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (cell @b))
+
+  (frame/tail
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+       ;; NOTE: We will never see 100 in the in field here because `form`s are
+       ;; circuits, so they evaluate by one step before we can look at them
+       ;; (at the frame resolution we use in tests, that is...)
+      (cell @a 100)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (cell @b))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out) 100))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (cell @b))
+
+  (frame/tail
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a 100)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (cell @b))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out) 100))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (cell @b))
+
+  (frame/tail
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a 100)
+      (cell @b)
+      (field (@y out)))
+    (cell @b))
+
+  (frame/tail fast-forward: true
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out) 100))
+    (cell @b))
+
+  (frame/tail
+    (cell @a)
+    (form @xf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @yf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (form @zf
+      (feed @x @a @b @y)
+      (field (@x in))
+      (cell @a)
+      (cell @b)
+      (field (@y out)))
+    (cell @b 100))
+
+  end)
+
+;; Read-only field
+(group
+  ;; Read-only field unset
+  (rack
+    (frame
+      (backsys {¦ xf: {| x_}} <> {(x): ()}) ;; |
+      (form @xf
+        (field (readonly @x) 100)
+        (backsys @x ±n <> {n: ^(+ n 1)})))
+
+    (frame/tail
+      (form @xf
+        (field (readonly @x) 101)
+        (backsys @x ±n <> {n: ^(+ n 1)})))
+
+    (frame/tail
+      (form @xf
+        (field (readonly @x) 102)
+        (backsys @x ±n <> {n: ^(+ n 1)}))))
+    ;; ...
+
+  ;; Read-only field change
+  (rack
+    (frame
+      (backsys {¦ xf: {| x_}} <> {x: ^(* x 2)}) ;; |
+      (form @xf
+        (field (readonly @x) 100)
+        (backsys @x ±n <> {n: ^(+ n 1)})))
+
+    (frame/tail
+      (form @xf
+        (field (readonly @x) 101)
+        (backsys @x ±n <> {n: ^(+ n 1)})))
+
+    (frame/tail
+      (form @xf
+        (field (readonly @x) 102)
+        (backsys @x ±n <> {n: ^(+ n 1)}))))
+
+  ;; Read-only field set
+  (rack
+    (frame
+      (backsys {¦ xf: {| -x_}} <> {x: 100}) ;; |
+      (form @xf
+        (field (readonly @x))
+        (cell @y 200)
+        (feed @y @x)))
+
+    (frame/tail
+      (form @xf
+        (field (readonly @x) 200) ;; backsys' `100` is rejected
+        (cell @y)
+        (feed @y @x)))
+
+    end))
+
+;; Read-only outlet (one)
+(group
+  (rack
+    (frame
+      (backsys @x ±n <> {n: ^(+ n 1)})
+      (outlet (readonly @x) 0))
+
+    (frame/tail
+      (outlet (readonly @x) 1))
+
+    (frame/tail
+      (outlet (readonly @x) 2)))
+    ;; ...
+
+  ;; Unset
+  (rack
+    (frame
+      (form @xf
+        (outlet (readonly @x) 100))
+      (feed @xf @yf)
+      (form @yf
+        (outlet @y)))
+
+    end)
+
+  ;; Set
+  (rack
+    (frame
+      (form @xf
+        (outlet @x 100))
+      (feed @xf @yf)
+      (form @yf
+        (outlet (readonly @y))))
+
+    end)
+
+  ;; Change
+  (rack
+    (frame
+      (form @xf
+        (outlet @x 100))
+      (backsys @x ±n <> {n: ^(+ n 1)}))
+
+    end)
+
+  (rack
+    (frame
+      (form @xf
+        (outlet (readonly @x) 100))
+      (feed @xf @yf)
+      (form @yf
+        (outlet (readonly @y))))
+
+    end)
+
+  (rack
+    (frame
+      (form @xf
+        (outlet (readonly @x) 100))
+      (reading @xf))
+
+    (frame/tail
+      (reading @xf 100))
+
+    end))
+
+;; Read-only outlet (many)
+(group
+  (rack
+    (frame
+      (form (arena @xf)
+        (outlet @x 100)
+        (outlet @y 200))
+      (feed (@xf front) @y)
+      (feed (@xf back) @z)
+      (cell @y)
+      (cell @z))
+
+    (frame
+      (form (arena @xf)
+        (outlet @x)
+        (outlet @y))
+      (feed (@xf front) @y)
+      (feed (@xf back) @z)
+      (cell @y 100)
+      (cell @z 200))
+
+    end)
+
+  (rack
+    (frame
+      (form (arena @xf)
+        (outlet (readonly @x) 100)
+        (outlet @y 200))
+      (feed (@xf front) @y)
+      (feed (@xf back) @z)
+      (cell @y)
+      (cell @z))
+
+    (frame
+      (form (arena @xf)
+        (outlet (readonly @x) 100)
+        (outlet @y))
+      (feed (@xf front) @y) ;; this one is rejected
+      (feed (@xf back) @z)
+      (cell @y)
+      (cell @z 200))
+
+    end)
+
+  (rack
+    (frame
+      (form (arena @xf)
+        (outlet (readonly @x) 100)
+        (outlet (readonly @y) 200))
+      (feed (@xf front) @y)
+      (feed (@xf back) @z)
+      (cell @y)
+      (cell @z))
+
+    ;; Both feeds are rejected
+    end))
+
+;; Read-only field with policy
+(group
+  (rack
+    (frame
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)})
+      (field (readonly @x) (0 0)))
+
+    end)
+
+  (rack
+    (frame
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)})
+      (field (readonly @x qux) (0 0)))
+
+    end)
+
+  (rack
+    (frame
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)})
+      (field (readonly (arena @x)) (0 0)))
+
+    (frame/tail
+      (field (readonly (arena @x)) (1 1)))
+
+    (frame/tail
+      (field (readonly (arena @x)) (2 2))))
+
+  (rack
+    (frame
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)})
+      (field (readonly (arena @x) qux) (0 0)))
+
+    (frame/tail
+      (field (readonly (arena @x) qux) (1 1)))
+
+    (frame/tail
+      (field (readonly (arena @x) qux) (2 2)))))
+    ;; ...
+
+;; Read-only outlet with policy
+(group
+  (rack
+    (frame
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)})
+      (outlet (readonly @x) (0 0)))
+
+    end)
+
+  (rack
+    (frame
+      (backsys @x (±n _) <> {n: ^(+ n 1)})
+      (backsys @x (_ ±m) <> {m: ^(+ m 1)})
+      (outlet (readonly (arena @x)) (0 0)))
+
+    (frame/tail
+      (outlet (readonly (arena @x)) (1 1)))
+
+    (frame/tail
+      (outlet (readonly (arena @x)) (2 2)))))
+    ;; ...
+
+;; Interop with part
+(group
+  (rack
+    (frame
+      (outlet @xs (1 2 3))
+      (part (@xs @x) (x_ _*))
+      (reading @x))
+
+    (frame
+      (outlet @xs (1 2 3))
+      (part (@xs @x) (x_ _*))
+      (reading @x 1))
+
+    end)
+
+  (rack
+    (frame
+      (field @xs (1 2 3))
+      (part (@xs @x) (x_ _*))
+      (reading @x))
+
+    (frame
+      (field @xs (1 2 3))
+      (part (@xs @x) (x_ _*))
+      (reading @x 1))
+
+    end))

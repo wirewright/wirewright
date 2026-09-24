@@ -13,7 +13,7 @@ module Ww::Rack
   # :nodoc:
   SYM_SPACE = Term[:space]
 
-  private def merge_policy(name : Term::Sym) : D7::MergePolicy
+  private def merge_policy?(name : Term::Sym) : D7::MergePolicy?
     # |@ rack.[merge-policy]
     #
     # |@summary
@@ -85,8 +85,6 @@ module Ww::Rack
       # |@block
       # Smart (diff-based) effectively unlimited deep merge of patches.
       D7::MergeDiff.new(depth_limit: UInt32::MAX)
-    else
-      D7::MergeDiff.new(depth_limit: 0u32) # atom
     end
   end
 
@@ -193,8 +191,10 @@ module Ww::Rack
         D7.gnd(node, edge)
       end
 
-      matchpiT %{[cell (policy_symbol @edge_) _?]} do
-        D7.gnd(node, edge, merge_policy: merge_policy(policy))
+      matchpiT %{[cell (policyQ_symbol @edge_) _?]} do
+        continue unless policy = merge_policy?(policyQ)
+
+        D7.gnd(node, edge, merge_policy: policy)
       end
 
       # |@ rack.cell
@@ -1149,10 +1149,12 @@ module Ww::Rack
 
       # Internal
       matchpiT(
-        %{[cell (pool (policy_symbol @edge_))]},
-        %{[cell (pool (policy_symbol @edge_)) _]},
+        %{[cell (pool (policyQ_symbol @edge_))]},
+        %{[cell (pool (policyQ_symbol @edge_)) _]},
       ) do
-        D7.gnd(node, edge, merge_policy: merge_policy(policy))
+        continue unless policy = merge_policy?(policyQ)
+
+        D7.gnd(node, edge, merge_policy: policy)
       end
 
       # |@ rack.circuit
@@ -4403,6 +4405,605 @@ module Ww::Rack
       # ```
       matchpi %{[lfo (_ _) _?]} do
         D7.gnd(node)
+      end
+
+      # |@ rack.form
+      #
+      # |@pattern
+      # ```wwml
+      # [form @edge_ children_*]
+      # [form (@edge_) children_*]
+      # [form (policy_symbol @edge_) children_*]
+      # [form ((policy_symbol @edge_)) children_*]
+      # ```
+      #
+      # |@key policy rack.[merge-policy]
+      # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`, and
+      # related nodes, the default merge policy for `form` is `exclusive`.
+      #
+      # |@key edge rack.edge
+      # The edge at which to expose the form projection of *children*.
+      #
+      # |@key children rack
+      # Nodes to make a form projection of.
+      #
+      # Forms work like `circuit`s, so their children are completely isolated from the
+      # rest of the world. The only way they can communicate is through form fields (with the
+      # parent form; see `rack.field`, `rack.outlet`) and termspaces (with other members of the
+      # termspace(s) of choice; see `rack.sensor`, `rack.appearance`).
+      #
+      # |@summary
+      # A subcircuit that exposes a projection of the *fields* it contains (`rack.field`
+      # and `rack.outlet`).
+      #
+      # |@block
+      # A *form* is a subcircuit that aggregates and exposes the fields in its *children*;
+      # the aggregation forming a live, bidirectional dashboard to facilitate control of them.
+      #
+      # Forms are the third "communication axis" or "connectivity axis" in Rack, the other
+      # two being edges (`rack.edge`) and termspaces (`rack.tspace`, `rack.sensor`,
+      # `rack.appearance`).
+      #
+      # It is useful to change the wording briefly and talk about the parent circuit
+      # as a *host world* (host), and its subcircuit as a *guest world* (guest).  The host
+      # *simulates* the guest's evolution. Fields (`rack.field`, `rack.outlet`) are a way for the
+      # guest to communicate bidirectionally with its host. The host thus has a kind of symbolic
+      # "dashboard", with symbolic knobs and the like, which it can use to modify the behavior of
+      # the guest. In other words, the guest, a dynamical system, exposes a "user interface" to
+      # the host, so the host *is* the user.
+      #
+      # A form does not have access to fields inside nested forms.
+      #
+      # There are two kinds of *fields*: *outlet* (anonymous, positional) and *named*
+      # fields. Both fields work very much like `cell`s and can be used where cells can be used.
+      #
+      # |@example
+      # The form node exposes a dictionary of fields in *children* at *edge*. *Outlet
+      # (positional) fields* are stored in the itemspart:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      # (form @xf
+      #   (outlet @x 100)
+      #   (outlet @y) ;; empty
+      #   (outlet @z 300))
+      # (reading @xf)
+      #
+      # ;; Frame 1
+      # (form @xf
+      #   (outlet @x 100)
+      #   (outlet @y)
+      #   (outlet @z 300))
+      # (reading @xf (100 300))
+      # ```
+      #
+      # The order of outlet fields in the form is the same as their order in the children
+      # (through depth-first traversal).
+      #
+      # *Named fields* are normally stored in the pairspart:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # ;; Only named fields, some empty
+      # (form @xf
+      #   (field @x 100)
+      #   (field @y) ;; empty
+      #   (field @z 300))
+      # (reading @xf)
+      #
+      # ;; A mix of both
+      # (form @yf
+      #   (outlet @x 100)
+      #   (outlet @y 200)
+      #   (field @z 300))
+      # (reading @yf)
+      #
+      # ;; Frame 1
+      # (form @xf
+      #   (field @x 100)
+      #   (field @y)
+      #   (field @z 300))
+      # (reading @xf
+      #   {x: 100, z: 300}) ;; only named fields, some empty
+      #
+      # (form @yf
+      #   (outlet @x 100)
+      #   (outlet @y 200)
+      #   (field @z 300))
+      # (reading @yf
+      #   (100 200 z: 300)) ;; a mix of both
+      # ```
+      #
+      # The variant of the `form` node without parentheses around the edge or the edge and
+      # the poicy *collapses* the form: if there is only one outlet field, instead of exposing
+      # a singleton dictionary containing the field's value at *edge* (i.e., a list of fields
+      # with only one field's value), it exposes the value directly. For example:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # ;; Only one outlet field in the form:
+      # (form @xf
+      #   (outlet @x 100))
+      # (reading @xf)
+      #
+      # ;; Frame 1
+      #
+      # (form @xf
+      #   (outlet @x 100))
+      # (reading @xf
+      #   100) ;; It's 100 directly rather than `(100)`
+      # ```
+      #
+      # The collapse behavior exists for convenience. For example, a checkbox in MuSoma becomes simply:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @consent ($Checkbox))
+      # (reading @consent)
+      #
+      # ;; Frame 1
+      #
+      # (form @consent ($Checkbox))
+      # (reading @consent
+      #   false) ;; unchecked
+      #
+      # ;; Frame 2 (after checking the checkbox)
+      #
+      # (form @consent ($Checkbox))
+      # (reading @consent
+      #   true) ;; checked
+      # ```
+      #
+      # Note how in this example, the underlying `outlet` is nested deep inside the
+      # implementation of `Checkbox`, and because there are no intervening `form`s you can
+      # "capture" it with your one (thus preventing its further flow upward).
+      #
+      # Similarly, something like an entire input field, with all its internal complexity,
+      # could simply use a string as its highest-level `form` representation (possibly making it
+      # more detailed as an opt-in).
+      #
+      # The collapse behavior simplifies pattern matching and reduces the number of
+      # parentheses, which is always good in a Lisp-like language.
+      #
+      # The collapse behavior can be undesirable if the number of fields in *children*
+      # changes dynamically and you want a uniform top-level representation. In that case, you can
+      # use the other variant of `form`, where the edge (or the edge and the policy) are
+      # wrapped in parentheses, a syntax picked as a mnemonic to the fact that a dictionary
+      # will always be used as the top-level representation.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form (@xf) ;; notice the wrapping parentheses
+      #   (outlet @x 100))
+      # (reading @xf)
+      #
+      # ;; Frame 1
+      #
+      # (form (@xf)
+      #   (outlet @x 100))
+      # ;; The representation is now uniform: a list of zero or more
+      # ;; field values.
+      # (reading @xf
+      #   (100))
+      # ```
+      #
+      # Fields are bound bidirectionally to the form dict:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @xf
+      #   (field @in)
+      #   (transfer (@in ±n @out) ^(* n n)) ;; square it
+      #   (field @out))
+      #
+      # (queue (@x @xs) (2 3 4))
+      # (queue (@y @ys) ())
+      # (backsys
+      #   ;; Move the value at x (front of queue) to the `in` field at @xf.
+      #   {¦ x_ xf: {¦ -in_}}
+      #     <> {(x): (), in: ^x}
+      #   ;; Move the value at the `out` field at @xf to `ys` (queue tail).
+      #   {¦ xf: {¦ out_} -ys_}
+      #     <> {(out): (), ys: ^out})
+      #
+      # ;; Frame 1.1
+      #
+      # (form @xf
+      #   (field @in 2)
+      #   (transfer (@in ±n @out) ^(* n n))
+      #   (field @out))
+      #
+      # (queue (@x @xs) (3 4))
+      # (queue (@y @ys) ())
+      # ;; (backsys ...)
+      #
+      # ;; Frame 1.2
+      #
+      # (form @xf
+      #   (field @in)
+      #   (transfer (@in ±n @out) ^(* n n))
+      #   (field @out 4))
+      #
+      # (queue (@x @xs) (3 4))
+      # (queue (@y @ys) ())
+      # ;; (backsys ...)
+      #
+      # ;; Frame 2
+      #
+      # (form @xf
+      #   (field @in)
+      #   (transfer (@in ±n @out) ^(* n n))
+      #   (field @out))
+      #
+      # (queue (@x @xs) (3 4))
+      # (queue (@y @ys) (4))
+      # ;; (backsys ...)
+      #
+      # ;; and so on . . .
+      #
+      # (form @xf
+      #   (field @in)
+      #   (transfer (@in ±n @out) ^(* n n))
+      #   (field @out))
+      #
+      # (queue (@x @xs) ())
+      # (queue (@y @ys) (4 9 16))
+      # ;; (backsys ...)
+      # ```
+      #
+      # `field`s (pairspart) can be *set* (i.e., a missing field is added), *changed*
+      # (i.e., an existing field is modified), or *unset* (aka cleared; i.e., an existing field is
+      # removed) through the form.
+      #
+      # `outlet`s (itemspart) can only be *changed* (an existing item is modified) or
+      # removed (an existing item is spliced empty). If you add extra items to the form, the
+      # `form` node will reject your entire patch since it does not know what your extra items are
+      # supposed to correspond to.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @xf
+      #   (outlet @x 100)
+      #   (outlet @y 200))
+      # (feed (@xf front) (@xs back))
+      # (cell @xs ())
+      #
+      # ;; Frame 1
+      #
+      # (form @xf
+      #   (outlet @x)
+      #   (outlet @y 200))
+      # ;; Feed removed the front of xf: (100 200) -> (200)
+      # (feed (@xf front) (@xs back))
+      # (cell @xs (100))
+      #
+      # ;; Frame 2
+      #
+      # (form @xf
+      #   (outlet @x)
+      #   (outlet @y))
+      # ;; Feed removed the front of xf: (200) -> ()
+      # (feed (@xf front) (@xs back))
+      # (cell @xs (100 200))
+      # ```
+      #
+      # When removing items, do note that the term diff algorithm is used to determine
+      # which outlets to clear. If you remove one or two items and leave everything else
+      # unchanged, that's fine. If you simultaneously modify (many) other items, however, there's
+      # a chance the diff algorithm will get it wrong, and clear the wrong outlets — the algorithm
+      # prefers replacements over deletions, so that may cause surprising behavior.
+      #
+      # Generally, if you want to clear fields reliably, just use the named field
+      # `rack.field`. A single outlet is well-behaved (e.g. the state of a checkbox, an input
+      # field, or a button). Multiple outlets that are never cleared are also well-behaved.
+      # Consider something like:
+      #
+      # ```wwml
+      # (form @form
+      #   ($Input label: "Login" placeholder: "j.doe")
+      #   ($Input label: "Password" mask: "·")
+      #   ($Checkbox "Subscribe to our newsletter"))
+      # (reading @form)
+      # ```
+      #
+      # Here, one could expect `@form` to read like:
+      #
+      # ```wwml
+      # ("samantha" "passw0rd" false)
+      # ```
+      #
+      # ... after typing/setting the corresponding values in each field through the UI.
+      # This  projection of the form is well-poised for processing by symbolic machinery.
+      #
+      # See `rack.outlet` and `rack.field` for more examples. They have several variants
+      # other than those featured here, in particular read-only outlets and fields.
+
+      matchpi(
+        %{[form @edge_ _*]},
+        %{[form (@edge_) _*]},
+      ) do
+        D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node, edge))
+      end
+
+      matchpiT(
+        %{[form (policyQ_symbol @edge_) _*]},
+        %{[form ((policyQ_symbol @edge_)) _*]},
+      ) do
+        continue unless policy = merge_policy?(policyQ)
+
+        D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node, edge, merge_policy: policy))
+      end
+
+      # |@ rack.outlet
+      #
+      # |@pattern
+      # [outlet @edge_]
+      # [outlet @edge_ value_]
+      # [outlet (policy_symbol @edge_)]
+      # [outlet (policy_symbol @edge_) value_]
+      # [outlet (readonly @edge_)]
+      # [outlet (readonly @edge_) value_]
+      # [outlet (readonly (policy_symbol @edge_))]
+      # [outlet (readonly (policy_symbol @edge_)) value_]
+      #
+      # |@key policy rack.[merge-policy]
+      # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`,
+      # and related nodes, the default merge policy for `outlet` is `exclusive`.
+      #
+      # |@key edge rack.edge
+      # The edge at which a nonempty outlet should expose its *value*. This works exactly
+      # like in `rack.cell`.
+      #
+      # |@key value
+      # The term stored in the outlet. If absent, the outlet is *empty*. If present, the
+      # outlet is *nonempty*.
+      #
+      # |@summary
+      # A positional field to be captured by an enclosing `rack.form`: populates the
+      # itemspart of a form dict.
+      #
+      # |@block
+      # Outlets populate the itemspart of an enclosing `rack.form`'s form dict.
+      #
+      # See `rack.form` for a more complete explanation.
+      #
+      # |@example
+      # There are two variants of `outlet`: the read-write variant and the read-only variant.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @xf
+      #  (outlet @x 100))
+      # (feed @xf @yf)
+      # (form @yf
+      #  (outlet @y))
+      #
+      # ;; Frame 1
+      #
+      # (form @xf
+      #  (outlet @x))
+      # (feed @xf @yf)
+      # (form @yf
+      #  (outlet @y 100))
+      # ```
+      #
+      # The read-only variant prevents the enclosing form from modifying the value stored in the
+      # outlet. The value can still be modified through *edge* (or through direct manipulation of
+      # the `outlet` node as a term).
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @xf
+      #  (outlet (readonly @x) 100))
+      # (feed @xf @yf)
+      # (form @yf
+      #  (outlet @y))
+      # (reading @xf)
+      #
+      # ;; Frame 1
+      #
+      # (form @xf
+      #  (outlet (readonly @x) 100))
+      # ;; The feed stays dormant because it is trying to modify a readonly outlet
+      # ;; in @xf. As it is illegal to do so, its patch is rejected.
+      # (feed @xf @yf)
+      # (form @yf
+      #  (outlet @y))
+      #
+      # ;; The value in the outlet in @xf is still available, but you can't
+      # ;; change or erase it.
+      # (reading @xf
+      #   100)
+      # ```
+
+      matchpi(
+        %{[outlet @edge_]},
+        %{[outlet @edge_ _]},
+        %{[outlet (readonly @edge_)]},
+        %{[outlet (readonly @edge_) _]},
+      ) do
+        D7.gnd(node, edge)
+      end
+
+      matchpiT(
+        %{[outlet (policyQ_symbol @edge_)]},
+        %{[outlet (policyQ_symbol @edge_) _]},
+        %{[outlet (readonly (policyQ_symbol @edge_))]},
+        %{[outlet (readonly (policyQ_symbol @edge_)) _]},
+      ) do
+        continue unless policy = merge_policy?(policyQ)
+
+        D7.gnd(node, edge, merge_policy: policy)
+      end
+
+      # |@ rack.field
+      #
+      # |@pattern
+      # [field @edge_]
+      # [field @edge_ value_]
+      # [field (@edge_ name_)]
+      # [field (@edge_ name_) value_]
+      #
+      # [field (readonly @edge_)]
+      # [field (readonly @edge_) value_]
+      # [field (readonly @edge_ name_)]
+      # [field (readonly @edge_ name_) value_]
+      #
+      # [field (policy_symbol @edge_)]
+      # [field (policy_symbol @edge_) value_]
+      # [field ((policy_symbol @edge_) name_)]
+      # [field ((policy_symbol @edge_) name_) value_]
+      #
+      # [field (readonly (policy_symbol @edge_))]
+      # [field (readonly (policy_symbol @edge_)) value_]
+      # [field (readonly (policy_symbol @edge_) name_)]
+      # [field (readonly (policy_symbol @edge_) name_) value_]
+      #
+      # |@key policy rack.[merge-policy]
+      # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`,
+      # and related nodes, the default merge policy for `field` is `exclusive`.
+      #
+      # |@key edge rack.edge
+      # The edge at which a nonempty field should expose its *value*. This works exactly
+      # like in `rack.cell`.
+      #
+      # |@key name
+      # Optionally, the name of the field. The form dict of the enclosing form will use
+      # this name. Fields whose names collide are *all* suppressed (there is no winner).  In
+      # shorthand variants (which lack an explicit *name*), the name of *edge* is used as *name*.
+      # So for example, writing `(field @x 100)` is the same as writing `(field (@x x) 100)`.
+      #
+      # |@key value
+      # The term stored in the field. If absent, the field is *empty*. If present, the
+      # field is *nonempty*.
+      #
+      # |@summary
+      # A named field to be captured by an enclosing `rack.form`: populates the pairspart
+      # of a form dict.
+      #
+      # |@block
+      # Fields populate the pairspart of an enclosing `rack.form`'s form dict.
+      #
+      # See `rack.form` for a more complete explanation.
+      #
+      # |@example
+      # There are two general variants of `field`: the read-write variant and the
+      # read-only variant. The buildup of patterns in the pattern section is due to the various
+      # combinations of policy, optional name, and readonly declaration.
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @xf
+      #   (field @x 100))
+      # (reading @xf)
+      #
+      # (field @yf
+      #   (field @y))
+      # (reading @yf)
+      #
+      # (backsys
+      #   {¦ xf: {| x_} yf: {| -y_}}
+      #     <> {(x): (), y: ^x})
+      #
+      # ;; Frame 1
+      #
+      # (form @xf
+      #   (field @x))
+      # (reading @xf {x: 100})
+      #
+      # (field @yf
+      #   (field @y 100))
+      # (reading @yf {})
+      #
+      # (backsys
+      #   {¦ xf: {| x_} yf: {| -y_}}
+      #     <> {(x): (), y: ^x})
+      #
+      # ;; Frame 2
+      #
+      # (form @xf
+      #   (field @x))
+      # (reading @xf {})
+      #
+      # (field @yf
+      #   (field @y 100))
+      # (reading @yf {y: 100})
+      #
+      # (backsys
+      #   {¦ xf: {| x_} yf: {| -y_}}
+      #     <> {(x): (), y: ^x})
+      # ```
+      #
+      # The read-only variant prevents the enclosing form from modifying or erasing the
+      # value stored in the field. The value can still be modified or erased through *edge* (or
+      # through direct manipulation of the `field` node as a term).
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (form @xf
+      #   (field (readonly @x) 100)
+      #   (backsys @x ±n <> {n: ^(+ n 1)}))
+      #
+      # ;; This backsystem wants to clear the field in @xf.
+      # (backsys {¦ xf: {| x_}} <> {(x): ()})
+      #
+      # ;; Frame 1
+      #
+      # (form @xf
+      #   (field (readonly @x) 101) ;; The field modification through @x succeeds
+      #   (backsys @x ±n <> {n: ^(+ n 1)}))
+      #
+      # ;; This backsystem fails to clear the field in @xf because
+      # ;; it is readonly.
+      # (backsys {¦ xf: {| x_}} <> {(x): ()})
+      #
+      # ;; Frame 2
+      #
+      # (form @xf
+      #   (field (readonly @x) 102)
+      #   (backsys @x ±n <> {n: ^(+ n 1)}))
+      #
+      # (backsys {¦ xf: {| x_}} <> {(x): ()})
+      #
+      # ;; and so on . . .
+      # ```
+
+      matchpi(
+        %{[field @edge_]},
+        %{[field @edge_ _]},
+        %{[field (@edge_ _)]},
+        %{[field (@edge_ _) _]},
+        %{[field (readonly @edge_)]},
+        %{[field (readonly @edge_) _]},
+        %{[field (readonly @edge_ _)]},
+        %{[field (readonly @edge_ _) _]},
+      ) do
+        D7.gnd(node, edge)
+      end
+
+      matchpiT(
+        %{[field (policyQ_symbol @edge_)]},
+        %{[field (policyQ_symbol @edge_) _]},
+        %{[field ((policyQ_symbol @edge_) _)]},
+        %{[field ((policyQ_symbol @edge_) _) _]},
+        %{[field (readonly (policyQ_symbol @edge_))]},
+        %{[field (readonly (policyQ_symbol @edge_)) _]},
+        %{[field (readonly (policyQ_symbol @edge_) _)]},
+        %{[field (readonly (policyQ_symbol @edge_) _) _]},
+      ) do
+        continue unless policy = merge_policy?(policyQ)
+
+        D7.gnd(node, edge, merge_policy: policy)
       end
 
       otherwise do

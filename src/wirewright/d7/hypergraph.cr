@@ -102,6 +102,9 @@ module Ww::D7
   # NOTE: You cannot share the same hypergraph between multiple threads due to `annotate`;
   # but you *can* share the wrapped `ParseTree`. So you should create a separate hypergraph
   # for each thread and pass that instead.
+  #
+  # Hypergraph traversal methods such as `each_node` and `each_node_with_head` emit nodes
+  # in depth-first order unless specified otherwise.
   class Hypergraph
     # Includers can be used to annotate a `Hypergraph`.
     module Annotation
@@ -200,15 +203,6 @@ module Ww::D7
       Hypergraph.walk(self, guide, sink)
     end
 
-    # Traverses nodes at the target level, calling *fn* only with nodes that
-    # have *any* of the given *heads*.
-    def each_node_with_head(head : Term, *heads : Term, &fn : Node ->) : Nil
-      each_node_with_head(head, &fn)
-      heads.each do |other|
-        each_node_with_head(other, &fn)
-      end
-    end
-
     # Traverses nodes at the target level, calling *fn* only with nodes that have
     # the given *head*, and participate in *all* edges provided in *memberof*.
     def each_node_with_head(head : Term, *, memberof : Tuple(AbsEdge), &fn : Node ->) : Nil
@@ -255,6 +249,15 @@ module Ww::D7
 
       needle = edge.term
       Hypergraph.resolve(self, origin, addr, guide, pointerof(needle).to_slice(1), id_zero, sink)
+    end
+
+    # Traverses nodes at the target level, calling *fn* only with nodes that
+    # have *any* of the given *heads*.
+    def each_node_with_head(head : Term, *heads : Term, **kwargs, &fn : Node ->) : Nil
+      each_node_with_head(head, **kwargs, &fn)
+      heads.each do |other|
+        each_node_with_head(other, **kwargs, &fn)
+      end
     end
 
     private def single(node_id : NodeId) : {Node, Set(Term)}

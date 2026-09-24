@@ -1,24 +1,11 @@
 module Ww::D7
   # Applies *patch* to *hg*'s tree. Returns the resulting patched circuit.
   def apply(hg : Hypergraph, patch : Patch) : Term
-    trie = {} of {UInt32, UInt32} => UInt32
-    reps = {} of UInt32 => Term
-    seq = 1u32 # 0 is root
-
-    patch.each do |node_id, rep|
+    guidance = guidance(patch) do |(node_id, rep)|
       node = hg[node_id]
-
-      pred = 0u32 # root
-      node.addr.each do |key|
-        pred = trie.put_if_absent({pred, key}) do
-          seq, _ = seq + 1, seq
-        end
-      end
-
-      reps[pred] = rep
+      {node.addr, rep}
     end
 
-    guidance = RepairGuidance.new(trie, reps, current: 0u32)
     apply(hg.tree, guidance)
   end
 
@@ -49,6 +36,27 @@ module Ww::D7
     def rep? : Term?
       @reps[@current]?
     end
+  end
+
+  def guidance(objects : Enumerable(T), & : T -> {NodeAddr, Term}) : RepairGuidance forall T
+    trie = {} of {UInt32, UInt32} => UInt32
+    reps = {} of UInt32 => Term
+    seq = 1u32 # 0 is root
+
+    objects.each do |object|
+      addr, rep = yield object
+
+      pred = 0u32 # root
+      addr.each do |key|
+        pred = trie.put_if_absent({pred, key}) do
+          seq, _ = seq + 1, seq
+        end
+      end
+
+      reps[pred] = rep
+    end
+
+    RepairGuidance.new(trie, reps, current: 0u32)
   end
 
   private def repair(tree : InertLeaf | GndLeaf, guidance : RepairGuidance) : RepairTree

@@ -287,7 +287,17 @@ module Ww::Rack
     extend self
 
     def call(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
-      Part.prepass(hg, proposals, &fn)
+      # Form must go before Part so that we can refer to fields in it with `part`:
+      #
+      #   (form @form ...)
+      #   (part (@form @fst) (fst_ _*))
+      #   (part (@form @snd) (_ snd_ _*))
+      #
+      #   ;; @fst now refers to the first field
+      #   ;; @snd now refers to the second one, etc.
+      Form.prepass(hg, proposals) do |hg, proposals1|
+        Part.prepass(hg, proposals1, &fn)
+      end
     end
   end
 
