@@ -248,7 +248,7 @@ module MuSoma
         end
 
         matchpi %{[figure _*]} do
-          _, tree = D7.follow(base_hg.@tree, addr)
+          _, tree = base_hg.follow(addr)
           rep, _ = MuSoma.distill(µ, base_hg, addr, tree, sites: Slice(Term).empty, site_zero: 0u32)
           Term.of(:figure, rep)
         end
@@ -1111,7 +1111,7 @@ module MuSoma
 
         InputExchange.sync(exchange0, @exchange, input_sync, keyboard_sync) do |action|
           perturbation = ->(hg : D7::Hypergraph) do
-            unless row = D7.follow?(hg.tree, hg.to_local(action.addr))
+            unless row = hg.follow?(hg.to_local(action.addr))
               return [D7::Patch.new]
             end
 

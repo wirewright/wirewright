@@ -5530,7 +5530,7 @@
       (cell @input "qux") (cell @output) (cell @error (err "invalid")))
     end))
 
-;; Conditional parent
+;; guard (conditional parent)
 (group
   ;; Basic
   (rack
@@ -6042,8 +6042,37 @@
       (cell @b)
       (cell @c)
       (cell @d)
-      (cell @sink))))
+      (cell @sink)))
     ;; ...
+
+  ;; Working with part (active)
+  (rack
+    (frame
+      (cell @cond {on: true})
+      (part (@cond @on) {¦ on_})
+      (guard (@on true)
+        (cell @a 10)
+        (discard @a)))
+
+    (frame
+      (cell @cond {on: true})
+      (part (@cond @on) {¦ on_})
+      (guard (@on true)
+        (cell @a)
+        (discard @a)))
+
+    end)
+
+  ;; Working with part (inactive)
+  (rack
+    (frame
+      (cell @cond {on: true})
+      (part (@cond @on) {¦ on_})
+      (guard (@on false)
+        (cell @a 10)
+        (discard @a)))
+
+    end))
 
 ;; manipulator
 (group

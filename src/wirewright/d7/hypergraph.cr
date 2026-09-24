@@ -226,7 +226,7 @@ module Ww::D7
 
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = D7.follow?(@tree, edge.module)
+      return unless row = follow?(edge.module)
 
       addr = edge.module
       id_zero, origin = row
@@ -260,7 +260,7 @@ module Ww::D7
       end
     end
 
-    private def single(node_id : NodeId) : {Node, Set(Term)}
+    private def single(node_id : NodeId, *, pass_guards : Bool) : {Node, Set(Term)}
       guide = Guide.new { true }
 
       buffer = Pf::Kit.stack_array({Node, Set(Term)}, 1)
@@ -269,7 +269,7 @@ module Ww::D7
         WalkFlow::Break
       end
 
-      Hypergraph.walk(self, guide, sink, ids: node_id...node_id + 1)
+      Hypergraph.walk(self, guide, sink, pass_guards, ids: node_id...node_id + 1)
 
       buffer.single
     end
@@ -285,7 +285,7 @@ module Ww::D7
     def each_member(edge : AbsEdge, *, heads : Indexable(Term) = Slice(Term).empty, &fn : Node ->) : Nil
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = D7.follow?(@tree, edge.module)
+      return unless row = follow?(edge.module)
 
       # Then we conduct a search in the subtree reached this way.
       addr = edge.module
@@ -342,8 +342,10 @@ module Ww::D7
     end
 
     # Returns the node with the given *node id*.
+    #
+    # NOTE: This method *will* descend into inactive guards if *node id* falls there.
     def [](node_id : NodeId) : Node
-      node, _ = single(node_id)
+      node, _ = single(node_id, pass_guards: true)
       node
     end
 
@@ -471,6 +473,49 @@ module Ww::D7
       AbsEdge.new(NodeAddr.empty, edge)
     end
 
+    def follow?(addr : NodeAddr) : {NodeId, ParseTree}?
+      tree = @tree
+      prefix = NodeAddr.empty
+      id_zero = NodeId.new(0)
+
+      addr.each do |index|
+        loop do
+          case tree
+          in InertLeaf, GndLeaf
+            return
+          in ScopeNode, MixtureNode
+            tree = tree.child
+            next
+          in GroupNode, CircuitNode
+            if tree.is_a?(CircuitNode)
+              id_zero += D7.population(tree.leaf) # Leave an id range reserved for the leaf
+            end
+
+            offset = tree.feature.range.begin
+            assert index >= offset
+
+            # Do not forget to shift the id of the child by all prior ids.
+            prior = tree.children.trim(index - offset)
+            prior.each do |child|
+              id_zero += D7.population(child)
+            end
+
+            tree = tree.children[index - offset]
+          end
+
+          break
+        end
+
+        prefix = prefix.append(index)
+      end
+
+      {id_zero, tree}
+    end
+
+    def follow(addr : NodeAddr) : {NodeId, ParseTree}
+      follow?(addr) || raise KeyError.new
+    end
+
     def gnd_map(replacements : Hash(NodeAddr, Gnd)) : Hypergraph
       Hypergraph.new(@addr, D7.gnd_map(@tree, replacements), @level_query)
     end
@@ -500,11 +545,17 @@ module Ww::D7
     alias Guide = TreeSummary -> Bool
 
     # :nodoc:
-    defrecord WalkContext,
+    defcase WalkContext,
       hg : Hypergraph,
       guide : Guide,
+      pass_guards : Bool,
+      id_zero : UInt32,
       ids : Range(NodeId, NodeId),
       sink : NodeId, NodeAddr, Gnd -> WalkFlow
+
+    class WalkContext
+      setter id_zero
+    end
 
     # :nodoc:
     enum WalkFlow
@@ -513,70 +564,81 @@ module Ww::D7
     end
 
     # :nodoc:
-    def self.walk(hg : Hypergraph, guide : Guide, fn : Node, Set(Term) -> WalkFlow, ids : Range(NodeId, NodeId) = NodeId::MIN...NodeId::MAX) : Nil
+    def self.walk(hg : Hypergraph, guide : Guide, fn : Node, Set(Term) -> WalkFlow, pass_guards : Bool = false, ids : Range(NodeId, NodeId) = NodeId::MIN...NodeId::MAX) : Nil
       assert ids.exclusive?
       assert ids.begin <= ids.end
 
       sink = ->(id : NodeId, addr : NodeAddr, feature : Gnd) do
-        assert id.in?(ids)
+        unless id.in?(ids)
+          return WalkFlow::Continue
+        end
 
-        # Use Gnd#defn (the node's definition) rather than #node here.
+        # Use Gnd#defn (the node's definition) rather than #node here for term.
         # The hypergraph should only ever see the defn.
         node = Node.new(id, addr, feature.signature, feature.defn, feature.merge_policy)
         fn.call(node, feature.edges)
       end
 
-      ctx = WalkContext.new(hg, guide, ids, sink)
-      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level_query, id_zero: 0u32)
+      id_zero = 0u32
+      ctx = stack_alloc WalkContext.new(hg, guide, pass_guards, id_zero, ids, sink)
+      walk(ctx, NodeAddr.empty, hg.@tree, hg.@level_query)
     end
 
-    private def self.walk(ctx, addr, tree : InertLeaf, target, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : InertLeaf, target) : WalkFlow
       WalkFlow::Continue
     end
 
-    private def self.walk(ctx, addr, tree : GndLeaf, target, id_zero) : WalkFlow
-      ctx.sink.call(id_zero, addr, tree.feature)
+    private def self.walk(ctx, addr, tree : GndLeaf, target) : WalkFlow
+      flow = ctx.sink.call(ctx.id_zero, addr, tree.feature)
+      ctx.id_zero += 1
+      flow
     end
 
-    private def self.walk(ctx, addr, tree : ScopeNode | MixtureNode, target, id_zero) : WalkFlow
-      walk(ctx, addr, tree.child, target, id_zero)
+    private def self.walk(ctx, addr, tree : ScopeNode | MixtureNode, target) : WalkFlow
+      walk(ctx, addr, tree.child, target)
     end
 
-    private def self.walk(ctx, addr, tree : CircuitNode, target, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : CircuitNode, target) : WalkFlow
       case target
       in AnyLevel
-        treatment = tree.to_group
-        walk(ctx, addr, treatment, target, id_zero)
+        ctx.id_zero += D7.population(tree.leaf) # Leave an id range reserved for the leaf
+        walk(ctx, addr, tree.to_group, target)
       in CurrentLevel
-        walk(ctx, addr, tree.leaf, target, id_zero)
+        flow = walk(ctx, addr, tree.leaf, target)
+        ctx.id_zero += D7.population(tree.to_group) # Leave an id range reserved for children
+        flow
       end
     end
 
-    private def self.walk(ctx, addr, tree : GroupNode, target, id_zero) : WalkFlow
+    private def self.walk(ctx, addr, tree : GroupNode, target) : WalkFlow
       unless ctx.guide.call(tree.summary)
+        ctx.id_zero += D7.population(tree)
         return WalkFlow::Continue
       end
 
       predicate = tree.feature.passable
-      unless predicate.call(ctx.hg, addr)
+      unless ctx.pass_guards || predicate.call(ctx.hg, addr)
+        ctx.id_zero += D7.population(tree)
         return WalkFlow::Continue
       end
 
       assert ctx.ids.exclusive?
 
       tree.children.each_with_index(offset: tree.feature.range.begin) do |child, key|
-        id_width = D7.population(child)
-        break if ctx.ids.end <= id_zero
+        break if ctx.ids.end <= ctx.id_zero
 
-        if ctx.ids.begin < id_zero + id_width
-          case walk(ctx, addr.append(key), child, target, id_zero)
-          in .continue?
-          in .break?
-            return WalkFlow::Break
-          end
+        id_stride = D7.population(child)
+        if ctx.ids.begin > ctx.id_zero + id_stride
+          # Skip child because it falls outside of the id range we're searching for.
+          ctx.id_zero += id_stride
+          next
         end
 
-        id_zero += id_width
+        case walk(ctx, addr.append(key), child, target)
+        in .continue?
+        in .break?
+          return WalkFlow::Break
+        end
       end
 
       WalkFlow::Continue

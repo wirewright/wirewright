@@ -332,7 +332,7 @@ module Ww::Rack::Form
       # [form _ _ _*]
       next unless nodeQ.itemsize >= 3
 
-      _, subtree = D7.follow(hg.tree, node.addr)
+      _, subtree = hg.follow(node.addr)
       assert subtree.is_a?(D7::CircuitNode)
       leaf = subtree.leaf
       assert leaf.is_a?(D7::GndLeaf)

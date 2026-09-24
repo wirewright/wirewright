@@ -2093,7 +2093,7 @@ module Ww::Rack::Accord
   end
 
   private def step(ctx : StepContext, hg : D7::Hypergraph, server : SocketServer | WebSocketServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
-    _, device_tree = D7.follow(hg.@tree, pool.node.addr)
+    _, device_tree = hg.follow(pool.node.addr)
     return unless device_tree.is_a?(D7::CircuitNode)
 
     changes = DeviceChangeList.new
@@ -2145,7 +2145,7 @@ module Ww::Rack::Accord
 
   # TODO: refactors
   private def step(ctx : StepContext, hg : D7::Hypergraph, server : HttpServer, pool : Pool, status : Term, incarnation : Harmony::ServerId) : D7::Patch?
-    _, device_tree = D7.follow(hg.@tree, pool.node.addr)
+    _, device_tree = hg.follow(pool.node.addr)
     return unless device_tree.is_a?(D7::CircuitNode)
 
     changes = DeviceChangeList.new
