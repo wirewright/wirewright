@@ -9,7 +9,7 @@
     {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
     {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
   (comment "... and then there's a bunch of stuff that comprises its appearance.")
-  (group style: "max-w-5xs bg-theme-surface px-5 py-3 gap-3 rounded-lg"
+  (group style: "max-w-4xs bg-theme-surface px-5 py-3 gap-3 rounded-lg"
     (p @count style: "text-6xl font-bold text-theme-text center")
     (group style: "flow-row gap-3 item-fr-1"
       ($Button (@msg inc) "Increment")
