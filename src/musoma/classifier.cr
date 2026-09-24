@@ -114,11 +114,17 @@ module MuSoma
     end
   end
 
-  struct ReflectionPrepass(Prepass)
-    def initialize(@vantages : VarHash(D7::GlobalNodeAddr, Term), @successor : Prepass)
+  struct ReflectionPrepass
+    def initialize(@vantages : VarHash(D7::GlobalNodeAddr, Term))
     end
 
     def call(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
+      Rack::Prepass.call(hg, proposals) do |hg, proposals| # shadow
+        process(hg, proposals, &fn)
+      end
+    end
+
+    private def process(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
       replacements = {} of D7::NodeAddr => D7::Gnd
 
       figure_node_ids = Pf::USet32.transaction do |txn|
@@ -133,11 +139,11 @@ module MuSoma
       end
 
       if replacements.empty?
-        @successor.call(hg, proposals, &fn)
+        fn.call(hg, proposals)
         return
       end
 
-      @successor.call(hg.gnd_map(replacements), proposals, &fn)
+      fn.call(hg.gnd_map(replacements), proposals)
 
       # Discard all patches to reflection nodes, which we've replaced. Such patches make
       # no sense. This covers circuits like:
@@ -338,11 +344,10 @@ module MuSoma
   end
 
   def distill(codex : Microfold::SyncCodex, tree : D7::ParseTree) : Term
-    hg = D7::Hypergraph.new(tree)
-
     markup = Term.rep # ?!
 
-    _ = Rack::Prepass.call(hg, [] of D7::Patch) do |hg, _| # ?!
+    hg = D7::Hypergraph.new(tree)
+    Rack::Prepass.call(hg) do |hg|
       markup, _ = distill(codex, hg, D7::NodeAddr.empty, tree, sites: Slice(Term).empty, site_zero: 0u32)
     end
 

@@ -164,8 +164,19 @@ module Ww::Rack::Form
   defrecord SetField, field : Field, value : Term
   defrecord UnsetField, field : Field
 
+  # A lightweight prepass overload for reading only (*fn* can inspect the resulting
+  # hypergraph but has no way to propose patches to it).
+  def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph ->) : Nil
+    unless hg.has_head?(SYM_FORM)
+      fn.call(hg)
+      return
+    end
+
+    form_ids, forms, replacements = collect(hg)
+    fn.call(hg.gnd_map(replacements))
+  end
+
   def prepass(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
-    # Fast path.
     unless hg.has_head?(SYM_FORM)
       fn.call(hg, proposals)
       return

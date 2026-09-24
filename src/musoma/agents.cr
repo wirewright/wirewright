@@ -185,7 +185,7 @@ module MuSoma
       end
     end
 
-    private def self.repr(µ, base_hg, hg, addr, tree : D7::InertLeaf) : Term
+    private def self.repr(µ, base_hg, addr, tree : D7::InertLeaf) : Term
       repr = Term::Dict.build do |commit|
         commit << :inert << tree.feature.node
 
@@ -199,7 +199,7 @@ module MuSoma
       Term.of(repr)
     end
 
-    private def self.repr(µ, base_hg, hg, addr, tree : D7::GndLeaf) : Term
+    private def self.repr(µ, base_hg, addr, tree : D7::GndLeaf) : Term
       node = tree.feature.node
 
       Term.case(node) do
@@ -259,15 +259,15 @@ module MuSoma
       end
     end
 
-    private def self.repr(µ, base_hg, hg, addr, tree : D7::MixtureNode) : Term
-      repr(µ, base_hg, hg, addr, D7::InertLeaf.new(D7.inert(tree.feature.node)))
+    private def self.repr(µ, base_hg, addr, tree : D7::MixtureNode) : Term
+      repr(µ, base_hg, addr, D7::InertLeaf.new(D7.inert(tree.feature.node)))
     end
 
-    private def self.repr(µ, base_hg, hg, addr, tree : D7::ScopeNode) : Term
-      repr(µ, base_hg, hg, addr, tree.child)
+    private def self.repr(µ, base_hg, addr, tree : D7::ScopeNode) : Term
+      repr(µ, base_hg, addr, tree.child)
     end
 
-    private def self.repr(µ, base_hg, hg, addr, tree : D7::ParentNode) : Term
+    private def self.repr(µ, base_hg, addr, tree : D7::ParentNode) : Term
       parent = tree.feature
 
       repr = parent.node.pairspart.transaction do |commit|
@@ -284,7 +284,7 @@ module MuSoma
           index = key - parent.range.begin
           child = tree.children[index]
 
-          commit << repr(µ, base_hg, hg, addr.append(key), child)
+          commit << repr(µ, base_hg, addr.append(key), child)
         end
       end
 
@@ -314,13 +314,11 @@ module MuSoma
     # Returns the representation tree for *tree*. This tree is ready for
     # pretty-printing.
     def self.repr(codex : Microfold::SyncCodex, base_tree : D7::ParseTree, repr_tree : D7::ParseTree) : Term
-      base_hg = D7::Hypergraph.new(base_tree)
-      repr_hg = D7::Hypergraph.new(repr_tree)
-
       repr = Term.of # ?!
 
+      base_hg = D7::Hypergraph.new(base_tree)
       Rack::Prepass.call(base_hg, [] of D7::Patch) do |base_hg, _| # ?!
-        repr = repr(codex, base_hg, repr_hg, D7::NodeAddr.empty, repr_tree)
+        repr = repr(codex, base_hg, D7::NodeAddr.empty, repr_tree)
       end
 
       # Mark the topmost parent as root for styling in prettyR.
@@ -843,7 +841,7 @@ module MuSoma
     end
 
     private def next_subframes(automaton : Rack::Automaton, library : Rack::Assembler::RuleLibrary, draft : Term) : Slice(Term)
-      prepass = ReflectionPrepass.new(@vantages, successor: Rack::Prepass)
+      prepass = ReflectionPrepass.new(@vantages)
       automaton.next_subframes(draft, prepass: prepass, library: library)
     end
   end

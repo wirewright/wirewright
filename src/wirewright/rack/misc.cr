@@ -299,6 +299,12 @@ module Ww::Rack
         Part.prepass(hg, proposals1, &fn)
       end
     end
+
+    def call(hg : D7::Hypergraph, &fn : D7::Hypergraph ->) : Nil
+      Form.prepass(hg) do |hg|
+        Part.prepass(hg, &fn)
+      end
+    end
   end
 
   def manipulate(parser : D7::Parser, circuit : Term, prepass) : Slice(Term)

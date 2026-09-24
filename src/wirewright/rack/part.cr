@@ -5,6 +5,20 @@ module Ww::Rack::Part
   # :nodoc:
   SYM_PART = Term.of(:part)
 
+  # A lightweight prepass overload for reading only (*fn* can inspect the resulting
+  # hypergraph but has no way to propose patches to it).
+  def prepass(hg : D7::Hypergraph, &fn : D7::Hypergraph ->) : Nil
+    # Fast path.
+    unless hg.has_head?(SYM_PART)
+      fn.call(hg)
+      return
+    end
+
+    roots, forms, layers, rejected_abs_parts = collect(hg)
+    replacements, replaced = submit(forms, rejected_abs_parts)
+    fn.call(hg.gnd_map(replacements))
+  end
+
   def prepass(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
     # Fast path.
     unless hg.has_head?(SYM_PART)

@@ -146,37 +146,40 @@ module MuSoma
       draft_tree = ws.parser.parse(draft)
       draft_hg = D7::Hypergraph.new(draft_tree)
 
-      plan = Plan.new
+      proposals0 = [] of D7::Patch
 
-      # Plan: observe ("soak in" changes from the circuit). Only do this if time
-      # is not paused (either single step `.` or time is running `...`, but not
-      # paused `-`.)
-      unless status == Term.of(:-)
-        agents.observe(ws, draft_hg, plan)
+      # NOTE: proposals0 is not necessarily .same?(proposals1)!
+      Rack::Prepass.call(draft_hg, proposals0) do |draft_hg, proposals1|
+        plan = Plan.new
+
+        # Plan: observe ("soak in" changes from the circuit). Only do this if time
+        # is not paused (either single step `.` or time is running `...`, but not
+        # paused `-`.)
+        unless status == Term.of(:-)
+          agents.observe(ws, draft_hg, plan)
+        end
+
+        # NOTE: We do not pause the scheduler and we certainly cannot pause
+        # the outside world.
+
+        # Plan from scheduler events.
+        ws.scheduler.tick do |event|
+          agents.receive(ws, plan, event)
+        end
+
+        # Plan from message in msgq.
+        if msg = ws.msgq.shift?
+          agents.receive(ws, plan, msg)
+        end
+
+        next if plan.empty?
+
+        plan.each do |perturbation|
+          proposals1.concat(perturbation.call(draft_hg))
+        end
       end
 
-      # NOTE: We do not pause the scheduler and we certainly cannot pause
-      # the outside world.
-
-      # Plan from scheduler events.
-      ws.scheduler.tick do |event|
-        agents.receive(ws, plan, event)
-      end
-
-      # Plan from message in msgq.
-      if msg = ws.msgq.shift?
-        agents.receive(ws, plan, msg)
-      end
-
-      return if plan.empty?
-
-      proposals = [] of D7::Patch
-
-      plan.each do |perturbation|
-        proposals.concat(perturbation.call(draft_hg))
-      end
-
-      patch = D7.merge(draft_hg, proposals)
+      patch = D7.merge(draft_hg, proposals0)
       draft1 = D7.apply(draft_hg, patch)
 
       ws.state.update do |state|
