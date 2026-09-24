@@ -101,8 +101,9 @@ module Ww::Rack::Supervisor
     key : Term,
     index : Int32,
     reference : Term,
-    task : Term,
-    update : Term -> Term
+    task : Term?,
+    update : Term -> Term,
+    smart: true
 
   defrecord ManagedDevicePool,
     pool : Pool,
@@ -233,9 +234,17 @@ module Ww::Rack::Supervisor
         next
       end
 
+      # If the device is missing or has an empty task cell (the latter is vastly more likely),
+      # this means it wants to remove itself and the task.
+      unless device_task = device.task?
+        corrections << DeleteDevice.new(device.index)
+        corrections << DeleteTask.new(task.index)
+        next
+      end
+
       # If this device's task did not change, but the @tasks' did, update
       # the device to the @tasks' task.
-      if device.reference == device.task
+      if device.reference == device_task
         unless device.reference == task.term
           corrections << UpdateDevice.new(device.index, task.term)
         end
@@ -245,10 +254,10 @@ module Ww::Rack::Supervisor
       # If the task in @tasks did not change, prefer the device's @task if
       # @task changed with respect to @reference.
       if device.reference == task.term
-        unless device.reference == device.task
+        unless device.reference == device_task
           # We still have to update the device's @reference so we have to UpdateDevice.
-          corrections << UpdateDevice.new(device.index, device.task)
-          corrections << UpdateTask.new(task.index, device.task)
+          corrections << UpdateDevice.new(device.index, device_task)
+          corrections << UpdateTask.new(task.index, device_task)
         end
         next
       end
@@ -258,7 +267,7 @@ module Ww::Rack::Supervisor
 
       patches = {
         D7::Patch.assoc(0u32, task.term),
-        D7::Patch.assoc(0u32, device.task),
+        D7::Patch.assoc(0u32, device_task),
       }
 
       merged_patch, _ = D7.merge(patches) do |id|
@@ -282,7 +291,6 @@ module Ww::Rack::Supervisor
     tasks.map.each do |key, task|
       next if devices.map.has_key?(key)
 
-      # TODO: or DeleteTask...?
       corrections << AddDevice.new(key, task.term)
     end
 
@@ -312,20 +320,26 @@ module Ww::Rack::Supervisor
     Term.matchpi?(item, %{[device _*]}) do
       children = item.items.move(1)
       next unless reference_row = children.leftmost_with_index? { |child| cell?(variant.ref_edge, child) }
-      next unless task_row = children.leftmost_with_index? { |child| cell?(variant.task_edge, child) }
 
       reference, reference_index = reference_row
-      task, task_index = task_row
       next unless key = key?(variant.pattern, reference)
 
-      reference_key = reference_index + 1
-      task_key = task_index + 1
+      # The task cell can be missing, most often when it is empty. This is
+      # used by devices to signify removal of their corresponding tasks, and
+      # themselves from the pool.
+      if task_row = children.leftmost_with_index? { |child| cell?(variant.task_edge, child) }
+        task, task_index = task_row
+      end
 
       update = ->(value1 : Term) do
-        Term.morph(item,
-          {reference_key, 2, value1},
-          {task_key, 2, value1},
-        )
+        reference_key = reference_index + 1
+
+        if task_index.nil?
+          return Term.morph(item, {reference_key, 2, value1})
+        end
+
+        task_key = task_index + 1
+        Term.morph(item, {reference_key, 2, value1}, {task_key, 2, value1})
       end
 
       ManagedDevice.new(key, index, reference, task, update)

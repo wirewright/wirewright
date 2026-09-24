@@ -353,3 +353,36 @@
        baz)
      (cell @values (4 5 6)))))
   ;; ...
+
+;; Clearing the task cell removes the device and the item
+(group
+  (rack
+    (frame
+      (cell @xs (1 2 3))
+      (supervisor (@xs @x key_ - @pool)
+        (discard @x))
+      (pool @pool))
+
+    (frame
+      (cell @xs ())
+      (supervisor (@xs @x key_ - @pool)
+        (discard @x))
+      (pool @pool))
+
+    end)
+
+  (rack
+    (frame
+      (cell @xs ({id: 1} {id: 2, done: true} {id: 3}))
+      (supervisor (@xs @x {¦ id_} - @pool)
+        (discard @x {¦ done}))
+      (pool @pool))
+
+    (frame pattern: true
+      ((cell @xs ({id: 1} {id: 3}))
+       (supervisor _*)
+       (pool @pool
+         (device …⟨(cell @reference {id: 1})⟩…)
+         (device …⟨(cell @reference {id: 3})⟩…))))
+
+    end))
