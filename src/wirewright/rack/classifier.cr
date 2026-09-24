@@ -4410,12 +4410,10 @@ module Ww::Rack
       # |@ rack.form
       #
       # |@pattern
-      # ```wwml
       # [form @edge_ children_*]
       # [form (@edge_) children_*]
       # [form (policy_symbol @edge_) children_*]
       # [form ((policy_symbol @edge_)) children_*]
-      # ```
       #
       # |@key policy rack.[merge-policy]
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`, and
