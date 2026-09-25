@@ -55,6 +55,10 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-form))
 
+(test "rack/assembler.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-assembler))
+
 (test "rack/rewriter.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-rewriter))

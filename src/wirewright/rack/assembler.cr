@@ -417,12 +417,15 @@ module Ww::Rack::Assembler
   defrecord InstantiateContext, rules : Array(Rule), scope : RuleScope, path : Pf::USet32
 
   private def instantiate(ctx : InstantiateContext, vars : Term::Dict, recipe : AlloyRecipe) : Term
-    Alloy.render(vars, recipe.template)
+    Term.collapse(render_rep(ctx, vars, recipe.template))
   end
 
   private def instantiate(ctx : InstantiateContext, vars : Term::Dict, recipe : CallRecipe) : Term
-    call = Alloy.render(vars, recipe.template)
+    call = Term.collapse(render_rep(ctx, vars, recipe.template))
+    instantiate_call?(ctx, call) || Term.of(:slot, call)
+  end
 
+  private def instantiate_call?(ctx : InstantiateContext, call : Term) : Term?
     ctx.rules.zip(0u32...ctx.rules.size.to_u32) do |rule, rule_id|
       next if rule_id.in?(ctx.path)
       next unless compatible_scopes?(rule.defn.scope, ctx.scope)
@@ -435,12 +438,10 @@ module Ww::Rack::Assembler
       subctx = InstantiateContext.new(ctx.rules, ctx.scope, ctx.path.add(rule_id))
       return instantiate(subctx, call_vars, rule.recipe)
     end
-
-    Term.of(:slot, call)
   end
 
   private def instantiate(ctx : InstantiateContext, vars : Term::Dict, recipe : ComponentRecipe) : Term
-    repair_tree = render_component_templates(vars, recipe, recipe.tree)
+    repair_tree = render_component_templates(ctx, vars, recipe.tree)
     interior_instance = D7.collapse(repair_tree)
 
     instance = Term::Dict.build do |commit|
@@ -477,7 +478,7 @@ module Ww::Rack::Assembler
     Term.of(instance)
   end
 
-  private def render_component_templates(vars, recipe, tree : D7::InertLeaf) : D7::RepairTree
+  private def render_component_templates(ctx : InstantiateContext, vars : Term::Dict, tree : D7::InertLeaf) : D7::RepairTree
     node = tree.feature.node
 
     Term.case(node) do
@@ -485,7 +486,7 @@ module Ww::Rack::Assembler
       #
       # But (template (^splice 1 2 3)) => (group 1 2 3)
       matchpi %{(template expr_)} do
-        rep = Alloy.render_rep(expr, locals: vars)
+        rep = render_rep(ctx, vars, expr)
         if result = rep.single?
           return result
         end
@@ -507,7 +508,7 @@ module Ww::Rack::Assembler
       #     (cell @x 100)
       #     (cell @y 200))
       matchpi %{(template _+)} do
-        Alloy.render(vars, Term.morph(node, {0, :group}))
+        Term.collapse(render_rep(ctx, vars, Term.morph(node, {0, :group})))
       end
 
       otherwise do
@@ -516,12 +517,30 @@ module Ww::Rack::Assembler
     end
   end
 
-  private def render_component_templates(vars, recipe, tree : D7::GndLeaf) : D7::RepairTree
+  private def render_component_templates(ctx : InstantiateContext, vars : Term::Dict, tree : D7::GndLeaf) : D7::RepairTree
     tree.feature.node
   end
 
-  private def render_component_templates(vars, recipe, tree : D7::ScopeNode | D7::MixtureNode | D7::ParentNode) : D7::RepairTree
-    D7.repair(tree) { |child| render_component_templates(vars, recipe, child) }
+  private def render_component_templates(ctx : InstantiateContext, vars : Term::Dict, tree : D7::ScopeNode | D7::MixtureNode | D7::ParentNode) : D7::RepairTree
+    D7.repair(tree) { |child| render_component_templates(ctx, vars, child) }
+  end
+
+  private def render_rep(ctx : InstantiateContext, vars : Term::Dict, template : Term) : Term::Rep
+    Alloy.render_rep(template, locals: vars, primitive: render_primitive_eval(ctx))
+  end
+
+  private def render_primitive_eval(ctx : InstantiateContext) : Nitrene::Eval
+    Nitrene::Eval.new do |it, vars, expr|
+      Term.case(expr) do
+        matchpi %{(embed call_)} do
+          instantiate_call?(ctx, call) || expr
+        end
+
+        otherwise do
+          Nitrene.primitive(it, vars, expr)
+        end
+      end
+    end
   end
 
   def step(state : State, parser : D7::Parser, library : RuleLibrary, circuit : Term) : Slice(Term)
