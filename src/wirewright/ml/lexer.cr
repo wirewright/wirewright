@@ -644,13 +644,15 @@ module Ww::ML
       end
     end
 
+    # ⏏"hello"
     private def string : TxnResponse
       unless ahead == '"'
         return revert
       end
 
-      lexemes = [] of Lexeme::Any
-      lexemes << Lexeme::Token.new(:dquote_left, view { forward })
+      segments = [] of Lexeme::Any
+      segments << Lexeme::Token.new(:dquote_left, view { forward })
+      # "⏏hello"
 
       loop do
         prefix = view do
@@ -671,19 +673,19 @@ module Ww::ML
         end
 
         unless prefix.empty?
-          lexemes << Lexeme::Datum.new(:substring, Term.of(Kit.unescape(prefix)), prefix)
+          segments << Lexeme::Datum.new(:substring, Term.of(Kit.unescape(prefix)), prefix)
         end
 
         case
         when ahead == '⸢'
-          lexemes << Lexeme::Token.new(:tl_half_bracket, view { forward })
+          segments << Lexeme::Token.new(:tl_half_bracket, view { forward })
 
           if ahead.space?
             raise "whitespace after `⸢` not allowed"
           end
 
           while lexeme = try? { top_non_eoi? }
-            lexemes << lexeme
+            segments << lexeme
           end
 
           # ⸢...⏏
@@ -692,16 +694,16 @@ module Ww::ML
           end
 
           # ⸢...⏏⸣
-          lexemes << Lexeme::Token.new(:tr_half_bracket, view { forward })
+          segments << Lexeme::Token.new(:tr_half_bracket, view { forward })
         when ahead == '"'
-          lexemes << Lexeme::Token.new(:dquote_right, view { forward })
+          segments << Lexeme::Token.new(:dquote_right, view { forward })
           break
         else
           unreachable
         end
       end
 
-      ready(Lexeme::Many.new(lexemes))
+      ready(Lexeme::Many.new(segments))
     end
 
     private alias BlobMediaType = Term::Blob::Classif | MediaTypeAuto | Nil
