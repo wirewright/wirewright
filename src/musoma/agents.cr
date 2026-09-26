@@ -59,6 +59,7 @@ module MuSoma
           draft = Rho.rewrite(@editR, draft)
           state = state
             .with(:motions, Term[])
+            .with(:moved, true)
             .with(:timeline, {behind, :I, :*, status, draft})
         end
 
@@ -1018,11 +1019,7 @@ module MuSoma
         when Term.of(:insert)
           @input.pressed.each do |key|
             Term.case(key) do
-              matchpi %{(key escape)} do
-                state = state.with(:mode, :normal)
-              end
-
-              matchpi %{(key tab)} do
+              matchpi %{(key escape)}, %{(key tab)} do
                 # Ignore
               end
 

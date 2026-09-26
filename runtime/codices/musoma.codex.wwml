@@ -1410,16 +1410,6 @@ scroll: {}
       scale: ^scale',
       (scale'): ()}
 
-;; Bind feedback from the circuit viewport to circuit-view-l/t. It's *feedback*
-;; because offset-x/y are actually computed from circuit-view-l/t of the previous
-;; cycle. This leads to more intuitive scrolling behavior: we scroll the smallest
-;; amount possible instead of starting at the top and scrolling until the aim is
-;; in view (if any) -- which is what user experience seems to expect.
-{¦ mode: insert
-   circuit-view-vantage: [vantage (box ⟪(clip _* ⍊ ±offset-x ±offset-y)⟫ ⍊ -panning)]
-   circuit-camera: {¦ ±l ±t}}
-  <> {l: ^offset-x, t: ^offset-y}
-
 ;; \control (action "Drag over the circuit pane")
 ;; Pan.
 
@@ -1484,6 +1474,19 @@ scroll: {}
 
 ;; \control (key insert "Esc")
 ;; Switch to Normal mode.
+{¦ mode_: insert keyboard: ((key escape)) -request-view-sync_}
+  <> {mode: normal, request-view-sync: true} ;; We have to sync also at the end of an insert session.
+
+;; After we had some motions, we want to pan the editor into view.
+{¦ mode: insert moved_ -request-view-sync_}
+  <> {(moved): (), request-view-sync: true}
+
+;; Pan the camera to bring the editor (or whatever else is the `aim` in
+;; the circuit pane) into view.
+{¦ request-view-sync_
+   circuit-view-vantage: [vantage (box ⟪(clip _* ⍊ ±offset-x ±offset-y)⟫ ⍊ -panning)]
+   circuit-camera: {¦ ±l ±t}}
+  <> {(request-view-sync): (), l: ^offset-x, t: ^offset-y}
 
 ;; \control (key insert "↑")
 ;; Move to the previous line (text). Move to previous item (structural).
