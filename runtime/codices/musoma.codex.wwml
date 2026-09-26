@@ -1048,7 +1048,7 @@ node←(cat l_ r←[⸨row,col,flow,indent⸩]) <> {node: ^l}
 (row elements_+ ⍊ gap: 1) => (group ^*elements style: "flow-row gap-3/2")
 
 [flow] => (^splice)
-[flow elements_+] => (group ^*elements style: "flow-wrap gap-2 max-w-2xs")
+[flow elements_+] => (group ^*elements style: "flow-wrap gap-x-2 gap-y-1/2 max-w-2xs")
 
 [col] => (^splice)
 [col elements_+] => (group ^*elements style: "flow-col gap-2/3")
