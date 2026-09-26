@@ -124,11 +124,19 @@ module MuSoma
       end
     end
 
+    # :nodoc:
+    SYM_REFLECTION = Term.of(:reflection)
+
     private def process(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
-      replacements = {} of D7::NodeAddr => D7::Gnd
+      unless hg.has_head?(SYM_REFLECTION)
+        fn.call(hg, proposals)
+        return
+      end
+
+      replacements = D7::NodeAddrRouter::Builder(D7::Gnd).new
 
       figure_node_ids = Pf::USet32.transaction do |txn|
-        hg.each_node_with_head(Term.of(:reflection)) do |node|
+        hg.each_node_with_head(SYM_REFLECTION) do |node|
           Term.matchpi?(node.term, %{[reflection @edge_]}) do
             global_addr = hg.to_global(node.addr)
             observation = @vantages.get?(global_addr)
@@ -138,12 +146,7 @@ module MuSoma
         end
       end
 
-      if replacements.empty?
-        fn.call(hg, proposals)
-        return
-      end
-
-      fn.call(hg.gnd_map(replacements), proposals)
+      fn.call(hg.gnd_map(replacements.router), proposals)
 
       # Discard all patches to reflection nodes, which we've replaced. Such patches make
       # no sense. This covers circuits like:

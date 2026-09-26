@@ -347,7 +347,7 @@ module Ww::Rack::Part
   end
 
   private def submit(forms : Hash(D7::AbsEdge, Form), rejected_abs_parts)
-    replacements = {} of D7::NodeAddr => D7::Gnd
+    replacements = D7::NodeAddrRouter::Builder(D7::Gnd).new
     replaced = Set(D7::NodeId).new
 
     forms.each do |_, form|
@@ -363,7 +363,7 @@ module Ww::Rack::Part
       replaced << form.id
     end
 
-    {replacements, replaced}
+    {replacements.router, replaced}
   end
 
   # `part`s must now "absorb" their corresponding changes bottom-up.

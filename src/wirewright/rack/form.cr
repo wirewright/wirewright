@@ -312,7 +312,7 @@ module Ww::Rack::Form
 
         break unless accepted
 
-        guidance = D7.guidance(plan) do |adjustment|
+        router = D7::NodeAddrRouter.build(plan) do |adjustment|
           case adjustment
           in UnsetField
             {adjustment.field.addr, adjustment.field.set.call(nil)}
@@ -322,7 +322,7 @@ module Ww::Rack::Form
         end
 
         # Proposal did form_id => (cell _ _), now we turn that into form_id => (form _ _*).
-        proposal = proposal.assoc(form_id, D7.apply(form.subtree, guidance))
+        proposal = proposal.assoc(form_id, D7.apply(form.subtree, router))
       end
 
       next unless accepted
@@ -331,8 +331,8 @@ module Ww::Rack::Form
     end
   end
 
-  private def collect(hg : D7::Hypergraph) : {Pf::USet32, Hash(UInt32, Form), Hash(D7::NodeAddr, D7::Gnd)}
-    replacements = {} of D7::NodeAddr => D7::Gnd
+  private def collect(hg : D7::Hypergraph) : {Pf::USet32, Hash(UInt32, Form), D7::NodeAddrRouter(D7::Gnd)}
+    replacements = D7::NodeAddrRouter::Builder(D7::Gnd).new
 
     form_ids = Pf::USet32.new
     forms = {} of UInt32 => Form
@@ -368,7 +368,7 @@ module Ww::Rack::Form
       replacements[node.addr] = D7.gnd(cell, leaf.feature.edges, merge_policy: leaf.feature.merge_policy)
     end
 
-    {form_ids, forms, replacements}
+    {form_ids, forms, replacements.router}
   end
 
   private def fields(addr : D7::NodeAddr, subtree : D7::GroupNode) : Array(Field)

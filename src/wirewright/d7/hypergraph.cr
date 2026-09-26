@@ -516,8 +516,8 @@ module Ww::D7
       follow?(addr) || raise KeyError.new
     end
 
-    def gnd_map(replacements : Hash(NodeAddr, Gnd)) : Hypergraph
-      Hypergraph.new(@addr, D7.gnd_map(@tree, replacements), @level_query)
+    def gnd_map(router : NodeAddrRouter(Gnd)) : Hypergraph
+      Hypergraph.new(@addr, D7.gnd_map(@tree, router), @level_query)
     end
 
     def propose(*heads : Symbol, &fn : Node -> Patch?) : Array(Patch)

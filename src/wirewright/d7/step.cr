@@ -1,85 +1,122 @@
 module Ww::D7
+  struct NodeAddrRouter(T)
+    # :nodoc:
+    def initialize(
+      @trie : Hash({UInt32, UInt32}, UInt32),
+      @values : Array(T),
+      @focus : UInt32,
+    )
+    end
+
+    # :nodoc:
+    SEQ_ROOT = 0u32
+    # :nodoc:
+    SEQ_VALUE = 1u32
+    # :nodoc:
+    SEQ_ZERO = 2u32
+
+    struct Builder(T)
+      def initialize
+        @trie = {} of {UInt32, UInt32} => UInt32
+        @values = [] of T
+        @seq = SEQ_ZERO
+        @writable = true
+      end
+
+      def []=(addr : NodeAddr, value : T) : T
+        assert @writable
+
+        pred = SEQ_ROOT
+        addr.each do |key|
+          pred = @trie.put_if_absent({pred, key}) do
+            @seq, _ = @seq + 1, @seq
+          end
+        end
+
+        value_index = @trie.put_if_absent({SEQ_VALUE, pred}, @values.size.to_u32)
+        if value_index == @values.size
+          @values << value
+        else
+          @values[value_index] = value
+        end
+
+        value
+      end
+
+      def router : NodeAddrRouter(T)
+        @writable = false
+
+        NodeAddrRouter.new(@trie, @values, focus: SEQ_ROOT)
+      end
+    end
+
+    def self.build(objects : Enumerable(T), & : T -> {NodeAddr, U}) : NodeAddrRouter(U) forall T, U
+      builder = Builder(U).new
+
+      objects.each do |object|
+        addr, value = yield object
+        builder[addr] = value
+      end
+
+      builder.router
+    end
+
+    # Focuses the successor of the focused node after following a link with
+    # the given *key*.
+    def cd?(key : UInt32) : NodeAddrRouter(T)?
+      return unless successor = @trie[{@focus, key}]?
+
+      NodeAddrRouter.new(@trie, @values, focus: successor)
+    end
+
+    # Returns `true` if the focused node has an associated value.
+    def has_value? : Bool
+      @trie.has_key?({SEQ_VALUE, @focus})
+    end
+
+    # Returns the value associated with the focused node.
+    def value? : T?
+      return unless value_index = @trie[{SEQ_VALUE, @focus}]
+
+      @values[value_index]
+    end
+  end
+
   # Applies *patch* to *hg*'s tree. Returns the resulting patched circuit.
   def apply(hg : Hypergraph, patch : Patch) : Term
-    guidance = guidance(patch) do |(node_id, rep)|
+    router = NodeAddrRouter.build(patch) do |(node_id, rep)|
       node = hg[node_id]
       {node.addr, rep}
     end
 
-    apply(hg.tree, guidance)
+    apply(hg.tree, router)
   end
 
   # :nodoc:
-  def apply(tree : ParseTree, guidance : RepairGuidance) : Term
-    repair_tree = repair(tree, guidance)
-    collapse(repair_tree)
+  def apply(tree : ParseTree, router : NodeAddrRouter(Term)) : Term
+    collapse(repair(tree, router))
   end
 
-  private struct RepairGuidance
-    def initialize(
-      @trie : Hash({UInt32, UInt32}, UInt32),
-      @reps : Hash(UInt32, Term),
-      @current : UInt32,
-    )
-    end
+  private def repair(tree : InertLeaf | GndLeaf, router : NodeAddrRouter(Term)) : RepairTree
+    router.value? || tree.feature.node
+  end
 
-    def []?(key : UInt32) : RepairGuidance?
-      return unless successor = @trie[{@current, key}]?
+  private def repair(tree : ScopeNode | MixtureNode, router : NodeAddrRouter(Term)) : RepairTree
+    repair(tree) { |child| repair(child, router) }
+  end
 
-      RepairGuidance.new(@trie, @reps, successor)
-    end
-
-    def has_rep? : Bool
-      @reps.has_key?(@current)
-    end
-
-    def rep? : Term?
-      @reps[@current]?
+  private def repair(tree : CircuitNode, router : NodeAddrRouter(Term)) : RepairTree
+    if router.has_value?
+      repair(tree.leaf, router)
+    else
+      repair(tree.to_group, router)
     end
   end
 
-  def guidance(objects : Enumerable(T), & : T -> {NodeAddr, Term}) : RepairGuidance forall T
-    trie = {} of {UInt32, UInt32} => UInt32
-    reps = {} of UInt32 => Term
-    seq = 1u32 # 0 is root
-
-    objects.each do |object|
-      addr, rep = yield object
-
-      pred = 0u32 # root
-      addr.each do |key|
-        pred = trie.put_if_absent({pred, key}) do
-          seq, _ = seq + 1, seq
-        end
-      end
-
-      reps[pred] = rep
-    end
-
-    RepairGuidance.new(trie, reps, current: 0u32)
-  end
-
-  private def repair(tree : InertLeaf | GndLeaf, guidance : RepairGuidance) : RepairTree
-    guidance.rep? || tree.feature.node
-  end
-
-  private def repair(tree : ScopeNode | MixtureNode, guidance : RepairGuidance) : RepairTree
-    repair(tree) { |child| repair(child, guidance) }
-  end
-
-  private def repair(tree : CircuitNode, guidance : RepairGuidance) : RepairTree
-    if guidance.has_rep?
-      return repair(tree.leaf, guidance)
-    end
-
-    treatment = tree.to_group
-    repair(treatment, guidance)
-  end
-
-  private def repair(tree : GroupNode, guidance : RepairGuidance) : RepairTree
+  private def repair(tree : GroupNode, router : NodeAddrRouter(Term)) : RepairTree
     repair(tree) do |child, index|
       key = tree.feature.range.begin + index
-      successor = guidance[key]?
+      successor = router.cd?(key)
       successor ? repair(child, successor) : unchanged(child)
     end
   end

@@ -629,90 +629,58 @@ module Ww::D7
     end
   end
 
-  # Replaces `GndLeaf` nodes in *tree* according to *replacements*.
-  #
-  # HACK: Avoid this function if you can because it makes ground nodes and their
-  # parents go out of sync with `Term`s stored in `Feature#node`. The only use
-  # case where `gnd_map` is appropriate is when you want to make a "shadow"
-  # replacement of a ground node and you can guarantee that you'll discard
-  # the returned parse tree eventually instead of `repair`ing it! Basically,
-  # by `gnd_map`ing a *tree*, you invalidate all `Feature#node`s in it; so if
-  # you plan on using them, you shouldn't `gnd_map`!
-  def gnd_map(tree : ParseTree, replacements : Hash(NodeAddr, Gnd)) : ParseTree
-    gnd_map(NodeAddr.empty, tree, replacements)
-  end
+  {% if flag?(:docs) %}
+    # Replaces `Gnd`s in *tree* with those stored in *router*.
+    #
+    # HACK: Avoid this function if you can because it makes ground nodes and their
+    # parents go out of sync with `Term`s stored in `Feature#node`. The only use
+    # case where `gnd_map` is appropriate is when you want to make a "shadow"
+    # replacement of a ground node and you can guarantee that you'll discard
+    # the returned parse tree eventually instead of `repair`ing it! Basically,
+    # by `gnd_map`ing a *tree*, you invalidate all `Feature#node`s in it; so if
+    # you plan on using them, you shouldn't use `gnd_map`!
+    def gnd_map(tree : ParseTree, router : NodeAddrRouter(Gnd)) : ParseTree
+    end
+  {% end %}
 
-  private def gnd_map(addr, tree : InertLeaf, replacements) : ParseTree
+  # :nodoc:
+  def gnd_map(tree : InertLeaf, router : NodeAddrRouter(Gnd)) : ParseTree
     tree
-  end
-
-  private def gnd_map(addr, tree : GndLeaf, replacements) : ParseTree
-    if feature = replacements[addr]?
-      return GndLeaf.new(feature)
-    end
-
-    tree
-  end
-
-  private def gnd_map(addr, tree : MixtureNode, replacements) : ParseTree
-    child1 = gnd_map(addr, tree.child, replacements)
-    if tree.child.same?(child1)
-      return tree # unchanged
-    end
-
-    MixtureNode.new(tree.feature, child1)
-  end
-
-  private def gnd_map(addr, tree : ScopeNode, replacements) : ParseTree
-    child1 = gnd_map(addr, tree.child, replacements)
-    if tree.child.same?(child1)
-      return tree # unchanged
-    end
-
-    ScopeNode.new(tree.feature, child1)
   end
 
   # :nodoc:
-  GND_REPLACEMENTS_SMALL = 16
+  def gnd_map(tree : GndLeaf, router : NodeAddrRouter(Gnd)) : ParseTree
+    feature = router.value?
+    feature ? GndLeaf.new(feature) : tree
+  end
 
-  private def gnd_map(addr, tree : GroupNode | CircuitNode, replacements) : ParseTree
-    # Prune this branch if no replacements talk about it. Most often replacements
-    # is very small so this should be cheap enough versus traversal down to
-    # ground nodes.
-    #
-    # NOTE: If *tree* is impassable, we expect no replacements to exist for nodes
-    # inside it. If some do, well, we carry them out...
-    if replacements.size < GND_REPLACEMENTS_SMALL
-      possibly_contains = false
+  # :nodoc:
+  def gnd_map(tree : MixtureNode, router : NodeAddrRouter(Gnd)) : ParseTree
+    MixtureNode.new(tree.feature, gnd_map(tree.child, router))
+  end
 
-      replacements.each_key do |replacement_addr|
-        next unless replacement_addr.starts_with?(addr)
-        possibly_contains = true
-        break
-      end
+  # :nodoc:
+  def gnd_map(tree : ScopeNode, router : NodeAddrRouter(Gnd)) : ParseTree
+    ScopeNode.new(tree.feature, gnd_map(tree.child, router))
+  end
 
-      unless possibly_contains
-        return tree
-      end
-    end
-
-    changed_indices = Pf::Kit.stack_array(Int32, 8)
+  # :nodoc:
+  def gnd_map(tree : GroupNode | CircuitNode, router : NodeAddrRouter(Gnd)) : ParseTree
+    changed_keys = Pf::Kit.stack_array(UInt32, 8)
     changed_children = Pf::Kit.stack_array(ParseTree, 8)
 
-    tree.children.each_with_index do |child0, child_index|
-      key = tree.feature.range.begin + child_index
-      child1 = gnd_map(addr.append(key), child0, replacements)
-      next if child0.same?(child1)
+    tree.children.zip(tree.feature.range) do |child, key|
+      next unless child_router = router.cd?(key)
 
-      changed_indices << child_index
-      changed_children << child1
+      changed_keys << key
+      changed_children << gnd_map(child, child_router)
     end
 
-    if changed_indices.present?
+    if changed_keys.present?
       # Apply changes to a mutable copy of children.
       children1 = tree.children.dup
-      changed_children.zip(changed_indices) do |child, child_index|
-        children1[child_index] = child
+      changed_children.zip(changed_keys) do |child, key|
+        children1[key - tree.feature.range.begin] = child
       end
 
       # Make the copy read-only.
@@ -721,13 +689,15 @@ module Ww::D7
 
     case tree
     in CircuitNode
-      leaf1 = gnd_map(addr, tree.leaf, replacements)
+      if router.has_value?
+        leaf1 = gnd_map(tree.leaf, router)
+      end
 
-      if children1.nil? && tree.leaf.same?(leaf1)
+      if children1.nil? && leaf1.nil?
         return tree # unchanged
       end
 
-      CircuitNode.new(tree.feature, children1 || tree.children, leaf1)
+      CircuitNode.new(tree.feature, children1 || tree.children, leaf1 || tree.leaf)
     in GroupNode
       if children1.nil?
         return tree # unchanged
