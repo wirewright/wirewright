@@ -186,11 +186,14 @@ module Ww::Rack
       # (cell @y 100)
       # (feed @x @y)
       # ```
-      matchpi %{[cell @edge_ _?]} do
+      matchpi %{[cell @edge_]}, %{[cell @edge_ _]} do
         D7.gnd(node, edge)
       end
 
-      matchpiT %{[cell (policyQ_symbol @edge_) _?]} do
+      matchpiT(
+        %{[cell (policyQ_symbol @edge_)]},
+        %{[cell (policyQ_symbol @edge_) _]},
+      ) do
         continue unless policy = merge_policy?(policyQ)
 
         D7.gnd(node, edge, merge_policy: policy)
