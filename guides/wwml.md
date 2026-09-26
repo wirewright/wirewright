@@ -427,6 +427,36 @@ harness for this; a tiny syntactic feature suffices.
 > comments aren't terms. They are interpreted by the dictionary that you place them
 > in, because only that dictionary knows which entries to focus or blur.
 
+### Semantic comments
+
+Semantic comments `;;|...` are represented using a dictionary term `(comment _string)`.
+Common indentation is stripped. For example:
+
+```wwml
+;;| Hello World
+;;|
+;;| I am a semantic comment!
+```
+
+The above is the same as writing the vastly less readable:
+
+```wwml
+(comment "Hello World\n\nI am a semantic comment!")
+```
+
+Or, if multiline form strings are used:
+
+```wwml
+(comment
+  "Hello World
+
+   I am a semantic comment!")
+```
+
+But both of these still look much uglier than `;;|`, and feel out-of-place in most code.
+An additional benefit of `;;|` is that grammars and syntax highlighters for other Lisps
+will highlight it as a comment.
+
 ## Boolean terms
 
 ```wwml

@@ -45,6 +45,57 @@
   (= ⎡(;,+ 1 2 x: 100 ;,3 y: 200)⎤ ⎡(+ 3 x: 100 y: 200)⎤)
   (= ⎡(+ 1 2 ;,x: 100 3 y: 200 z: 300)⎤ ⎡(+ 1 2 3 x: 100)⎤))
 
+;; Semantic comment
+(ml
+  ;; Empty
+  (= ⎡;;|⎤ ⎡(comment "")⎤)
+  (= ⎡;;|
+     ⎤
+     ⎡(comment "")⎤)
+
+  ;; Single line
+  (= ⎡;;| Hello World⎤ ⎡(comment "Hello World")⎤)
+
+  ;; Multiline
+
+  (= ⎡;;|Hello World
+      ;;|Bye world⎤
+     ⎡(comment "Hello World\nBye world")⎤)
+
+  (= ⎡;;| Hello World
+      ;;| Bye world⎤
+     ⎡(comment "Hello World\nBye world")⎤)
+
+  ;; Common indent 1
+  (= ⎡;;| Hello World
+      ;;|
+      ;;| Bye world⎤
+     ⎡(comment "Hello World\n\nBye world")⎤)
+
+  ;; Common indent 3
+  (= ⎡;;|   Hello World
+      ;;|
+      ;;|   Bye world⎤
+     ⎡(comment "Hello World\n\nBye world")⎤)
+
+  ;; Common indent 3, trailing spaces
+  (= ⎡  ;;|   Hello World
+        ;;|
+        ;;|   Bye world  ⎤
+     ⎡(comment "Hello World\n\nBye world  ")⎤)
+
+  ;; Common indent zero
+  (= "  ;;|   Hello World
+        ;;|x
+        ;;|   Bye world  "
+     ⎡(comment "   Hello World\nx\n   Bye world  ")⎤)
+
+  ;; Empty line indent is ignored (common indent = 3 despite empty line indent = 1)
+  (= "  ;;|   Hello World
+        ;;|\x20
+        ;;|   Bye world  "
+     ⎡(comment "Hello World\n\nBye world  ")⎤))
+
 ;; Symbols
 (ml
   (+ ⎡foo42⎤ _symbol)

@@ -429,10 +429,74 @@ module Ww::ML
       response || token(:lcurly)
     end
 
+    # ;;⏏
     private def comment
-      skip { |rune| !rune.vspace? }
+      unless past?('|')
+        # ;;⏏ Hello World
+        skip { |rune| !rune.vspace? }
+        return token(:line_comment)
+      end
 
-      token(:line_comment)
+      text, comment = view_and_object do
+        #   ;;|⏏ Line 1
+        #   ;;| Line 2
+        #   xyz
+
+        line = view do
+          skip { |rune| !rune.vspace? }
+        end
+
+        lines = Pf::Kit.stack_array(StringView, 8)
+        lines << line
+
+        #   ;;| Line 1⏏
+        #   ;;| Line 2
+        #   xyz
+        while past?(&.vspace?)
+          #   ;;| Line 1
+          # ⏏ ;;| Line 2
+          #   xyz
+
+          # Lookahead
+          comment_continues = try? do
+            skip(&.hspace?)
+            past?(';', ';', '|') ? true : nil
+          end
+          unless comment_continues
+            #   ;;| Line 1
+            #   ;;| Line 2
+            # ⏏ xyz
+            break
+          end
+
+          #   ;;| Line 1
+          #   ;;|⏏ Line 2
+          #   xyz
+          line = view do
+            skip { |rune| !rune.vspace? }
+          end
+          lines << line
+        end
+
+        # Strip common indentation.
+
+        common_indentation = UInt32::MAX
+
+        lines.each do |line|
+          line_indentation, line_content = line.skip_thru(" ")
+          next if line_content.empty? # Skip empty lines
+
+          common_indentation = Math.min(common_indentation, line_indentation.size)
+        end
+
+        lines.map! do |line|
+          line.lskip(common_indentation)
+        end
+
+        Term.of(:comment, lines.join('\n'))
+      end
+
+      ready(Lexeme::Datum.new(:semantic_comment, comment, text))
     end
 
     private def vspace : TxnResponse

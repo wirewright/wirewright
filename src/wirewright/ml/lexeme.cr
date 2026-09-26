@@ -156,6 +156,7 @@ module Ww::ML
         RawSymbol
         Substring
         Blob
+        SemanticComment
       end
     end
 
