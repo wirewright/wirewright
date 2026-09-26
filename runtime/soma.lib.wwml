@@ -609,7 +609,7 @@
 (FilledButton icon_ caption_)
   => ($FilledButtonBox
        (group style: "flow-row gap-2"
-         (icon ^icon style: "text-lg")
+         (icon ^icon style: "text-xl")
          (p ^caption)))
 
 (FilledButton header←[@_ _] rest_*)
@@ -637,7 +637,7 @@
 (Button icon_ caption_)
   => ($TonalButtonBox
        (group style: "flow-row gap-1"
-         (icon ^icon style: "text-lg")
+         (icon ^icon style: "text-xl")
          (p ^caption)))
 
 (Button header←[@_ _] rest_*)
@@ -657,7 +657,7 @@
 (OutlinedButton icon_ caption_)
   => ($OutlinedButtonBox
        (group style: "flow-row gap-1"
-         (icon ^icon style: "text-lg")
+         (icon ^icon style: "text-xl")
          (p ^caption)))
 
 (OutlinedButton header←[@_ _] rest_*)
@@ -677,7 +677,7 @@
 (TextButton icon_ caption_)
   => ($TextButtonBox
        (group style: "flow-row gap-1"
-         (icon ^icon style: "text-lg")
+         (icon ^icon style: "text-xl")
          (p ^caption)))
 
 (TextButton header←[@_ _] rest_*)
