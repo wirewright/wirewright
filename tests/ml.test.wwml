@@ -94,7 +94,20 @@
   (= "  ;;|   Hello World
         ;;|\x20
         ;;|   Bye world  "
-     ⎡(comment "Hello World\n\nBye world  ")⎤))
+     ⎡(comment "Hello World\n\nBye world  ")⎤)
+
+  ;; Raises on ;; inside ;;|
+  (- ⎡;;| hello world
+      ;;⏏ bye⎤
+     ⎡lexical comment cannot follow a semantic comment⎤)
+  (- ⎡;;| hello world
+      ;;| foobar
+      ;;⏏ bye⎤
+     ⎡lexical comment cannot follow a semantic comment⎤)
+  (- ⎡;;| hello world
+      ;;⏏ bye
+      ;;| foobar⎤
+     ⎡lexical comment cannot follow a semantic comment⎤))
 
 ;; Symbols
 (ml

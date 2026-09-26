@@ -460,7 +460,7 @@ module Ww::ML
           # Lookahead
           comment_continues = try? do
             skip(&.hspace?)
-            past?(';', ';', '|') ? true : nil
+            past?(';', ';') ? true : nil
           end
           unless comment_continues
             #   ;;| Line 1
@@ -470,12 +470,28 @@ module Ww::ML
           end
 
           #   ;;| Line 1
-          #   ;;|⏏ Line 2
+          #   ;;⏏| Line 2
+          #   xyz
+          unless past?('|')
+            raise "lexical comment cannot follow a semantic comment directly; insert a blank line or fix to `;;|`", ahead1.before_begin
+          end
+
+          #   ;;| Line 1
+          #   ;;|⏏Line 2
           #   xyz
           line = view do
             skip { |rune| !rune.vspace? }
           end
           lines << line
+
+          #   ;;| Line 1
+          #   ;;| Line 2⏏
+          #   xyz
+          #
+          #   ;;| Line 1
+          #   ;;| Line 2⏏
+          #   ;;| Line 3
+          #   xyz
         end
 
         # Strip common indentation.
