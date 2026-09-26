@@ -3,120 +3,6 @@
 ;; buggy and basically unusable. Do note that I'm discovering the "righter"
 ;; ways of writing these things as I go. It's not that I know anything, either.
 
-;; |@ musoma.button
-;;
-;; |@pattern
-;; (Button (@msgs_ msg_) view_ ⍊ ⋮key)
-;;
-;; |@key msgs
-;; Edge where *msg* should be placed on click.
-;;
-;; |@key msg
-;; Term to place in *msgs*.
-;;
-;; |@key view
-;; Subtree comprising the button's view. The Button component augments
-;; the root of *view* with the following pairs:
-;;
-;; - `hover`: set to `true` on hover irrespective of `enabled`.
-;; - `active`: set to `true` while the button is pressed irrespective of `enabled`.
-;; - `enabled`: set to `true` while *msgs* is empty.
-;;
-;; |@block
-;; View-agnostic "brain" for a button. See other overloads for stock view/styling.
-(Button (@msgs_ msg_) view_ ¦ props_)
-  => (component {@:msgs}
-       (template
-         (cell @msg ^msg))
-       (comment
-         "Buttons are interested in which mouse buttons are currently pressed, \
-          so inside a button is its \"personal\" representation of the mouse \
-          which it can watch.")
-       (node @mouse (mouse))
-       (comment
-         "Buttons are also interested in their own visual reflection. While you can see \
-          the button as a rectangle with centered text, the button itself cannot see \
-          that; instead, it sees a symbolic, visual reflection of itself, something akin \
-          to SVG in spirit, annotated with information such as what the mouse is currently \
-          hovering over.")
-       (reflection {@:desc, @:node}
-         (template ^view))
-       (comment
-         "Optionally, the button also watches the input (i.e., the keyboard). If you \
-          see an empty group here, this means the button isn't interested in the keyboard.")
-       (template
-         (^when (props {¦ key_})
-           (cell @key ^key)
-           (node @input (input focus: always))))
-       (comment
-         "The backsystem below then relates everything together. The rewrite rules \
-          below are responsible for the button's behavior.")
-       (backsys
-         ;; The key that this button is watching for was pressed.
-         {¦ input: ⟨K'←K_⟩ key: K_ msg_ node: {¦ -active_} -msgs_}
-           <> {(K'): (), active: tap, msgs: ^msg}
-         ;; Mouse enters the button.
-         {¦ mouse: [mouse] desc: (reflection {¦ hit-hover}) node: {¦ hover_: (%optional false false)}}
-           <> {hover: true}
-         ;; Mouse leaves the button.
-         {¦ desc: (reflection {¦ -hit-hover}) node: {¦ hover_: true}}
-           <> {(hover): ()}
-         ;; Mouse left pressed while over the button.
-         {¦ mouse: [mouse left] node: {¦ hover: true active_: (%optional false false)}}
-           <> {active: true}
-         ;; Mouse moved away from the button while holding left, then returned back
-         ;; while holding left.
-         {¦ desc: (reflection {¦ hit-hover}) node: {¦ -hover_ active: true}}
-           <> {hover: true}
-         ;; Mouse left released while over the button.
-         {¦ mouse: [mouse], desc: (reflection {¦ hit-hover}) node: {¦ active: true} msg_ -msgs_}
-           <> {msgs: ^msg}
-         ;; Mouse left released while **not** over the button.
-         {¦ mouse: [mouse] node: {¦ active_: true}}
-           <> {(active): ()}
-         ;; Target cell occupied, won't be able to send if clicked.
-         {¦ msgs node: {¦ ⋮enabled}} <> {enabled: false}
-         ;; Target cell free, we can send if clicked.
-         {¦ -msgs node: {¦ ⋮enabled}} <> {enabled: true}
-         ;; End tap on the next tick.
-         {¦ node: {¦ active_: tap}}
-           <> {(active): ()}))
-
-;; |@ musoma.button
-;;
-;; |@pattern
-;; (Button (@msgs_ msg_) caption_string ¦ props_)
-;;
-;; |@key msgs
-;; Edge where *msg* should be placed on click.
-;;
-;; |@key msg
-;; Term to place in *msgs*.
-;;
-;; |@key caption
-;; Text to display on the button.
-;;
-;; |@key props
-;; Properties to pass to the main `musoma.button` overload.
-;;
-;; |@block
-;; Renders a button with stock styling based on the MuSoma theme.
-;;
-;; ```wwml
-;; (window style: "flow-col center gap-3"
-;;   (queue (@action @actions) ())
-;;   ($Button (@actions inc) "Increment")
-;;   ($Button (@actions dec) "Decrement"))
-;; ```
-(Button head←(@_ _) caption_string ¦ props_ style⋮ "")
-  => (slot
-       (Button ^head
-         (box style: ^"bg-theme-surface px-5 py-2 content-center text-theme-subtle rounded-full \
-                       enabled:hover:text-theme-text enabled:active:text-theme-text \
-                       enabled:hover:cursor-pointer enabled:hover:bg-theme-overlay \
-                       enabled:active:bg-theme-highlight-med -enabled:hover:cursor-not-allowed ⸢style⸣"
-           ^caption)))
-
 ;; |@ musoma.input
 ;;
 ;; |@pattern
@@ -388,29 +274,28 @@
 ;; |@block
 ;; Stock view/styling for an Input field based on the current MuSoma theme.
 (Input @state_ ¦ props_ label⋮ "" label-style⋮ "" placeholder⋮ "" placeholder-style⋮ "" content-style⋮ "" box-style⋮ "")
-  => (slot
-       (Input ^state
-         (box style: "flow-col gap-2/3 membrane hover:cue-hover active:cue-active \
-                      focus:cue-focus focus:input empty:cue-empty"
-           ;; Render the label, if any.
-           (^when (label (%string nonempty))
-             (p style: ^"content upcase font-condensed text-sm leading-none text-theme-muted \
-                         in-hover:text-theme-subtle in-focus:text-theme-selection-bg ⸢label-style⸣"
-               ^label))
-           (box style: ^"fr-1 flow-none content-clip border-xs border-theme-highlight-low rounded-sm \
-                         px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
-                         in-focus:border-theme-selection-bg ⸢box-style⸣"
-             ;; Display placeholder, but only in an empty field.
-             (p style: ^"absent in-empty:present text-theme-muted leading-none ⸢placeholder-style⸣"
-               ^placeholder)
-             (p style: ^"content-y sel sel-endl sel-aim sel-clearance-x-3 sel-clearance-line \
-                         sel-text-theme-muted in-focus:sel-text-theme-selection-fg sel-theme-highlight-low \
-                         in-hover:sel-theme-highlight-med text-theme-text leading-tight \
-                         beam-transparent in-hover:beam-thick in-focus:beam-thick \
-                         in-focus:sel-theme-selection-bg ⸢content-style⸣"
-                value: true
-               "")))
-         ^… props))
+  => ($Input ^state
+       (box style: "flow-col gap-2/3 membrane hover:cue-hover active:cue-active \
+                    focus:cue-focus focus:input empty:cue-empty"
+         ;; Render the label, if any.
+         (^when (label (%string nonempty))
+           (p style: ^"content upcase font-condensed text-sm leading-none text-theme-muted \
+                       in-hover:text-theme-subtle in-focus:text-theme-selection-bg ⸢label-style⸣"
+             ^label))
+         (box style: ^"fr-1 content-clip border-xs border-theme-highlight-low rounded-sm \
+                       px-2 py-1 in-hover:cursor-text in-hover:border-theme-highlight-med \
+                       in-focus:border-theme-selection-bg ⸢box-style⸣"
+           ;; Display placeholder, but only in an empty field.
+           (p style: ^"absent in-empty:present text-theme-muted leading-none ⸢placeholder-style⸣"
+             ^placeholder)
+           (p style: ^"content-y sel sel-endl sel-aim sel-clearance-x-3 sel-clearance-line \
+                       sel-text-theme-muted in-focus:sel-text-theme-selection-fg sel-theme-highlight-low \
+                       in-hover:sel-theme-highlight-med text-theme-text leading-tight \
+                       beam-transparent in-hover:beam-thick in-focus:beam-thick \
+                       in-focus:sel-theme-selection-bg ⸢content-style⸣"
+              value: true
+             "")))
+       ^… props)
 
 ;; |@ musoma.y-scrollbar
 ;;
@@ -598,11 +483,10 @@
        (part (@desc @view-aim) [reflection {¦ aim-y: ±view-aim}])
        (part (@desc @view-hover) [reflection {¦ hit-hover: view-hover_}])
        (part (@desc @content-size) [reflection {¦ content-h: ±content-size}])
-       (slot
-         (Scroll
-           (bar @thumb-offset @thumb-size @track-size @show)
-           (view @view-scroll @view-size @view-hover @content-size @view-aim)
-           (axis y))))
+       ($Scroll
+         (bar @thumb-offset @thumb-size @track-size @show)
+         (view @view-scroll @view-size @view-hover @content-size @view-aim)
+         (axis y)))
 
 (Scroll)
   => (component {}
@@ -626,196 +510,371 @@
 
 ;; NOTE: Most of these designs are simplified versions of the corresponding
 ;; component in Material Design 3. Due to implementation limitations we cannot
-;; (yet?) do "fancy" visual things like press animations, etc.; nor should we,
+;; (yet?) do "fancy" visual things like press animations, etc. -- nor should we,
 ;; perhaps. We largely ignore keyboard focus/control on mouse-driven components
 ;; as well (and the corresponding focus states). This isn't particularly nice
-;; of course.
+;; of course and has to be implemented at some point.
 
-(Checkbox @state_ view_)
-  => (component {@:state}
-       (reflection {@:desc, @:node}
-         (template ^view))
+(Trigger (@msgs_ msg_ ⍊ disable⋮ false) view_)
+  => (component {@:msgs, @:enabled}
+       (comment
+         "This cell stores this button's configuration so that we can refer to them \
+          in the rewriter.")
+       (template
+         (cell @config {^:msg, ^:disable}))
 
-       (frag @mouse
-         (mouse))
+       ;; TODO: Split into paragraphs. Current string literals sadly do not allow that :(
+       ;; We should probably have semantic comments, ;;| ...
+       (comment
+         "The button contains a \"mirror\", which it can use to look at the *reflection* \
+          of its visuals. Most importantly for us, the reflection contains information \
+          about whether the button is currently hovered. Inside the reflection is a group. \
+          The rewriter below sets various pairs on the group throughout the lifetime of \
+          the button. For example, while you hover over the button, the `hover` pair is \
+          set. The style then turns these pairs into Microfold cues. Importantly, the style \
+          blocks the upward (from inside the view, out) and the downward flow of cues \
+          (from the outside of the view, in) using the special `membrane` utility — completely \
+          enclosing the *view* in a \"membrane\" that cues cannot permeate.")
+       (reflection {desc: @mirror, node: @visuals}
+         (box style: "membrane disabled:cue-disabled -disabled:cue-enabled \
+                      -disabled:hover:cue-hover -disabled:active:cue-active \
+                      pressed:cue-active"
+           (template ^view)))
 
-       (rewriter ((stageR (rulesetR exh: true)) - {@:state, @:desc, @:node, @:mouse})
+       (comment
+         "The button also contains a live symbolic representation of the mouse. \
+          The button maintains a continuous watch on the evolution of the mouse, \
+          so when the left mouse button is pressed, the button can see and react \
+          to that with respect to its current state.")
+       (frag @mouse (mouse))
+
+       (comment
+         "Finally, there's this rewriter. If you expand it, you will see that it is \
+          comprised of three stages. You will meet the same three stages in many other \
+          UI components. The stages are: observe, reconcile (decide), and act. See also \
+          the `Trigger` component.")
+       (rewriter ((stageR (rulesetR exh: true)) - {@:config, @:mirror, @:mouse, @:msgs, @:visuals})
          (stage
-           ;; The user's mouse has entered our visuals. Treat that as hover.
-           {¦ -hover_ mouse: [mouse] desc: [reflection {¦ hit-hover}]}
+           ;; The mouse is over our visuals. We're being hovered over!
+           {¦ -hover_ mouse: [mouse] mirror: [reflection {¦ hit-hover}]}
              <> {hover: true}
-           ;; The user's mouse had previously entered and remains within our visuals.
-           ;; Treat that as hover.
-           {¦ -hover_ node: {¦ hover} desc: [reflection {¦ hit-hover}]}
+           ;; The mouse had previously entered and remains within our visuals. We're
+           ;; being hovered over!
+           {¦ -hover_ visuals: {¦ hover} mirror: [reflection {¦ hit-hover}]}
              <> {hover: true}
-           ;; Find out whether the user just pressed the left mouse button over
-           ;; our visuals.
+           ;; The left mouse button is down over our visuals. We're active!
            {¦ -active_ hover mouse: [mouse left]}
              <> {active: true}
-           ;; Find out whether we just transitioned active -> not(active), with
-           ;; mouse over us, and interpret that as a click.
-           {¦ -clicked_ hover mouse: [mouse] node: {¦ active}}
-             <> {clicked: true})
+           ;; The left mouse button was just released while the button was active,
+           ;; still over our visuals. That's a click!
+           {¦ -clicked_ hover mouse: [mouse] visuals: {¦ active}}
+             <> {clicked: true}
+           ;; If the messages edge already contains this button's message, then
+           ;; this button is currently pressed.
+           {¦ config: {¦ msg_} msgs: msg_ -pressed_}
+             <> {pressed: true})
          (stage
-           ;; The checkbox's "brain" is just this one tiny rule.
-           {¦ clicked state_boolean} <> {state: ^(not state)})
+           ;; The only decision a button makes is this: place our message at
+           ;; the messages edge if it's empty.
+           {¦ clicked config: {¦ msg_} -msgs_ -pressed_}
+             <> {msgs: ^msg, pressed: true})
          (stage
-           ;; Place checked, hover, and active on the node, but only if state
-           ;; exists (i.e., only if the checkbox is enabled).
-           {¦ state_boolean node: {¦ ⋮checked ⋮enabled}}
-             <> {checked: ^state, enabled: true}
-           {¦ state hover node: {¦ ⋮hover}} <> {hover: true}
-           {¦ state -hover node: {¦ hover_}} <> {(hover): ()}
-           {¦ state active node: {¦ ⋮active}} <> {active: true}
-           {¦ state -active node: {¦ active_}} <> {(active): ()}
-           ;; When there is no state, style the checkbox as disabled.
-           {¦ -state node: {¦ enabled_}} <> {(enabled): ()})))
+           ;; Maintain `hover` on *visuals* in sync.
+           {¦ hover visuals: {¦ ⋮hover}} <> {hover: true}
+           {¦ -hover visuals: {¦ hover_}} <> {(hover): ()}
+           ;; Maintain `active` on *visuals* in sync. Us doing so serves a double duty,
+           ;; since we also use `active` from *visuals* as a memory of our previous state.
+           {¦ active visuals: {¦ ⋮active}} <> {active: true}
+           {¦ -active visuals: {¦ active_}} <> {(active): ()}
+           ;; Maintain `pressed` on *visuals* in sync.
+           {¦ pressed visuals: {¦ ⋮pressed}} <> {pressed: true}
+           {¦ -pressed visuals: {¦ pressed_}} <> {(pressed): ()}
+           ;; Maintain `disabled` on *visuals* in sync.
+           {¦ config: {¦ disable: true} -pressed msgs visuals: {¦ -disabled_}}
+             <> {disabled: true}
+           {¦ config: {¦ disable: true} -msgs visuals: {¦ disabled_}}
+             <> {(disabled): ()})))
 
-;; Design reference: https://m3.material.io/components/checkbox/specs
-(Checkbox @state_)
-  => (slot
-       (Checkbox ^state
-         (box style: "flow-none content hover:cursor-pointer membrane checked:cue-checked \
-                      hover:cue-hover active:cue-active enabled:cue-enabled"
-               ;; The circle thing around the checkbox on hover.
-               (box style: "bg-theme-subtle in-hover:bg-ui-checked scale-5/3 pivot-center \
-                            floating rounded-full transparent in-enabled:in-hover:opacity-25%
-                            in-active:bg-okl-95%")
-               ;; The check and the box.
-               (box style: "rounded-xs border-sm border-theme-highlight-high in-enabled:border-theme-subtle \
-                            text-sm text-theme-text in-checked:bg-theme-highlight-high in-enabled:in-checked:border-ui-checked \
-                            in-enabled:in-checked:bg-ui-checked in-enabled:text-ui-checked in-enabled:text-okl-10%"
-                 (icon "check" style: "transparent in-checked:opaque")))))
+;; Reference: https://m3.material.io/components/buttons/specs, "Filled button"
+(FilledButtonBox child_)
+  => (box style: ^"px-4 py-2 rounded-full content-center bg-ui-accent text-ui-accent \
+                   in-enabled:bg-okl-70% text-sm/5 font-medium in-enabled:text-okl-15% \
+                   in-hover:cursor-pointer in-hover:bg-okl-75% in-active:bg-okl-80% \
+                   in-disabled:bg-ui-decoration-low in-disabled:text-ui-supplementary"
+       ^child)
 
-;; Design reference: https://m3.material.io/components/switch/specs
-(Switch @state_)
-  => (slot
-       (Checkbox ^state
-         (group style: "content flow-row border-sm border-ui-subtle bg-ui-surface rounded-full \
-                        membrane checked:border-ui-accent checked:bg-ui-accent checked:cue-checked \
-                        hover:cue-hover hover:cursor-pointer -enabled:opacity-50%"
-           ;; The disabled half.
-           (box style: "opaque in-checked:transparent content p-1"
-             (box style: "rounded-full bg-min-4 bg-ui-subtle")
-             ;; The circle thing for hovering when disabled.
-             (box style: "bg-ui-subtle scale-5/2 pivot-center rounded-full transparent \
-                          in-hover:opacity-20% in-checked:transparent"))
-           ;; The checked half.
-           (box style: "transparent in-checked:opaque content p-1 bg-ui-accent bg-okl-20% \
-                        text-ui-accent rounded-full"
-             (icon "check")
-             ;; The circle thing for hovering when checked.
-             (box style: "bg-ui-accent bg-okl-30% scale-5/2 pivot-center rounded-full \
-                          transparent in-checked:in-hover:opacity-20%")))))
+(FilledButton caption_)
+  => ($FilledButtonBox (p ^caption))
 
-;; A Switch with a title, looking like so:
-;;
-;; ```text
-;; Title                [switch]
-;; ```
-(Setting @state_ title_string)
-  => (group style: "flow-row item-center-y content-y px-3 py-3"
-       (p ^title style: "fr-1 text-ui-content text-base/6")
-       ($Switch ^state))
+(FilledButton icon_ caption_)
+  => ($FilledButtonBox
+       (group style: "flow-row gap-2"
+         (icon ^icon style: "text-lg")
+         (p ^caption)))
 
-;; A switch with a title and a common subtitle for both the toggled and the untoggled
-;; state. It looks like so:
-;;
-;; ```text
-;; Title
-;;                        [switch]
-;; Subtitle
-;; ```
-(Setting @state_ title_string subtitle_string)
-  => (group style: "flow-row item-center-y content-y px-3 py-1"
-       (group style: "flow-col fr-1"
-         (p ^title style: "text-ui-content text-base/6")
-         (p ^subtitle style: "text-ui-supplementary text-sm/5"))
-       ($Switch ^state))
+(FilledButton header←[@_ _] rest_*)
+  => ($Trigger ^header ($FilledButton ^*rest))
 
-;; A switch with a title and a custom subtitle for the two states: *subtitle0*
-;; for the OFF state, and *subtitle1* for the ON state. It looks like so:
-;;
-;; ```text
-;; Title
-;;                        [switch]
-;; Subtitle
-;; ```
-(Setting @state_ title_string (subtitle0_string subtitle1_string))
-  => (group style: "flow-row item-center-y content-y px-3 py-1"
-       (group style: "flow-col fr-1"
-         (p ^title style: "text-ui-content text-base/6")
-         (guard (^state false)
-           (p ^subtitle0 style: "text-ui-supplementary text-sm/5"))
-         (guard (^state true)
-           (p ^subtitle1 style: "text-ui-supplementary text-sm/5")))
-       ($Switch ^state))
+(IconButton icon_)
+  => (box style: "rounded-full p-2 content text-ui-content in-hover:cursor-pointer \
+                  in-hover:bg-ui-surface in-active:bg-ui-overlay in-disabled:text-ui-supplementary"
+       (icon ^icon style: "text-lg"))
+
+(IconButton header←[@_ _] rest_*)
+  => ($Trigger ^header ($IconButton ^*rest))
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Tonal button"
+(TonalButtonBox child_)
+  => (box style: ^"px-4 py-2 rounded-full content-center bg-ui-overlay text-ui-content \
+                   text-sm/5 font-medium in-hover:cursor-pointer in-hover:bg-okl-30% \
+                   in-active:bg-okl-40% in-disabled:bg-ui-decoration-low \
+                   in-disabled:text-ui-supplementary"
+       ^child)
+
+(Button caption_)
+  => ($TonalButtonBox (p ^caption))
+
+(Button icon_ caption_)
+  => ($TonalButtonBox
+       (group style: "flow-row gap-1"
+         (icon ^icon style: "text-lg")
+         (p ^caption)))
+
+(Button header←[@_ _] rest_*)
+  => ($Trigger ^header ($Button ^*rest))
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Outlined button"
+(OutlinedButtonBox child_)
+  => (box style: ^"px-4 py-2 rounded-full content-center border-xs border-ui-decoration-high \
+                   text-ui-content text-sm/5 font-medium in-hover:cursor-pointer \
+                   in-hover:bg-ui-surface in-active:bg-ui-overlay in-disabled:bg-ui-decoration-low \
+                   in-disabled:text-ui-supplementary"
+       ^child)
+
+(OutlinedButton caption_)
+  => ($OutlinedButtonBox (p ^caption))
+
+(OutlinedButton icon_ caption_)
+  => ($OutlinedButtonBox
+       (group style: "flow-row gap-1"
+         (icon ^icon style: "text-lg")
+         (p ^caption)))
+
+(OutlinedButton header←[@_ _] rest_*)
+  => ($Trigger ^header ($OutlinedButton ^*rest))
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Text button"
+(TextButtonBox child_)
+  => (box style: ^"px-4 py-2 rounded-full content-center text-ui-accent text-sm/5 \
+                   font-medium in-hover:cursor-pointer in-hover:bg-ui-surface \
+                   in-active:bg-ui-overlay in-disabled:bg-ui-decoration-low \
+                   in-disabled:text-ui-supplementary"
+       ^child)
+
+(TextButton caption_)
+  => ($TextButtonBox (p ^caption))
+
+(TextButton icon_ caption_)
+  => ($TextButtonBox
+       (group style: "flow-row gap-1"
+         (icon ^icon style: "text-lg")
+         (p ^caption)))
+
+(TextButton header←[@_ _] rest_*)
+  => ($Trigger ^header ($TextButton ^*rest))
 
 ;; This is an internal component used by `SegmentedButton`.
-(SegmentedOption (@state_ id_) view_dict)
-  => (component {@:state}
-       (template (cell @id ^id))
+(SegmentedOption (@current_ @next_ option_) view_dict)
+  => (component {@:current, @:next}
+       (template (cell @option ^option))
 
-       (reflection {@:desc, @:node}
-         (template ^view))
+       (comment
+         "Since the view would otherwise have no access to @first and @last, because \
+          the `box` would block that, we have to pass them down as cues.")
+       (reflection {desc: @mirror, node: @visuals}
+         (box style: "membrane -disabled:checked:cue-checked disabled:cue-disabled \
+                      -disabled:cue-enabled -disabled:hover:cue-hover \
+                      -disabled:active:cue-active @first:cue-first @last:cue-last"
+           (template ^view)))
 
        (frag @mouse (mouse))
 
-       (rewriter ((stageR (rulesetR exh: true)) - {@:id, @:state, @:desc, @:node, @:mouse})
+       (rewriter ((stageR (rulesetR exh: true)) - {@:current, @:mirror, @:mouse, @:next, @:option, @:visuals})
          (stage
-           ;; The user's mouse has entered our visuals. Treat that as hover.
-           {¦ -hover_ mouse: [mouse] desc: [reflection {¦ hit-hover}]}
+           {¦ -hover_ mouse: [mouse] mirror: [reflection {¦ hit-hover}]}
              <> {hover: true}
-           ;; The user's mouse had previously entered and remains within our visuals.
-           ;; Treat that as hover.
-           {¦ -hover_ node: {¦ hover} desc: [reflection {¦ hit-hover}]}
+           {¦ -hover_ visuals: {¦ hover} mirror: [reflection {¦ hit-hover}]}
              <> {hover: true}
-           ;; Find out whether the user just pressed the left mouse button over
-           ;; our visuals.
            {¦ -active_ hover mouse: [mouse left]}
              <> {active: true}
-           ;; Find out whether we just transitioned active -> not(active), with
-           ;; mouse over us, and interpret that as a click.
-           {¦ -clicked_ hover mouse: [mouse] node: {¦ active}}
+           {¦ -clicked_ hover mouse: [mouse] visuals: {¦ active}}
              <> {clicked: true})
          (stage
-           ;; If we're the "reigning" option and someone asks us for a turnover, we do
-           ;; the turnover.
-           {¦ id_ state_: (turnover id_ -> successor_)}
-             <> {state: ^successor}
-           ;; If the user clicks on us and we're already active, just consume their click
-           ;; and move on. Do nothing.
-           {¦ clicked_ id_ state: id_}
+           ;; If we're the "reigning" option and someone asks for a turnover, we submit
+           ;; and do the turnover.
+           {¦ option_ current_: option_ next_}
+             <> {current: ^next, (next): ()}
+           ;; If the user clicks on us and we're already active, just consume their
+           ;; click and move on.
+           {¦ clicked_ option_ current: option_}
              <> {(clicked): ()}
-           ;; If the user clicks on us and we're not already active, we have to initiate
-           ;; a turnover.
-           {¦ clicked_ id_ state_}
-             <> {(clicked): (), state: (turnover ^state -> ^id)})
+           ;; If the user clicks on us and we're NOT already active, we have to
+           ;; ask the "reigning" option for a turnover.
+           {¦ clicked_ option_ -next_}
+             <> {(clicked): (), next: ^option})
          (stage
-           {¦ id_ state_ node: {¦ ⋮checked ⋮disabled}} <> {checked: ^(= id state), disabled: false}
-           {¦ -state node: {¦ ⋮checked ⋮disabled}} <> {checked: false, disabled: true}
-           {¦ state hover node: {¦ ⋮hover}} <> {hover: true}
-           {¦ state -hover node: {¦ hover_}} <> {(hover): ()}
-           {¦ state active node: {¦ ⋮active}} <> {active: true}
-           {¦ state -active node: {¦ active_}} <> {(active): ()})))
+           {¦ option_ current_ visuals: {¦ ⋮checked ⋮disabled}}
+             <> {checked: ^(= option current), disabled: false}
+           {¦ -current visuals: {¦ ⋮checked ⋮disabled}}
+             <> {checked: false, disabled: true}
+           {¦ current hover visuals: {¦ ⋮hover}}
+             <> {hover: true}
+           {¦ current -hover visuals: {¦ hover_}}
+             <> {(hover): ()}
+           {¦ current active visuals: {¦ ⋮active}}
+             <> {active: true}
+           {¦ current -active visuals: {¦ active_}}
+             <> {(active): ()})))
 
-;; Ditto.
-(SegmentedOption header_ title_string)
-  => (slot
-       (SegmentedOption ^header
-         (box style: "clip content-center item-center-y border-l @last:border-r \
-                      border-y @first:rounded-l-full @last:rounded-r-full border-ui-subtle \
-                      text-ui-content hover:bg-ui-surface hover:cursor-pointer checked:bg-ui-overlay \
-                      text-sm/5 font-medium px-8 py-2 disabled:opacity-50% membrane \
-                      checked:cue-checked active:bg-okl-30%"
-           (icon "check" style: "-dl-2 absent in-checked:present")
-           (p ^title style: "in-checked:dl-2"))))
+(SegmentedOptionView title_)
+  => (box style: "clip content-center item-center-y border-l in-last:border-r border-y \
+                  in-first:rounded-l-full in-last:rounded-r-full border-ui-subtle \
+                  text-ui-content in-hover:bg-ui-surface in-hover:cursor-pointer \
+                  in-checked:bg-ui-overlay text-sm/5 font-medium px-8 py-2 \
+                  in-disabled:opacity-25% active:bg-okl-30%"
+       (icon "check" style: "-dl-2 absent in-checked:present")
+       (p ^title style: "in-checked:dl-2"))
 
 ;; Presents one or more *options*, of the form `(label_string id_)`, as a segmented
 ;; button, allowing only one choice.
 ;;
 ;; Reference: https://m3.material.io/components/segmented-buttons/specs
 (SegmentedButton @state_ options_+)
-  => (group style: "flow-row item-fr-1"
-       (^each (options as (label_string id_))
-         ($SegmentedOption (^state ^id) ^label)))
+  => (component {@:state}
+       (cell @next)
+       (group style: "flow-row item-fr-1"
+         (template
+           (^each (options as (label_string id_))
+             ($SegmentedOption (@state @next ^id)
+               ($SegmentedOptionView ^label))))))
+
+(Toggle (%any° @state_ (@state_ @states_)) view_)
+  => (component {@:state, @:states}
+       (comment
+         "The toggle must be able to look at its own visual rendition to see \
+          whether it's hovered and so on. It must also be able to set pairs \
+          on the box to communicate with the visuals, through cues.")
+       (reflection {desc: @mirror, node: @visuals}
+         (box style: "membrane -disabled:checked:cue-checked disabled:cue-disabled \
+                      -disabled:hover:cue-hover -disabled:active:cue-active"
+           (template ^view)))
+
+       (comment
+         "The toggle also wants to track the mouse, to check which mouse buttons \
+          are pressed when it needs to.")
+       (frag @mouse (mouse))
+
+       (comment
+         "This rewriter is the tiny \"brain\" of the toggle. Just like some of the other \
+          components, it consists of three stages: observe, reconcile (decide), and act.")
+       (rewriter ((stageR (rulesetR exh: true)) - {@:mirror, @:mouse, @:visuals, @:state, @:states})
+         (stage
+           ;; The mouse is over our visuals. We're being hovered over!
+           {¦ -hover_ mouse: [mouse] mirror: [reflection {¦ hit-hover}]}
+             <> {hover: true}
+           ;; The mouse had previously entered and remains within our visuals. We're
+           ;; being hovered over!
+           {¦ -hover_ visuals: {¦ hover} mirror: [reflection {¦ hit-hover}]}
+             <> {hover: true}
+           ;; The left mouse button is down over our visuals. We're active!
+           {¦ -active_ hover mouse: [mouse left]}
+             <> {active: true}
+           ;; The left mouse button was just released while the button was active,
+           ;; still over our visuals. That's a click!
+           {¦ -clicked_ hover mouse: [mouse] visuals: {¦ active}}
+             <> {clicked: true})
+         (stage
+           ;; "Decide" to toggle state when clicked.
+           {¦ clicked state_boolean -states_}
+             <> {state: ^(not state), states: ^(not state)})
+         (stage
+           ;; Maintain `checked` on *visuals* in sync.
+           {¦ state_boolean visuals: {¦ ⋮checked}}
+             <> {checked: ^state}
+           ;; Maintain `hover` on *visuals* in sync.
+           {¦ hover visuals: {¦ ⋮hover}}
+             <> {hover: true}
+           {¦ -hover visuals: {¦ hover_}}
+             <> {(hover): ()}
+           ;; Maintain `active` on *visuals* in sync. Us doing so serves a double duty,
+           ;; since we also use `active` from *visuals* as a memory of our previous state.
+           {¦ active visuals: {¦ ⋮active}}
+             <> {active: true}
+           {¦ -active visuals: {¦ active_}}
+             <> {(active): ()}
+           ;; Maintain `disabled` on *visuals* in sync.
+           {¦ -state visuals: {¦ -disabled_}}
+             <> {disabled: true}
+           {¦ state visuals: {¦ disabled_}}
+             <> {(disabled): ()})))
+
+(Checkbox)
+  => (box style: "content in-hover:cursor-pointer in-disabled:opacity-25% in-disabled:in-hover:cursor-arrow"
+       ;; The circle thing around the checkbox on hover.
+       (box style: "bg-ui-subtle in-hover:bg-ui-checked scale-5/3 pivot-center \
+                    rounded-full transparent in-hover:opacity-25% in-active:bg-okl-95%")
+       ;; The check and the box.
+       (box style: "rounded-xs border-sm border-ui-subtle text-sm text-ui-content \
+                    in-checked:bg-ui-decoration-high in-checked:border-ui-checked \
+                    in-checked:bg-ui-checked text-ui-checked text-okl-10%"
+         (icon "check" style: "transparent in-checked:opaque")))
+
+(Checkbox @state_)
+  => ($Toggle ^state ($Checkbox))
+
+(Switch)
+  => (group style: "content flow-row border-sm border-ui-subtle bg-ui-surface rounded-full \
+                    in-checked:border-ui-accent in-checked:bg-ui-accent in-hover:cursor-pointer \
+                    in-disabled:opacity-25%"
+       ;; The unchecked half.
+       (box style: "opaque in-checked:transparent in-disabled:transparent content p-1"
+         (box style: "rounded-full bg-min-4 bg-ui-subtle")
+         ;; The circle thing for hovering when disabled.
+         (box style: "bg-ui-subtle scale-5/2 pivot-center rounded-full transparent \
+                      in-hover:opacity-20% in-checked:transparent"))
+       ;; The middle part to indicate the disabled state.
+       (box style: "floating absent -dl-3 in-disabled:present content p-1"
+         (box style: "rounded-full bg-min-4 bg-ui-subtle"))
+       ;; The checked half.
+       (box style: "transparent in-checked:opaque content p-1 bg-ui-accent bg-okl-20% \
+                    text-ui-accent rounded-full"
+         (icon "check")
+         ;; The circle thing for hovering when checked.
+         (box style: "bg-ui-accent bg-okl-30% scale-5/2 pivot-center rounded-full \
+                      transparent in-checked:in-hover:opacity-20%")))
+
+(Switch @state_)
+  => ($Toggle ^state ($Switch))
+
+(Setting title_)
+  => (group style: "flow-row item-center-y content-y px-3 py-3"
+       (p ^title style: "fr-1 text-ui-content text-base/6")
+       (box style: "center-y"
+         ($Switch)))
+
+(Setting title_ subtitle_)
+  => (group style: "flow-row content-y px-3 py-1"
+       (group style: "flow-col fr-1"
+         (p ^title style: "text-ui-content text-base/6")
+         (p ^subtitle style: "text-ui-supplementary text-sm/5"))
+       (box style: "center-y"
+         ($Switch)))
+
+(Setting title_ subtitle0_ subtitle1_)
+  => (group style: "flow-row content-y px-3 py-1"
+       (group style: "flow-col fr-1"
+         (p ^title style: "text-ui-content text-base/6")
+         (p ^subtitle0 style: "present in-checked:absent text-ui-supplementary text-sm/5")
+         (p ^subtitle1 style: "absent in-checked:present text-ui-supplementary text-sm/5"))
+       (box style: "center-y"
+         ($Switch)))

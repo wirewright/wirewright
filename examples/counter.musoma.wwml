@@ -4,9 +4,9 @@
       (p 0 style: "center text-6xl text-theme-text font-medium"))
 
     (group style: "flow-wrap gap-3"
-      ($Button (@msg (sub 1)) "Decrement")
-      ($Button (@msg (set 0)) "Reset")
-      ($Button (@msg (add 1)) "Increment"))
+      ($OutlinedButton (@msg (sub 1)) "Decrement")
+      ($OutlinedButton (@msg (set 0)) "Reset")
+      ($OutlinedButton (@msg (add 1)) "Increment"))
 
     (cell @msg)
 

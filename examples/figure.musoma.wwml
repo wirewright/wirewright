@@ -12,8 +12,8 @@
   (group style: "max-w-4xs bg-theme-surface px-5 py-3 gap-3 rounded-lg"
     (p @count style: "text-6xl font-bold text-theme-text center")
     (group style: "flow-row gap-3 item-fr-1"
-      ($Button (@msg inc) "Increment")
-      ($Button (@msg dec) "Decrement")))
+      ($OutlinedButton (@msg inc) "Increment")
+      ($OutlinedButton (@msg dec) "Decrement")))
   (comment "Hit Right or spacebar to escape."))
 
 ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
