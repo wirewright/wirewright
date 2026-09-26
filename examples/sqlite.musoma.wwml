@@ -42,7 +42,7 @@
       (rect style: "max-h-1px bg-min-none bg-theme-highlight-med")
       (group style: "fr-1"
         (p "Contacts" style: "font-condensed text-theme-text upcase")
-        (group style: "fr-1 flow-none bg-transparent"
+        (box style: "fr-1 bg-transparent"
           (suspense
             (p style: "center text-theme-muted"
               "Loading...")

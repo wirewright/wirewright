@@ -12,7 +12,7 @@
   (module {}
     (group style: "font-mono max-h-xs gap-1"
       (cell @ml ("(x⫽y⫽z ^a⫽b⫽c) =>" " ^(* a⫽b⫽c 2)"))
-      (group style: "flow-none fr-1"
+      (box style: "fr-1"
         ($Input @ml))
       (view (@ml [l_string r_string] @view)
         (^let text: (~ l r)

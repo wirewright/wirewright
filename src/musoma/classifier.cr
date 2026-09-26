@@ -25,7 +25,7 @@ module MuSoma
 
     ->(node : Term) do
       Term.case(node) do
-        matchpi %{[window _*]} do
+        matchpi %{[window _*]}, %{[box _*]} do
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
