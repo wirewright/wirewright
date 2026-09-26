@@ -4,10 +4,9 @@
 ;; 4: 4039
 ;; 8: 3341
 
-(comment
-  "Merge sort. The goal here isn't efficiency, just use `sort` in Nitrene to do actual \
-   sorting. The goal is to demo how a sorting algorithm can be implemented as \
-   a symbolic machine.")
+;;| Merge sort. The goal here isn't efficiency, just use `sort` in Nitrene to
+;;| do actual sorting. The goal is to demo how a sorting algorithm can be
+;;| implemented as a symbolic machine.
 
 (rewriter ((rulesetR) - {@:unsorted, @:sorted, @:run, @:tasks, @:pool})
   ;; Append inorder numbers to run.
@@ -26,14 +25,12 @@
   {¦ unsorted_: () -sorted_ run: () tasks: (run_) pool: (%items () [device (cell @l _) _*] min: 0)}
     <> {(unsorted): (), sorted: ^run, (run): ()})
 
-(comment
-  "NOTE: One feature of `axis: _` is that it \"threads\" modifications \
-   to the tasks \"through\". In other words, each device has access \
-   to the *modified* tasks (perhaps after a preceding device popped \
-   work off it or published work). This means that sometimes work does \
-   not \"leave\" this rewriter and make it into `tasks`; a preceding \
-   device could publish its completed result for the next free device \
-   to take it immediately.")
+;;| NOTE: One feature of `axis: _` is that it "threads" modifications to the tasks
+;;| "through". In other words, each device has access to the *modified* tasks
+;;| (perhaps after a preceding device popped work off it or published work).
+;;| This means that sometimes work does not "leave" this rewriter and make it
+;;| into `tasks`; a preceding device could publish its completed result for
+;;| the next free device to take it immediately.
 (rewriter ((scanR (rulesetR) axis: pool) - {@:tasks, @:pool})
   ;; Give work from the tasks to each device in the pool.
   {¦ pool: [device (cell @l `>l) (cell @r `>r) (cell @out `out) _*]

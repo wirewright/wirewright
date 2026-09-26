@@ -1,21 +1,21 @@
-(comment "Try incrementing / decrementing the counter.")
+;;| Try incrementing / decrementing the counter.
 
 (figure
-  (comment "Here you are, \"inside\" the counter. It contains some state:")
+  ;;| Here you are, inside the counter. ssuming It contains some state:
   (cell @count 15)
   (cell @msg)
-  (comment "... a backsystem responsible for its behavior:")
+  ;;| ... a backsystem responsible for its behavior:
   (backsys
     {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
     {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
-  (comment "... and then there's a bunch of stuff that comprises its appearance.")
+  ;;| ... and then there's a bunch of stuff that comprises its appearance.
   (group style: "max-w-4xs bg-theme-surface px-5 py-3 gap-3 rounded-lg"
     (p @count style: "text-6xl font-bold text-theme-text center")
     (group style: "flow-row gap-3 item-fr-1"
       ($OutlinedButton (@msg inc) "Increment")
-      ($OutlinedButton (@msg dec) "Decrement")))
-  (comment "Hit Right or spacebar to escape."))
+      ($OutlinedButton (@msg dec) "Decrement"))))
 
 ((I compose: true modify: true multiline: true structural: true) ("" * "") 0)
 
-(comment "Now, go to Insert mode using `l` and hit Left.")
+;;| Now, go to Insert mode using `l` and hit Left. You can hit Right or Space
+;;| to escape when you're done.

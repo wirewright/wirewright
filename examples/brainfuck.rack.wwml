@@ -1,10 +1,9 @@
 ;; Reference: https://en.wikipedia.org/wiki/Brainfuck
 
-(comment
-  "NOTE: The order of rules matters here. It determines the winner, i.e., \
-   rules lower down win on conflict. This, too, cannot (as readily) be \
-   a rewriter, because the rules *must* cooperate within a single tick \
-   (in this particular arrangement).")
+;;| NOTE: The order of rules matters here. It determines the winner, i.e.,
+;;| rules lower down win on conflict. This, too, cannot (as readily) be
+;;| a rewriter, because the rules *must* cooperate within a single tick
+;;| (in this particular arrangement).
 
 (backsys
   ;; Aux: Begin reading program.
@@ -142,7 +141,7 @@
 
    [This program sorts input bytes via quicksort.]")
 
-(comment "The following is a 32x32 (1024-cell) tape.")
+;;| The following is a 32x32 (1024-cell) tape.
 (cell @data
   (()
    0

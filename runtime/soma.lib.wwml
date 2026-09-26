@@ -25,29 +25,27 @@
 ;; stock view/styling.
 (Input @state_ view_ ¦ props_)
   => (component {@:state}
-       (comment "The following cells comprise this input's internal state.")
+       ;;| The following cells comprise this input's internal state.
        (cell @unit rune)
        (cell @motions ())
 
-       (comment
-         "The input also contains reflections of the keyboard and the mouse, \
-          since it is interested in both of them. The input wants to \
-          watch the keyboard for, well... keys that you press, but only when \
-          the input is focused; as for the mouse, the input wants to know \
-          about it to detect things like hover, to let you click to focus & move \
-          cursor, and so on.")
+       ;;| The input also contains reflections of the keyboard and the mouse,
+       ;;| since it is interested in both of them. The input wants to
+       ;;| watch the keyboard for, well... keys that you press, but only when
+       ;;| the input is focused; as for the mouse, the input wants to know
+       ;;| about it to detect things like hover, to let you click to focus & move
+       ;;| cursor, and so on.
        (node @input (input))
        (node @mouse (mouse))
 
-       (comment
-         "Inputs are also interested in their own visual reflection, just like buttons are")
+       ;;| Inputs are also interested in their own visual reflection, just like
+       ;;| buttons are.
        (reflection {@:desc, @:node}
          (template ^view))
 
-       (comment
-         "The following massive rewriter is where the \"symbolic physics\" of the input \
-          field is described. A bit less pretentiously, these are the rewrite rules that \
-          are responsible for the input's behavior.")
+       ;;| The following massive rewriter is where the "symbolic physics" of the input
+       ;;| field is described. A bit less pretentiously, these are the rewrite rules that
+       ;;| are responsible for the input's behavior.
        (rewriter ((rulesetR exh: true) - {@:state @:unit @:desc @:node @:input @:mouse @:motions})
          ;; Input focused.
          {¦ input: {¦ focus: true} node: {¦ -focus_}}
@@ -324,7 +322,8 @@
 ;; via *track-style* and *thumb-style*.
 (YScrollbar @thumb-dt_ @thumb-h_ @track-h_ @show_ ⍊ track-style⋮ "" thumb-style⋮ "")
   => (component {@:thumb-dt @:thumb-h @:track-h @:show}
-       (comment "Give outside world (and ourselves!) direct access to parts of the reflection below.")
+       ;;| Give outside world (and ourselves!) direct access to parts of
+       ;;| the reflection below.
        (part (@node @thumb-dt) [track [thumb-container (thumb _ ⍊ µ-dt: ±thumb-dt)]])
        (part (@node @thumb-h) [track [thumb-container (thumb _ ⍊ µ-h: ±thumb-h)]])
        (part (@desc @track-h) ⟪(thumb-container _ ⍊ h: ±track-h)⟫)
@@ -333,12 +332,11 @@
        (part (@node @show) {¦ show_})
        (part (@desc @scroll-hover) [reflection (track _ ⍊ hit-hover: scroll-hover_)])
 
-       (comment
-         "Define the visual appearance for the scrollbar. Notice how we have \
-          a dedicated thumb-container instead of just using track's height. This \
-          is because track-style can include things like padding that do not affect \
-          track's own height but do restrict thumb's max height. Therefore, we use \
-          thumb-container's height instead of track's for track-h.")
+       ;;| Define the visual appearance for the scrollbar. Notice how we have
+       ;;| a dedicated thumb-container instead of just using track's height. This
+       ;;| is because track-style can include things like padding that do not affect
+       ;;| track's own height but do restrict thumb's max height. Therefore, we use
+       ;;| thumb-container's height instead of track's for track-h.
        (reflection {@:desc, @:node}
          (template
            (track style: ^"transparent show:opaque flow-none bg-transparent bg-min-none \
@@ -349,16 +347,14 @@
                  (box style: ^"bg-theme-highlight-med bg-min-none max-w-1 rounded-full in-hover:bg-theme-subtle \
                                in-active:bg-theme-text ⸢thumb-style⸣"))))))
 
-       (comment
-         "The scrollbar is interested in the mouse because (at the moment) only \
-          the mouse can control it.")
+       ;;| The scrollbar is interested in the mouse because (at the moment) only
+       ;;| the mouse can control it.
        (node @mouse (mouse))
 
-       (comment
-         "The rewriter below controls the behavior of the scrollbar. Notice how it \
-          is a severely capped exhR. But even with limit: 3 there's a lot of opportunities \
-          for the rules to apply. exhR is needed here to make sure we do the clamps during \
-          just one tick; we can't spread it over multiple ticks due to UX concerns.")
+       ;;| The rewriter below controls the behavior of the scrollbar. Notice how it
+       ;;| is a severely capped exhR. But even with limit: 3 there's a lot of opportunities
+       ;;| for the rules to apply. exhR is needed here to make sure we do the clamps during
+       ;;| just one tick; we can't spread it over multiple ticks due to UX concerns.
        (rewriter ((exhR (rulesetR exh: true) limit: 3) - {@:mouse @:thumb-dt @:thumb-h @:thumb-hover @:track-goal @:track-h @:scroll-hover @:node})
          ;; Sync visual hover with logical hover: hover.
          {¦ thumb-hover mouse: [mouse] node: {¦ -hover_}}
@@ -416,20 +412,18 @@
        (template
          (cell @axis ^axis))
 
-       (comment
-         "Scroll is interested in the mouse (for mouse wheel) and the keyboard. If the axis \
-          is X, then we need the keyboard to detect Shift + scroll. If the axis, \
-          is Y, then we need it to detect PageUp and PageDn.")
+       ;;| Scroll is interested in the mouse (for mouse wheel) and the keyboard. If the axis
+       ;;| is X, then we need the keyboard to detect Shift + scroll. If the axis,
+       ;;| is Y, then we need it to detect PageUp and PageDn.
        (node @mouse (mouse))
        (node @input (input))
 
        (cell @ref-offset)
 
-       (comment
-         "The rewriter below works just like the one in YScrollbar. We do a capped exhR \
-          for the same reason; instead of having more complex rules but less rewrite ticks, \
-          have simpler rules but more rewrite ticks. It's a trade-off seen all throughout \
-          Wirewright's rewrite part, including the very D7/Rack design itself.")
+       ;; The rewriter below works just like the one in YScrollbar. We do a capped exhR
+       ;; for the same reason; instead of having more complex rules but less rewrite ticks,
+       ;; have simpler rules but more rewrite ticks. It's a trade-off seen all throughout
+       ;; Wirewright's rewrite part, including the very D7/Rack design itself.
        (rewriter ((exhR (rulesetR exh: true) limit: 3)
                    - {@:show @:axis @:content-size @:input @:mouse @:thumb-offset
                         @:thumb-size @:track-size @:view-hover @:view-scroll
@@ -497,10 +491,9 @@
                      page-x: (0 px)
                      page-y: (0 px)
              (content y: true
-               (comment
-                 "Scroll is meant to head an *ensemble* that consists of two nodes: \
-                  the one for the scroll itself and the one for the body. This site \
-                  here is basically a \"reference\" to the body.")
+               ;;| Scroll is meant to head an *ensemble* that consists of two nodes:
+               ;;| the one for the scroll itself and the one for the body. This site
+               ;;| here is basically a "reference" to the body.
                (site))))
          (align x: 1
            ($YScrollbar @thumb-offset @thumb-size @track-size @show)))
@@ -517,42 +510,39 @@
 
 (Trigger (@msgs_ msg_ ⍊ disable⋮ false) view_)
   => (component {@:msgs, @:enabled}
-       (comment
-         "This cell stores this button's configuration so that we can refer to them \
-          in the rewriter.")
+       ;;| This cell stores this button's configuration so that we can refer to them
+       ;;| in the rewriter.
        (template
          (cell @config {^:msg, ^:disable}))
 
-       ;; TODO: Split into paragraphs. Current string literals sadly do not allow that :(
-       ;; We should probably have semantic comments, ;;| ...
-       (comment
-         "The button contains a \"mirror\", which it can use to look at the *reflection* \
-          of its visuals. Most importantly for us, the reflection contains information \
-          about whether the button is currently hovered. Inside the reflection is a group. \
-          The rewriter below sets various pairs on the group throughout the lifetime of \
-          the button. For example, while you hover over the button, the `hover` pair is \
-          set. The style then turns these pairs into Microfold cues. Importantly, the style \
-          blocks the upward (from inside the view, out) and the downward flow of cues \
-          (from the outside of the view, in) using the special `membrane` utility — completely \
-          enclosing the *view* in a \"membrane\" that cues cannot permeate.")
+       ;;| The button contains a "mirror", which it can use to look at the *reflection*
+       ;;| of its visuals. Most importantly for us, the reflection contains information
+       ;;| about whether the button is currently hovered.
+       ;;|
+       ;;| Inside the reflection is a group. The button's rewriter (see below) sets
+       ;;| various pairs on the group throughout the lifetime of the button. For example,
+       ;;| while you hover over the button, the `hover` pair is set.
+       ;;|
+       ;;| The style then turns these pairs into Microfold cues. Importantly, the style
+       ;;| blocks the upward (from inside the view, out) and the downward flow of cues
+       ;;| (from the outside of the view, in) using the special `membrane` utility —
+       ;;| completely enclosing the *view* in a "membrane" that cues cannot permeate.
        (reflection {desc: @mirror, node: @visuals}
          (box style: "membrane disabled:cue-disabled -disabled:cue-enabled \
                       -disabled:hover:cue-hover -disabled:active:cue-active \
                       pressed:cue-active"
            (template ^view)))
 
-       (comment
-         "The button also contains a live symbolic representation of the mouse. \
-          The button maintains a continuous watch on the evolution of the mouse, \
-          so when the left mouse button is pressed, the button can see and react \
-          to that with respect to its current state.")
+       ;;| The button also contains a live symbolic representation of the mouse.
+       ;;| The button maintains a continuous watch on the evolution of the mouse,
+       ;;| so when the left mouse button is pressed, the button can see and react
+       ;;| to that with respect to its current state.
        (frag @mouse (mouse))
 
-       (comment
-         "Finally, there's this rewriter. If you expand it, you will see that it is \
-          comprised of three stages. You will meet the same three stages in many other \
-          UI components. The stages are: observe, reconcile (decide), and act. See also \
-          the `Trigger` component.")
+       ;;| Finally, there's this rewriter. If you expand it, you will see that it is
+       ;;| comprised of three stages. You will meet the same three stages in many other
+       ;;| UI components. The stages are: observe, reconcile (decide), and act. See also
+       ;;| the `Trigger` component.
        (rewriter ((stageR (rulesetR exh: true)) - {@:config, @:mirror, @:mouse, @:msgs, @:visuals})
          (stage
            ;; The mouse is over our visuals. We're being hovered over!
@@ -688,9 +678,8 @@
   => (component {@:current, @:next}
        (template (cell @option ^option))
 
-       (comment
-         "Since the view would otherwise have no access to @first and @last, because \
-          the `box` would block that, we have to pass them down as cues.")
+       ;;| Since the view would otherwise have no access to @first and @last, because
+       ;;| the `box` would block that, we have to pass them down as cues.
        (reflection {desc: @mirror, node: @visuals}
          (box style: "membrane -disabled:checked:cue-checked disabled:cue-disabled \
                       -disabled:cue-enabled -disabled:hover:cue-hover \
@@ -760,23 +749,20 @@
 
 (Toggle (%any° @state_ (@state_ @states_)) view_)
   => (component {@:state, @:states}
-       (comment
-         "The toggle must be able to look at its own visual rendition to see \
-          whether it's hovered and so on. It must also be able to set pairs \
-          on the box to communicate with the visuals, through cues.")
+       ;;| The toggle must be able to look at its own visual rendition to see
+       ;;| whether it's hovered and so on. It must also be able to set pairs
+       ;;| on the box to communicate with the visuals, through cues.
        (reflection {desc: @mirror, node: @visuals}
          (box style: "membrane -disabled:checked:cue-checked disabled:cue-disabled \
                       -disabled:hover:cue-hover -disabled:active:cue-active"
            (template ^view)))
 
-       (comment
-         "The toggle also wants to track the mouse, to check which mouse buttons \
-          are pressed when it needs to.")
+       ;;| The toggle also wants to track the mouse, to check which mouse buttons
+       ;;| are pressed when it needs to.
        (frag @mouse (mouse))
 
-       (comment
-         "This rewriter is the tiny \"brain\" of the toggle. Just like some of the other \
-          components, it consists of three stages: observe, reconcile (decide), and act.")
+       ;;| This rewriter is the tiny "brain" of the toggle. Just like some of the other
+       ;;| components, it consists of three stages: observe, reconcile (decide), and act.
        (rewriter ((stageR (rulesetR exh: true)) - {@:mirror, @:mouse, @:visuals, @:state, @:states})
          (stage
            ;; The mouse is over our visuals. We're being hovered over!

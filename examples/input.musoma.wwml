@@ -1,5 +1,5 @@
 (window style: "p-5 flow-col gap-5 content-clip" height: 600
-  (comment "Input without placeholder")
+  ;;| Input without placeholder
   (cell @input0 ("" ""))
   ($Input @input0)
   (cell @input1 ("" ""))
@@ -8,7 +8,7 @@
   ($Input @input2 label: "Input with label")
   (cell @input3 ("" ""))
   ($Input @input3 label: "Input with label" placeholder: "...and placeholder")
-  (comment "Usage example")
+  ;;| Usage example
   (module {}
     (group style: "font-mono max-h-xs gap-1"
       (cell @ml ("(x⫽y⫽z ^a⫽b⫽c) =>" " ^(* a⫽b⫽c 2)"))

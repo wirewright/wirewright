@@ -28,10 +28,9 @@
   (section "Display"
     (module {:@history :@workspace}
       (group style: "flow-col fr-1 gap-1 bottom"
-        (comment
-          "This piece of machinery looks at the last expression in history and \
-           pretty-prints it as math. Remember that our base representation is symbolic, \
-           so we have to work some to get to a string one.")
+        ;;| This piece of machinery looks at the last expression in history and
+        ;;| pretty-prints it as math. Remember that our base representation is symbolic,
+        ;;| so we have to work some to get to a string one.
         (part (@history @prev) (_* prev_))
         (rewriter (@prev - ascR - @prev-display)
           (in caption_string) => ^caption
@@ -43,9 +42,8 @@
                  ^expr))
         (node @prev-display)
 
-        (comment
-          "Use ascR (ascending rewriter) to convert the contents of the workspace to \
-           Microfold.")
+        ;;| Use ascR (ascending rewriter) to convert the contents of the workspace
+        ;;| to Microfold.
         (rewriter (@workspace - ascR - @display)
            (impassable [in _string])
            wait => (icon "hourglass_top" style: "text-neutral-200")
@@ -85,7 +83,7 @@
       (feed @action @actions)
       (frag @input (input focus: always))
 
-      (comment "Translate key presses to actions.")
+      ;;| Translate key presses to actions.
       (backsys
         {¦ input: ⟨K←(rune digit←(%any "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "."))⟩ -action_}
           <> {(K): (), action: ^digit}
@@ -110,7 +108,7 @@
         {¦ input: ⟨K←(key backspace)⟩ -action_}
           <> {(K): (), action: backspace})
 
-      (comment "Display a visual keypad and translate presses of buttons to actions.")
+      ;;| Display a visual keypad and translate presses of buttons to actions.
       (group style: "flow-col min-h-md item-fr-1"
         (group style: "flow-row item-fr-1"
           ($KeypadTextButton (@action clear accent: bright) "C")
@@ -143,14 +141,13 @@
           ($KeypadIconButton (@action dn accent: control) "keyboard_arrow_down")
           ($KeypadIconButton (@action right accent: control) "keyboard_arrow_right")))))
 
-  (comment "Buttons from the Keypad report actions to a centralized queue.")
+  ;;| Buttons from the Keypad report actions to a centralized queue.
   (queue (@action @actions) ())
 
   (section "Control"
-    (comment
-      "The following somewhat intimidating backsystem handles input; that is, moves \
-       the cursor according to what the buttons say, appends digits, surrounds \
-       the cursor with more complex structure such as the infixes and so on.")
+    ;;| The following somewhat intimidating backsystem handles input; that is, moves
+    ;;| the cursor according to what the buttons say, appends digits, surrounds
+    ;;| the cursor with more complex structure such as the infixes and so on.
 
     (backsys
       {¦ action_}
