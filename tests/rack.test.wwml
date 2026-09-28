@@ -5775,18 +5775,16 @@
   (frame
     (feed @a (@xs back))
     (feed @b (@xs back))
-    (pool (arena @xs)
+    (circuit (arena @xs)
       (cell @x "lorea"))
     (cell @a (feed @x @y))
     (cell @b (cell @y)))
 
   (frame/tail
-    ;; NOTE: The underlying lexicographical order changes here so the cells
-    ;; and feeds are rearranged.
-    (pool (arena @xs)
+    (circuit (arena @xs)
       (cell @x)
-      (feed @x @y)
-      (cell @y "lorea"))
+      (cell @y "lorea")
+      (feed @x @y))
     (cell @a)
     (cell @b))
 
@@ -5820,7 +5818,7 @@
     (cell @run ())
     (cell (arena @tasks) ())
 
-    (pool @pool
+    (circuit @pool
       (device
         (cell @l)
         (cell @r)
@@ -5873,7 +5871,7 @@
     (cell @run ())
     (cell (arena @tasks) ())
 
-    (pool @pool
+    (circuit @pool
       (device
         (cell @l)
         (cell @r)
@@ -5974,7 +5972,7 @@
     (cell @run ())
     (cell (arena @tasks) ())
 
-    (pool @pool
+    (circuit @pool
       (device
         (cell @l)
         (cell @r)

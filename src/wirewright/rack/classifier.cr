@@ -1060,9 +1060,9 @@ module Ww::Rack
         %{[circuit header←(_symbol @_) children0_*]},
       ) do
         if children0.empty?
-          mix0 = Term.of(:cell, header)
+          mix0 = Term.of(:cell, {:circuit, header})
         else
-          mix0 = Term.of(:cell, header, children0)
+          mix0 = Term.of(:cell, {:circuit, header}, children0)
         end
 
         leaf = D7.mixture(node, mix0) do |mix1|
@@ -1078,85 +1078,6 @@ module Ww::Rack
         end
 
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
-      end
-
-      # |@ rack.pool
-      #
-      # |@pattern
-      # [pool @edge_ children_*]
-      # [pool (policy_symbol @edge_) children_*]
-      #
-      # |@key edge rack.edge
-      # The edge the pool should be a member of.
-      #
-      # |@key policy rack.[merge-policy]
-      # Optionally, the merge policy to use. By default, a pool's merge policy
-      # is to smart-merge patches adding or removing *children*, but treat each
-      # *child* atomically.
-      #
-      # |@key children rack
-      # Zero or more child nodes. Most often, for `pool`, the nodes are `rack.device`.
-      # All children are completely isolated from the outside world like in `rack.circuit`.
-      # All children are evolved *after* the parent circuit evolves. This way, the parent
-      # circuit has time to react to the contents of *children*, and manipulate them
-      # if needed.
-      #
-      # |@summary
-      # A pool of devices.
-      #
-      # |@block
-      # Designates an executable place in the circuit, primarily to host zero or more
-      # `rack.device`s. Semantically, the `device` node is the same as `rack.circuit`.
-      # This means you can put anything in a pool -- not just devices.
-      #
-      # There are a few key differences and things to point out, though:
-      #
-      # - Nodes that expect a pool will only work with a `pool` -- not a `cell` or
-      #   a `circuit`. Examples of such nodes include `rack.supervisor`, `rack.server`.
-      # - MuSoma considers pools as *complete* (the opposite of *incomplete*) even
-      #   when you are editing them. Normally, editing renders a node *incomplete* and
-      #   disables it while you are editing it. Pools are exempt from this rule. If
-      #   the editor is inside a pool, MuSoma will allow the pool (and any devices in
-      #   it) to execute.
-      # - Pools are predominantly *managed* by another *node* (such as `rack.supervisor`,
-      #   `rack.server`), whereas something like `rack.node` or `rack.circuit` or
-      #   `rack.frag` is written by *you*, manually; or maanged by a *rule*.
-      #
-      # |@example
-      # ```wwml
-      # (server (@pool (tcp local 5000)))
-      # (pool @pool)
-      # ```
-      matchpi(
-        %{[pool @header_ children0_*]},
-        %{[pool header←(_symbol @_) children0_*]},
-      ) do
-        mix0 = Term.of(:cell, {:pool, header}, children0)
-        leaf = D7.mixture(node, mix0) do |mix1|
-          Term.matchpi(mix1, %{(cell _ children1←[_*])}) do
-            Term.of(node.replace(2...node.itemsize, Term.rep(children1.items)))
-          end
-        end
-
-        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
-      end
-
-      # Internal
-      matchpi(
-        %{[cell (pool @edge_)]},
-        %{[cell (pool @edge_) _]},
-      ) do
-        D7.gnd(node, edge, merge_policy: D7::MergeDiff.new(1u32))
-      end
-
-      # Internal
-      matchpiT(
-        %{[cell (pool (policyQ_symbol @edge_))]},
-        %{[cell (pool (policyQ_symbol @edge_)) _]},
-      ) do
-        continue unless policy = merge_policy?(policyQ)
-
-        D7.gnd(node, edge, merge_policy: policy)
       end
 
       # |@ rack.circuit
@@ -1188,6 +1109,24 @@ module Ww::Rack
         end
 
         D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
+      end
+
+      # Internal
+      matchpi(
+        %{[cell (circuit @edge_)]},
+        %{[cell (circuit @edge_) _]},
+      ) do
+        D7.gnd(node, edge, merge_policy: D7::MergeDiff.new(1u32))
+      end
+
+      # Internal
+      matchpiT(
+        %{[cell (circuit (policyQ_symbol @edge_))]},
+        %{[cell (circuit (policyQ_symbol @edge_)) _]},
+      ) do
+        continue unless policy = merge_policy?(policyQ)
+
+        D7.gnd(node, edge, merge_policy: policy)
       end
 
       # |@ rack.frag
@@ -3153,7 +3092,7 @@ module Ww::Rack
       #                       (appearance paths path_))
       #     (appearance paths)))
       #
-      # (pool @pool)
+      # (circuit @pool)
       #
       # (frag @journal
       #   (sensor (journal paths _string)))
@@ -3607,17 +3546,17 @@ module Ww::Rack
       # ;; Frame 0 (seed)
       #
       # (server (@pool (ws local 5000)))
-      # (pool @pool)
+      # (circuit @pool)
       #
       # ;; Frame 1
       #
       # (server (@pool (ws local 5000) pending))
-      # (pool @pool)
+      # (circuit @pool)
       #
       # ;; Frame 2
       #
       # (server (@pool (ws local 5000) up)) ;; < The server is running!
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # Now I'm going to connect to it:
@@ -3626,7 +3565,7 @@ module Ww::Rack
       # ;; Frame 3
       #
       # (server (@pool (ws local 5000) up))
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     ;; Your id will differ, they are generated randomly!
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
@@ -3640,7 +3579,7 @@ module Ww::Rack
       # ;; Frame 4
       #
       # (server (@pool (ws local 5000) up))
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
       #     (cell @in ("hello\n"))
@@ -3654,7 +3593,7 @@ module Ww::Rack
       # ;; Frame 5
       #
       # (server (@pool (ws local 5000) up))
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "84d8e6e9-5b10-4743-93f5-c925ace9c138")
       #     (cell @in ("hello\n"))
@@ -3671,7 +3610,7 @@ module Ww::Rack
       # ;; Frame 6
       #
       # (server (@pool (ws local 5000) up))
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "77d394f2-9a54-4f58-a5d3-ead50973d4fc")
       #     (cell @in ())
@@ -3691,7 +3630,7 @@ module Ww::Rack
       #   ;; This `feed` takes a message from the *front* of the @in queue,
       #   ;; and puts it at the *back* of the @out queue.
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # Let's trace its evolution as I connect to it and write `hello`.
@@ -3701,19 +3640,19 @@ module Ww::Rack
       #
       # (server (@pool (ws local 5000) pending)
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       #
       # ;; Frame 2
       #
       # (server (@pool (ws local 5000) up)
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       #
       # ;; Frame 3
       # ;; I connect to the server. From now on I'll omit `server` because it does
       # ;; not change.
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ())
@@ -3723,7 +3662,7 @@ module Ww::Rack
       # ;; Frame 4.1
       # ;; I write `hello`.
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ("hello\n"))
@@ -3733,7 +3672,7 @@ module Ww::Rack
       # ;; Frame 4.2
       # ;; The feed node moves my message to the outgoing message queue.
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ())
@@ -3743,7 +3682,7 @@ module Ww::Rack
       # ;; Frame 5
       # ;; The message is picked up by the runtime and sent as a reply.
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "fcc51789-929e-4dd2-a209-204a38cc80d3")
       #     (cell @in ())
@@ -3782,7 +3721,7 @@ module Ww::Rack
       # ```wwml
       # (server (@pool ((ml @in) -> (ws local 5000) -> (ml @out)))
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # Let's see what happens after I connect and send `(+ 1 2)`:
@@ -3793,7 +3732,7 @@ module Ww::Rack
       # ;; Frame N
       # ;; I connected
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ())
@@ -3803,7 +3742,7 @@ module Ww::Rack
       # ;; Frame N+1
       # ;; I sent `(+ 1 2)`. Notice how it has arrived as a term.
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ((+ 1 2)))
@@ -3814,7 +3753,7 @@ module Ww::Rack
       # ;; The feed node moves the term to the outgoing message queue. The outgoing
       # ;; message queue, too, accepts terms now that we're using format: ml.
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ())
@@ -3823,7 +3762,7 @@ module Ww::Rack
       #
       # ;; Frame N+3
       # ;; The runtime consumed the term, encoded it, and sent it over the network.
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "c9d6b3c3-60bf-49e2-a620-69c44a041d37")
       #     (cell @in ())
@@ -4199,7 +4138,7 @@ module Ww::Rack
       # (cell @xs ((a 1) (b 2) (c 3)))
       # (supervisor (@xs @x (k_ _) - @pool)
       #   (p "Hello World"))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # Populates the pool as follows:
@@ -4207,7 +4146,7 @@ module Ww::Rack
       # ```wwml
       # (cell @xs ((a 1) (b 2) (c 3)))
       # (supervisor (@xs @x (k_ _) - @pool))
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @x (a 1))
       #     (p "Hello World"))

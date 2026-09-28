@@ -197,9 +197,9 @@ module MuSoma
 
   private def incomplete?(clf, feature : D7::Gnd, strict : Bool) : Bool
     Term.case(feature.node) do
-      # A pool cell is passable. Prevent MuSoma from disabling it while it
+      # A circuit cell is passable. Prevent MuSoma from disabling it while it
       # is edited.
-      matchpi %{[cell (pool @_) _*]} do
+      matchpi %{[cell (circuit @_) _*]} do
         false
       end
 

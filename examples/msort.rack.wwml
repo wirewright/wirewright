@@ -44,7 +44,7 @@
 (cell @run ())
 (cell (arena @tasks) ())
 
-(pool @pool
+(circuit @pool
   (device
     (cell @l)
     (cell @r)

@@ -112,22 +112,12 @@ module Ww::Rack
   defrecord Pool, node : D7::Node, contents : Term::Dict
 
   def pool?(hg : D7::Hypergraph, edge : D7::AbsEdge) : Pool?
-    pools = Pf::Kit.stack_array(Pool, 1)
+    return unless cell = Rack.cell?(hg, edge)
 
-    hg.each_node_with_head(SYM_CELL, memberof: {edge}) do |node|
-      Term.case(node.term) do
-        matchpiT(
-          %{[cell (pool @_) contents_dict]},
-          %{[cell (pool (_symbol @_)) contents_dict]},
-        ) do
-          pools << Pool.new(node, contents)
-        end
-
-        otherwise { }
-      end
+    if value = cell.value?
+      return unless contents = value.as_d?
     end
-
-    pools.single?
+    Pool.new(cell.node, contents || Term[])
   end
 
   defrecord FillTemplateTarget, key : Term, value : Term?, node : D7::Node, smart: true

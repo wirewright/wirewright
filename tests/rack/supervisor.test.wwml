@@ -10,7 +10,7 @@
        {key: 2, count: 0}
        {key: 3, count: 0}))
 
-    (pool @pool))
+    (circuit @pool))
 
   (frame/tail
     (cell @values
@@ -18,7 +18,7 @@
        {key: 2, count: 1}
        {key: 3, count: 1}))
 
-    (pool @pool
+    (circuit @pool
       (device
         (cell @reference {key: 1, count: 1})
         (cell @value {key: 1, count: 1})
@@ -41,7 +41,7 @@
        {key: 2, count: 2}
        {key: 3, count: 2}))
 
-    (pool @pool
+    (circuit @pool
       (device
         (cell @reference {key: 1, count: 2})
         (cell @value {key: 1, count: 2})
@@ -118,25 +118,25 @@
         {¦ ±state} <> {state: ^(+ state 1)}))
 
     (cell @xs ())
-    (pool @pool))
+    (circuit @pool))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 100)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (a 100)) (cell @state 0) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 101) (b 200)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (a 101)) (cell @state 1) _*)
        (device (cell @reference _) (cell @x (b 200)) (cell @state 0) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((a 102) (b 201) (c 300)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (a 102)) (cell @state 2) _*)
        (device (cell @reference _) (cell @x (b 201)) (cell @state 1) _*)
        (device (cell @reference _) (cell @x (c 300)) (cell @state 0) _*))))
@@ -144,7 +144,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((a 103) (b 202) (c 301)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (a 103)) (cell @state 3) _*)
        (device (cell @reference _) (cell @x (b 202)) (cell @state 2) _*)
        (device (cell @reference _) (cell @x (c 301)) (cell @state 1) _*))))
@@ -152,7 +152,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((a 104) (b 203) (c 302)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (a 104)) (cell @state 4) _*)
        (device (cell @reference _) (cell @x (b 203)) (cell @state 3) _*)
        (device (cell @reference _) (cell @x (c 302)) (cell @state 2) _*))))
@@ -160,7 +160,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((a 105) (b 204) (c 303)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (a 105)) (cell @state 5) _*)
        (device (cell @reference _) (cell @x (b 204)) (cell @state 4) _*)
        (device (cell @reference _) (cell @x (c 303)) (cell @state 3) _*))))
@@ -169,7 +169,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((b 205) (c 304)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (b 205)) (cell @state 5) _*)
        (device (cell @reference _) (cell @x (c 304)) (cell @state 4) _*))))
 
@@ -177,7 +177,7 @@
   (frame pattern: true
     (_*
      (cell @xs ((b 206) (c 400)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (b 206)) (cell @state 6) _*)
        (device (cell @reference _) (cell @x (c 400)) (cell @state 5) _*))))
 
@@ -185,14 +185,14 @@
   (frame pattern: true
     (_*
      (cell @xs ((foo 234) (c 401)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (foo 234)) (cell @state 0) _*)
        (device (cell @reference _) (cell @x (c 401)) (cell @state 6) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((foo 235) (c 402)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (foo 235)) (cell @state 1) _*)
        (device (cell @reference _) (cell @x (c 402)) (cell @state 7) _*))))
 
@@ -201,34 +201,34 @@
   (frame pattern: true
     (_*
      (cell @xs ((foo 235) (c 403) (foo 123)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (c 403)) (cell @state 8) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((foo 235) (c 404) (foo 123)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (c 404)) (cell @state 9) _*))))
 
   ;; Collision is removed
   (frame pattern: true
     (_*
      (cell @xs ((c 405) (foo 123)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (c 405)) (cell @state 10) _*)
        (device (cell @reference _) (cell @x (foo 123)) (cell @state 0) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((c 406) (foo 124)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (c 406)) (cell @state 11) _*)
        (device (cell @reference _) (cell @x (foo 124)) (cell @state 1) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((c 407) (foo 125)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (c 407)) (cell @state 12) _*)
        (device (cell @reference _) (cell @x (foo 125)) (cell @state 2) _*))))
 
@@ -236,34 +236,34 @@
   (frame pattern: true
     (_*
      (cell @xs)
-     (pool @pool)))
+     (circuit @pool)))
 
   ;; List is reintroduced
   (frame pattern: true
     (_*
      (cell @xs ((qux 100) (qyx 200)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (qux 100)) (cell @state 0) _*)
        (device (cell @reference _) (cell @x (qyx 200)) (cell @state 0) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((qux 101) (qyx 201)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (qux 101)) (cell @state 1) _*)
        (device (cell @reference _) (cell @x (qyx 201)) (cell @state 1) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((qux 102) (qyx 202)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (qux 102)) (cell @state 2) _*)
        (device (cell @reference _) (cell @x (qyx 202)) (cell @state 2) _*))))
 
   (frame pattern: true
     (_*
      (cell @xs ((qux 103) (qyx 203)))
-     (pool @pool
+     (circuit @pool
        (device (cell @reference _) (cell @x (qux 103)) (cell @state 3) _*)
        (device (cell @reference _) (cell @x (qyx 203)) (cell @state 3) _*)))))
   ;; ...
@@ -273,12 +273,12 @@
   (frame
     (supervisor (@values @value key_ - @pool)
       (backsys @value ±n <> {n: ^(+ n 1)}))
-    (pool @pool)
+    (circuit @pool)
     (cell @values (1 2 3)))
 
   (frame pattern: true
     (_*
-     (pool @pool
+     (circuit @pool
        (device …⟨(cell @value 2)⟩…)
        (device …⟨(cell @value 3)⟩…)
        (device …⟨(cell @value 4)⟩…))
@@ -286,7 +286,7 @@
 
   (frame pattern: true
     (_*
-     (pool @pool
+     (circuit @pool
        (device …⟨(cell @value 3)⟩…)
        (device …⟨(cell @value 4)⟩…)
        (device …⟨(cell @value 5)⟩…))
@@ -294,7 +294,7 @@
 
   (frame pattern: true
     (_*
-     (pool @pool
+     (circuit @pool
        (device …⟨(cell @value 4)⟩…)
        (device …⟨(cell @value 5)⟩…)
        (device …⟨(cell @value 6)⟩…))
@@ -312,12 +312,12 @@
       ⟨D←[device …⟨(cell @value 2)⟩…]⟩ <> {(D): (^D bar)}
       ⟨D←[device …⟨(cell @value 3)⟩…]⟩ <> {(D): (^D baz)})
 
-    (pool @pool)
+    (circuit @pool)
     (cell @values (1 2 3)))
 
   (frame pattern: true
     (_*
-     (pool @pool
+     (circuit @pool
        [device …⟨(cell @value 2)⟩…] ;; already incremented because it's a subcircuit
        foo ;; it was 1
        [device …⟨(cell @value 3)⟩…]
@@ -328,7 +328,7 @@
 
   (frame pattern: true
     (_*
-     (pool @pool
+     (circuit @pool
        [device …⟨(cell @value 3)⟩…] ;; already incremented because it's a subcircuit
        bar ;; it was 2
        foo
@@ -341,7 +341,7 @@
 
   (frame pattern: true
     (_*
-     (pool @pool
+     (circuit @pool
        [device …⟨(cell @value 4)⟩…] ;; already incremented because it's a subcircuit
        baz ;; it was 3
        bar
@@ -361,13 +361,13 @@
       (cell @xs (1 2 3))
       (supervisor (@xs @x key_ - @pool)
         (discard @x))
-      (pool @pool))
+      (circuit @pool))
 
     (frame
       (cell @xs ())
       (supervisor (@xs @x key_ - @pool)
         (discard @x))
-      (pool @pool))
+      (circuit @pool))
 
     end)
 
@@ -376,12 +376,12 @@
       (cell @xs ({id: 1} {id: 2, done: true} {id: 3}))
       (supervisor (@xs @x {¦ id_} - @pool)
         (discard @x {¦ done}))
-      (pool @pool))
+      (circuit @pool))
 
     (frame pattern: true
       ((cell @xs ({id: 1} {id: 3}))
        (supervisor _*)
-       (pool @pool
+       (circuit @pool
          (device …⟨(cell @reference {id: 1})⟩…)
          (device …⟨(cell @reference {id: 3})⟩…))))
 

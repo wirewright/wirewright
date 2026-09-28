@@ -199,7 +199,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool ((text @request) -> (http local 5000) -> (text @response)))
       #   (cell @response (ok "Hello World")))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # Limiting the capacity of the ingoing message queue means the client device will
@@ -210,7 +210,7 @@ module Ww::Rack::Accord
       #
       # (server (@pool ((text @in capacity: 1) -> (ws local 5000 link: handoff) -> (text @out)))
       #   (feed (@in front) (@back out)))
-      # (pool @pool)
+      # (circuit @pool)
       #
       # (queue (@name @names) ("Alice" "Bob" "Charlie"))
       # (client (@name -> (ws local 5000 link: handoff) -> @replies))
@@ -224,7 +224,7 @@ module Ww::Rack::Accord
       # ```wwml
       # ;; Frame N (omitting server)
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "unique client device id")
       #     (cell @in ())
@@ -237,7 +237,7 @@ module Ww::Rack::Accord
       #
       # ;; Frame N+1
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "unique client device id")
       #     (cell @in ("Alice"))
@@ -250,7 +250,7 @@ module Ww::Rack::Accord
       #
       # ;; Frame N+2
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "unique client device id")
       #     (cell @in ())
@@ -268,7 +268,7 @@ module Ww::Rack::Accord
       # ```wwml
       # ;; Frame N+M
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "unique client device id")
       #     (cell @in ())
@@ -282,7 +282,7 @@ module Ww::Rack::Accord
       #
       # ;; Frame N+M+1
       #
-      # (pool @pool
+      # (circuit @pool
       #   (device
       #     (cell @id "unique client device id")
       #     (cell @in ())
@@ -302,7 +302,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool ((text @in capacity: 1) -> (ws local 5000 link: handoff) -> (text @out capacity: 1)))
       #   (feed (@in front) (@back out)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # In the above, I limited *both* of them. This means only one message gets to enter
@@ -348,7 +348,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (ws local 5000))
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       otherwise do
         return unless transport = server_transport?(hg, addr, term)
@@ -1024,7 +1024,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (tcp local 5000))
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       matchpiT %{(tcp hostQ_ portQ_ ⍊ key: (%optional master keyQ_) link: (%optional stream linkQ_))} do
         return unless host = host?(hostQ)
@@ -1054,7 +1054,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (unix "/tmp/example.sock"))
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       matchpiT %{(unix path_string ⍊ key: (%optional master keyQ_) link: (%optional stream linkQ_))}, path: NormalPath do
         return unless key = key?(hg, addr, keyQ)
@@ -1302,7 +1302,7 @@ module Ww::Rack::Accord
       #     {¦ request: [get ["/"]] -response_}
       #       <> {response: (ok ⟬‸<h1>Hello World</h1>‸ ⁑ text/html⟭)}))
       #
-      # (pool @pool)
+      # (circuit @pool)
       # ```
       #
       # If we send an unsupported request:
@@ -1341,7 +1341,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (ws local 5000))
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
 
       matchpiT(
@@ -1386,7 +1386,7 @@ module Ww::Rack::Accord
       #   (backsys
       #     {¦ request: [get ["/"]] -response_}
       #       <> {response: (ok "Hello")}))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
 
       # |@ rack.server.transport
@@ -1416,7 +1416,7 @@ module Ww::Rack::Accord
       # ```wwml
       # (server (@pool (wss local 5000 ssl-cert: "path/to/openssl.cert" ssl-key: "path/to/openssl.key"))
       #   (feed (@in front) (@out back)))
-      # (pool @pool)
+      # (circuit @pool)
       # ```
 
       matchpiT(
@@ -1661,7 +1661,7 @@ module Ww::Rack::Accord
       return D7.patches(
         # (server (@_ _ ⏏) _*)
         D7.patch(server.node, {1, 2, status}),
-        # (pool @_ ⏏)
+        # (circuit _ ⏏)
         D7.patch(pool.node, {2, Term[]}),
       )
     end
@@ -1682,7 +1682,7 @@ module Ww::Rack::Accord
       return D7.patches(
         # (server (@_ _ ⏏) _*)
         D7.patch(server.node, {1, 2, status}),
-        # (pool @_ ⏏)
+        # (circuit _ ⏏)
         D7.patch(pool.node, {2, Term[]}),
       )
     end
@@ -2138,7 +2138,7 @@ module Ww::Rack::Accord
     D7.patches(
       # (server (@_ _ ⏏) _*)
       D7.patch(server.node, {1, 2, status}),
-      # (pool @_ ⏏)
+      # (circuit _ ⏏)
       D7.patch(pool.node, {2, apply(pool.contents, changes)}),
     )
   end
@@ -2221,7 +2221,7 @@ module Ww::Rack::Accord
     D7.patches(
       # (server (@_ _ ⏏) _*)
       D7.patch(server.node, {1, 2, status}),
-      # (pool @_ ⏏)
+      # (circuit _ ⏏)
       D7.patch(pool.node, {2, apply(pool.contents, changes)}),
     )
   end

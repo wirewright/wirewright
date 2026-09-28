@@ -121,7 +121,7 @@
                           (appearance paths path_))
         (appearance paths)))
 
-    (pool @pool)
+    (circuit @pool)
 
     (frag @journal
       (sensor (journal paths _string)))
