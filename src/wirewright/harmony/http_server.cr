@@ -157,6 +157,8 @@ class Ww::Harmony
       return
     end
 
+    wg = WaitGroup.new(1)
+
     spawn do
       queue << HttpRxListening.new
       server.listen
@@ -165,67 +167,76 @@ class Ww::Harmony
     rescue e : IO::Error | OpenSSL::Error
       queue << HttpRxCrashed.new(cause: e)
     ensure
-      server.close rescue nil
+      wg.done
     end
 
     pending = {} of HttpRequestId => Sync::Future(Term)
 
     begin
-      loop do
-        command = queue.shift
+      begin
+        loop do
+          command = queue.shift
 
-        case command
-        in HttpRxListening
-          info = Term[]
-          if port_cfg.is_a?(AutoServerPort)
-            info = Term[port: address.port]
-          end
-
-          observations << HttpServerStarted.new(defn, id, queue, info)
-        in HttpRxClosed
-          break
-        in HttpRxCrashed
-          raise command.cause
-        in HttpRxRequest
-          pending[command.request_id] = command.response
-          observations << HttpRequestReceived.new(id, command.request_id, command.request)
-        in HttpRespond
-          next unless response = pending.delete(command.request_id)
-
-          response.set(command.response)
-          observations << HttpRequestHandled.new(command.request_id)
-        in HttpReject
-          unless response = pending.delete(command.request_id)
-            Log.debug { "ignoring an attempt to reject a nonexistent request" }
-            next
-          end
-
-          response.fail(HttpRequestRejectedException.new)
-          observations << HttpRequestHandled.new(command.request_id)
-        in HttpAddWebSocketHandler
-          begin
-            next if websocket_handler.enabled?
-
-            link = command.link
-            connect = ->(socket : HTTP::WebSocket, ctx : HTTP::Server::Context) do
-              peer(observations, id, link, socket)
+          case command
+          in HttpRxListening
+            info = Term[]
+            if port_cfg.is_a?(AutoServerPort)
+              info = Term[port: address.port]
             end
 
-            websocket_handler.enabled = true
-          ensure
-            observations << WebSocketHandlerAdded.new(id)
+            observations << HttpServerStarted.new(defn, id, queue, info)
+          in HttpRxClosed
+            break
+          in HttpRxCrashed
+            raise command.cause
+          in HttpRxRequest
+            pending[command.request_id] = command.response
+            observations << HttpRequestReceived.new(id, command.request_id, command.request)
+          in HttpRespond
+            next unless response = pending.delete(command.request_id)
+
+            response.set(command.response)
+            observations << HttpRequestHandled.new(command.request_id)
+          in HttpReject
+            unless response = pending.delete(command.request_id)
+              Log.debug { "ignoring an attempt to reject a nonexistent request" }
+              next
+            end
+
+            response.fail(HttpRequestRejectedException.new)
+            observations << HttpRequestHandled.new(command.request_id)
+          in HttpAddWebSocketHandler
+            begin
+              next if websocket_handler.enabled?
+
+              link = command.link
+              connect = ->(socket : HTTP::WebSocket, ctx : HTTP::Server::Context) do
+                peer(observations, id, link, socket)
+              end
+
+              websocket_handler.enabled = true
+            ensure
+              observations << WebSocketHandlerAdded.new(id)
+            end
+          in HttpRemoveWebSocketHandler
+            begin
+              websocket_handler.enabled = false
+              connect = connect_default
+            ensure
+              observations << WebSocketHandlerRemoved.new(id)
+            end
+          in Close
+            break
           end
-        in HttpRemoveWebSocketHandler
-          begin
-            websocket_handler.enabled = false
-            connect = connect_default
-          ensure
-            observations << WebSocketHandlerRemoved.new(id)
-          end
-        in Close
-          server.close rescue nil
-          break
         end
+      ensure
+        # We must be absolutely sure to send the Stopped or Crashed observation
+        # only *after* the server stops listening. Otherwise there is the possibility
+        # of races where we report Stopped before the server stops listening. This may
+        # cause someone to connect to the lingering server when what they actually
+        # wanted was to connect to a new one that hasn't started yet.
+        server.close rescue nil
+        wg.wait
       end
 
       observations << ServerStopped.new(defn, id)

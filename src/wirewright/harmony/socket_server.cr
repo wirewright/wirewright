@@ -80,6 +80,12 @@ class Ww::Harmony
         break
       end
     end
+
+    # Here we don't need any wait groups and that sort of stuff to wait for
+    # the `accept?` fiber to stop because the accept fiber reports to
+    # *observations* directly. So *we* here cannot lie in any way due to races.
+    # The accept fiber always knows when it's done and the observation it emits
+    # is therefore always true.
   end
 
   # :nodoc:
@@ -115,8 +121,10 @@ class Ww::Harmony
         break
       end
     end
+
+    # Ditto as above (here we don't need any wait groups).
   end
 
   # NOTE: WebSockets are special in that they are handled by the HTTP server. Therefore
-  # there is not a WebSocketServerDefn. Please see `.server(ObservationQueue, HttpServerDefn)`.
+  # there is no WebSocketServerDefn. Please see `.server(ObservationQueue, HttpServerDefn)`.
 end

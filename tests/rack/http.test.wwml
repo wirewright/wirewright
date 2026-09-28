@@ -821,8 +821,8 @@
 
     (part (@server @port) (server (@_ _ (up ⍊ port_)) _*))
 
-    (manipulator (@port -> ⟪(http local `port)⟫)
-      (client (@query -> (http local) -> @reply)))
+    (manipulator (@port -> ⟪(http local port←?)⟫)
+      (client (@query -> (http local ?) -> @reply)))
 
     (cell @query (get "/kaixo"))
     (cell @reply))

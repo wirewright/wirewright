@@ -90,12 +90,14 @@ class Ww::Harmony
           work = HttpWorkerExec.new(seq, command.request)
           seq += 1
 
-          select
-          when worker.send(work)
-            inflight = work
-          else
+          if inflight
+            Log.trace { "HTTP worker is busy; pending HttpWorkerExec" }
             pending << work
+            next
           end
+
+          worker.send(work)
+          inflight = work
         in HttpWorkerExecResult
           # Discard results from canceled requests if they do arrive somehow.
           next unless inflight
