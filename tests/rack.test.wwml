@@ -5605,11 +5605,18 @@
   (rack
     (frame
       (cell @x 100)
+      (discard @x)
       (reading @x))
 
     (frame
-      (cell @x 100)
+      (cell @x)
+      (discard @x)
       (reading @x 100))
+
+    (frame
+      (cell @x)
+      (discard @x)
+      (reading @x))
 
     end)
 

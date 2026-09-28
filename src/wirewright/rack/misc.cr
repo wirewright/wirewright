@@ -61,9 +61,9 @@ module Ww::Rack::Misc
     hg.propose(proposals, :reading) do |node|
       Term.case(node.term) do
         matchpi %{[reading @edge_]}, %{[reading @edge_ _]} do
-          next unless cell = Rack.cell?(hg, hg.resolve(node.addr, edge))
-
-          D7.patch(node, {2, cell.value?})
+          abs_edge = hg.resolve(node.addr, edge)
+          value = Rack.cell?(hg, abs_edge).try(&.value?)
+          D7.patch(node, {2, value})
         end
 
         otherwise { }
