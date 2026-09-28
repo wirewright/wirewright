@@ -3434,9 +3434,9 @@ module Ww::Rack
       # (cell @stmt)
       # (cell @response
       #   (ok
-      #     {"name": "Alice", "age": 25}
-      #     {"name": "Bob", "age" 26}
-      #     {"name": "Charlie", "age": 27}))
+      #     {name: "Alice", age: 25}
+      #     {name: "Bob", age 26}
+      #     {name: "Charlie", age: 27}))
       # ```
       matchpi(
         %{[db (@stmt_ -> _string -> @response_)]},

@@ -1,3 +1,14 @@
+lib LibSQLite3
+  fun column_decltype = sqlite3_column_decltype(stmt : Statement, iCol : Int32) : UInt8*
+end
+
+class SQLite3::ResultSet
+  def column_decltype?(index) : String?
+    result = LibSQLite3.column_decltype(sqlite3_statement, index)
+    result.null? ? nil : String.new(result)
+  end
+end
+
 module Ww::Rack::Database
   extend self
 
@@ -274,8 +285,24 @@ module Ww::Rack::Database
   private def transcribe(object rs : DB::ResultSet) : Term
     result = Term::Dict.build do |commit|
       (0...rs.column_count).each do |index|
-        key = Term.of(rs.column_name(index))
-        value = transcribe?(rs.read)
+        # Column names in databases are predominantly symbolic in nature. Whitespace is
+        # rarely found and discouraged by all databases that I know. "Strange characters"
+        # are, too. So we use the symbol type here for key.
+        key = Term.of(Term::Sym.new(rs.column_name(index)))
+
+        raw_value = rs.read
+        # A hack to get booleans out of SQLite
+        if rs.responds_to?(:column_decltype?)
+          case rs.column_decltype?(index)
+          when "boolean"
+            if raw_value.is_a?(Int64)
+              raw_value = raw_value != 0 # Convert it to Bool
+            end
+          end
+        end
+
+        value = Term.of(raw_value)
+
         commit.with(key, value)
       end
     end

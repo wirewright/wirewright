@@ -16,7 +16,7 @@
   => (ensemble
        ($Scroll)
        (group style: "flow-col gap-1 mb-1 content-y clip"
-         (^each (rows as {¦ "name": name_string, "age": ±age})
+         (^each (rows as {¦ name_string ±age})
            ($Contact ^name ^age))))
 
 (window title: "MuBook"

@@ -35,14 +35,14 @@
        (query "select * from people")
        (expect
          (ok
-           {"id": 1, "name": "John Doe", "age": 25}
-           {"id": 2, "name": "Samantha Doe", "age": 35}
-           {"id": 3, "name": "Daniel Doe", "age": 45}))
+           {id: 1, name: "John Doe", age: 25}
+           {id: 2, name: "Samantha Doe", age: 35}
+           {id: 3, name: "Daniel Doe", age: 45}))
        (query "select name, age from people where age > ?" 30)
        (expect
          (ok
-           {"name": "Samantha Doe", "age": 35}
-           {"name": "Daniel Doe", "age": 45}))
+           {name: "Samantha Doe", age: 35}
+           {name: "Daniel Doe", age: 45}))
        ;; Update
        (exec "update people set name = ? where id = ?" "Barbara Doe" 2)
        (expect (ok 1)) ;; 1 row affected
@@ -50,15 +50,15 @@
        (query "select name, age from people where age > ?" 30)
        (expect
          (ok
-           {"name": "Barbara Doe", "age": 35}
-           {"name": "Daniel Doe", "age": 45}))
+           {name: "Barbara Doe", age: 35}
+           {name: "Daniel Doe", age: 45}))
        ;; Delete
        (exec "delete from people where age < ?" 40)
        (expect (ok 2)) ;; 2 rows affected
        ;; ... check it:
        (query "select id, name from people")
        (expect
-         (ok {"id": 3, "name": "Daniel Doe"})))))
+         (ok {id: 3, name: "Daniel Doe"})))))
 
   (frame/tail fast-forward: true
     (cell @plan ()))
