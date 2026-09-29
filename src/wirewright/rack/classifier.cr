@@ -4943,6 +4943,159 @@ module Ww::Rack
         D7.gnd(node, edge, merge_policy: policy)
       end
 
+      # |@ rack.changes
+      #
+      # |@pattern
+      # [changes (behavior←(%any sync async) @edge_
+      #    ⍊ limit_: (%optional ∞ (%any° ∞ (%number u32)))
+      #      maxdepth_: (%optional ∞ (%any° ∞ (%number u32))))
+      #   ops_*]
+      #
+      # |@key behavior
+      # Whether the `changes` node should behave *synchronously* or
+      # *asynchronously*.
+      #
+      # The words are used in not quite the conventional way: a *synchronous*
+      # `changes` node denies all patches to the cell at *edge* until its *ops*
+      # compartment is empty; and an *asynchronous* one does not, running
+      # independently from the cell and simply accumulating changes to it.
+      #
+      # The synchronous `changes` node is useful to make sure the value of the
+      # cell at *edge* is not modified "right under your feet" while you are handling
+      # changes to it. It is conceptually a kind of "lock" or mutual exclusion mechanism
+      # (of changes vs. the world).
+      #
+      # |@key edge rack.edge
+      # The edge referring to the cell to watch (or a similar node such as `rack.outlet`).
+      #
+      # |@key limit
+      # The maximum number of *ops* to store. Old *ops* are removed to make
+      # space for new ones (which looks a bit like scrolling). `∞` imposes no limit.
+      #
+      # |@key maxdepth
+      # The maximum depth passed to the diff algorithm. The diff algorithm
+      # will treat values at that depth and below as atomic (so it will not descend
+      # into them to find more fine-grained changes). Maxdepth of `0` treats the root
+      # value atomically (so e.g. `{x: 1, y: 2} -> {x: 100, y: 2}` will be a single
+      # indivisible change, a replacement of the first dict by the second) . Maxdepth
+      # of `1` will descend into the root if it is a dict, but no deeper. And so on for
+      # greater maxdepths.
+      #
+      # |@key ops
+      # Records the history of changes to the value at *edge*.
+      #
+      # |@summary
+      # Maintains a history of changes to a cell or a similar node.
+      #
+      # |@block
+      # Watches the evolution of the value at *edge* and describes it operationally.
+      #
+      # The following is a list of operations emitted for changes pertaining to
+      # the cell itself (i.e., at the depth of 0):
+      # - `(put value_)`: the cell was empty and now holds *value*.
+      # - `(drop old-value_)`: the cell held *old-value* and now is empty.
+      # - `(set value_)`: the cell was nonempty and its value was updated to *value*.
+      #
+      # The following is a list of operations emitted for changes deeper in the value:
+      # - `(assoc keypath←(_* key_) value_)`: a pair at *keypath* was created or updated, or an item was updated.
+      # - `(dissoc keypath←(_* key_) old-value_)`: a pair at *keypath* was removed.
+      # - `(insert keypath←(_* index_) seq←(_+))`: one or more items (*seq*) were inserted at *keypath* (before *index*).
+      # - `(delete keypath←(_* index_) old-item_)`: an item was removed at *keypath*.
+      #
+      # The changes node is allowed to emit *transactions* which group
+      # simultaneous changes to the value (the word *simultaneous* meaning *made in the
+      # same timestep*): `(txn ops_*)`.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @employees
+      #   ({name: "John", busy: false}
+      #    {name: "Samantha", busy: true}
+      #    {name: "Daniel", busy: false}))
+      #
+      # (backsys @employees
+      #   ;; Make the first free employee busy. If allowed to evolve indefinitely,
+      #   ;; this would mark all employees as busy.
+      #   ⟨{¦ busy_: false}⟩ <> {busy: true})
+      #
+      # (changes (async @employees))
+      #
+      # ;; Frame 1
+      #
+      # (cell @employees
+      #   ({name: "John", busy: true} ;; < Josh's the first free employee so now he is busy.
+      #    {name: "Samantha", busy: true}
+      #    {name: "Daniel", busy: false}))
+      #
+      # ;; (backsys ...)
+      #
+      # (changes (async @employees)
+      #   ;; This op tells that 0's (that's the item key, or more traditionally
+      #   ;; the index, of the record for Josh) `busy` pair was created or updated
+      #   ;; with `true`.
+      #   (assoc (0 busy) true))
+      #
+      # ;; Frame 2
+      #
+      # (cell @employees
+      #   ({name: "John", busy: true}
+      #    {name: "Samantha", busy: true}
+      #    ;;   The backsystem is continuing its operation; Daniel is now
+      #    ;; v the first free employee so he is marked as busy.
+      #    {name: "Daniel", busy: true}))
+      #
+      # ;; (backsys ...)
+      #
+      # (changes (async @employees)
+      #   (assoc (0 busy) true)
+      #   (assoc (2 busy) true)) ;; < Describes the change operationally.
+      # ```
+      #
+      # The `changes` node in the example above is *asynchronous*, meaning it is
+      # completely decoupled from its cell's evolution; the two are allowed to diverge
+      # (in a sense), and `changes` compensates by having a backlog of *ops*.
+      #
+      # A *synchronous* `changes` node prevents the cell from being modified
+      # until its *ops* compartment is empty. Taking the same example:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @employees
+      #   ({name: "John", busy: false}
+      #    {name: "Samantha", busy: true}
+      #    {name: "Daniel", busy: false}))
+      #
+      # (backsys @employees
+      #   ⟨{¦ busy_: false}⟩ <> {busy: true})
+      #
+      # ;; NOTICE that we had `async` and we now have `sync` here.
+      # ;;        vvvv
+      # (changes (sync @employees))
+      #
+      # ;; Frame 1
+      #
+      # (cell @employees
+      #   ({name: "John", busy: true}
+      #    {name: "Samantha", busy: true}
+      #    {name: "Daniel", busy: false}))
+      #
+      # ;; (backsys ...)
+      #
+      # (changes (sync @employees)
+      #   (assoc (0 busy) true))
+      #
+      # ;; Evolution stops here because there is nothing to do. The changes
+      # ;; node blocks `backsys` from making changes to `cell` because there
+      # ;; are pending *ops* (or, well, one op, the `assoc`). But then there
+      # ;; is no one to handle the op so everything is at a standstill.
+      # ```
+      matchpi %{[changes [(%any sync async) @edge_] _*]} do
+        D7.gnd(node, merge_policy: D7::MergeDiff.new(1u32))
+      end
+
       otherwise do
         D7.inert(node)
       end

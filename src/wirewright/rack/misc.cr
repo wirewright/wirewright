@@ -296,13 +296,17 @@ module Ww::Rack
       #   ;; @fst now refers to the first field
       #   ;; @snd now refers to the second one, etc.
       Form.prepass(hg, proposals) do |hg, proposals1|
-        Part.prepass(hg, proposals1, &fn)
+        Part.prepass(hg, proposals1) do |hg, proposals2|
+          Changes.prepass(hg, proposals2, &fn)
+        end
       end
     end
 
     def call(hg : D7::Hypergraph, &fn : D7::Hypergraph ->) : Nil
       Form.prepass(hg) do |hg|
-        Part.prepass(hg, &fn)
+        Part.prepass(hg) do |hg|
+          Changes.prepass(hg, &fn)
+        end
       end
     end
   end

@@ -11,10 +11,10 @@ struct Ww::Term
     alias PairAction = WithPair | WithoutPair
 
     defrecord WithPair, prefix : Slice(Term), key : Term, value : Term, copying: true
-    defrecord WithoutPair, prefix : Slice(Term), key : Term, copying: true
+    defrecord WithoutPair, prefix : Slice(Term), key : Term, old_value : Term, copying: true
     defrecord WithItem, prefix : Slice(Term), index : UInt32, item : Term, copying: true
     defrecord InsertItem, prefix : Slice(Term), index : UInt32, item : Term, copying: true
-    defrecord DeleteItem, prefix : Slice(Term), index : UInt32, copying: true
+    defrecord DeleteItem, prefix : Slice(Term), index : UInt32, old_item : Term, copying: true
 
     {% for cls in %w[WithPair WithoutPair] %}
       struct {{cls.id}}
@@ -74,10 +74,10 @@ struct Ww::Term
 
       # Deal with the easy stuff first: emit actions pertaining to
       # the pairspart.
-      reference.each_entry(in: Term::Dict.pairspart) do |key, _|
+      reference.each_entry(in: Term::Dict.pairspart) do |key, value0|
         next if key.in?(successor)
 
-        actions << WithoutPair.new(Slice(Term).empty, key)
+        actions << WithoutPair.new(Slice(Term).empty, key, value0)
       end
 
       successor.each_entry(in: Term::Dict.pairspart) do |key, value1|
@@ -162,7 +162,7 @@ struct Ww::Term
         end
 
         if x == 0
-          actions.unshift DeleteItem.new(Slice(Term).empty, y - 1)
+          actions.unshift DeleteItem.new(Slice(Term).empty, y - 1, reference[y - 1])
           y -= 1
           next
         end
@@ -198,7 +198,7 @@ struct Ww::Term
           actions.unshift InsertItem.new(Slice(Term).empty, y, target)
           x -= 1
         in .delete?
-          actions.unshift DeleteItem.new(Slice(Term).empty, y - 1)
+          actions.unshift DeleteItem.new(Slice(Term).empty, y - 1, reference[y - 1])
           y -= 1
         end
       end
