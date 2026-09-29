@@ -510,7 +510,7 @@
 
 (Trigger (@msgs_ msg_ ⍊ disable⋮ false) view_)
   => (component {@:msgs, @:enabled}
-       ;;| This cell stores this button's configuration so that we can refer to them
+       ;;| This cell stores this button's configuration so that we can refer to it
        ;;| in the rewriter.
        (template
          (cell @config {^:msg, ^:disable}))
@@ -519,8 +519,8 @@
        ;;| of its visuals. Most importantly for us, the reflection contains information
        ;;| about whether the button is currently hovered.
        ;;|
-       ;;| Inside the reflection is a group. The button's rewriter (see below) sets
-       ;;| various pairs on the group throughout the lifetime of the button. For example,
+       ;;| Inside the reflection is a box. The button's rewriter (see below) sets
+       ;;| various pairs on the box throughout the lifetime of the button. For example,
        ;;| while you hover over the button, the `hover` pair is set.
        ;;|
        ;;| The style then turns these pairs into Microfold cues. Importantly, the style

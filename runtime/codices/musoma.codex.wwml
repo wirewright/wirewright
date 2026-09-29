@@ -1564,7 +1564,7 @@ scroll: {}
 
 (Expander addr_ ⍊ icon_string center⋮ false)
   => (vantage id: (hoverable (expander ^addr)) active: if-hit
-       (icon style: "font-lg text-theme-subtle rounded-sm center:center-y \
+       (icon style: "dt-1/3 font-lg text-theme-subtle rounded-sm center:center-y \
                      -center:content-y bg-transparent hover:bg-theme-overlay \
                      hover:text-theme-text hover:cursor-pointer"
              hover: ^(any? hover-over ('expander addr))
