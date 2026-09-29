@@ -52,6 +52,15 @@ Wirewright is an *ecosystem*. The major components of this ecosystem are:
 
 ## Gallery
 
+### Todo list
+
+This is an example of a basic CRUD TODO app. It also supports search and filtering. The whole app spans about 250 lines of code,
+counting comments and blank lines. If you remove them it's about 130 lines, and I believe it's going to go down to sub-100 in
+the near future. Of course the number means nothing but it *can* act as a loose "compression success score", as in how well
+Wirewright manages to compress the concept and the implementation of an interactive app.
+
+<img width="1920" height="1026" alt="musoma-shot-5" src="https://github.com/user-attachments/assets/454f5604-bce6-49aa-9694-dcfb426c1314" />
+
 ### Calculator
 
 This is an example of an interactive calculator. The UI manipulates "AST" directly instead of working with strings. The app is about ~200 lines of code, *including* comments, blank lines, etc. Starting from the middle of the video I show time-travel.
