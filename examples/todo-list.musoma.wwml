@@ -1,0 +1,243 @@
+;;| The todo list will store the state of all existing todos, as fetched from
+;;| the database (with the `space` merge policy, meaning diff-based merges
+;;| are allowed arbitrarily deep).
+(cell (space @todos))
+
+;;| The filter appearance shows the current filter to all todos so that they
+;;| can decide whether to show themselves.
+(frag (@filter [appearance _ filter_])
+  (appearance filter {show: all, query: ""}))
+(part (@filter @show) {¦ show_})
+
+;;| To simplify our affairs, we maintain a single *request* cell to store
+;;| the outstanding request. We also use the name *action*; but importantly,
+;;| we consider an action to be basically a lower-tier request.
+(cell @request boot)
+
+;;| This module is the core of the app. Its major focus is on interacting with
+;;| (syncing @todos to) the database. Most such interactions (if safe) are done
+;;| off of modifications to @todos. In exceptional cases, such as insertion, before
+;;| the identity of a todo is known, we fall back to an explicit request.
+(module {:@todos, :@request}
+  ;;| This module's database node which it uses to talk to the database.
+  (cell @query)
+  (cell @reply)
+  (db (@query -> "sqlite3:///tmp/todos.sqlite3" -> @reply))
+
+  ;;| The `changes` node is used to watch for changes to @todos (e.g., part of
+  ;;| a todo updated, a todo removed). We're only interested in the first change.
+  ;;| The rest of changes (if any) wait until the first one is handled.
+  (frag (@change (changes _ change_ _*))
+    (changes (sync @todos maxdepth: 2)))
+
+  (backsys
+    ;; `request` is a "volatile" kind of cell: it is *cleared by default*,
+    ;; unless one of the rules below marks it as `pending`.
+    {¦ request_: [(%not pending) _*]}
+      <> {(request): ()}
+
+    ;; This rule moves changes to @todos into our request cell when that
+    ;; becomes possible.
+    {¦ -request_ change_: ((%not txn) _*)}
+      <> {request: ^change, (change): ()}
+
+    ;; Transaction consume base case.
+    {¦ change_: (txn)}
+      <> {(change): ()}
+
+    ;; Drain transactions (which the `changes` node will emit for changes made
+    ;; within the same tick).
+    {¦ -request_ change: (txn change_ _*)}
+      <> {request: ^change, (change): ()}
+
+    ;; Boot sends an SQL CREATE TABLE to the database.
+    {¦ request_: boot -query_ -reply}
+      <> {request: (pending ^request), query: (exec "create table if not exists todos (id integer primary key, content text not null, done boolean not null)")}
+
+    ;; Wait for boot to complete. When it does, trigger a restart to fetch
+    ;; all todos from the database.
+    {¦ request_: (pending boot) -query reply_: (ok _)}
+      <> {request: reload, (reply): ()}
+
+    ;; Send a SELECT to the database to fetch all todos.
+    {¦ request_: reload -query_ -reply}
+      <> {request: (pending ^request), query: (query "select id, content, done from todos")}
+
+    ;; When the todos arrive, put them in todos, stomping over anything that
+    ;; is found there already (if anything at all).
+    {¦ request_: (pending reload) -query reply_: [ok todos'_*] ⋮todos}
+      <> {(request): (), (reply): (), todos: ^todos'}
+
+    ;; The application can ask us to add a todo. We only INSERT into the database
+    ;; the parts that we find interesting (content and done), and ignore the rest.
+    {¦ request_: (add {¦ content_string done_boolean}) -query_ -reply}
+      <> {request: (pending ^request), query: (query "insert into todos (content, done) values (?, ?) returning id" ^content ^done)}
+
+    ;; Wait for the insert to finish. When it does, assign the id and add
+    ;; the todo to @todos.
+    {¦ request_: (pending (add todo←{¦ -id: >id})) todos: (_* `>todo) -query reply_: [ok {¦ id_}]}
+      <> {(request): (), >id: ^id, >todo: ^(up todo), (reply): ()}
+
+    ;; React to updates of a todo's `done` attribute.
+    {¦ request_: (assoc (index_ done) done_boolean) todos: (%value index {¦ id_}) -query_ -reply}
+      <> {request: (pending ^request), query: (exec "update todos set done = ? where id = ?" ^done ^id)}
+
+    ;; React to updates of a todo's `content` attribute.
+    {¦ request_: (assoc (index_ content) content_string) todos: (%value index {¦ id_}) -query_ -reply}
+       <> {request: (pending ^request), query: (exec "update todos set content = ? where id = ?" ^content ^id)}
+
+    ;; Wait for updates to complete successfully.
+    {¦ request_: (pending (assoc _ _)) -query reply_: [ok _*]}
+      <> {(request): (), (reply): ()}
+
+    ;; Handle deletion of a todo from @todos by DELETE-ing the corresponding
+    ;; row from the database.
+    {¦ request_: (delete (_) {¦ id_}) -query_ -reply}
+      <> {request: (pending ^request), query: (exec "delete from todos where id = ?" ^id)}
+
+    ;; Wait for the DELETE to finish successfully.
+    {¦ request_: (pending (delete _ _)) -query reply_: [ok _*]}
+      <> {(request): (), (reply): ()}
+
+    ;; Clear the database in a more efficient way than asking each complete
+    ;; todo to remove itself -- using DELETE...WHERE.
+    {¦ request_: clear -query_ -reply}
+      <> {request: (pending ^request), query: (exec "delete from todos where done = true")}
+
+    ;; Wait for the DELETE to complete. When it does, take the easy way and
+    ;; reload the whole thing.
+    {¦ request_: (pending clear) -query reply_: [ok _]}
+      <> {request: reload, (reply): ()}))
+
+;;| The supervisor will watch @todos and manage devices representing each
+;;| entry automatically.
+(supervisor (@todos @todo {¦ id_} - @pool)
+  ;;| Refer to various parts of the database entry, with appropriate translation
+  ;;| where necessary.
+  (part (@todo @id) {¦ id_})
+  (part (@todo @content) {¦ content_string})
+  (part (@todo @done) {¦ done_boolean})
+
+  ;;| The todo needs to sense the filter to decide whether to show itself
+  ;;| to the user.
+  (frag (@filter (sensor _ filter_))
+    (sensor (view filter _)))
+
+  (cell @show false)
+  (cell @editor)
+
+  ;;| The todo's visuals.
+  (group style: "flow-row gap-2 px-3 py-1 item-center-y rounded absent show:present" @:show
+    (guard (@editor)
+      ($Toggle @done ($Checkbox))
+      (p @content style: "fr-1 clip text-ui-content leading-6 min-w-1")
+      ($IconButton (@action (editor open)) "edit")
+      ($IconButton (@action delete) "delete"))
+    (guard (@editor _)
+      (box ($Input @editor) style: "fr-1")
+      ($IconButton (@action (editor submit)) "done")
+      ($IconButton (@action (editor close)) "cancel")))
+
+  ;;| The action the todo is executing.
+  (cell @action)
+
+  ;;| The todo's little brain.
+  (backsys
+    {¦ show_boolean}
+      <> {show: false}
+
+    {¦ filter: {¦ show: all query_string} content_string show_boolean}
+      <> {show: ^(substring? content query)}
+
+    {¦ filter: {¦ show: active query_string} content_string done: false show_boolean}
+      <> {show: ^(substring? content query)}
+
+    {¦ filter: {¦ show: completed query_string} content_string done: true show_boolean}
+      <> {show: ^(substring? content query)}
+
+    {¦ action_: delete todo_}
+      <> {(action): (), (todo): ()}
+
+    {¦ action_: (editor open) content_string -editor_}
+      <> {(action): (), editor: ("" ^content focus: true)}
+
+    {¦ action_: (editor submit) editor: [l_string r_string] content_}
+      <> {action: (editor close), content: ^(~ l r)}
+
+    {¦ action_: (editor close) editor_}
+      <> {(action): (), (editor): ()}))
+
+(window title: "Todo"
+        width: 400
+        height: 800
+        style: "bg-ui-base"
+
+  (group style: "flow-col gap-3 p-3"
+    (h1 "Todo list" style: "font-light text-ui-content")
+
+    ;; TODO: we should be able to directly bind the input to filter query...
+    (cell @search ("" ""))
+    (backsys
+      {¦ search: (l_string r_string) filter: {¦ query_string}}
+        <> {query: ^(~ l r)})
+    ($Input @search placeholder: "Type to search...")
+
+    ($SegmentedButton @show ("All" all) ("Active" active) ("Completed" completed))
+
+    (guard (@show all)
+      (module {:@todos}
+        (cell @message)
+        ;; TODO: cache backsys
+        (backsys
+          {¦ ⋮message}
+            <> {message: "No active todos"}
+          {¦ todos: (%items (%pipe size ±count) {¦ done: false}) ⋮message}
+            <> {message: ^"⸢count⸣ active todo(s)"})
+        (p @message style: "text-ui-supplementary")))
+
+    (guard (@show completed)
+      ($Button (@request clear) "Clear"))
+
+    (group style: "flow-col gap-1 fr-1 bg-transparent"
+      (circuit @pool))
+
+    ($Button (@request add) "add" "Add todo"))
+
+  (section "Add todo modal"
+    (module {:@request}
+      ;; TODO: maintain a "model" {content: ..., done: ...} and bind the input to it.
+      (cell @action)
+      (cell @visible)
+      (cell @content)
+
+      (guard (@visible true)
+        (box style: ""
+          (box style: "bg-ui-base opacity-90%")
+          (group style: "bottom m-5 mb-3 px-5 py-4 gap-2 bg-ui-overlay min-h-sm rounded-xl"
+            (group style: "flow-row gap-1"
+              (h1 style: "fr-1 text-2xl font-medium text-ui-content"
+                "Add todo")
+              ($IconButton (@action close) "close"))
+            (box style: "fr-1"
+              ($Input @content label: "Content"))
+            ($Button (@action submit) "add" "Add"))))
+
+      (backsys
+        ;; Respond to the user pressing the add button by opening ourselves.
+        {¦ request_: add -action_}
+          <> {(request): (), action: open}
+
+        ;; To open means to make ourselves visible with an empty input field.
+        {¦ action_: open -content_ -visible_}
+          <> {(action): (), content: ("" "" focus: true), visible: true}
+
+        ;; To close means to make ourselves hidden and clear the input field.
+        {¦ action_: close content_ visible_}
+          <> {(action): (), (content): (), (visible): ()}
+
+        ;; To submit means to send the content away as an insertion and subsequently
+        ;; close ourselves.
+        {¦ action_: submit content: [l_string r_string] -request_}
+          <> {action: close, request: (add {done: false, content: ^(~ l r)})}))))
+
+((I modify: true structural: true multiline: true compose: true) ("" * "") 0)
