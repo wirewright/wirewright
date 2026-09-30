@@ -7,7 +7,8 @@ module ::Ww::Rack::FS
   defcase State, tasks : D7::TaskBoard(Automaton::Epoch, Request, Response)
 
   alias Request = CreateFile | CreateDir | CreateDirIfMissing | DeleteFile | DeleteFileIfExists |
-                  DeleteDir | DeleteDirIfExists | Move | CreateTmpFile | OverwriteFile | AppendFile
+                  DeleteDir | DeleteDirIfExists | Move | CreateTmpFile | OverwriteFile | AppendFile |
+                  ReadTextFile | ReadBinaryFile
 
   defrecord CreateFile, path : NormalPath
   defrecord CreateDir, path : NormalPath
@@ -20,6 +21,8 @@ module ::Ww::Rack::FS
   defrecord CreateTmpFile, parent : NormalPath
   defrecord OverwriteFile, path : NormalPath, content : Term::Str | Term::Blob
   defrecord AppendFile, path : NormalPath, content : Term::Str | Term::Blob
+  defrecord ReadTextFile, path : NormalPath
+  defrecord ReadBinaryFile, path : NormalPath
 
   def request?(term : Term) : Request?
     # |@ rack.fs.request
@@ -173,15 +176,35 @@ module ::Ww::Rack::FS
         AppendFile.new(path, content)
       end
 
+      # |@ rack.fs.request
+      #
+      # |@pattern
+      # [read text file path_string]
+      # [read binary file path_string]
+      #
+      # |@block
+      # Reads the content of the file at *path* if it exists. The result is a string
+      # for `text` files (encoded using UTF-8; an error otherwise), and a blob
+      # for `binary` files.
+
+      matchpi %{[read text file path_string]}, path: NormalPath do
+        ReadTextFile.new(path)
+      end
+
+      matchpi %{[read binary file path_string]}, path: NormalPath do
+        ReadBinaryFile.new(path)
+      end
+
       otherwise { }
     end
   end
 
-  alias Response = Present | Absent | Moved | Wrote | Err
+  alias Response = Present | Absent | Moved | Read | Wrote | Err
 
   defrecord Present, path : NormalPath
   defrecord Absent, path : NormalPath
   defrecord Moved, src : NormalPath, dst : NormalPath
+  defrecord Read, path : NormalPath, content : Term::Str | Term::Blob
   defrecord Wrote, path : NormalPath
   defrecord Err, detail : String
 
@@ -211,6 +234,17 @@ module ::Ww::Rack::FS
       # Confirms that an action was carried out after which *path* was
       # observed absent.
       Term.of(:ok, {:absent, response.path})
+    in Read
+      # |@ rack.fs.response
+      #
+      # |@pattern
+      # (ok (read path_string content_string))
+      # (ok (read path_string content_blob))
+      #
+      # |@block
+      # Shows the content of the file at *path* at some indeterminate point
+      # in the past.
+      Term.of(:ok, {:read, response.path, response.content})
     in Wrote
       # |@ rack.fs.response
       #
@@ -395,6 +429,55 @@ module ::Ww::Rack::FS
     end
 
     Wrote.new(task.path)
+  rescue e : File::Error | IO::Error
+    Err.new(e.message || "internal error")
+  end
+
+  # :nodoc:
+  READ_BLOCK_SIZE = 4096
+
+  private def execute(task : ReadTextFile, ping : D7::TaskBoard::Ping) : Response
+    File.open(task.path.unwrap, "r") do |src|
+      content = String.build do |dst|
+        # Read in blocks to have an opportunity to call ping.
+        loop do
+          ping.call
+
+          finished = false
+
+          READ_BLOCK_SIZE.times do
+            unless chr = src.read_char
+              finished = true
+              break
+            end
+
+            dst << chr
+          end
+
+          break if finished
+        end
+      end
+
+      Read.new(task.path, Term[content])
+    end
+  rescue e : File::Error | IO::Error
+    Err.new(e.message || "internal error")
+  end
+
+  private def execute(task : ReadBinaryFile, ping : D7::TaskBoard::Ping) : Response
+    File.open(task.path.unwrap, "r") do |src|
+      content = Term::Blob.build do |dst|
+        # Read in blocks to have an opportunity to call ping.
+        loop do
+          ping.call
+
+          bytes_read = IO.copy(src, dst, limit: READ_BLOCK_SIZE)
+          break if bytes_read.zero?
+        end
+      end
+
+      Read.new(task.path, Term[content])
+    end
   rescue e : File::Error | IO::Error
     Err.new(e.message || "internal error")
   end

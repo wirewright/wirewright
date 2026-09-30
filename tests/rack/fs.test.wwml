@@ -228,3 +228,57 @@
   ;; If it didn't clog this means we've executed successfully.
   (frame/tail fast-forward: true
     (cell @plan ())))
+
+;; Read text file
+(rack
+  (frame
+    (queue (@query @queries)
+      ((overwrite file "/tmp/wirewright-path2-x" "Hello World")
+       (read text file "/tmp/wirewright-path2-x")))
+    (queue (@reply @replies)
+      ())
+    (fs @query @replies))
+
+  (frame
+    (queue (@query @queries)
+      ((read text file "/tmp/wirewright-path2-x")))
+    (queue (@reply @replies)
+      ((ok (wrote "/tmp/wirewright-path2-x"))))
+    (fs @query @replies))
+
+  (frame
+    (queue (@query @queries)
+      ())
+    (queue (@reply @replies)
+      ((ok (wrote "/tmp/wirewright-path2-x"))
+       (ok (read "/tmp/wirewright-path2-x" "Hello World"))))
+    (fs @query @replies))
+
+  end)
+
+;; Read binary file
+(rack
+  (frame
+    (queue (@query @queries)
+      ((overwrite file "/tmp/wirewright-path2-y" ⟬de ad be ef⟭)
+       (read binary file "/tmp/wirewright-path2-y")))
+    (queue (@reply @replies)
+      ())
+    (fs @query @replies))
+
+  (frame
+    (queue (@query @queries)
+      ((read binary file "/tmp/wirewright-path2-y")))
+    (queue (@reply @replies)
+      ((ok (wrote "/tmp/wirewright-path2-y"))))
+    (fs @query @replies))
+
+  (frame
+    (queue (@query @queries)
+      ())
+    (queue (@reply @replies)
+      ((ok (wrote "/tmp/wirewright-path2-y"))
+       (ok (read "/tmp/wirewright-path2-y" ⟬de ad be ef⟭))))
+    (fs @query @replies))
+
+  end)
