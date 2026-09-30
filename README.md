@@ -26,7 +26,11 @@ Wirewright is different. A Wirewright program is effectively a serialized snapsh
 
 In this snippet, there are three *things*, called *nodes*: two `cell`s and one `feed`. One of the cells holds the number `100`.
 
-The snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions, and there is no machine that can "execute" it. Instead, it is a description of a symbolic world frozen in time — a *seed*. So instead of telling an existing general-purpose machine how to do things, you build specialized machines to do each one of those things. As a consequence, machine-building machines become possible; as machine-controlling machines, and so on.
+The snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions, and there is no machine that can "execute" it. Instead, it is a description of a symbolic world frozen in time — a *seed*.
+
+So instead of telling an existing general-purpose machine how to do things step-by-step, through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you build specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, devices, links, producers, consumers, black boxes, and so forth.
+
+As an interesting  consequence, machine-building machines become possible; as do machine-controlling machines, and so forth. One of the central themes of Wirewright is, in fact, its attempt to make programming be more about *nouns* and systems of interacting nouns (machines; organisms, even, if you forgive me my metaphor) — nouns rather than verbs (algorithms, plans, and so on). In other words, instead of telling the machine what to do in each case, you set up a world, and let that world react to its surroundings: "relax" its way into equilibria, *generating* or *synthesizing* behavior along the way; grow structure in response to stimuli, etc. To give a simple example of the approach, you do not *select* or *query* (both are not at all nouns), but have a *sensor* (a noun!) supplying a continuous view of things. You do not *store* or *call* but have an *appearance* (a noun!), an entity the sensor can see.
 
 The terminology of *seed*s, *evolution*, and so on is borrowed primarily from the field of cellular automata. Cellular automata is a good reference point for understanding what Wirewright is. Roughly speaking, Wirewright is an automaton which uses *symbols*, *numbers*, *strings* etc. instead of *on/off* for state, and *trees* instead of grids for spatial arrangement. Importantly, trees can also be used for state. Do note that cellular automata and Wirewright are as similar to each other as a stickman and a real human being.
 
@@ -389,6 +393,8 @@ Another bunch of ideas come from cellular automata, in particular from Stephen W
 
 There is a lot of interesting ideas in the works of Michael Levin and Joscha Bach. 
 
+Complex systems and systems theory and philosophy are also quite relevant. Wirewright's notion of a *world* or a *circuit* is very similar is not the same as the notion of a *system* in the most general sense of the world, although an important difference is, I think, the fact that a system's behavior is determined by its composition more than any imposed *laws* (as in laws of physics); although of course laws act as the thing that "evaluates" or time-steps the system eventually. Put simply, a *world* in Wirewright terms is matter under law; whereas a system is more like a set of interacting components.
+
 Bret Victor demonstrated what interactivity means, and Wirewright tries to follow his advice.
 
 *Obviously* I must reference Casey Muratori and Jonathan Blow. The ideas of Alan Key have proved useful as well.
@@ -399,10 +405,10 @@ Wirewright is influenced and inspired by biology, in particular cellular biology
 
 There are significant influences from philosophy as well, especially from the fields of philosophy of consciousness, phenomenology, and metaphysics.
 
-
 Since the project is in active development, it is very early to attribute and link things precisely. Hopefully, that would be possible later.
 
 The project did not start with a "research" phase but rather with improvisation, so it is hard to pinpoint exactly what influenced me and where it comes from. I am sure no part of Wirewright is truly new. A lot of things Wirewright touches are well-studied in academia: in automata theory, in term rewriting, in reactive systems, transition systems, and so on. I am not smart enough to explore these topics deeply, so all I know about them are the names and their very loose meanings. The *synthesis* of the aforementioned ideas, and the *practicality* of Wirewright is where my hopes on the project's usefulness are.
+
 ### Misc
 
 Wirewright's Microfold is heavily inspired by (and in some places copies!)  [Tailwind CSS](https://tailwindcss.com/)
