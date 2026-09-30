@@ -488,34 +488,34 @@ module Ww::ScanKit
     nullable?(pattern.scanner)
   end
 
-  alias Log = CaptureLog | NoLog
+  alias Journal = CaptureJournal | NoJournal
 
-  defrecord NoLog
-  defrecord CaptureLog, entries : Pf::Kit::HybridArray(LogEntry, 16)
+  defrecord NoJournal
+  defrecord CaptureJournal, entries : Pf::Kit::HybridArray(CaptureEntry, 16)
 
-  defrecord LogEntry, name : Term::Sym, capture : Pf::StringSeln
+  defrecord CaptureEntry, name : Term::Sym, capture : Pf::StringSeln
 
-  private def append(log : CaptureLog, name : Term::Sym, capture : Pf::StringSeln) : Nil
-    log.entries << LogEntry.new(name, capture)
+  private def append(journal : CaptureJournal, name : Term::Sym, capture : Pf::StringSeln) : Nil
+    journal.entries << CaptureEntry.new(name, capture)
   end
 
-  private def checkpoint(log : CaptureLog) : Int32
-    log.entries.size
+  private def checkpoint(journal : CaptureJournal) : Int32
+    journal.entries.size
   end
 
-  private def render(log : CaptureLog) : Term::Dict
+  private def render(journal : CaptureJournal) : Term::Dict
     Term::Dict.build do |commit|
-      log.entries.each do |entry|
+      journal.entries.each do |entry|
         commit.with(entry.name, entry.capture)
       end
     end
   end
 
-  private def rollback(log : CaptureLog, checkpoint : Int32) : Nil
-    assert 0 <= log.entries.size >= checkpoint
+  private def rollback(journal : CaptureJournal, checkpoint : Int32) : Nil
+    assert 0 <= journal.entries.size >= checkpoint
 
-    (log.entries.size - checkpoint).times do
-      _ = log.entries.pop
+    (journal.entries.size - checkpoint).times do
+      _ = journal.entries.pop
     end
   end
 
@@ -632,13 +632,13 @@ module Ww::ScanKit
     member?(charset.positive, text) && !member?(charset.negative, text)
   end
 
-  def match?(scanner : Char, log : Log, text : Pf::StringSeln) : Pf::StringSeln?
+  def match?(scanner : Char, journal : Journal, text : Pf::StringSeln) : Pf::StringSeln?
     return unless text.starts_with?(scanner)
 
     text.rest
   end
 
-  def match?(scanner : Category, log : Log, text : Pf::StringSeln) : Pf::StringSeln?
+  def match?(scanner : Category, journal : Journal, text : Pf::StringSeln) : Pf::StringSeln?
     # TODO:
     # if scanner.grapheme?
     #   return skip grapheme
@@ -649,12 +649,12 @@ module Ww::ScanKit
     text.rest
   end
 
-  def match?(scanner : Concat, log : CaptureLog, text : Pf::StringSeln) : Pf::StringSeln?
-    checkpoint = checkpoint(log)
+  def match?(scanner : Concat, journal : CaptureJournal, text : Pf::StringSeln) : Pf::StringSeln?
+    checkpoint = checkpoint(journal)
 
     scanner.members.each do |member|
-      unless text = match?(member, log, text)
-        rollback(log, checkpoint)
+      unless text = match?(member, journal, text)
+        rollback(journal, checkpoint)
         return
       end
     end
@@ -662,15 +662,15 @@ module Ww::ScanKit
     text
   end
 
-  def match?(scanner : Concat, log : NoLog, text : Pf::StringSeln) : Pf::StringSeln?
+  def match?(scanner : Concat, journal : NoJournal, text : Pf::StringSeln) : Pf::StringSeln?
     scanner.members.each do |member|
-      return unless text = match?(member, log, text)
+      return unless text = match?(member, journal, text)
     end
 
     text
   end
 
-  def match?(scanner : Charset, log : Log, text : Pf::StringSeln) : Pf::StringSeln?
+  def match?(scanner : Charset, journal : Journal, text : Pf::StringSeln) : Pf::StringSeln?
     assert scanner.min <= scanner.max
 
     # Match required part.
@@ -690,36 +690,36 @@ module Ww::ScanKit
     text
   end
 
-  def match?(scanner : Capture, log : Log, text : Pf::StringSeln) : Pf::StringSeln?
-    return unless ahead = match?(scanner.member, log, text)
+  def match?(scanner : Capture, journal : Journal, text : Pf::StringSeln) : Pf::StringSeln?
+    return unless ahead = match?(scanner.member, journal, text)
 
-    if log.is_a?(CaptureLog)
-      append(log, scanner.name, text.upto(ahead))
+    if journal.is_a?(CaptureJournal)
+      append(journal, scanner.name, text.upto(ahead))
     end
 
     ahead
   end
 
-  def match?(scanner : Empty, log : Log, text : Pf::StringSeln) : Pf::StringSeln?
+  def match?(scanner : Empty, journal : Journal, text : Pf::StringSeln) : Pf::StringSeln?
     text
   end
 
   def match?(pattern : Pattern, text : Pf::StringSeln) : {Term::Dict, Pf::StringSeln}?
-    log_entries = Pf::Kit.stack_array(LogEntry)
-    log = CaptureLog.new(log_entries)
+    journal_entries = Pf::Kit.stack_array(CaptureEntry)
+    journal = CaptureJournal.new(journal_entries)
 
     text.each_before_and_after do |_, after|
-      checkpoint = checkpoint(log)
+      checkpoint = checkpoint(journal)
 
-      if ahead = match?(pattern.scanner, log, after)
+      if ahead = match?(pattern.scanner, journal, after)
         # If the pattern is anchored to the right and there are things ahead,
         # then this isn't a match.
         if pattern.anchor_r && !ahead.empty?
-          rollback(log, checkpoint)
+          rollback(journal, checkpoint)
           next
         end
 
-        return render(log), ahead
+        return render(journal), ahead
       end
 
       # If scanner did not match and we are anchored to the left, we can't
@@ -738,7 +738,7 @@ module Ww::ScanKit
 
   def test?(pattern : Pattern, text : Pf::StringSeln) : Pf::StringSeln?
     text.each_before_and_after do |_, after|
-      if ahead = match?(pattern.scanner, NoLog.new, after)
+      if ahead = match?(pattern.scanner, NoJournal.new, after)
         # If the pattern is anchored to the right and there are things ahead,
         # then this isn't a match.
         next if pattern.anchor_r && !ahead.empty?

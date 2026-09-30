@@ -1126,7 +1126,7 @@ module Ww::ParseKit
 
   defrecord Ok,
     match : Pf::StringSeln,
-    captures : CaptureLog,
+    captures : CaptureJournal,
     result : Result,
     ahead : Pf::StringSeln
 
@@ -1135,15 +1135,15 @@ module Ww::ParseKit
   # on replay.
   #
   # Note also that since a log can only support adding and updating entries
-  # (but not removing them), checks such as `CaptureLog#empty?` remain valid
+  # (but not removing them), checks such as `CaptureJournal#empty?` remain valid
   # and well-defined.
-  alias CaptureLog = Slice(CaptureEntry)
+  alias CaptureJournal = Slice(CaptureEntry)
 
   defrecord CaptureEntry, name : Term, value : Result
 
-  alias Result = Term | Thunk | CaptureLog | MatchList
+  alias Result = Term | Thunk | CaptureJournal | MatchList
 
-  defrecord Thunk, template : Alloy::CompiledTemplate, captures : CaptureLog
+  defrecord Thunk, template : Alloy::CompiledTemplate, captures : CaptureJournal
   defrecord MatchList, items : Slice(MatchListItem)
 
   alias MatchListItem = Result
@@ -1162,11 +1162,11 @@ module Ww::ParseKit
     Term.of(result)
   end
 
-  def resolve(object : CaptureLog) : Term
+  def resolve(object : CaptureJournal) : Term
     Term.of(resolve_log(object))
   end
 
-  def resolve_log(log : CaptureLog) : Term::Dict
+  def resolve_log(log : CaptureJournal) : Term::Dict
     Term::Dict.build do |commit|
       log.each do |entry|
         commit.with(entry.name, resolve(entry.value))
@@ -1378,7 +1378,7 @@ module Ww::ParseKit
       end
     end
 
-    Ok.new(start.upto(text), CaptureLog.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
+    Ok.new(start.upto(text), CaptureJournal.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
   def parse(ctx : Context, parselet : ManySepF, text : Pf::StringSeln) : Parseout
@@ -1469,7 +1469,7 @@ module Ww::ParseKit
       end
     end
 
-    Ok.new(start.upto(text), CaptureLog.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
+    Ok.new(start.upto(text), CaptureJournal.empty, MatchList.new(items.to_unsafe_readonly_slice!), text)
   end
 
   def parse(ctx : Context, parselet : CaptureF, text : Pf::StringSeln) : Parseout
@@ -1551,7 +1551,7 @@ module Ww::ParseKit
     end
 
     result = Thunk.new(production.template, π.captures)
-    Ok.new(π.match, CaptureLog.empty, result, π.ahead)
+    Ok.new(π.match, CaptureJournal.empty, result, π.ahead)
   end
 
   def parse(ctx : Context, production : AliasProductionF, text : Pf::StringSeln) : Parseout
@@ -1561,9 +1561,9 @@ module Ww::ParseKit
     end
 
     if π.captures.empty?
-      Ok.new(π.match, CaptureLog.empty, π.result, π.ahead)
+      Ok.new(π.match, CaptureJournal.empty, π.result, π.ahead)
     else
-      Ok.new(π.match, CaptureLog.empty, π.captures, π.ahead)
+      Ok.new(π.match, CaptureJournal.empty, π.captures, π.ahead)
     end
   end
 
