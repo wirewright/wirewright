@@ -849,7 +849,7 @@ module Ww::M1
   def match(ctx, op : Op::CaptureItemsonly, matchee : Tzip, plan)
     return Fb[] unless matchee.term.as_itemsonly_d?
 
-    capture(ctx, op.capture, Tzip.new(matchee.term, matchee.items.log), Op::INSTANCE_PASS, matchee, plan)
+    capture(ctx, op.capture, Tzip.new(matchee.term, matchee.items.trace), Op::INSTANCE_PASS, matchee, plan)
   end
 
   # :nodoc:
@@ -1067,11 +1067,11 @@ module Ww::M1
     end
   end
 
-  private def search_with_sealed_log!(ctx, op : Op::Scan | Op::Dfs | Op::Bfs, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
+  private def search_with_sealed_trace!(ctx, op : Op::Scan | Op::Dfs | Op::Bfs, matchee : Tzip, plan, & : Fb, Trace::Sealed | Trace::None -> Bool) : Nil
     search(op, matchee) do |chunk|
       action = Action.lzip(op.seq, chunk)
       ahead = ctx.interject(plan, action)
-      yield eval(fb(ctx, ahead)), Log.seal(chunk, &.log)
+      yield eval(fb(ctx, ahead)), Trace.seal(chunk, &.trace)
     end
   end
 
@@ -1082,10 +1082,10 @@ module Ww::M1
     end
   end
 
-  private def search_with_sealed_log!(ctx, op : Op::Entries, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
+  private def search_with_sealed_trace!(ctx, op : Op::Entries, matchee : Tzip, plan, & : Fb, Trace::Sealed | Trace::None -> Bool) : Nil
     matchee.each_entry_ord do |key, value|
       ahead = ctx.interject(plan, Action.match(op.vop, value))
-      _ = yield eval(match(ctx, op.kop, key, ahead)), Log.seal({key, value}, &.log)
+      _ = yield eval(match(ctx, op.kop, key, ahead)), Trace.seal({key, value}, &.trace)
     end
   end
 
@@ -1146,7 +1146,7 @@ module Ww::M1
     end
   end
 
-  private def search_with_sealed_log!(ctx, op : Op::Split, matchee : Tzip, plan, & : Fb, Log::Sealed | Log::None -> Bool) : Nil
+  private def search_with_sealed_trace!(ctx, op : Op::Split, matchee : Tzip, plan, & : Fb, Trace::Sealed | Trace::None -> Bool) : Nil
     each_split(op.focus.size, matchee, wide: op.wide) do |l, focus, r|
       fb = eval(match(ctx, op, l, focus, r, plan))
 
@@ -1163,19 +1163,19 @@ module Ww::M1
       # ... means referring to all foci we've matched. Foci have the nice property
       # that they cannot overlap (left/right halves may include the next/previous
       # foci, but we  don't really care about that).
-      _ = yield fb, Log.seal(Log.simplify(focus.log))
+      _ = yield fb, Trace.seal(Trace.simplify(focus.trace))
     end
   end
 
-  private def search_with_sealed_log(ctx, op, matchee, plan, &) : Nil
-    # Logging is disabled. Do not waste time managing the log.
-    if matchee.log.is_a?(Log::None)
-      search(ctx, op, matchee, plan) { |fb| yield fb, Log.none }
+  private def search_with_sealed_trace(ctx, op, matchee, plan, &) : Nil
+    # Tracing is disabled. Do not waste time managing the trace.
+    if matchee.trace.is_a?(Trace::None)
+      search(ctx, op, matchee, plan) { |fb| yield fb, Trace.none }
       return
     end
 
-    search_with_sealed_log!(ctx, op, matchee, plan) do |fb, fblog|
-      yield fb, fblog
+    search_with_sealed_trace!(ctx, op, matchee, plan) do |fb, fb_trace|
+      yield fb, fb_trace
     end
   end
 
@@ -1208,7 +1208,7 @@ module Ww::M1
   def match(ctx, op : Op::First, matchee : Tzip, plan)
     return Fb[] unless eligible?(op, matchee.term)
 
-    # Fast log with less indirection specifically for ⟨_⟩, because it
+    # Fast path with less indirection specifically for ⟨_⟩, because it
     # is used quite a lot in very hot places.
     if op.is_a?(Op::ScanFirst) && op.seq.size == 1
       needle = op.seq.unsafe_fetch(0)
@@ -1293,10 +1293,10 @@ module Ww::M1
       # In `(a_ (%items xs_ ⏏a_ b_⏏) b_)`, `a_ b_` matches unconstrained by
       # the outer `a_` and `b_`. Such constraints can be established later,
       # in the successor (here it is `xs_`, which does not impose any constraints).
-      search_with_sealed_log(ctx.sibling, op, matchee, plan: nil) do |fb, fblog|
+      search_with_sealed_trace(ctx.sibling, op, matchee, plan: nil) do |fb, fb_trace|
         next false if fb.empty? # reject
 
-        unless push.call?(fb, fblog)
+        unless push.call?(fb, fb_trace)
           return Fb[] # does not fit (max exceeded)
         end
 
@@ -1309,7 +1309,7 @@ module Ww::M1
   #
   # (%matches () ⟨_number⟩°)  (%matches ({¦ x_} _* lst_) ⟨±x⟩°)
   def match(ctx, op : Op::Matches, matchee : Tzip, plan)
-    handle = Log.seal(Log.simplify(matchee.log))
+    handle = Trace.seal(Trace.simplify(matchee.trace))
     successor = Envlist.new(op.successor, op.min, op.max, handle)
 
     match(ctx, successor, plan) do |push|
@@ -1331,7 +1331,7 @@ module Ww::M1
     return Fb[] unless blob = matchee.term.as_blob?
     return Fb[] unless classif = blob.classif?
 
-    media_type_string = Tzip.new(Term.of(classif.to_s), Log.none)
+    media_type_string = Tzip.new(Term.of(classif.to_s), Trace.none)
     match(ctx, op.successor, media_type_string, plan)
   end
 
@@ -1342,8 +1342,8 @@ module Ww::M1
     return Fb[] unless blob = matchee.term.as_blob?
     return Fb[] unless classif = blob.classif?
 
-    media_type = Tzip.new(Term.of(classif.media_type), Log.none)
-    media_params = Tzip.new(Term.of(classif.media_params), Log.none)
+    media_type = Tzip.new(Term.of(classif.media_type), Trace.none)
+    media_params = Tzip.new(Term.of(classif.media_params), Trace.none)
 
     ahead = ctx.interject(plan, Action.match(op.params, media_params))
     match(ctx, op.type, media_type, ahead)
@@ -1353,14 +1353,14 @@ module Ww::M1
   class EnvlistPush(N)
     def initialize(
       @envs : Pf::Kit::HybridArray(Tzip, N),
-      @logs : Pf::Kit::HybridArray(Log::SealedOne, N)?,
+      @traces : Pf::Kit::HybridArray(Trace::SealedOne, N)?,
       @capacity : Magnitude,
     )
     end
 
-    # Returns `true` if *fb*/*fblog* fits. Returns `false` if they do not fit
+    # Returns `true` if *fb*/*fb_trace* fits. Returns `false` if they do not fit
     # in the envlist.
-    def call?(fb : Fb, fblog : Log::None | Log::Sealed) : Bool
+    def call?(fb : Fb, fb_trace : Trace::None | Trace::Sealed) : Bool
       unless fb.present?
         return true # continue
       end
@@ -1373,18 +1373,18 @@ module Ww::M1
 
         # When you match (%items (⏏x_⏏ y_) _ _) and change `x` (the first *env*), it
         # should change the first matched PAIR of items (generally, the first matched
-        # sequence of items); which is exactly what *fblog* refers to, being
-        # a collection of matched logs.
+        # sequence of items); which is exactly what *fb_trace* refers to, being
+        # a collection of matched traces.
         #
         # NOTE: We knowingly discard imaginary/virtual responses here (e.g. `kp` in
         # `(%-value k kp)`), because it's hard and unnecessary to match on them
         # in practice.
-        @envs << Tzip.mapping(response.envtab, fblog) { |entry, _| entry }
+        @envs << Tzip.mapping(response.envtab, fb_trace) { |entry, _| entry }
       end
 
-      if logs = @logs
-        Log.flatten(fblog) do |one|
-          logs << Log.seal(one)
+      if traces = @traces
+        Trace.flatten(fb_trace) do |one|
+          traces << Trace.seal(one)
         end
       end
 
@@ -1397,7 +1397,7 @@ module Ww::M1
     op : Op::Any,
     min : Magnitude,
     max : Magnitude,
-    handle : Log::Sealed | Log::None? = nil
+    handle : Trace::Sealed | Trace::None? = nil
 
   # :nodoc:
   def match(ctx, mod : Envlist, plan, &)
@@ -1405,10 +1405,10 @@ module Ww::M1
     # If it doesn't specify a concrete handle, then its handle is the union of
     # the handles of what it will push.
     if mod.handle.nil?
-      logs = Pf::Kit.stack_array(Log::SealedOne, 8)
+      traces = Pf::Kit.stack_array(Trace::SealedOne, 8)
     end
 
-    push = stack_alloc EnvlistPush(8).new(envs, logs, mod.max)
+    push = stack_alloc EnvlistPush(8).new(envs, traces, mod.max)
     yield push
 
     return Fb[] if envs.size < mod.min
@@ -1416,14 +1416,14 @@ module Ww::M1
     # Synthesize the environment list, containing environments pushed by
     # the block. Indices are mapped to environments, which are Tzips.
     #
-    # *logs* contains flattened handles of environments. Therefore, *envlist*'s
+    # *traces* contains flattened handles of environments. Therefore, *envlist*'s
     # handle is the union of those. This means it points to all elements matched by
     # environments in the envlist. So e.g. for %items, referring to `(%items ⏏xs_⏏ _number)`
     # means referring to all items that it matched (in this example, to all numbers
     # in the itemspart of the matchee).
     unless handle = mod.handle
-      assert logs
-      handle = Log.seal(logs, &.itself)
+      assert traces
+      handle = Trace.seal(traces, &.itself)
     end
     envlist = Tzip.mapping(envs, handle) do |env, index|
       {Term.of(index), env}
@@ -1589,7 +1589,7 @@ module Ww::M1
   def match(ctx, op : Op::Charcount, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_s?
 
-    cons(ctx, op.successor, Tzip.new(Term.of(a.charcount), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(a.charcount), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1598,14 +1598,14 @@ module Ww::M1
   def match(ctx, op : Op::Size, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_d?
 
-    cons(ctx, op.successor, Tzip.new(Term.of(a.size), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(a.size), Trace.none), plan)
   end
 
   # :nodoc:
   #
   # (%pipe type _number)
   def match(ctx, op : Op::Type, matchee : Tzip, plan)
-    cons(ctx, op.successor, Tzip.new(Term.of(matchee.term.type.blank), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(matchee.term.type.blank), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1622,15 +1622,15 @@ module Ww::M1
       return Fb[]
     end
 
-    cons(ctx, op.successor, Tzip.new(result, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(result, Trace.none), plan)
   end
 
   # :nodoc:
   #
-  # (%pipe untracked x_) -- a utility operator used to remove log tracking. This lets
+  # (%pipe untracked x_) -- a utility operator used to remove trace tracking. This lets
   # you set up equality constraints while not having backmaps manipulate both parties.
   def match(ctx, op : Op::Untracked, matchee : Tzip, plan)
-    cons(ctx, op.successor, Tzip.new(matchee.term, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(matchee.term, Trace.none), plan)
   end
 
   # :nodoc:
@@ -1641,7 +1641,7 @@ module Ww::M1
 
     dict1 = dict0.replace(0...0, Term.rep(op.terms))
 
-    cons(ctx, op.successor, Tzip.new(Term.of(dict1), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(dict1), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1650,7 +1650,7 @@ module Ww::M1
   def match(ctx, op : Op::Add, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_n?
 
-    cons(ctx, op.successor, Tzip.new(Term.of(a + op.arg), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(a + op.arg), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1659,7 +1659,7 @@ module Ww::M1
   def match(ctx, op : Op::Sub, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_n?
 
-    cons(ctx, op.successor, Tzip.new(Term.of(a - op.arg), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(a - op.arg), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1668,7 +1668,7 @@ module Ww::M1
   def match(ctx, op : Op::Mul, matchee : Tzip, plan)
     return Fb[] unless a = matchee.term.as_n?
 
-    cons(ctx, op.successor, Tzip.new(Term.of(a * op.arg), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(a * op.arg), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1683,7 +1683,7 @@ module Ww::M1
       return Fb[] # (%pipe (/ 0) _) is a nevermatch.
     end
 
-    cons(ctx, op.successor, Tzip.new(q, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(q, Trace.none), plan)
   end
 
   # :nodoc:
@@ -1698,7 +1698,7 @@ module Ww::M1
       return Fb[] # (%pipe (// 0) _) is a nevermatch
     end
 
-    cons(ctx, op.successor, Tzip.new(q, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(q, Trace.none), plan)
   end
 
   # :nodoc:
@@ -1713,7 +1713,7 @@ module Ww::M1
       return Fb[] # (%pipe (% 0) _) is a nevermatch
     end
 
-    cons(ctx, op.successor, Tzip.new(r, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(r, Trace.none), plan)
   end
 
   # :nodoc:
@@ -1728,7 +1728,7 @@ module Ww::M1
       return Fb[]
     end
 
-    cons(ctx, op.successor, Tzip.new(c, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(c, Trace.none), plan)
   end
 
   # :nodoc:
@@ -1739,7 +1739,7 @@ module Ww::M1
 
     a = Math.min(Math.max(a, op.min), op.max)
 
-    cons(ctx, op.successor, Tzip.new(Term.of(a), Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(Term.of(a), Trace.none), plan)
   end
 
   # :nodoc:
@@ -1748,27 +1748,27 @@ module Ww::M1
   def match(ctx, op : Op::Map, matchee : Tzip, plan)
     return Fb[] unless v = op.arg[matchee.term]?
 
-    cons(ctx, op.successor, Tzip.new(v, Log.none), plan)
+    cons(ctx, op.successor, Tzip.new(v, Trace.none), plan)
   end
 
   # :nodoc:
   #
   # (%keypath kp)
   def match(ctx, op : Op::KeypathCapture, matchee : Tzip, plan)
-    log = matchee.log
-    if log.is_a?(Log::None)
-      # Either logging is disabled, or there is no path to matchee. Raise
-      # RequestLog. The caller will either enable logging for us, or trigger
+    trace = matchee.trace
+    if trace.is_a?(Trace::None)
+      # Either tracing is disabled, or there is no path to matchee. Raise
+      # RequestTrace. The caller will either enable tracing for us, or trigger
       # mismatch on our behalf -- if there's no path to matchee KeypathCapture
       # is a nevermach.
-      raise RequestLog.new
+      raise RequestTrace.new
     end
 
-    unless keypath = Log.keypath?(Log.simplify(log))
+    unless keypath = Trace.keypath?(Trace.simplify(trace))
       return Fb[]
     end
 
-    proposal = Tzip.new(Term.of(keypath), Log.none)
+    proposal = Tzip.new(Term.of(keypath), Trace.none)
 
     capture(ctx, op.capture, proposal, Op::INSTANCE_PASS, matchee, plan)
   end
@@ -2206,9 +2206,9 @@ module Ww::M1
           itemctx = response.sibling(envtab: envtab, choicetab: choicetab, selector: true)
 
           fb = eval(match(itemctx, op.selector, item, plan: nil))
-          fblog = Log.seal(Log.simplify(item.log))
+          fb_trace = Trace.seal(Trace.simplify(item.trace))
 
-          unless push.call?(fb, fblog)
+          unless push.call?(fb, fb_trace)
             return Fb[] # does not fit (max envs exceeded)
           end
         end
@@ -2432,12 +2432,12 @@ module Ww::M1
   #
   # (%gap n_)
   def match(ctx, op : Op::Item::GapFirstDistrib, run : Tzip::ItemsView, plan)
-    # NOTE: It makes no sense to refer to the gap's n, hence Log.none:
+    # NOTE: It makes no sense to refer to the gap's n, hence Trace.none:
     #
     #   ((%gap n_)) <> {n: 10}
     #
     # This backmap has no meaning.
-    n = Tzip.new(Term.of(run.size), Log.none)
+    n = Tzip.new(Term.of(run.size), Trace.none)
 
     ahead = ctx.interject(plan, Action.match(op.measurer, n))
     cons(ctx, ahead)
@@ -2448,7 +2448,7 @@ module Ww::M1
   # (%gap/min n_)  (%gap/max (%number _ < (var hi)))  (%gap/min° n_)
   def match(ctx, op : Op::Item::GapMinMax, feed : Feed, run : Tzip::ItemsView, rest : Tzip::ItemsView, plan)
     # Ditto: it makes no sense to refer to the gap's n.
-    n = Tzip.new(Term.of(run.size), Log.none)
+    n = Tzip.new(Term.of(run.size), Trace.none)
 
     feed = feed.claim(run)
     ahead = ctx.interject(plan,
@@ -2573,9 +2573,9 @@ module Ww::M1
 
     if b = op.stops.last?
       content = items.reshape(b, items.begin)
-      handle = Log.seal(Log.simplify(content.log))
+      handle = Trace.seal(Trace.simplify(content.trace))
 
-      # Construct a mapping log for each match of children so that e.g. in:
+      # Construct a mapping trace for each match of children so that e.g. in:
       #
       #   (%many (env←{¦ x: K_} _*) x_ y_)
       #
@@ -2600,9 +2600,9 @@ module Ww::M1
       # Construct the toplevel envs list lst←(env₀ env₁ ...) and its corresponding
       # mapping. lst should refer to all items matched.
       #
-      # Each env's log is a Mapping (see above): its handle refers to the range
+      # Each env's trace is a Mapping (see above): its handle refers to the range
       # matched by env₀, env₁ and so on; we concatenate them to get a single handle.
-      handle = Log.seal(op.envs, &.log)
+      handle = Trace.seal(op.envs, &.trace)
       envlist = Tzip.mapping(op.envs, handle) { |env, index| {Term.of(index), env} }
 
       if lbound = op.stops.first?
@@ -2871,33 +2871,33 @@ module Ww::M1
 
   # :nodoc:
   #
-  # `%keypath` operators use this exception to request that `log:` should be set
+  # `%keypath` operators use this exception to request that `trace:` should be set
   # to `true` and another round of `match` should be attempted.
   #
-  # In practice, RequestLog is almost never raised (that's why it's modeled as
-  # an exception, because RequestLog *is* exceptional, even though at the core
+  # In practice, RequestTrace is almost never raised (that's why it's modeled as
+  # an exception, because RequestTrace *is* exceptional, even though at the core
   # is a control flow construct).
-  class RequestLog < Exception
+  class RequestTrace < Exception
     @callstack = CallStack.empty
   end
 
   # :nodoc:
-  def match(env : Term::Dict, op : Op::Any, matchee : Term, *, log : Bool = false, & : Fb -> T) : T forall T
-    2.times do # 2 means before and after RequestLog is raised.
+  def match(env : Term::Dict, op : Op::Any, matchee : Term, *, trace : Bool = false, & : Fb -> T) : T forall T
+    2.times do # 2 means before and after RequestTrace is raised.
       Context.new(env) do |ctx|
-        tzip = Tzip.new(matchee, log ? Log.root : Log.none)
+        tzip = Tzip.new(matchee, trace ? Trace.root : Trace.none)
 
         begin
           fb = eval(match(ctx, op, tzip, plan: nil))
-        rescue RequestLog
-          unless log
-            log = true
+        rescue RequestTrace
+          unless trace
+            trace = true
             next
           end
 
-          # `%keypath` is expected to RequestLog again if it's in an unreachable spot
-          # (because it doesn't see the difference between log: false and unavailability
-          # of the log at its particular spot). `%keypath` will never match when it's in
+          # `%keypath` is expected to RequestTrace again if it's in an unreachable spot
+          # (because it doesn't see the difference between trace: false and unavailability
+          # of the trace at its particular spot). `%keypath` will never match when it's in
           # an unreachable spot. So we trigger a mismatch immediately.
           fb = Fb[]
         end

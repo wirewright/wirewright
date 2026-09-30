@@ -1,51 +1,52 @@
 module Ww::M1
   # A term plus a composable explanation of how that term was selected,
-  # inspected, or synthesized (see `Log`).
+  # inspected, or synthesized (see `Trace`).
   struct Tzip
     # Returns the focused term.
     getter term : Term
 
-    # Returns the underlying log. `Log::None` means logging is disabled or this
-    # tzip is unreachable.
-    getter log : Log::Any
+    # Returns the underlying trace. `Trace::None` means tracing is disabled or this
+    # tzip is unreachable (e.g. a purely synthetic trace such as that for
+    # a dictionary size).
+    getter trace : Trace::Any
 
-    def initialize(@term, @log)
+    def initialize(@term, @trace)
     end
 
     # Constructs a pair of tzips for *key* and *value* stemming out of
-    # the same *log*.
-    def self.entry(log : Log::Any, key : Term, value : Term) : {Tzip, Tzip}
-      {key(log, key), value(log, key, value)}
+    # the same *trace*.
+    def self.entry(trace : Trace::Any, key : Term, value : Term) : {Tzip, Tzip}
+      {key(trace, key), value(trace, key, value)}
     end
 
-    # Constructs an entry key tzip stemming out of the given *log*.
-    def self.key(log : Log::Any, key : Term) : Tzip
-      new(key, Log.append(log, Log::ExamineKey.new(key)))
+    # Constructs an entry key tzip stemming out of the given *trace*.
+    def self.key(trace : Trace::Any, key : Term) : Tzip
+      new(key, Trace.append(trace, Trace::ExamineKey.new(key)))
     end
 
-    # Constructs an entry value tzip stemming out of the given *log*.
-    def self.value(log : Log::Any, key : Term, value : Term) : Tzip
-      new(value, Log.append(log, Log::ExamineValue.new(key)))
+    # Constructs an entry value tzip stemming out of the given *trace*.
+    def self.value(trace : Trace::Any, key : Term, value : Term) : Tzip
+      new(value, Trace.append(trace, Trace::ExamineValue.new(key)))
     end
 
-    # Joins the logs of two tzips if their terms are equal.
+    # Joins the traces of two tzips if their terms are equal.
     def self.join?(a : Tzip, b : Tzip) : Tzip?
       return unless a.term == b.term
 
-      Tzip.new(a.term, Log.join(a.log, b.log))
+      Tzip.new(a.term, Trace.join(a.trace, b.trace))
     end
 
     # :nodoc:
-    def self.mapping(objects : Enumerable(T), handle : Log::Sealed, & : T, Int32 -> {Term | Tzip, Tzip}) : Tzip forall T
-      mapping = Pf::Kit.stack_array({Log::ExamineKey | Log::ExamineValue, Log::Some}, 8)
+    def self.mapping(objects : Enumerable(T), handle : Trace::Sealed, & : T, Int32 -> {Term | Tzip, Tzip}) : Tzip forall T
+      mapping = Pf::Kit.stack_array({Trace::ExamineKey | Trace::ExamineValue, Trace::Some}, 8)
 
       dict = Term::Dict.build do |commit|
         objects.each_with_index do |object, index|
           key, value = yield object, index
 
           if key.is_a?(Tzip)
-            if log = key.log.as?(Log::Some)
-              mapping << {Log::ExamineKey.new(key.term), log}
+            if trace = key.trace.as?(Trace::Some)
+              mapping << {Trace::ExamineKey.new(key.term), trace}
             end
 
             key = key.term
@@ -53,24 +54,24 @@ module Ww::M1
 
           commit.with(key, value.term)
 
-          # Value may not necessarily have a log, as in the following pattern:
+          # Value may not necessarily have a trace, as in the following pattern:
           #
           #   (%items xs_ (%all x_symbol (%keypath path)))
           #
           # Here, the capture *path* (and its correponding mapping when %items
-          # requests it) does not have an associated log even if logging is enabled.
+          # requests it) does not have an associated trace even if tracing is enabled.
           # Such cases we simply skip.
-          if log = value.log.as?(Log::Some)
-            mapping << {Log::ExamineValue.new(key), log}
+          if trace = value.trace.as?(Trace::Some)
+            mapping << {Trace::ExamineValue.new(key), trace}
           end
         end
       end
 
-      new(Term.of(dict), Log::Mapping.new(handle, mapping.to_readonly_slice(&.itself)))
+      new(Term.of(dict), Trace::Mapping.new(handle, mapping.to_readonly_slice(&.itself)))
     end
 
     # :nodoc:
-    def self.mapping(objects : Enumerable(T), handle : Log::None, & : T, Int32 -> {Term | Tzip, Tzip}) : Tzip forall T
+    def self.mapping(objects : Enumerable(T), handle : Trace::None, & : T, Int32 -> {Term | Tzip, Tzip}) : Tzip forall T
       dict = Term::Dict.build do |commit|
         objects.each_with_index do |object, index|
           key, value = yield object, index
@@ -83,14 +84,14 @@ module Ww::M1
         end
       end
 
-      new(Term.of(dict), Log.none)
+      new(Term.of(dict), Trace.none)
     end
 
     {% if flag?(:docs) %}
-      # Synthesizes a dictionary tzip with the appropriate `Log::Mapping`. Uses the block
+      # Synthesizes a dictionary tzip with the appropriate `Trace::Mapping`. Uses the block
       # to convert *objects* to key-value pairs (also supplies the block with the index
       # of the current object).
-      def self.mapping(objects : Enumerable(T), handle : Log::None, & : T, Int32 -> {Term | Tzip, Tzip}) : Tzip forall T
+      def self.mapping(objects : Enumerable(T), handle : Trace::None, & : T, Int32 -> {Term | Tzip, Tzip}) : Tzip forall T
       end
     {% end %}
 
@@ -109,7 +110,7 @@ module Ww::M1
       key = Term.of(key)
       return unless value = dict[key]?
 
-      Tzip.new(value, Log.append(@log, Log::ExamineValue.new(key)))
+      Tzip.new(value, Trace.append(@trace, Trace::ExamineValue.new(key)))
     end
 
     # Similar to `Term::Dict#[]`.
@@ -121,7 +122,7 @@ module Ww::M1
     def each_entry(& : Tzip, Tzip ->)
       assert dict = @term.as_d?
 
-      dict.each_entry { |key, value| yield *Tzip.entry(@log, key, value) }
+      dict.each_entry { |key, value| yield *Tzip.entry(@trace, key, value) }
     end
 
     # Similar to `Term::Dict#each_entry(Part::EntriesOrd)`.
@@ -129,7 +130,7 @@ module Ww::M1
       assert dict = @term.as_d?
 
       dict.each_entry(in: Term::Dict.entries_ord) do |key, value|
-        yield *Tzip.entry(@log, key, value)
+        yield *Tzip.entry(@trace, key, value)
       end
     end
 
@@ -138,7 +139,7 @@ module Ww::M1
       assert dict = @term.as_d?
 
       dict.each_entry(in: Term::Dict.pairspart_ord) do |key, value|
-        yield *Tzip.entry(@log, key, value)
+        yield *Tzip.entry(@trace, key, value)
       end
     end
 
@@ -146,12 +147,12 @@ module Ww::M1
     #
     # This is more efficient than using `each_pair_ord` and discarding the key,
     # as its construction actually takes some effort and memory (key-descent
-    # logs are somewhat pessimized since they're rare in practice).
+    # traces are somewhat pessimized since they're rare in practice).
     def each_pair_value_ord(& : Tzip ->)
       assert dict = @term.as_d?
 
       dict.each_entry(in: Term::Dict.pairspart_ord) do |key, value|
-        yield Tzip.value(@log, key, value)
+        yield Tzip.value(@trace, key, value)
       end
     end
 
@@ -159,20 +160,20 @@ module Ww::M1
     def itemspart : Tzip
       assert dict = @term.as_d?
 
-      Tzip.new(Term.of(dict.itemspart), Log.append(@log, Log::ExamineItemspart.new))
+      Tzip.new(Term.of(dict.itemspart), Trace.append(@trace, Trace::ExamineItemspart.new))
     end
 
     # Similar to `Term::Dict.pairspart`.
     def pairspart : Tzip
       assert dict = @term.as_d?
 
-      Tzip.new(Term.of(dict.pairspart), Log.append(@log, Log::ExaminePairspart.new))
+      Tzip.new(Term.of(dict.pairspart), Trace.append(@trace, Trace::ExaminePairspart.new))
     end
 
-    def ref(key : Term) : Log::Sealed | Log::None
-      log = Log.append(@log, Log::ExamineValue.new(key))
+    def ref(key : Term) : Trace::Sealed | Trace::None
+      trace = Trace.append(@trace, Trace::ExamineValue.new(key))
 
-      Log.seal(Log.simplify(log))
+      Trace.seal(Trace.simplify(trace))
     end
 
     enum Order : UInt16
@@ -254,9 +255,9 @@ module Ww::M1
       case order
       in .skip?
       in .lexical?
-        Tzip.value(@log, Term.of(n), dict.items[n])
+        Tzip.value(@trace, Term.of(n), dict.items[n])
       in .memory?
-        Tzip.value(@log, *dict.nth(n))
+        Tzip.value(@trace, *dict.nth(n))
       end
     end
 
@@ -269,9 +270,9 @@ module Ww::M1
       case order
       in .skip?
       in .lexical?
-        Tzip.value(@log, *dict.ordnth(dict.itemsize + n))
+        Tzip.value(@trace, *dict.ordnth(dict.itemsize + n))
       in .memory?
-        Tzip.value(@log, *dict.nth(dict.itemsize + n))
+        Tzip.value(@trace, *dict.nth(dict.itemsize + n))
       end
     end
 
@@ -284,47 +285,47 @@ module Ww::M1
 
       zname = Tzip.new(
         term: Term.of(blank.name),
-        log: Log.append(@log, Log::ExamineBlankName.new),
+        trace: Trace.append(@trace, Trace::ExamineBlankName.new),
       )
 
       ztype = Tzip.new(
         term: Term.of(blank.type.blank),
-        log: Log.append(@log, Log::ExamineBlankType.new),
+        trace: Trace.append(@trace, Trace::ExamineBlankType.new),
       )
 
       {zname, ztype}
     end
 
     # Pretends to insert *item* before *index*. The resulting tzip is of *item*,
-    # with insertion logged.
+    # with insertion recorded in the trace.
     #
     # *ord* is needed to disambiguate multiple insertions before the same index.
-    # See `Log::InsertItem`.
+    # See `Trace::InsertItem`.
     def insert(item : Term, *, before index : UInt32, ord : UInt32) : Tzip
       assert dict = @term.as_d?
       assert index <= dict.itemsize
 
-      Tzip.new(item, Log.append(@log, Log::InsertItem.new(index, ord, item)))
+      Tzip.new(item, Trace.append(@trace, Trace::InsertItem.new(index, ord, item)))
     end
 
     # Pretends to insert an entry with the given *key* and *value*. The resulting
-    # tzip is of *value*, with insertion logged.
+    # tzip is of *value*, with insertion recorded in the trace.
     def with(key : Term, value : Term) : Tzip
       assert dict = @term.as_d?
       {% unless flag?(:release) %}
         assert !dict.includes?(key)
       {% end %}
 
-      Tzip.new(value, Log.append(@log, Log::InsertEntry.new(key, value)))
+      Tzip.new(value, Trace.append(@trace, Trace::InsertEntry.new(key, value)))
     end
 
     # Removes keys from this tzip. Keys are obtained by converting *objects*
     # to terms using the block. The resulting tzip is of the dict without
-    # keys, with removal of keys logged.
+    # keys, with removal of keys recorded in the trace.
     def without(objects : Indexable(T), & : T -> Term) : Tzip forall T
       assert dict0 = @term.as_d?
 
-      log = @log
+      trace = @trace
       removed = Pf::Kit.stack_array(Term, 8)
 
       dict1 = dict0.transaction do |commit|
@@ -337,30 +338,30 @@ module Ww::M1
           next unless size0 > size1
 
           assert size0 - 1 == size1
-          next if log.is_a?(Log::None)
+          next if trace.is_a?(Trace::None)
 
           removed << key
         end
       end
 
-      if log.is_a?(Log::None) || removed.empty?
-        return Tzip.new(Term.of(dict1), @log)
+      if trace.is_a?(Trace::None) || removed.empty?
+        return Tzip.new(Term.of(dict1), @trace)
       end
 
-      action = Log::ExamineResidue.new(removed.to_readonly_slice(&.itself))
+      action = Trace::ExamineResidue.new(removed.to_readonly_slice(&.itself))
 
-      Tzip.new(Term.of(dict1), Log.append(@log, action))
+      Tzip.new(Term.of(dict1), Trace.append(@trace, action))
     end
 
-    # Adds to this tzip's logs that it's also a key in the given *table*.
-    # Returns the modified tzip.
+    # Records in this tzip's trace that it is a key in the given *table*, meaning
+    # client modifications should also affect the key in *table*.
     def also_key_in(table : Tzip) : Tzip
       assert table.dict?
       {% unless flag?(:release) %}
         assert table.term.includes?(@term)
       {% end %}
 
-      Tzip.new(@term, Log.join(@log, Log.append(table.log, Log::ExamineKey.new(@term))))
+      Tzip.new(@term, Trace.join(@trace, Trace.append(table.trace, Trace::ExamineKey.new(@term))))
     end
 
     # Returns a view of the items in this tzip's itemspart.
@@ -558,9 +559,9 @@ module Ww::M1
       flat(sink, spec)
 
       # (%flat (_ n) ns_) <> {(ns): ()} means remove all pairs with key `n`.
-      case @log
-      in Log::Some then handle = Log.seal(sink, &.log)
-      in Log::None then handle = Log.none
+      case @trace
+      in Trace::Some then handle = Trace.seal(sink, &.trace)
+      in Trace::None then handle = Trace.none
       end
 
       Tzip.mapping(sink, handle: handle) do |item, index|
@@ -578,7 +579,7 @@ module Ww::M1
       return unless value0 = self[step.term]?
       return unless value1 = value0.pluck?(steps)
 
-      handle = Log.seal(Log.simplify(@log))
+      handle = Trace.seal(Trace.simplify(@trace))
 
       Tzip.mapping({ {step.term, value1} }, handle, &.itself)
     end
@@ -593,12 +594,12 @@ module Ww::M1
         return unless value0 = self[key]?
         return unless value1 = value0.pluck?(steps)
 
-        entries << {Tzip.key(@log, key), value1}
+        entries << {Tzip.key(@trace, key), value1}
       end
 
       return if entries.empty?
 
-      Tzip.mapping(entries, handle: Log.seal(Log.simplify(@log)), &.itself)
+      Tzip.mapping(entries, handle: Trace.seal(Trace.simplify(@trace)), &.itself)
     end
 
     # :nodoc:
@@ -613,7 +614,7 @@ module Ww::M1
 
           # NOTE: Since we append items first, we can use entries.size instead of
           # maintaining a separate counter.
-          entries << {Tzip.key(@log, Term.of(entries.size)), item1}
+          entries << {Tzip.key(@trace, Term.of(entries.size)), item1}
         end
       end
 
@@ -627,7 +628,7 @@ module Ww::M1
 
       return if entries.empty?
 
-      Tzip.mapping(entries, handle: Log.seal(Log.simplify(@log)), &.itself)
+      Tzip.mapping(entries, handle: Trace.seal(Trace.simplify(@trace)), &.itself)
     end
 
     # :nodoc:
@@ -649,13 +650,13 @@ module Ww::M1
     # generating Mappings for everything; and Mappings aren't the cheapest solution,
     # to put it lightly. Maybe there's a better way to do it (at least in the common case).
     def pluck(spec : PluckSpec) : Tzip
-      pluck?(spec) || Tzip.new(Term.of, Log.none)
+      pluck?(spec) || Tzip.new(Term.of, Trace.none)
     end
 
     def inspect(io)
       @term.inspect(io)
       io << "//"
-      @log.inspect(io)
+      @trace.inspect(io)
     end
   end
 
@@ -839,27 +840,27 @@ module Ww::M1
       copy_with(begin: @begin + pivot.to_u32)
     end
 
-    # Constructs a log corresponding to this items view. The log stems
-    # from `tzip`'s log and is annotated as `Log::ExamineRange`.
-    def log : Log::Any
-      Log.append(@tzip.log, Log::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: 0u32))
+    # Constructs a trace corresponding to this items view. The trace stems
+    # from `tzip`'s trace and is annotated as `Trace::ExamineRange`.
+    def trace : Trace::Any
+      Trace.append(@tzip.trace, Trace::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: 0u32))
     end
 
     # Constructs a span reference (see `Ref::Span`) corresponding to this
     # items view.
-    def ref(*, ord : UInt32) : Log::Sealed | Log::None
-      log = Log.append(@tzip.log, Log::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: ord))
+    def ref(*, ord : UInt32) : Trace::Sealed | Trace::None
+      trace = Trace.append(@tzip.trace, Trace::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: ord))
 
-      Log.seal(Log.simplify(log))
+      Trace.seal(Trace.simplify(trace))
     end
 
     # Returns a tzip of the items in this view (as a dict).
     def collect : Tzip
       iv = @tzip.term.items(@begin.to_i, @end.to_i)
 
-      # FIXME: It is unclear whether `log` is enough here or whether we should
-      # construct a mapping. Assuming disciplined use, `log` *is* enough.
-      Tzip.new(Term.of(iv.collect), log)
+      # FIXME: It is unclear whether `trace` is enough here or whether we should
+      # construct a mapping. Assuming disciplined use, `trace` *is* enough.
+      Tzip.new(Term.of(iv.collect), trace)
     end
 
     # Yields all splits of this view into two subviews, starting with

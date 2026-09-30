@@ -511,30 +511,30 @@ module Ww::M1
     matches(env, operator(pattern, **kwargs), matchee)
   end
 
-  # Each entry in the log list maps a name to its corresponding sealed log. The log
-  # may not point to an existing term in the matchee, as is the case for logs emitted
+  # Each entry in the trace list maps a name to its corresponding sealed trace. The trace
+  # may not point to an existing term in the matchee, as is the case for traces emitted
   # by so-called *refs*. For example, `{¦ ⏏-x_⏏}`, which checks for the *absence* of
-  # an entry with the key *x* but produces a log to it anyway. On the other hand,
-  # *captures* always produce logs that exist in the matchee.
+  # an entry with the key *x* but produces a trace to it anyway. On the other hand,
+  # *captures* always produce traces that exist in the matchee.
   #
-  # Whenever a capture has multiple logs associated with it, you'll see multiple
+  # Whenever a capture has multiple traces associated with it, you'll see multiple
   # entries with the same name.
-  alias LogList = Slice({Term, Log::SealedOne})
+  alias TraceList = Slice({Term, Trace::SealedOne})
 
-  private def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term, &)
-    match(env, op, matchee, log: true) do |fb|
-      buffer = Pf::Kit.stack_array({Term::Dict, LogList}, 16)
+  private def matches_and_traces(env : Term::Dict, op : Op::Any, matchee : Term, &)
+    match(env, op, matchee, trace: true) do |fb|
+      buffer = Pf::Kit.stack_array({Term::Dict, TraceList}, 16)
 
       fb.each do |response|
-        logs = Pf::Kit.stack_array({Term, Log::SealedOne}, 8)
+        traces = Pf::Kit.stack_array({Term, Trace::SealedOne}, 8)
 
         # Add captures and paths to them (if any).
         env = Term::Dict.build do |commit|
           response.envtab.each do |key, value|
             commit.with(key, value.term)
 
-            Log.flatten(Log.simplify(value.log)) do |log|
-              logs << {key, Log.seal(log)}
+            Trace.flatten(Trace.simplify(value.trace)) do |trace|
+              traces << {key, Trace.seal(trace)}
             end
           end
         end
@@ -542,12 +542,12 @@ module Ww::M1
         # Add refs (roughly speaking, named paths not associated with any
         # particular capture).
         response.reftab.each do |key, ref|
-          Log.flatten(ref) do |ref_one|
-            logs << {key, ref_one.as(Log::SealedOne)}
+          Trace.flatten(ref) do |ref_one|
+            traces << {key, ref_one.as(Trace::SealedOne)}
           end
         end
 
-        buffer << {env, logs.to_readonly_slice(&.itself)}
+        buffer << {env, traces.to_readonly_slice(&.itself)}
       end
 
       yield buffer
@@ -555,32 +555,32 @@ module Ww::M1
   end
 
   # A list of pairs, where each pair consists of an environment dict, and a list
-  # of logs associated with that environment dict.
-  alias EnvLogList = Slice({Term::Dict, LogList})
+  # of traces associated with that environment dict.
+  alias EnvTraceList = Slice({Term::Dict, TraceList})
 
   # Returns a read-only slice of match envs paired with their corresponding
-  # log lists. The order is as in `matches`.
+  # trace lists. The order is as in `matches`.
   #
   # This function is the point of contact between the pattern matching part
   # of M1 and its backmap part. What this function returns is exactly what
   # a backmap engine needs as input.
-  def matches_and_logs(env : Term::Dict, op : Op::Any, matchee : Term) : EnvLogList
-    matches_and_logs(env, op, matchee, &.to_readonly_slice(&.itself))
+  def matches_and_traces(env : Term::Dict, op : Op::Any, matchee : Term) : EnvTraceList
+    matches_and_traces(env, op, matchee, &.to_readonly_slice(&.itself))
   end
 
   # Runs the backmap engine on the given backsystem *backsys* and *matchee*.
   #
   # This overload lets you specify the backsystem as a list of associations between
-  # an env log list (as emitted e.g. by `matches_and_logs`) and backspecs. Returns
+  # an env trace list (as emitted e.g. by `matches_and_traces`) and backspecs. Returns
   # the resulting replacement (see `Term::Rep`).
   #
   # WARNING: You are not advised to use this overload because it relies without any
-  # checks on the fact that match log lists in *backsys* really are pointing into
+  # checks on the fact that match trace lists in *backsys* really are pointing into
   # *matchee*. If they are not, the behavior of this function is not specified (not
-  # in the UB sense, but in that it may or may not raise depending on how much logs
+  # in the UB sense, but in that it may or may not raise depending on how much traces
   # from *backsys* and *matchee* overlap).
-  def backmapR(backsys : Enumerable({EnvLogList, Term::Dict}), matchee : Term) : Term::Rep
-    agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
+  def backmapR(backsys : Enumerable({EnvTraceList, Term::Dict}), matchee : Term) : Term::Rep
+    agents = Pf::Kit.stack_array(Backmap::Agent(EnvTraceList), 8)
 
     backsys.each do |matches, backspec|
       next if matches.empty?
@@ -601,12 +601,12 @@ module Ww::M1
   # Returns the resulting replacement (see `Term::Rep`). Returns `nil` if *none*
   # of the operators matched *matchee*.
   def backmapR?(backsys : Enumerable({Op::Any, Term::Dict}), matchee : Term, *, env : Term::Dict = Term[]) : Term::Rep?
-    agents = Pf::Kit.stack_array(Backmap::Agent(EnvLogList), 8)
+    agents = Pf::Kit.stack_array(Backmap::Agent(EnvTraceList), 8)
 
     backsys.each do |op, backspec|
       next unless probably_matches?(op, matchee)
 
-      matches = matches_and_logs(env, op, matchee)
+      matches = matches_and_traces(env, op, matchee)
       next if matches.empty?
 
       agents << Backmap::Agent.new(matches, backspec)
@@ -647,7 +647,7 @@ module Ww::M1
   def backmapR?(op : Op::Any, backspec : Term, matchee : Term, *, env : Term::Dict = Term[]) : Term::Rep?
     return unless backspec = backspec.as_d?
 
-    matches_and_logs(env, op, matchee) do |matches|
+    matches_and_traces(env, op, matchee) do |matches|
       return if matches.empty?
 
       agent = Backmap::Agent.new(matches, backspec)
@@ -753,7 +753,7 @@ module Ww::M1
   end
 end
 
-require "./m1/log"
+require "./m1/trace"
 require "./m1/tzip"
 require "./m1/context"
 require "./m1/op"

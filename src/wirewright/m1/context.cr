@@ -53,8 +53,8 @@ module Ww::M1
     alias CstMap = ListMap(Term, Cst::Any)
     alias CstMapArena = Arena(List({Term, Cst::Any}), 8)
 
-    alias RefMap = ListMap(Term, Log::Sealed)
-    alias RefMapArena = Arena(List({Term, Log::Sealed}), 4)
+    alias RefMap = ListMap(Term, Trace::Sealed)
+    alias RefMapArena = Arena(List({Term, Trace::Sealed}), 4)
 
     # Choices are relatively rare in practice so we're just using Pf::Map/Set
     # for them instead of the fancy Arena stuff.
@@ -98,7 +98,7 @@ module Ww::M1
 
         # NOTE: in the vast majority of cases *env* is empty. No work is done here.
         env.each_entry do |key, value|
-          envtab = EnvMap.assoc(envtabs, envtab, key, Tzip.new(value, Log.none))
+          envtab = EnvMap.assoc(envtabs, envtab, key, Tzip.new(value, Trace.none))
         end
 
         arenas = stack_alloc ArenaRow.new(cdatas, plans, envtabs, csttabs, reftabs)
@@ -235,16 +235,16 @@ module Ww::M1
       copy_with(csttab: CstMap.assoc(csttabs, csttab, key, cst1))
     end
 
-    def join(key : Term, ref : Log::None)
+    def join(key : Term, ref : Trace::None)
       self
     end
 
-    def join(key : Term, ref : Log::Sealed)
+    def join(key : Term, ref : Trace::Sealed)
       ref0 = reftab.fetch(key) do
         return copy_with(reftab: RefMap.assoc(reftabs, reftab, key, ref))
       end
 
-      ref1 = Log.seal(Log.join(ref0, ref))
+      ref1 = Trace.seal(Trace.join(ref0, ref))
 
       copy_with(reftab: RefMap.assoc(reftabs, reftab, key, ref1))
     end

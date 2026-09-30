@@ -5,16 +5,16 @@ module Ww::M1
   #
   # The algorithm is, very generally, as follows:
   #
-  # - Logs that M1's matching half gives us are clues about a structure -- which we,
+  # - Traces that M1's matching half gives us are clues about a structure -- which we,
   #   with our god's eye view -- know is the matchee. The backmap engine doesn't quite
   #   know this, though.
-  # - Instead, it uses logs to materialize a term-like tree (see `Node`). Each log
+  # - Instead, it uses traces to materialize a term-like tree (see `Node`). Each trace
   #   is a path through that tree (although not verbatim). In a sense, the backmap
-  #   engine operates on a model of the matchee, built based on match logs. It does refer
+  #   engine operates on a model of the matchee, built based on match traces. It does refer
   #   to the matchee afterwards, however, as it merges its response back where appropriate.
-  # - Logs must be normalized before giving them to the engine, see `Log.normalize`.
+  # - Traces must be normalized before giving them to the engine, see `Trace.normalize`.
   # - Mutations are routed toward their corresponding *endpoint* on backmap tree nodes
-  #   (both logs and mutations are associated with names; we use those to do the routing).
+  #   (both traces and mutations are associated with names; we use those to do the routing).
   #   We use the term *mutation* (and derived) to refer to components of a backspec, as in
   #   `{x: ⏏^y⏏, y: ⏏^x⏏}`. Mutations do not have a name; they are *associated* with
   #   a name. Among other metadata, they carry e.g. multiplicity, which is written
@@ -40,8 +40,8 @@ module Ww::M1
   module Backmap
     extend self
 
-    # `Ref` is a scoped log name (as returned by e.g. `matches_and_logs`). You can
-    # imagine `Ref`s as log names with a subscript. Consider, for instance,
+    # `Ref` is a scoped trace name (as returned by e.g. `matches_and_traces`). You can
+    # imagine `Ref`s as trace names with a subscript. Consider, for instance,
     # the following backmap:
     #
     # ```wwml
@@ -57,7 +57,7 @@ module Ww::M1
     # ```
     #
     # Blindly using *a* and *b* for both would cause a name clash even though
-    # the underlying logs are not in conflict. We prevent such name clashes by
+    # the underlying traces are not in conflict. We prevent such name clashes by
     # referring to the first backmap's *a*, *b* as *a₀*, *b₀*; and similarly,
     # *a₁*, *b₁* for the second backmap's *a*, *b*.
     #
@@ -236,8 +236,8 @@ module Ww::M1
     # :nodoc:
     #
     # Steps that `Dict` understands.
-    alias DictStep = Log::ExamineItemspart |
-                     Log::ExaminePairspart
+    alias DictStep = Trace::ExamineItemspart |
+                     Trace::ExaminePairspart
 
     defcase Dict,
       interior : DictInterior,
@@ -248,8 +248,8 @@ module Ww::M1
     # :nodoc:
     #
     # Steps that `DictInterior` understands.
-    alias DictInteriorStep = Log::ExamineKey |
-                             Log::ExamineValue |
+    alias DictInteriorStep = Trace::ExamineKey |
+                             Trace::ExamineValue |
                              DictInteriorFanoutStep
 
     # :nodoc:
@@ -259,10 +259,10 @@ module Ww::M1
     # or may not trigger a conflict (i.e., we don't know whether they'll overlap
     # at mount-time; we only know they're distinct, and so they proceed to
     # different successor nodes).
-    alias DictInteriorFanoutStep = Log::ExamineRange |
-                                   Log::ExamineResidue |
-                                   Log::InsertEntry |
-                                   Log::InsertItem
+    alias DictInteriorFanoutStep = Trace::ExamineRange |
+                                   Trace::ExamineResidue |
+                                   Trace::InsertEntry |
+                                   Trace::InsertItem
 
     defcase DictInterior,
       initial : Term::Dict,
@@ -273,8 +273,8 @@ module Ww::M1
       mutation: true
 
     # :nodoc:
-    alias ImpliesBlank = Log::ExamineBlankName |
-                         Log::ExamineBlankType
+    alias ImpliesBlank = Trace::ExamineBlankName |
+                         Trace::ExamineBlankType
 
     defcase Blank, name : Node, type : Node
 
@@ -355,7 +355,7 @@ module Ww::M1
     alias MountOut = Mounted
 
     # Populates the backmap tree starting at *root*. Constructs nodes according
-    # to *log*.
+    # to *trace*.
     #
     # - *depth* determines the initial depth (you probably want `0`).
     # - *action* is the action to perform on the endpoint thus reached.
@@ -364,14 +364,14 @@ module Ww::M1
     def mount(
       ctx : Context,
       root : Node,
-      log : Log::SeqOne,
+      trace : Trace::SeqOne,
       depth : UInt32,
       action : MountAction,
     ) : MountOut
-      mount(ctx, root, Log::SeqSlice.new(log), depth, action)
+      mount(ctx, root, Trace::SeqSlice.new(trace), depth, action)
     end
 
-    private def mount(ctx, node, steps : Log::SeqSlice, depth, action) : MountOut
+    private def mount(ctx, node, steps : Trace::SeqSlice, depth, action) : MountOut
       unless step = steps.first?
         return mount(ctx, node, action)
       end
@@ -421,12 +421,12 @@ module Ww::M1
       response
     end
 
-    private def mount(ctx, form : Dict, step : Log::ExamineItemspart | Log::ExaminePairspart, steps, depth, action) : MountOut
+    private def mount(ctx, form : Dict, step : Trace::ExamineItemspart | Trace::ExaminePairspart, steps, depth, action) : MountOut
       assert steps.empty?
 
       case step
-      in Log::ExamineItemspart then form.itemspart = action.call(ctx, form.itemspart)
-      in Log::ExaminePairspart then form.pairspart = action.call(ctx, form.pairspart)
+      in Trace::ExamineItemspart then form.itemspart = action.call(ctx, form.itemspart)
+      in Trace::ExaminePairspart then form.pairspart = action.call(ctx, form.pairspart)
       end
 
       Mounted.new(mutates: form.itemspart.mutates? || form.pairspart.mutates?)
@@ -443,7 +443,7 @@ module Ww::M1
     end
 
     # NOTE: Remember than entries are one level deeper than DictInterior.
-    private def mount(ctx, form : DictInterior, step : Log::ExamineKey | Log::ExamineValue, steps, depth, action) : MountOut
+    private def mount(ctx, form : DictInterior, step : Trace::ExamineKey | Trace::ExamineValue, steps, depth, action) : MountOut
       unless entry = form.entries[step.key]?
         knode = ctx.slot(initial: step.key, form: nil, depth: depth + 1, endpoint: Endpoint.new)
 
@@ -470,14 +470,14 @@ module Ww::M1
       end
 
       case step
-      in Log::ExamineKey   then mount(ctx, entry.key, steps, depth + 1, action)
-      in Log::ExamineValue then mount(ctx, entry.value, steps, depth + 1, action)
+      in Trace::ExamineKey   then mount(ctx, entry.key, steps, depth + 1, action)
+      in Trace::ExamineValue then mount(ctx, entry.value, steps, depth + 1, action)
       end
     end
 
     # NOTE: Remember that successors in fanout are one level deeper than DictInterior.
 
-    private def mount(ctx, form : DictInterior, step : Log::ExamineRange, steps, depth, action) : MountOut
+    private def mount(ctx, form : DictInterior, step : Trace::ExamineRange, steps, depth, action) : MountOut
       unless successor = form.fanout[step]?
         range = form.initial.items(step.begin.to_i, step.end.to_i)
         successor = ctx.slot(Term.of(range), form: nil, depth: depth + 1, endpoint: Endpoint.new)
@@ -487,7 +487,7 @@ module Ww::M1
       mount(ctx, successor, steps, depth + 1, action)
     end
 
-    private def mount(ctx, form : DictInterior, step : Log::ExamineResidue, steps, depth, action) : MountOut
+    private def mount(ctx, form : DictInterior, step : Trace::ExamineResidue, steps, depth, action) : MountOut
       unless successor = form.fanout[step]?
         residue = Term.exclude(form.initial, step.removed)
         successor = ctx.slot(Term.of(residue), form: nil, depth: depth + 1, endpoint: Endpoint.new)
@@ -497,7 +497,7 @@ module Ww::M1
       mount(ctx, successor, steps, depth + 1, action)
     end
 
-    private def mount(ctx, form : DictInterior, step : Log::InsertEntry | Log::InsertItem, steps, depth, action) : MountOut
+    private def mount(ctx, form : DictInterior, step : Trace::InsertEntry | Trace::InsertItem, steps, depth, action) : MountOut
       unless successor = form.fanout[step]?
         successor = ctx.slot(step.value, form: nil, depth: depth + 1, endpoint: Endpoint.new)
         form.fanout = ctx.assoc(form.fanout, step, successor)
@@ -509,11 +509,11 @@ module Ww::M1
     # NOTE: Remember that the name and type of a blank is one level deeper than
     # Blank (and its parent Slot).
 
-    private def mount(ctx, form : Blank, step : Log::ExamineBlankName, steps, depth, action) : MountOut
+    private def mount(ctx, form : Blank, step : Trace::ExamineBlankName, steps, depth, action) : MountOut
       mount(ctx, form.name, steps, depth + 1, action)
     end
 
-    private def mount(ctx, form : Blank, step : Log::ExamineBlankType, steps, depth, action) : MountOut
+    private def mount(ctx, form : Blank, step : Trace::ExamineBlankType, steps, depth, action) : MountOut
       mount(ctx, form.type, steps, depth + 1, action)
     end
 
@@ -747,7 +747,7 @@ module Ww::M1
       # Finally, if the upper half does not contain *ref*, too, this method
       # indicates absence by returning `nil`.
       #
-      # This method works only if one underlying log corresponds to *ref*, or if
+      # This method works only if one underlying trace corresponds to *ref*, or if
       # they all agree on the value. Otherwise, this method returns `nil`. In other
       # words, this method is blind to "pluralities" corresponding to *ref*.
       def up?(ref : Ref) : Term?
@@ -1395,13 +1395,13 @@ module Ww::M1
       end
     end
 
-    def propose?(ctx, step : Log::ExamineRange, proposal : Term::Rep) : Bool
+    def propose?(ctx, step : Trace::ExamineRange, proposal : Term::Rep) : Bool
       ctx.patches << {ReplaceRange.new(step.begin, step.end, step.ord, proposal), ctx.subtree}
 
       true # ok
     end
 
-    def propose?(ctx, step : Log::ExamineResidue, proposal : Term::Rep) : Bool
+    def propose?(ctx, step : Trace::ExamineResidue, proposal : Term::Rep) : Bool
       residue = Term.collapse(proposal)
       unless residue = residue.as_d?
         return false # error
@@ -1438,7 +1438,7 @@ module Ww::M1
       true # ok
     end
 
-    def propose?(ctx, step : Log::InsertEntry, proposal : Term::Rep) : Bool
+    def propose?(ctx, step : Trace::InsertEntry, proposal : Term::Rep) : Bool
       # The subtree of *step* must have at least one mutation, otherwise, the entry
       # is not inserted. See, for example:
       #
@@ -1475,7 +1475,7 @@ module Ww::M1
       true # ok
     end
 
-    def propose?(ctx, step : Log::InsertItem, proposal : Term::Rep) : Bool
+    def propose?(ctx, step : Trace::InsertItem, proposal : Term::Rep) : Bool
       # Ditto as the above:
       #
       #   ((%optional 0 x_)) <> {x: 0}
@@ -1692,7 +1692,7 @@ module Ww::M1
     # Represents a rewrite agent, which is a very general way of saying "backmap
     # inside a backsystem".
     #
-    # *T* must be `Enumerable({Term::Dict, LogList})`.
+    # *T* must be `Enumerable({Term::Dict, TraceList})`.
     defrecord Agent(T), matches : T, backspec : Term::Dict
 
     private def muti(expr : Term, &assign : Term, Mut::Adj, Mut::Mult ->)
@@ -1783,15 +1783,15 @@ module Ww::M1
           next if agent_id.in?(disabled)
 
           muttab(agent.backspec) do |muts|
-            agent.matches.each_with_index do |(env, logs), env_id|
-              logs.each do |name, log|
-                log = Log.normalize(log.seq)
-                next if log.is_a?(Log::None)
+            agent.matches.each_with_index do |(env, traces), env_id|
+              traces.each do |name, trace|
+                trace = Trace.normalize(trace.seq)
+                next if trace.is_a?(Trace::None)
 
                 ref = Ref.new(name, agent_id, env_id.to_u32)
 
                 unless row = muts[name]?
-                  result = mount(ctx, tree, log, 0, MountRef.new(ref))
+                  result = mount(ctx, tree, trace, 0, MountRef.new(ref))
                   assert result.is_a?(Mounted)
                   next
                 end
@@ -1799,7 +1799,7 @@ module Ww::M1
                 template, post, mult = row
                 mut = ctx.mut(post, mult, ref, env, template)
 
-                result = mount(ctx, tree, log, 0, MountMut.new(mut))
+                result = mount(ctx, tree, trace, 0, MountMut.new(mut))
                 assert result.is_a?(Mounted)
               end
             end

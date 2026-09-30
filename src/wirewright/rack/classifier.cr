@@ -94,13 +94,13 @@ module Ww::Rack
   defrecord ManyReplacer, update : Term? -> Term
 
   private def replacer(pattern : Term, capture : Term, whole : Term) : Replacer
-    env_log_lists = M1.matches_and_logs(Term[], M1.operator(pattern), whole)
-    if env_log_lists.empty?
+    env_trace_lists = M1.matches_and_traces(Term[], M1.operator(pattern), whole)
+    if env_trace_lists.empty?
       return ZeroReplacer.new
     end
 
-    if env_log_list = env_log_lists.single?
-      env, log_list = env_log_list
+    if env_trace_list = env_trace_lists.single?
+      env, log_list = env_trace_list
       part0 = env[capture]?
     end
 
@@ -118,14 +118,13 @@ module Ww::Rack
         end
       end
 
-      backmap = {env_log_lists, backspec}
+      backmap = {env_trace_lists, backspec}
       rep = M1.backmapR({backmap}, whole)
       Term.collapse(rep)
     end
 
-    if env_log_list.nil?
+    if env_trace_list.nil?
       assert part0.nil?
-
       return ManyReplacer.new(update)
     end
 

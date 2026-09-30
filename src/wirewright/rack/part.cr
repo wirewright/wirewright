@@ -217,18 +217,18 @@ module Ww::Rack::Part
             part_form = WriteOnlyForm.new(node.id, node.addr, abs_whole, abs_part, variant.part_edge, update, matchee)
           end
         in PatternVariant
-          env_log_lists = M1.matches_and_logs(Term[], variant.pattern, matchee)
+          env_trace_lists = M1.matches_and_traces(Term[], variant.pattern, matchee)
           # Skip this `part` if there are no matches whatsoever.
-          if env_log_lists.empty?
+          if env_trace_lists.empty?
             next false # do not process it in the future
           end
 
-          update = updatef(variant, matchee, env_log_lists)
+          update = updatef(variant, matchee, env_trace_lists)
 
           part_form = pass do
-            next unless env_log_list = env_log_lists.single?
+            next unless env_trace_list = env_trace_lists.single?
 
-            env, _ = env_log_list
+            env, _ = env_trace_list
             next unless value = env[variant.part_capture]?
 
             # We can only make a read-write cell if there's just one match.
@@ -314,7 +314,7 @@ module Ww::Rack::Part
     end
   end
 
-  private def updatef(variant : PatternVariant, matchee : Term, env_log_lists : M1::EnvLogList)
+  private def updatef(variant : PatternVariant, matchee : Term, env_trace_lists : M1::EnvTraceList)
     ->(rep : Term::Rep) do
       backspec = pass do
         # This should remove `1`:
@@ -341,7 +341,7 @@ module Ww::Rack::Part
         end
       end
 
-      backmap = {env_log_lists, backspec}
+      backmap = {env_trace_lists, backspec}
       M1.backmapR({backmap}, matchee).as(Term::Rep?)
     end
   end
