@@ -112,8 +112,7 @@
 ;;| The supervisor will watch @todos and manage devices representing each
 ;;| entry automatically.
 (supervisor (@todos @todo {¦ id_} - @pool)
-  ;;| Refer to various parts of the database entry, with appropriate translation
-  ;;| where necessary.
+  ;;| Refer to various parts of the database entry.
   (part (@todo @id) {¦ id_})
   (part (@todo @content) {¦ content_string})
   (part (@todo @done) {¦ done_boolean})
