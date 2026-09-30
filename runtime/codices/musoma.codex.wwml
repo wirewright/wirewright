@@ -577,7 +577,7 @@ history-limit: 128
 (path-report-widget addr_ path_string report_)
   => (group detail: (dict block)
             multiline: true
-       (term path-report) ;; l0
+       (term path) ;; l0
        (group detail: (dict generic) ;; l1
          (term ^path)
          (term report))
