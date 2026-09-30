@@ -246,6 +246,7 @@ See the `guides/` directory.
 
 - [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
 - [Wirewright: The Guide (Part 1)](<guides/Guide (Part 1).md>)
+- [Wirewright: The Guide (Part 2)](<guides/Guide (Part 2).md>)
 
 ## Building Wirewright
 
