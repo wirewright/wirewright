@@ -169,7 +169,16 @@ module MuSoma
           end
 
           # :ditto:
+          matchpi %{(supervisor (@_ @_ _ - @_) _* ⍊ -open)} do
+            continue if feature.is_a?(D7::Inert)
+
+            D7.gnd(node)
+          end
+
           matchpi %{[supervisor (@_ @_ _ - @_) _*]} do
+            continue if feature.is_a?(D7::Inert)
+            continue if MuSoma.editing?(node)
+
             D7.parent(node.as_d, 2u32...node.itemsize.to_u32)
           end
 
@@ -221,6 +230,10 @@ module MuSoma
 
         matchpi %{(rewriter _* ⍊ open)} do
           Term.of(:"open-rewriter-widget", addr, node)
+        end
+
+        matchpi %{(supervisor header_ _* ⍊ -open)} do
+          Term.of(:"closed-supervisor-widget", addr, header)
         end
 
         matchpi %{(device _* ⍊ -open)} do
@@ -299,6 +312,10 @@ module MuSoma
 
         matchpi %{(rule _ _ ⍊ doc⋮ () open)} do
           Term.of(:"open-rule-widget", addr, doc, repr)
+        end
+
+        matchpi %{(supervisor _ _* ⍊ open)} do
+          Term.of(:"open-supervisor-widget", addr, repr)
         end
 
         matchpi %{(device _* ⍊ open)} do

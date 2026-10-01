@@ -497,6 +497,22 @@ history-limit: 128
            (term device)
            (atom "…" type: punct))))
 
+;; Supervisor widget
+
+(open-supervisor-widget addr_ node←(parent _* ⍊ open: true))
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "expand_more") mass: 0)
+       ^(view (without node 'open)))
+
+(closed-supervisor-widget addr_ header_)
+  => (group detail: seq
+       (atom type: (expander ^addr icon: "chevron_right") mass: 0)
+       (inline
+         (group detail: (dict generic lbr: "(" rbr: ")")
+           (term supervisor)
+           (term ^header)
+           (atom "…" type: punct))))
+
 ;; Rewriter widget
 
 (open-rewriter-widget addr_ (rewriter header_ mid_* last_ open: true))
