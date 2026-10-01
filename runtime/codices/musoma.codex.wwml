@@ -1416,12 +1416,21 @@ scroll: {}
 ;; \control (action "Drag over the circuit pane")
 ;; Pan.
 
-;; Begin panning circuit...
+;; Begin panning circuit by syncing the view (which points wherever the aim is)
+;; with our logical pan state.
 {¦ hover-over: ()
    -reflection-hover
-   mouse: {| left -dragging_} ;; | Damn Racket highlighting
-   circuit-view-vantage: [vantage {¦ hit-hover hit-focus-l: ±hit-l hit-focus-t: ±hit-t}]
-   -panning-circuit_}
+   mouse: {| left}
+   circuit-view-vantage: [vantage {¦ hit-hover}]
+   -panning-circuit_
+   -request-view-sync_} ;; |
+  <> {panning-circuit: sync, request-view-sync: true}
+
+;; Once syncing finishes we start panning...
+{¦ panning-circuit_: sync
+   -request-view-sync
+   mouse: {¦ -dragging_}
+   circuit-view-vantage: [vantage {¦ hit-hover hit-focus-l: ±hit-l hit-focus-t: ±hit-t}]}
   <> {dragging: (circuit-view ^hit-l ^hit-t), panning-circuit: true}
 
 ;; ...continue while Left is being held...
@@ -1434,7 +1443,7 @@ scroll: {}
       hit-t: ^hit-t'}
 
 ;; ... and stop when not dragging anymore.
-{¦ mouse: {¦ -dragging} panning-circuit_} ;; |
+{¦ mouse: {¦ -dragging} panning-circuit_: true}
   <> {(panning-circuit): ()}
 
 ;; \control (action "Drag the pane divider")
@@ -1478,16 +1487,12 @@ scroll: {}
 ;; \control (key insert "Esc")
 ;; Switch to Normal mode.
 {¦ mode_: insert keyboard: ((key escape)) -request-view-sync_}
-  <> {mode: normal, request-view-sync: true} ;; We have to sync also at the end of an insert session.
-
-;; After we had some motions, we want to pan the editor into view.
-{¦ mode: insert moved_ -request-view-sync_}
-  <> {(moved): (), request-view-sync: true}
+  <> {mode: normal, request-view-sync: true} ;; We have to sync at the end of an insert session.
 
 ;; Pan the camera to bring the editor (or whatever else is the `aim` in
 ;; the circuit pane) into view.
 {¦ request-view-sync_
-   circuit-view-vantage: [vantage (box ⟪(clip _* ⍊ ±offset-x ±offset-y)⟫ ⍊ -panning)]
+   circuit-view-vantage: [vantage [box ⟪(clip _* ⍊ ±offset-x ±offset-y)⟫]]
    circuit-camera: {¦ ±l ±t}}
   <> {(request-view-sync): (), l: ^offset-x, t: ^offset-y}
 
@@ -2074,8 +2079,7 @@ scroll: {}
 (CircuitViewLoaded)
   => (vantage id: (state circuit-view-vantage)
        (box style: "border rounded-lg membrane mode/insert:cue-focused mode/insert:input \
-                    hide:cue-editor-hidden panning-circuit:cursor-resize
-                    panning-circuit:tag-panning"
+                    hide:cue-editor-hidden panning-circuit:cursor-resize"
             ^:panning-circuit
             ^:mode
             ^:hide

@@ -59,7 +59,6 @@ module MuSoma
           draft = Rho.rewrite(@editR, draft)
           state = state
             .with(:motions, Term[])
-            .with(:moved, true)
             .with(:timeline, {behind, :I, :*, status, draft})
         end
 
