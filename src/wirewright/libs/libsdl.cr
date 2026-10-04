@@ -1,4 +1,4 @@
-{% skip_file unless flag?(:sdl3) %}
+{% skip_file unless flag?(:sdl3) || flag?(:libsdl3) %}
 
 require "sdl-crystal-bindings/sdl3-crystal-bindings"
 
@@ -142,6 +142,26 @@ module Ww
       assert_true LibSDL.show_window(window)
     end
 
+    def hide(window : Window) : Nil
+      assert_true LibSDL.hide_window(window)
+    end
+
+    def minimize(window : Window) : Nil
+      assert_true LibSDL.minimize_window(window)
+    end
+
+    def maximize(window : Window) : Nil
+      assert_true LibSDL.maximize_window(window)
+    end
+
+    def restore(window : Window) : Nil
+      assert_true LibSDL.restore_window(window)
+    end
+
+    def sync(window : Window) : Nil
+      assert_true LibSDL.sync_window(window)
+    end
+
     def cursor=(cursor : Bool) : Bool
       if cursor
         assert_true LibSDL.show_cursor
@@ -157,10 +177,6 @@ module Ww
       cursor
     end
 
-    def hide(window : Window) : Nil
-      assert_true LibSDL.hide_window(window)
-    end
-
     def push(event : Trigger)
       assert @@trigger > 0
 
@@ -174,6 +190,12 @@ module Ww
 
     def wait : Event
       assert_true LibSDL.wait_event(out event)
+
+      transcribe(event)
+    end
+
+    def poll? : Event?
+      return unless LibSDL.poll_event(out event) == TRUE
 
       transcribe(event)
     end
@@ -200,13 +222,14 @@ module Ww
       X2     = 5
     end
 
-    alias Event = Trigger | WindowEvent | MouseEvent | KeyboardEvent | TextEvent | UnknownEvent
+    alias Event = KnownEvent | UnknownEvent | Trigger | MouseAdded | MouseRemoved
+    alias KnownEvent = WindowEvent | MouseEvent | KeyboardEvent | TextEvent
 
     defrecord Trigger
 
     alias WindowEvent = WindowMouseFocusGained | WindowMouseFocusLost | WindowExposed |
                         WindowResized | WindowClosed | WindowFocusGained | WindowFocusLost |
-                        WindowMinimized | WindowRestored
+                        WindowMaximized | WindowMinimized | WindowRestored
 
     defrecord WindowMouseFocusGained, window_id : WindowId
     defrecord WindowMouseFocusLost, window_id : WindowId
@@ -215,12 +238,15 @@ module Ww
     defrecord WindowClosed, window_id : WindowId
     defrecord WindowFocusGained, window_id : WindowId
     defrecord WindowFocusLost, window_id : WindowId
+    defrecord WindowMaximized, window_id : WindowId
     defrecord WindowMinimized, window_id : WindowId
     defrecord WindowRestored, window_id : WindowId
 
     alias MouseEvent = MouseMoved | MouseButtonEvent | MouseWheelScrolled
     alias MouseButtonEvent = MouseButtonUp | MouseButtonDown
 
+    defrecord MouseAdded, mouse_id : MouseId
+    defrecord MouseRemoved, mouse_id : MouseId
     defrecord MouseMoved, window_id : WindowId, mouse_id : MouseId, x : Float32, y : Float32, dx : Float32, dy : Float32
     defrecord MouseButtonUp, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
     defrecord MouseButtonDown, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
@@ -295,10 +321,16 @@ module Ww
         WindowFocusGained.new(event.window.window_id)
       when .window_focus_lost?
         WindowFocusLost.new(event.window.window_id)
+      when .window_maximized?
+        WindowMaximized.new(event.window.window_id)
       when .window_minimized?
         WindowMinimized.new(event.window.window_id)
       when .window_restored?
         WindowRestored.new(event.window.window_id)
+      when .mouse_added?
+        MouseAdded.new(event.mdevice.which)
+      when .mouse_removed?
+        MouseRemoved.new(event.mdevice.which)
       when .mouse_motion?
         MouseMoved.new(event.motion.window_id,
           mouse_id: event.motion.which,
