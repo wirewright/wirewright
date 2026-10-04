@@ -52,7 +52,7 @@ end
 # ```
 class Ww::Rack::Automaton
   # Actions returned by `next`.
-  alias Action = DisplayAction | Wait | Again | End
+  alias Action = DisplayAction | Wait | End
 
   # `next` wants you to wait until some asynchronous computation it scheduled
   # is finished. The circuit itself is quiescent; no more "logical" progress
@@ -60,9 +60,6 @@ class Ww::Rack::Automaton
   # wait. `Automaton` will signal completion on the alarm you pass to `Automaton.new`.
   # The simplest way is, therefore, to simply call `BlockingSignal#wait`.
   defrecord Wait, deadline : Time::Instant?, smart: true
-
-  # `next` tells you to call it again.
-  defrecord Again
 
   # `next` tells you that there are no more frames; the circuit reached
   # *quiescence*. Unless it is perturbed by the outside world somehow,
@@ -383,10 +380,6 @@ class Ww::Rack::Automaton
       return circuit, item
     end
 
-    unless frames.all? { |frame| circuit0 == frame }
-      return circuit, Again.new
-    end
-
     # If there's nothing new to display, this means we're probably quiescent.
     # Check if any asynchronous work is in progress.
 
@@ -407,7 +400,6 @@ class Ww::Rack::Automaton
       circuit, action = self.next(circuit, *args, **kwargs)
 
       case action
-      in Again
       in DisplayAction, End
         return circuit, action
       in Wait
@@ -454,7 +446,6 @@ class Ww::Rack::Automaton
 
     circuit1 = self.next(circuit0, **kwargs) do |action|
       case action
-      in Again
       in DisplayFrame
       in DisplaySubframe
         subframes = subframes.append(action.content)

@@ -106,8 +106,6 @@ module Testtool
           seed, action = automaton.next(seed)
 
           case action
-          in Rack::Automaton::Again
-            next
           in Rack::Automaton::DisplaySubframe
             next # Skip subframes
           in Rack::Automaton::DisplayFrame
