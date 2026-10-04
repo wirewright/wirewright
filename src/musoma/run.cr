@@ -277,7 +277,7 @@ module MuSoma
 
     console.send(Console::InfoLog.new("Initializing and booting agents"))
 
-    automaton = Rack::Automaton.new(ws.parser, alarm: ws.alarm, display_mask: Rack::Automaton::DisplayMask::Subframe)
+    automaton = Rack::Automaton.new(ws.parser, alert: ws.alarm, display_mask: Rack::Automaton::DisplayMask::Subframe)
 
     agents = AgentPopulation.new(
       app: AppAgent.new,

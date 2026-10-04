@@ -57,7 +57,7 @@ class Ww::Rack::Automaton
   # `next` wants you to wait until some asynchronous computation it scheduled
   # is finished. The circuit itself is quiescent; no more "logical" progress
   # can be made. It is your responsibility to determine how (and whether) to
-  # wait. `Automaton` will signal completion on the alarm you pass to `Automaton.new`.
+  # wait. `Automaton` will signal completion on the alert you pass to `Automaton.new`.
   # The simplest way is, therefore, to simply call `BlockingSignal#wait`.
   defrecord Wait, deadline : Time::Instant?, smart: true
 
@@ -91,14 +91,14 @@ class Ww::Rack::Automaton
   # Constructs a Rack automaton.
   #
   # - *parser* is the parser to use to parse circuits.
-  # - *alarm* will be passed to asynchronous subsystems of `Rack` so that they
+  # - *alert* will be passed to asynchronous subsystems of `Rack` so that they
   #   can notify you that some piece of asynchronous work has completed.
   # - *measure* enables or disables frame time measurement (see also: `median`;
   #   disabled by default).
   # - *mask* specifies the `DisplayAction` classes to emit.
   def initialize(
     @parser : D7::Parser, *,
-    @alarm = BlockingSignal.new,
+    @alert = BlockingSignal.new,
     @measure : Bool = false,
     @display_mask : DisplayMask = DisplayMask::Frame,
   )
@@ -107,11 +107,11 @@ class Ww::Rack::Automaton
     @fuse_parser = D7::Parser.new(@parser.clf)
 
     # Automaton state.
-    @epoch = @alarm
+    @epoch = @alert
     @display = Deque(DisplayAction).new
 
     # Auxiliary state.
-    @alarm_epoch = 0u64
+    @alert_epoch = 0u64
     @t = [] of Time::Span
     @first = false
 
@@ -233,7 +233,8 @@ class Ww::Rack::Automaton
     end
   end
 
-  private def step(subframes, frames, circuit : Term, prepass, library) : Nil
+  # :nodoc:
+  def step(subframes, frames, circuit : Term, prepass, library) : Nil
     # HACK: This is a "shadow step" to make sure rigs execute in the same tick
     # invisibly from the main Rack pass. From the latter's point of view, rigs
     # are immediate.
@@ -392,7 +393,7 @@ class Ww::Rack::Automaton
     {circuit, End.new}
   end
 
-  # The same as `next`, but subtracts control actions (`Again`, `Wait`, etc.)
+  # The same as `next`, but subtracts control actions (`Wait`, etc.)
   # by executing them. This lets you handle only "meaningful" actions such as
   # `DisplayAction` at the cost of a possibly nonterminating, blocking call.
   def blocking_next(circuit : Term, *args, **kwargs) : {Term, DisplayAction | End}
@@ -406,7 +407,7 @@ class Ww::Rack::Automaton
         if deadline = action.deadline?
           wait(deadline)
         else
-          @alarm_epoch = @epoch.wait(@alarm_epoch)
+          @alert_epoch = @epoch.wait(@alert_epoch)
         end
       end
     end
@@ -414,7 +415,7 @@ class Ww::Rack::Automaton
 
   def wait(deadline)
     timeout = deadline - Time.instant
-    @alarm_epoch = @epoch.wait_until(@alarm_epoch, timeout)
+    @alert_epoch = @epoch.wait_until(@alert_epoch, timeout)
   end
 
   def next_frame(seed : Term) : {Term, Term?}

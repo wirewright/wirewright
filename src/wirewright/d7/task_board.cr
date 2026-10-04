@@ -1,10 +1,10 @@
 # An experimental way of managing asynchronous tasks for D7 clients.
 #
 # TODO: Write more meaningful docs!
-class D7::TaskBoard(Alarm, Task, Result)
+class D7::TaskBoard(Alert, Task, Result)
   Log = ::Log.for(self)
 
-  def initialize(@alarm : Alarm, &@fn : Task, Ping -> Result)
+  def initialize(@alert : Alert, &@fn : Task, Ping -> Result)
     @clock = Atomic(UInt64).new(1)
     @generation = 0u64
     @demand = {} of Task => UInt64
@@ -22,7 +22,7 @@ class D7::TaskBoard(Alarm, Task, Result)
     @callstack = CallStack.empty
   end
 
-  # Returns `true` if there are pending tasks. `Alarm` will be notified of
+  # Returns `true` if there are pending tasks. `Alert` will be notified of
   # their completion.
   def pending? : Bool
     @lock.synchronize { @demand.present? || @supply.present? }
@@ -69,7 +69,7 @@ class D7::TaskBoard(Alarm, Task, Result)
         next unless @demand.has_key?(task) # Just to be extra sure.
 
         @supply = @supply.assoc(task, result)
-        @alarm.call
+        @alert.call
       end
     rescue Canceled
     end
@@ -126,8 +126,8 @@ class D7::TaskBoard(Alarm, Task, Result)
   end
 
   # Represents a rendezvous with a task board. See `TaskBoard#rdv`.
-  struct Rdv(Alarm, Task, Result)
-    protected def initialize(@board : TaskBoard(Alarm, Task, Result), @map : Pf::Map(Task, Result))
+  struct Rdv(Alert, Task, Result)
+    protected def initialize(@board : TaskBoard(Alert, Task, Result), @map : Pf::Map(Task, Result))
     end
 
     # Returns the harvested result of *task*, if available.
