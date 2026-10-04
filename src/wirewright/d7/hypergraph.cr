@@ -27,6 +27,10 @@ module Ww::D7
       new(keys, &.itself)
     end
 
+    def self.concat(a : NodeAddr, b : NodeAddr) : NodeAddr
+      b.reduce(a) { |memo, key| memo.append(key) }
+    end
+
     # Lexicographical comparison of two node addresses.
     def <=>(other : NodeAddr)
       compare(other) { |key0, key1| key0 <=> key1 }
