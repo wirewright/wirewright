@@ -198,7 +198,7 @@ module Ww::Rack::Changes
       #           v
       #   (changes (@x limit: 3)
       #     C D E)
-      rep = rep.replace(2u32...rep.itemsize.to_u32 - changes_node.limit, Term.rep)
+      rep = rep.replace(2u32...rep.uitemsize - changes_node.limit, Term.rep)
     end
 
     # TODO: Handle this when (if?) this is reached.

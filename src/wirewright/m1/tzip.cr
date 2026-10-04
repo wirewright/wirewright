@@ -684,7 +684,7 @@ module Ww::M1
       assert @tzip.type.dict?
 
       @begin = 0u32
-      @end = @tzip.term.itemsize.to_u32
+      @end = @tzip.term.uitemsize
     end
 
     # :nodoc:
@@ -766,7 +766,7 @@ module Ww::M1
     # Returns a view of all items after this view's end in the underlying
     # dict itemspart.
     def ahead : ItemsView
-      copy_with(begin: @end, end: @tzip.term.itemsize.to_u32)
+      copy_with(begin: @end, end: @tzip.term.uitemsize)
     end
 
     # Changes the begin and end of this view to *begin1*, *end1* (in absolute coordinates).

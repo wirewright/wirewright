@@ -165,7 +165,7 @@ module MuSoma
           # It's unconditionally a parent node for MuSoma. For Rack, on the other
           # hand, it's a ground node.
           matchpi %{[ws _ _*]} do
-            D7.parent(node.as_d, 2u32...node.itemsize.to_u32)
+            D7.parent(node.as_d, 2u32...node.uitemsize)
           end
 
           # :ditto:
@@ -179,7 +179,7 @@ module MuSoma
             continue if feature.is_a?(D7::Inert)
             continue if MuSoma.editing?(node)
 
-            D7.parent(node.as_d, 2u32...node.itemsize.to_u32)
+            D7.parent(node.as_d, 2u32...node.uitemsize)
           end
 
           # :ditto:
