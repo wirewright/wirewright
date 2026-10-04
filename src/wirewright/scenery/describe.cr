@@ -47,7 +47,7 @@ module Ww::Scenery
     end
   end
 
-  private def describe!(cache, node : Inert, box : OriginBox, hit : HitNode)
+  private def describe!(cache, node : Inert | HitArea, box : OriginBox, hit : HitNode)
     describe = -> { Slice(Term).empty }
     vantages = -> { Slice(Term).empty }
 
@@ -440,7 +440,7 @@ module Ww::Scenery
 
     nodes.zip(boxes, 0...nodes.size) do |node, box, index|
       case hit_parent
-      in HitEmpty, HitLeaf
+      in HitEmpty, HitLeaf, HitAreaLeaf
         # HitLeaf means the parent's own bounds were hit but none of its children
         # were, so we make each child's hit Empty.
         hit = HitEmpty.new
@@ -472,10 +472,10 @@ module Ww::Scenery
   private def annotate(commit : Term::Dict::Commit, hit : HitEmpty) : Nil
   end
 
-  private def annotate(commit : Term::Dict::Commit, hit : HitLeaf | HitGroup) : Nil
+  private def annotate(commit : Term::Dict::Commit, hit : HitLeaf | HitAreaLeaf | HitGroup) : Nil
     if hit.hover
       commit.with(:"hit-hover", true)
-      if hit.is_a?(HitLeaf)
+      if hit.is_a?(HitLeaf) || hit.is_a?(HitAreaLeaf)
         commit.with(:"hit-leaf", true)
       end
     end

@@ -57,7 +57,7 @@ module Ww::Scenery
     end
   end
 
-  private def box!(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph | ShapedText, size : Size) : OriginBox
+  private def box!(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph | ShapedText, size : Size) : OriginBox
     OriginBox.new(size.outer, children: Slice(Box).empty)
   end
 

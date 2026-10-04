@@ -343,7 +343,7 @@ module Ww::Scenery
     node.copy_with(children: children)
   end
 
-  private def shape(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph) : ShapedNode
+  private def shape(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph) : ShapedNode
     node
   end
 

@@ -2,7 +2,7 @@ module Ww::Scenery
   # :nodoc:
   defrecord AimResponse, node : AimedNode, foci : Slice(Rect)
 
-  private def aim!(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph, box : OriginBox) : AimResponse
+  private def aim!(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph, box : OriginBox) : AimResponse
     AimResponse.new(node, foci: Slice(Rect).empty)
   end
 

@@ -1046,7 +1046,11 @@ module Ww
 
       def redescribe(session_key : Term, session : Session, scene : Scenery::Scene) : Nil
         queries = session.mice.to_readonly_slice(&.position)
-        vantages = Scenery::Safe.describe(session.cache, scene, queries)
+        if query = queries.first? # FIXME: ?!
+          vantages = Scenery::Safe.describe(session.cache, scene, query)
+        else
+          vantages = Scenery::Safe.describe(session.cache, scene)
+        end
 
         description = WindowDescription.new(vantages,
           session.mice,

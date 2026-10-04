@@ -312,21 +312,17 @@ module Ww::Scenery
       end
     end
 
-    # A shorthand for `describe` with no hit queries.
+    # `describe` without a hit query.
     def describe(cache : CacheSet, scene : Scene) : Slice(Term)
-      describe(scene, Slice(HitQuery).empty)
+      @@lock.synchronize do
+        Scenery.describe(cache, scene, HitEmpty.new)
+      end
     end
 
-    # Returns vantages in *scene* after hitting it (see `hit`) with the union
-    # of *queries*.
-    def describe(cache : CacheSet, scene : Scene, queries : Enumerable(HitQuery)) : Slice(Term)
+    # Returns vantages in *scene* after hitting it (see `hit`) with *query*.
+    def describe(cache : CacheSet, scene : Scene, query : HitQuery) : Slice(Term)
       @@lock.synchronize do
-        hit = HitEmpty.new
-        queries.each do |query|
-          hit = Scenery.union(hit, Scenery.hit(scene, query))
-        end
-
-        Scenery.describe(cache, scene, hit)
+        Scenery.describe(cache, scene, Scenery.hit(scene, query))
       end
     end
   end

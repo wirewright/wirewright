@@ -15,7 +15,7 @@ module Ww::Scenery
     query_set(queries) { |commit, query| commit.add(query) }
   end
 
-  private def queries!(cache, node : Inert | RectShape | Loading) : QuerySet
+  private def queries!(cache, node : Inert | RectShape | HitArea | Loading) : QuerySet
     query_set()
   end
 
@@ -64,7 +64,7 @@ module Ww::Scenery
     defrecord Wait, node : AssetNode
   end
 
-  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Inert | RectShape) : Resn::Any
+  private def resolve!(cache : CacheSet, assets : Asset::Map, node : Inert | RectShape | HitArea) : Resn::Any
     Resn::Ready.new(node)
   end
 

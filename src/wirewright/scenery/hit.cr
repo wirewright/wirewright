@@ -108,7 +108,7 @@ module Ww::Scenery
   # rectangle": its size can be negative, which just means the anchor
   # point is above the focus. Most if not all rectangle methods work the same,
   # but you might want to use `Rect#abs` if you want to be extra careful.
-  alias HitNode = HitEmpty | HitLeaf | HitTextLeaf | HitGroup
+  alias HitNode = HitEmpty | HitLeaf | HitAreaLeaf | HitTextLeaf | HitGroup
 
   # The current node and its subtree (if any) were not hit by the hit query.
   defrecord HitEmpty
@@ -119,6 +119,8 @@ module Ww::Scenery
   #
   # See `HitNode` for info about *part*.
   defrecord HitLeaf, hover : Bool, part : Rect, copying: true
+
+  defrecord HitAreaLeaf, payload : Term, hover : Bool, part : Rect, copying: true
 
   # A text node was hit by the hit query.
   #
@@ -140,40 +142,7 @@ module Ww::Scenery
     part : Rect,
     copying: true
 
-  # Returns a tree of hit nodes which represents the union of two hit nodes.
-  # The hit nodes must come from the same node tree.
-  #
-  # NOTE: Currently, we do not support unioning two `HitTextLeaf` nodes.
-  # The one from *a* will be preferred.
-  def union(a : HitNode, b : HitNode) : HitNode
-    case {a, b}
-    in {HitEmpty, _}              then b
-    in {_, HitEmpty}              then a
-    in {HitTextLeaf, HitTextLeaf} then a # ?!
-    in {_, HitTextLeaf}           then b # ?!
-    in {HitTextLeaf, _}           then a # ?!
-    in {HitLeaf, HitLeaf}
-      HitLeaf.new(a.hover || b.hover, Rect.union(a.part, b.part))
-    in {HitLeaf, HitGroup}
-      HitGroup.new(b.children, a.hover || b.hover, Rect.union(a.part, b.part))
-    in {HitGroup, HitLeaf}
-      HitGroup.new(a.children, a.hover || b.hover, Rect.union(a.part, b.part))
-    in {HitGroup, HitGroup}
-      assert a.children.size == b.children.size
-
-      children = Pf::Kit.stack_array(HitNode)
-      a.children.zip(b.children) do |a_child, b_child|
-        children << union(a_child, b_child)
-      end
-
-      HitGroup.new(children.to_unsafe_readonly_slice!,
-        hover: a.hover || b.hover,
-        part: Rect.union(a.part, b.part),
-      )
-    end
-  end
-
-  private def hit(node : Inert | RectShape | Pending | Img | Svg | IconGlyph, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
     unless vbox.bounds.intersects?(itf.map(query.rect))
@@ -183,7 +152,11 @@ module Ww::Scenery
     part = Rect.new(tl: itf.map(query.focus), br: itf.map(query.anchor))
     hover = vbox.bounds.includes?(part.tl)
 
-    HitLeaf.new(hover, part)
+    if node.is_a?(HitArea)
+      HitAreaLeaf.new(node.payload, hover, part)
+    else
+      HitLeaf.new(hover, part)
+    end
   end
 
   private def hit_index(node : ShapedText, box : OriginBox, point : Point) : Int32

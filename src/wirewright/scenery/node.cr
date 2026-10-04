@@ -8,6 +8,7 @@ module Ww::Scenery
   # fetched fonts yet but just have the specifications for them, etc.
   alias RecognizedNode = Inert |
                          RectShape |
+                         HitArea |
                          Img(Asset::ImageQuery) |
                          Svg(Asset::SvgQuery) |
                          Text(Asset::FontQuery) |
@@ -39,6 +40,7 @@ module Ww::Scenery
   # by `Pending`. `Suspense` nodes are subtracted also.
   alias AssetNode = Inert |
                     RectShape |
+                    HitArea |
                     Pending |
                     Img(Asset::PvgRasterImage) |
                     Svg(Asset::PvgSvgImage) |
@@ -72,6 +74,7 @@ module Ww::Scenery
   # to different pieces of the original text.
   alias ShapedNode = Inert |
                      RectShape |
+                     HitArea |
                      Pending |
                      Img(Asset::PvgRasterImage) |
                      Svg(Asset::PvgSvgImage) |
@@ -101,6 +104,7 @@ module Ww::Scenery
   # are emitted along the `Size` tree, which stores the actual sizes.
   alias SizedNode = Inert |
                     RectShape |
+                    HitArea |
                     Pending |
                     Img(Asset::PvgRasterImage) |
                     Svg(Asset::PvgSvgImage) |
@@ -125,6 +129,7 @@ module Ww::Scenery
   # both `Overlay` and `Page` are subtracted from the type.
   alias ElevatedNode = Inert |
                        RectShape |
+                       HitArea |
                        Pending |
                        Img(Asset::PvgRasterImage) |
                        Svg(Asset::PvgSvgImage) |
@@ -152,6 +157,7 @@ module Ww::Scenery
   # a `PixelRect`); which are the two major output modes of `Scenery`.
   alias AimedNode = Inert |
                     RectShape |
+                    HitArea |
                     Pending |
                     Img(Asset::PvgRasterImage) |
                     Svg(Asset::PvgSvgImage) |
@@ -210,6 +216,8 @@ module Ww::Scenery
 
   defrecord RectThickness, l : Unit, r : Unit, t : Unit, b : Unit
   defrecord RectRadii, tl : Unit, tr : Unit, bl : Unit, br : Unit
+
+  defcase HitArea, payload : Term
 
   defcase Pending,
     blame : Text(Asset::FontQuery) |

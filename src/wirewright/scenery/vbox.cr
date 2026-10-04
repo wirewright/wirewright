@@ -2,7 +2,7 @@ module Ww::Scenery
   # :nodoc:
   defrecord VBox, bounds : Rect, children : Slice(VBox)
 
-  private def vbox!(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph | ShapedText, box : OriginBox) : VBox
+  private def vbox!(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph | ShapedText, box : OriginBox) : VBox
     VBox.new(box.bounds, children: Slice(VBox).empty)
   end
 

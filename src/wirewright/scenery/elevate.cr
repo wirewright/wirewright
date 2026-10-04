@@ -11,7 +11,7 @@ module Ww::Scenery
   defrecord ElevateEntry, node : ElevatedNode, box : Box
 
   # Leaf nodes remain unchanged.
-  private def elevate!(cache, node : Inert | RectShape | Pending | Img | Svg | IconGlyph | ShapedText, box : OriginBox) : ElevateResponse
+  private def elevate!(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph | ShapedText, box : OriginBox) : ElevateResponse
     ElevateResponse.new(node, box, upbound: Slice(ElevateEntry).empty)
   end
 

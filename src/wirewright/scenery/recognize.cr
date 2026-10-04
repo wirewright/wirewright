@@ -15,6 +15,7 @@ module Ww::Scenery
       Term.of(:svg),
       Term.of(:img),
       Term.of(:loading),
+      Term.of(:"hit-area"),
     }
 
     # :nodoc:
@@ -1497,17 +1498,35 @@ module Ww::Scenery
         Gate.new(children)
       end
 
+      # |@ scenery.hit-area
+      #
+      # |@pattern
+      # [hit-area payload_]
+      #
+      # |@key payload
+      # The *payload* can be any term whatsoever.
+      #
+      # |@block
+      # An internal utility node which fills all available space and denotes it as
+      # a *hit area*: an area which participates in hit testing. This node acts as
+      # the foundation for `mxrack.mousearea`. In fact, `mousearea`s are lowered to
+      # `hit-area` nodes eventually.
+      matchpi %{[hit-area payload_]} do
+        HitArea.new(payload)
+      end
+
       # |@ scenery.stack
       #
       # |@pattern
       # [z-stack children_+]
-      # [(%all _symbol (%not inert)) children_+]
+      # [(%all _symbol (%not inert)) children_*]
       #
       # |@key children scenery
       #
       # |@block
       # Displays *children* on top of each other. The first (0th) *child* is
-      # drawn on the background, the last *child* is drawn on the foreground.
+      # the background, the last *child* is the foreground, and children between
+      # are ordered appropriately.
       #
       # See also: `overlay`.
       #
@@ -1515,11 +1534,12 @@ module Ww::Scenery
       # it groups children is interpreted as a z-stack unless a more specific
       # treatment exists. So for example, `(qux (rect fill: red) (text caption: "A"))`
       # is recognized as a z-stack, and displays as an "A" on top of a red rect.
-      matchpi %{[name←(%all _symbol (%not inert)) subterms_+]} do
+      matchpi %{[name←(%all _symbol (%not inert)) subterms_*]} do
         children = recognize(cache, nodes: subterms.items)
-        return Inert.new if children.all?(Inert)
 
-        unless name == Term.of(:"z-stack")
+        if name == Term.of(:"z-stack")
+          return Inert.new if children.all?(Inert)
+        else
           info = ZInfo.new(name, node.pairspart)
         end
 

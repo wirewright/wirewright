@@ -178,7 +178,7 @@ module Ww::Scenery
     end
   end
 
-  private def depict!(cache, node : Inert, box : OriginBox) : DrawCommand
+  private def depict!(cache, node : Inert | HitArea, box : OriginBox) : DrawCommand
     DrawSeq.empty
   end
 

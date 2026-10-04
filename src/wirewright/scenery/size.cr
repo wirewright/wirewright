@@ -239,7 +239,7 @@ module Ww::Scenery
     yield ShapedLine.new(word, advance)
   end
 
-  private def min_size!(cache, node : Inert) : Point
+  private def min_size!(cache, node : Inert | HitArea) : Point
     Point[0, 0]
   end
 
@@ -347,6 +347,10 @@ module Ww::Scenery
 
   private def size!(cache, node : Inert, cst : Cst) : {SizedNode, Size}
     {node, Size.zero}
+  end
+
+  private def size!(cache, node : HitArea, cst : Cst) : {SizedNode, Size}
+    {node, Size.expand(Point[0, 0], cst)}
   end
 
   # NOTE: If the parent doesn't know the size and the rect doesn't know the size
