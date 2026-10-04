@@ -124,7 +124,11 @@ module Ww::D7
   end
 
   # Wraps a continuation feature *cont* in a lexical scope qualified by *scope*.
-  defcase Scope, scope : NodeScope, cont : Feature
+  defcase Scope, scope : NodeScope, cont : Feature do
+    def node : Term
+      Term.of(cont.node)
+    end
+  end
 
   # Constructs a scope feature.
   #
