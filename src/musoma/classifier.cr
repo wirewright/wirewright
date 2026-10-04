@@ -119,8 +119,8 @@ module MuSoma
     end
 
     def call(hg : D7::Hypergraph, proposals : Array(D7::Patch), &fn : D7::Hypergraph, Array(D7::Patch) ->) : Nil
-      Rack::Prepass.call(hg, proposals) do |hg, proposals| # shadow
-        process(hg, proposals, &fn)
+      process(hg, proposals) do |hg, proposals| # shadow
+        Rack::Prepass.call(hg, proposals, &fn)
       end
     end
 
