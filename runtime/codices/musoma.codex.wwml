@@ -1072,15 +1072,14 @@ node←(cat l_ r←[⸨row,col,flow,indent⸩]) <> {node: ^l}
 
 ;; Interior cols are decorated with a thin line on the left.
 (col children_* ⍊ detail: interior)
-  => (group style: "flow-none border-xs border-theme-highlight-high px-3 py-1 rounded-sm"
-       ;(hr style: "bg-theme-overlay min-w-3xs max-w-3xs max-h-2px")
+  => (box style: "border-xs border-theme-highlight-high px-3 py-1 rounded-sm"
        ^*children)
 
 [indent] => (^splice)
 [indent elements_+]
-  => (group ^*elements style: "flow-none ml-2 pl-2 border-l-xs border-theme-highlight-low")
+  => (box ^*elements style: "ml-2 pl-2 border-l-xs border-theme-highlight-low")
 
-[align-bottom child_] => (group ^child style: "flow-none bottom")
+[align-bottom child_] => (box ^child style: "bottom")
 
 [root elements_*]
   => (group style: "flow-col font-mono text-sm/5 gap-1"
@@ -1750,7 +1749,7 @@ scroll: {}
 ;;
 
 (TooltipBL child_ hint_ ⍊ id_)
-  => (box style: "flow-none"
+  => (box
        (vantage id: (hoverable ^id) active: if-hit
          ^child)
        (^if (any? hover-over id)
@@ -1763,13 +1762,13 @@ scroll: {}
                min-w: 8
                min-h: 8)
              ;; FIXME: Why is flow-wrap f**ing everything up with text-base and larger?
-             (box style: "flow-none px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
+             (box style: "px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
                           rounded-sm text-theme-text"
                 ^hint)))))
 
 ;; FIXME: dedupe
 (TooltipBR child_ hint_ ⍊ id_)
-  => (box style: "flow-none"
+  => (box
        (vantage id: (hoverable ^id) active: if-hit
          ^child)
        (^if (any? hover-over id)
@@ -1780,7 +1779,7 @@ scroll: {}
                style: "fill-theme-highlight-high -dl-3 dt-1 bottom right pivot-center rotate-45"
                min-w: 8
                min-h: 8)
-             (box style: "flow-none px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
+             (box style: "px-3/2 py-2/3 text-sm leading-none bg-theme-highlight-high \
                           rounded-sm text-theme-text"
                 ^hint)))))
 

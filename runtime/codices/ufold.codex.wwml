@@ -41,6 +41,7 @@ h5: "font-sans font-medium text-lg text-neutral"
 h6: "font-sans font-semibold text-xs text-neutral upcase"
 icon: "font-icons font-base text-neutral"
 group: "flow-col"
+box: "flow-none"
 code: "font-mono font-normal text-xs/4 bg-neutral-900 text-neutral-300 px-3 py-2 rounded border-l-md border-blue-400"
 button: "font-sans font-normal font-sm py-2 bg-neutral-700 text-neutral-200 rounded content-center content-clip hover:bg-blue-700 hover:text-white hover:cursor-pointer active:bg-blue-600"
 
@@ -1240,6 +1241,10 @@ vantage: ""
 (for self-box
   (utility (prefix "fill-" (one-of colors fill)) cascade: true
     {^:fill}))
+
+(for self-box
+  (utility (prefix "radius-" (one-of radii radius))
+    {radius-tl: ^radius, radius-tr: ^radius, radius-br: ^radius, radius-bl: ^radius}))
 
 (for tag-box
   (utility (prefix "tag-" (symbol name))

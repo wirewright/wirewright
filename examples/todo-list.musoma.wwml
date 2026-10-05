@@ -210,7 +210,7 @@
       (cell @content)
 
       (guard (@visible true)
-        (box style: ""
+        (box
           (box style: "bg-ui-base opacity-90%")
           (group style: "bottom m-5 mb-3 px-5 py-4 gap-2 bg-ui-overlay min-h-sm rounded-xl"
             (group style: "flow-row gap-1"
