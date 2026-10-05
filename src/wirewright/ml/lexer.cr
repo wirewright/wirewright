@@ -1336,7 +1336,7 @@ module Ww::ML
             return token(:caret_star)
           end
         else
-          if ahead.content?
+          if ahead.content? || ahead == '@'
             return token(:caret_left)
           else
             return token(:caret)

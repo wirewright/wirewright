@@ -1351,3 +1351,8 @@
   (= ⎡($Button "Press me" x: 100 y: 200)⎤ ⎡(slot (Button "Press me" x: 100 y: 200))⎤)
   (= ⎡($Button "Press me" ⍊ x y z)⎤ ⎡(slot (Button "Press me" ⍊ x y z))⎤)
   (= ⎡($Button "Press me" ^:a ^:b ^… rest)⎤ ⎡(slot (^extend (Button "Press me" ^:a ^:b) rest))⎤))
+
+;; BUG: ^@xyz must be parsed correctly
+(ml
+  (= ⎡^@xyz⎤ ⎡(^ @xyz)⎤)
+  (= ⎡(a ^:@xyz)⎤ ⎡(a @xyz: ^@xyz)⎤))
