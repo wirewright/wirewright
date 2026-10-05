@@ -537,7 +537,7 @@ module Ww::Rack::Assembler
         end
 
         otherwise do
-          Nitrene.primitive(it, vars, expr)
+          Nitrene.inert
         end
       end
     end
