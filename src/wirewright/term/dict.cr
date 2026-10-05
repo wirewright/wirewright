@@ -706,8 +706,14 @@ module Ww
 
     # Returns `true` if this dictionary probably includes *all of* *symbol*
     # and *symbols*, or `false` if it definitely does not include some of them.
-    def probably_includes?(symbol : Term::Sym, *symbols : Term::Sym) : Bool
-      probably_includes?(symbol) && probably_includes?(*symbols)
+    def probably_includes_all?(*symbols : Term::Sym) : Bool
+      symbols.all? { |symbol| probably_includes?(symbol) }
+    end
+
+    # Returns `true` if this dictionary probably includes *any of* *symbol*
+    # or *symbols*, or `false` if it definitely does not include any of them.
+    def probably_includes_any?(*symbols : Term::Sym) : Bool
+      symbols.any? { |symbol| probably_includes?(symbol) }
     end
 
     # Returns a copy of this dictionary extended with an association between

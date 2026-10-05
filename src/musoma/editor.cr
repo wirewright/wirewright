@@ -112,7 +112,7 @@ module MuSoma
       return Term.rep(world)
     end
 
-    unless world_dict.probably_includes?(SYM_EDITOR_KERNEL, SYM_EDITOR_GP)
+    unless world_dict.probably_includes_all?(SYM_EDITOR_KERNEL, SYM_EDITOR_GP)
       return Term.rep(world)
     end
 

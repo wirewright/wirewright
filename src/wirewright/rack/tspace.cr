@@ -472,7 +472,7 @@ module Ww::Rack::Tspace
 
   private def index(cache : ICache, tree : D7::ParentNode) : IndexNode
     node = tree.feature.node
-    unless node.probably_includes?(SYM_SENSOR) || node.probably_includes?(SYM_APPEARANCE)
+    unless node.probably_includes_any?(SYM_SENSOR, SYM_APPEARANCE)
       return NoIndex.new
     end
 
