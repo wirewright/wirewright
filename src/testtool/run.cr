@@ -281,7 +281,7 @@ module Testtool
       Term.case(item) do
         matchpi %{[hit query_ pattern_]} do
           hit_query = Scenery::HitQuery.parse(query)
-          vantages = Scenery::Safe.describe(cache, scene_out.unwrap, Slice[hit_query])
+          vantages = Scenery::Safe.describe(cache, scene_out.unwrap, hit_query)
           unless vantages.any? { |vantage| M1.probe?(pattern, vantage) }
             complaints << complaint("did not hit according to", query: query, pattern: pattern, vantages: Term.of(vantages))
           end
