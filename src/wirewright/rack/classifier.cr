@@ -14,7 +14,7 @@ module Ww::Rack
   SYM_SPACE = Term[:space]
 
   private def merge_policy?(name : Term::Sym) : D7::MergePolicy?
-    # |@ rack.[merge-policy]
+    # |@ rack.[merge policy]
     #
     # |@summary
     # Ways to handle conflicting patches to `rack.cell`s and some other nodes.
@@ -34,7 +34,7 @@ module Ww::Rack
 
     case name
     when SYM_SEQ
-      # |@ rack.[merge-policy]
+      # |@ rack.[merge policy]
       #
       # |@pattern
       # seq
@@ -43,7 +43,7 @@ module Ww::Rack
       # Accepts the lexicographical minimum patch among competing patches.
       D7::MergeSeq.new
     when SYM_EXCLUSIVE
-      # |@ rack.[merge-policy]
+      # |@ rack.[merge policy]
       #
       # |@pattern
       # exclusive
@@ -55,7 +55,7 @@ module Ww::Rack
       # NOTE: This policy is the default policy for the vast majority of nodes.
       D7::MergeDiff.new(depth_limit: 0u32)
     when SYM_SURFACE
-      # |@ rack.[merge-policy]
+      # |@ rack.[merge policy]
       #
       # |@pattern
       # surface
@@ -65,7 +65,7 @@ module Ww::Rack
       # `(foo 1 2 ⏏3⏏)`; its "surface"). Deeper dictionaries are treated atomically.
       D7::MergeDiff.new(depth_limit: 1u32)
     when SYM_ARENA
-      # |@ rack.[merge-policy]
+      # |@ rack.[merge policy]
       #
       # |@pattern
       # arena
@@ -76,7 +76,7 @@ module Ww::Rack
       # `(foo (1 2 ⏏3⏏))`). Deeper dictionaries are treated atomically.
       D7::MergeDiff.new(depth_limit: 2u32)
     when SYM_SPACE
-      # |@ rack.[merge-policy]
+      # |@ rack.[merge policy]
       #
       # |@pattern
       # space
@@ -150,7 +150,7 @@ module Ww::Rack
       # |@key edge rack.edge
       # The hyperedge ("group") the cell should be a member of.
       #
-      # |@key policy rack.[merge-policy]
+      # |@key policy rack.[merge policy]
       # Optionally, the merge policy to use.
       #
       # |@key value
@@ -1146,7 +1146,7 @@ module Ww::Rack
       # Writes to this edge propose a new *child*. Writes take precedence over evolution
       # of the *child*.
       #
-      # |@key policy rack.[merge-policy]
+      # |@key policy rack.[merge policy]
       # Optionally, the merge policy to use.
       #
       # |@key child rack
@@ -4431,7 +4431,7 @@ module Ww::Rack
       # [form (policy_symbol @edge_) children_*]
       # [form ((policy_symbol @edge_)) children_*]
       #
-      # |@key policy rack.[merge-policy]
+      # |@key policy rack.[merge policy]
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`, and
       # related nodes, the default merge policy for `form` is `exclusive`.
       #
@@ -4767,7 +4767,7 @@ module Ww::Rack
       # [outlet (readonly (policy_symbol @edge_))]
       # [outlet (readonly (policy_symbol @edge_)) value_]
       #
-      # |@key policy rack.[merge-policy]
+      # |@key policy rack.[merge policy]
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`,
       # and related nodes, the default merge policy for `outlet` is `exclusive`.
       #
@@ -4879,7 +4879,7 @@ module Ww::Rack
       # [field (readonly (policy_symbol @edge_) name_)]
       # [field (readonly (policy_symbol @edge_) name_) value_]
       #
-      # |@key policy rack.[merge-policy]
+      # |@key policy rack.[merge policy]
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`,
       # and related nodes, the default merge policy for `field` is `exclusive`.
       #

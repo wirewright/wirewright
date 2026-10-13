@@ -202,7 +202,7 @@ You can use the *arena* merge policy to make the circuit above work:
 (feed (@xs front) (@xs back))
 ```
 
-... but, funnily enough, that is more or less beside the point. We *have* acquainted ourselves with merge policies, have we not? There are some more of them. If you are interested for some reason, visit the `rack.[merge-policy]` group in the doctool. It gives more detailed explanations for *what* merge policies are and *which* merge policies exist.
+... but, funnily enough, that is more or less beside the point. We *have* acquainted ourselves with merge policies, have we not? There are some more of them. If you are interested for some reason, visit the `rack.[merge policy]` group in the doctool. It gives more detailed explanations for *what* merge policies are and *which* merge policies exist.
 
 Going back to the `queue` node — which is supposed to be far more interesting to us at the moment ­— it consists of two parts:
 
