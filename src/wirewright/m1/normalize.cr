@@ -2094,7 +2094,7 @@ module Ww::M1
       # *Keypaths* are sequences of keys pointing into a tree of dictionaries.
       # Keypaths are itemsonly dicts. For example, in `({name: "John"} {name: "Susan"})`,
       # the keypath to `"John"` is `(0 name)`, and the keypath to `"Susan"` is
-      # `(0 age)`.
+      # `(1 name)`.
       #
       # NOTE: Keypaths are rooted at the root matchee.
       #
