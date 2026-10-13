@@ -315,7 +315,7 @@ module Ww::Rack::Feed
   def copy?(spec : Edge, cell : Cell) : {D7::Patch, Term}?
     return unless value = cell.value?
 
-    {D7::Patch.new, value}
+    {D7.patch, value}
   end
 
   # :nodoc:
@@ -323,7 +323,7 @@ module Ww::Rack::Feed
     return unless dict = cell.value?.as_d?
     return unless first = dict.items.first?
 
-    {D7::Patch.new, first}
+    {D7.patch, first}
   end
 
   # :nodoc:
@@ -331,7 +331,7 @@ module Ww::Rack::Feed
     return unless dict = cell.value?.as_d?
     return unless last = dict.items.last?
 
-    {D7::Patch.new, last}
+    {D7.patch, last}
   end
 
   {% if flag?(:docs) %}

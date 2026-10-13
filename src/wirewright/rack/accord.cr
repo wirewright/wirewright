@@ -2301,8 +2301,8 @@ module Ww::Rack::Accord
 
     D7.patches(
       status_patch,
-      source_patch || D7::Patch.new,
-      target_patch || D7::Patch.new,
+      source_patch || D7.patch,
+      target_patch || D7.patch,
     )
   end
 

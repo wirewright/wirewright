@@ -1123,7 +1123,7 @@ module MuSoma
         InputExchange.sync(exchange0, @exchange, input_sync, keyboard_sync) do |action|
           perturbation = ->(hg : D7::Hypergraph) do
             unless row = hg.follow?(hg.to_local(action.addr))
-              return [D7::Patch.new]
+              return [D7.patch]
             end
 
             node_id, _ = row

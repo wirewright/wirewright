@@ -147,6 +147,11 @@ module Ww::D7
     Patch.assoc(object.id, term)
   end
 
+  # Constructs an empty patch.
+  def patch : Patch
+    Patch.new
+  end
+
   # Constructs a patch that morphs node terms in *object* according
   # to *morphseq*.
   #
