@@ -13,7 +13,9 @@ module Ww::D7
     # :nodoc:
     SEQ_VALUE = 1u32
     # :nodoc:
-    SEQ_ZERO = 2u32
+    SEQ_CHILDREN = 2u32
+    # :nodoc:
+    SEQ_ZERO = 3u32
 
     struct Builder(T)
       def initialize
@@ -28,6 +30,8 @@ module Ww::D7
 
         pred = SEQ_ROOT
         addr.each do |key|
+          # Mark that *pred* has children
+          @trie.put_if_absent({SEQ_CHILDREN, pred}, 0u32)
           pred = @trie.put_if_absent({pred, key}) do
             @seq, _ = @seq + 1, @seq
           end
@@ -69,6 +73,12 @@ module Ww::D7
       NodeAddrRouter.new(@trie, @values, focus: successor)
     end
 
+    # Returns `true` if the focused node has one or more children (that you
+    # can `cd?` into).
+    def has_children? : Bool
+      @trie.has_key?({SEQ_CHILDREN, @focus})
+    end
+
     # Returns `true` if the focused node has an associated value.
     def has_value? : Bool
       @trie.has_key?({SEQ_VALUE, @focus})
@@ -76,7 +86,7 @@ module Ww::D7
 
     # Returns the value associated with the focused node.
     def value? : T?
-      return unless value_index = @trie[{SEQ_VALUE, @focus}]
+      return unless value_index = @trie[{SEQ_VALUE, @focus}]?
 
       @values[value_index]
     end

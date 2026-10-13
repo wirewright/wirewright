@@ -425,6 +425,8 @@ module Ww::D7
               scopes << {key_index, ScopeClosedExcept.new(Term[])}
             end
 
+            assert key >= node.feature.range.begin
+
             index = key - node.feature.range.begin
             unless 0 <= index < node.children.size
               raise KeyError.new
