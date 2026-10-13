@@ -34,9 +34,9 @@ struct Ww::Term
       end
     {% end %}
 
-    defrecord DiffCell, decision : DiffDecision, cost : UInt32
+    defrecord MatrixCell, decision : Decision, cost : UInt32
 
-    enum DiffDecision
+    enum Decision
       Keep
       Insert
       Delete
@@ -106,42 +106,42 @@ struct Ww::Term
       # Now we handle changes to the itemspart.
       h = reference.uitemsize + 1
       w = successor.uitemsize + 1
-      matrix = Slice(DiffCell).new(h * w, DiffCell.new(:keep, cost: 0u32))
+      matrix = Slice(MatrixCell).new(h * w, MatrixCell.new(:keep, cost: 0u32))
 
       (0u32...h).each do |y|
         (0u32...w).each do |x|
           cell = pass do
             # Initialize (0, 0).
             if x == 0 && y == 0
-              next DiffCell.new(DiffDecision::Keep, cost: DiffDecision::Keep.cost)
+              next MatrixCell.new(Decision::Keep, cost: Decision::Keep.cost)
             end
 
             # Initialize the first column.
             if x == 0
-              next DiffCell.new(DiffDecision::Delete, cost: y * DiffDecision::Delete.cost)
+              next MatrixCell.new(Decision::Delete, cost: y * Decision::Delete.cost)
             end
 
             # Initialize the first row.
             if y == 0
-              next DiffCell.new(DiffDecision::Insert, cost: x * DiffDecision::Insert.cost)
+              next MatrixCell.new(Decision::Insert, cost: x * Decision::Insert.cost)
             end
 
             source = reference[y - 1]
             target = successor[x - 1]
 
             if source == target
-              decision = DiffDecision::Keep
+              decision = Decision::Keep
               cost = matrix[(y - 1)*w + (x - 1)].cost
             else
               candidates = {
-                {DiffDecision::Insert, matrix[y*w + (x - 1)].cost},
-                {DiffDecision::Delete, matrix[(y - 1)*w + x].cost},
-                {DiffDecision::Replace, matrix[(y - 1)*w + (x - 1)].cost},
+                {Decision::Insert, matrix[y*w + (x - 1)].cost},
+                {Decision::Delete, matrix[(y - 1)*w + x].cost},
+                {Decision::Replace, matrix[(y - 1)*w + (x - 1)].cost},
               }
               decision, cost = candidates.min_by { |decision, cost| cost + decision.cost }
             end
 
-            DiffCell.new(decision, cost + decision.cost)
+            MatrixCell.new(decision, cost + decision.cost)
           end
 
           matrix[y*w + x] = cell
