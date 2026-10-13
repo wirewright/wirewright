@@ -1860,15 +1860,8 @@ module Ww::Rack
       # |@pattern
       # [backsys template_dict backmaps_*]
       #
-      # |@key template
-      # The template dict works the same as in `rack.rewriter`: edge entry values are
-      # replaced by the value of the cell at the corresponding edge.
-      #
-      # Edges in the itemspart are required and cannot be erased by the backmap
-      # (because this would leave "holes" in the itemspart which confuse
-      # the `backsys` node).
-      #
-      # Edges in the pairspart can be removed, in turn clearing their respective cell.
+      # |@key template rack.[edge template]
+      # The edge template dict.
       #
       # |@key backmaps m1.backmap
       # Zero or more backmaps.
@@ -2495,17 +2488,7 @@ module Ww::Rack
       # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
       #
       # |@key target
-      # Either an edge (`rack.edge`) or a template dictionary with edge values,
-      # e.g. `(+ @x @y a: @foo b: @bar)`. The rewriter node replaces each such
-      # edge value with the value at the corresponding cell to obtain the term
-      # to rewrite.
-      #
-      # For template targets, the rewritten term is "unpacked" or "destructured"
-      # afterwards, and the resulting values are written to the corresponding cells.
-      #
-      # Removal is not allowed in the itemspart but allowed in the pairspart. For
-      # example, if the rewriter removes `a` from `{a: @a, b: @b}` (or more compactly,
-      # `{@:a, @:b}`), the `@a` cell will be cleared.
+      # Either an edge (`rack.edge`) or an edge template (`rack.[edge template]`).
       #
       # |@block
       # The *regime* variant of the rewriter node allows you to maintain a *rewrite

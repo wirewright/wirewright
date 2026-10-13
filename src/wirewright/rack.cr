@@ -120,13 +120,221 @@ module Ww::Rack
     Pool.new(cell.node, contents || Term[])
   end
 
-  defrecord FillTemplateTarget, key : Term, value : Term?, node : D7::Node, smart: true
+  # |@ rack.[edge template]
+  #
+  # |@pattern
+  # _dict
+  #
+  # |@summary
+  # A dictionary with zero or more edge references that are subsequently
+  # replaced by the values at the corresponding cells.
+  #
+  # |@block
+  # Edge templates are primarily used in `rack.rewriter` and `rack.backsys`.
+  # A rewriter or backsys node *instantiates* its template: replaces edges
+  # in it with the corresponding values. The instance is then modified or
+  # rewritten by the node. Lastly, the node inspects the rewritten instance
+  # for updates to cells at the edges, and carries out those updates.
+  #
+  # Instantiation does not start until all edges in the *itemspart* have
+  # a value. In the *pairspart*, edges without a value cause the corresponding
+  # entry to be omitted.
+  #
+  # For example, the template `(@x @y @:a @:b)` will not be instantiated until
+  # both `@x` and `@y` have a value. `@a` and `@b` may be empty: in that case
+  # their entries are simply not included in the instance.
+  #
+  # Literals are left as-is. For example, in `(+ @a @b)`, `@a` and `@b` will be
+  # replaced with their values when available, and `+` will be kept as is. If we
+  # take `(cell @a 1)` and `(cell @b 2)`, then `(+ 1 2)`.
+  #
+  # In the pairspart, simple pairs confuse the absence of a cell at an edge with
+  # its emptiness: both cases "look" the same for a pair such as `@:x` (short for `x: @x`).
+  # That is, for `@:x`:
+  #
+  # - If the cell `@x` is missing, `-x` (x is not included in the instance).
+  # - If the cell `@x` is empty, `-x`.
+  # - If the cell `@x` has a value, `x: value_`, where *value* is that value.
+  #
+  # You can use `optional` to distinguish the three states. For example, `x: (optional @x)`
+  # distinguishes the three possible states as follows:
+  #
+  # - If the cell `@x` is missing, `x: none`.
+  # - If the cell `@x` is empty, `-x` (x is not included in the instance).
+  # - If the cell `@x` has a value, `x: (some value_)`, where *value* is that value.
+  #
+  # |@example
+  # Swap, edges in itemspart:
+  #
+  # ```wwml
+  # (cell @x 100)
+  # (cell @y 200)
+  # (backsys (@x @y)
+  #   (x_ y_) <> {x: ^y, y: ^x})
+  # ```
+  #
+  # Swap, edges in pairspart:
+  #
+  # ```wwml
+  # (cell @x 100)
+  # (cell @y 200)
+  # (backsys {@:x, @:y}
+  #   {¦ x_ y_} <> {x: ^y, y: ^x})
+  # ```
+  #
+  # Swap, edges in both:
+  #
+  # ```wwml
+  # (cell @x 100)
+  # (cell @y 200)
+  # (backsys (@x @:y)
+  #   (x_ ⍊ y_) <> {x: ^y, y: ^x})
+  # ```
+  #
+  # Optional:
+  #
+  # ```wwml
+  # ;; Frame 0 (seed)
+  #
+  # ;; Activate the @x cell when @y becomes nonempty.
+  # (guard (@y _)
+  #   (cell @x))
+  # (cell @y)
+  # (backsys {x: (optional @x), @:y}
+  #   ;; @x is missing.
+  #   {¦ x: none -y_} <> {y: "Y is nonempty now"}
+  #   ;; @x is empty.
+  #   {¦ -x_} <> {x: (some 100)}
+  #   ;; @x is nonempty, increment the number it stores.
+  #   {¦ x: (some n_)} <> {n: ^(+ n 1)})
+  #
+  # ;; Frame 1
+  #
+  # (guard (@y _)
+  #   (cell @x))
+  # (cell @y "Y is nonempty now")
+  # ;; (backsys {@:x, @:y} ...)
+  #
+  # ;; Frame 2
+  #
+  # (guard (@y _)
+  #   (cell @x 100))
+  # (cell @y "Y is nonempty now")
+  # ;; (backsys {@:x, @:y} ...)
+  #
+  # ;; Frame 3
+  #
+  # (guard (@y _)
+  #   (cell @x 101))
+  # (cell @y "Y is nonempty now")
+  # ;; (backsys {@:x, @:y} ...)
+  #
+  # ;; Frame 4
+  #
+  # (guard (@y _)
+  #   (cell @x 102))
+  # (cell @y "Y is nonempty now")
+  # ;; (backsys {@:x, @:y} ...)
+  #
+  # ;; ... and so on.
+  # ```
+  #
+  # Note that you cannot change the itemsize of a template instance during
+  # rewriting. Instances with itemsize different from what it was during
+  # instantiation are discarded wholesale:
+  #
+  # ```wwml
+  # ;; Frame 0 (seed)
+  #
+  # (cell @x 1)
+  # (cell @y 2)
+  # (cell @z 3)
+  # (backsys (@x @y @z)
+  #   ;; Incrementing *x* is fine, but removing *y* is not!
+  #   (x_ y_ _) <> {x: ^(+ x 1), (y): ()})
+  #
+  # ;; This circuit is quiescent because the backsystem's rewritten instance
+  # ;; is discarded.
+  # ```
+  #
+  # You can remove and add pairs. Removals clear the corresponding cell,
+  # and additions fill a cell if it was empty.
+  #
+  # ```wwml
+  # ;; Frame 0 (seed)
+  #
+  # (cell @x)
+  # (backsys {@:x}
+  #   ;; If x is empty, fill it with `100`.
+  #   {¦ -x_} <> {x: 100}
+  #   ;; If x is nonempty, clear it.
+  #   {¦ x_} <> {(x): ()})
+  #
+  # ;; Frame 1
+  #
+  # (cell @x 100)
+  # ;; (backsys {@:x} ...)
+  #
+  # ;; Frame 1
+  #
+  # (cell @x)
+  # ;; (backsys {@:x} ...)
+  #
+  # ;; Frame 2
+  #
+  # (cell @x 100)
+  # ;; (backsys {@:x} ...)
+  #
+  # ;; ... and so on
+  # ```
+
+  module EdgeTemplateMember
+    alias Any = Bare | Optional
+
+    struct Bare
+      getter key : Term
+
+      # :nodoc:
+      def initialize(@node : D7::Node, @key : Term, @value0 : Term?)
+      end
+
+      def patch(value1 : Term?) : D7::Patch
+        # (cell @_ value0_) -> (cell @_ value1_)  [value0 : Term, value1 : Term]
+        # (cell @_) -> (cell @_ value1_)          [value0 : Nil, value1 : Term]
+        # (cell @_ value0_) -> (cell @_)          [value0 : Term, value1 : Nil]
+        @value0 == value1 ? D7.patch : D7.patch(@node, {2, value1})
+      end
+    end
+
+    struct Optional
+      getter key : Term
+
+      # :nodoc:
+      def initialize(@node : D7::Node, @key : Term, @value0 : Term?)
+      end
+
+      def patch(value1 : Term?) : D7::Patch
+        if @value0 == value1
+          return D7.patch
+        end
+
+        if value1.nil? # => value0 != nil
+          return D7.patch(@node, {2, nil})
+        end
+
+        Term.case(value1) do
+          matchpi %{(some rep_)} { D7.patch(@node, {2, rep}) }
+          otherwise { D7.patch }
+        end
+      end
+    end
+  end
 
   # NOTE: This function does not implement rollback or transactionality; if it returns
   # `nil`, all block yields prior must be reverted *by the caller*.
-  def fill?(hg : D7::Hypergraph, addr : D7::NodeAddr, template : Term::Dict, & : FillTemplateTarget ->) : Term::Dict?
-    template.transaction do |commit|
-      template.items.each_with_index do |item, index|
+  def fill_edge_template?(hg : D7::Hypergraph, addr : D7::NodeAddr, edge_template : Term::Dict, & : EdgeTemplateMember::Any ->) : Term::Dict?
+    edge_template.transaction do |commit|
+      edge_template.items.each_with_index do |item, index|
         next unless Term.edge?(item)
 
         abs_target = hg.resolve(addr, item)
@@ -136,27 +344,57 @@ module Ww::Rack
         return unless target_cell = Rack.cell?(hg, abs_target)
         return unless target_value = target_cell.value?
 
-        yield FillTemplateTarget.new(Term.of(index), target_value, target_cell.node)
+        yield EdgeTemplateMember::Bare.new(target_cell.node, Term.of(index), target_value)
 
         commit.with(index, target_value)
       end
 
-      template.each_entry(in: Term::Dict.pairspart) do |key, value|
-        next unless Term.edge?(value)
+      edge_template.each_entry(in: Term::Dict.pairspart) do |key, value|
+        # Fast / typical path.
+        if Term.edge?(value)
+          abs_target = hg.resolve(addr, value)
+          unless target_cell = Rack.cell?(hg, abs_target)
+            commit.without(key) # Skip if cell missing
+            next
+          end
 
-        abs_target = hg.resolve(addr, value)
+          target_value = target_cell.value?
+          # Omit (target_value : Nil) if cell value is missing, but still count as
+          # a target cell so that the rewriter can write there if necessary.
+          commit.with(key, target_value)
 
-        unless target_cell = Rack.cell?(hg, abs_target)
-          commit.without(key) # Skip if cell missing
+          yield EdgeTemplateMember::Bare.new(target_cell.node, key, target_value)
           next
         end
 
-        target_value = target_cell.value?
-        yield FillTemplateTarget.new(key, target_value, target_cell.node)
+        Term.case(value) do
+          # Cell absence is represented by `key: none`.
+          # Cell presence is represented by `key: (some value_)`.
+          # Cell emptiness is represented by `-key`.
+          matchpi %{(optional @edge_)} do
+            abs_target = hg.resolve(addr, edge)
+            unless target_cell = Rack.cell?(hg, abs_target)
+              commit.with(key, :none)
+              next
+            end
 
-        # Omit (target_value : Nil) if cell value is missing, but still count as
-        # a target cell so that the rewriter can write there if necessary.
-        commit.with(key, target_value)
+            if target_value = target_cell.value?
+              commit.with(key, {:some, target_value})
+            else
+              commit.without(key)
+            end
+
+            yield EdgeTemplateMember::Optional.new(target_cell.node, key, target_value)
+          end
+
+          otherwise do
+            # Keep key: value as is. For example:
+            #   {⏏foo: 100⏏, @:x}
+            # ... with `(cell @x 100)` should give:
+            #   {foo: 100, x: 100}
+            # ... where `foo` is a completely passive, inert entry.
+          end
+        end
       end
     end
   end

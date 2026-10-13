@@ -38,7 +38,7 @@ module Ww::Rack::Backsys
     backsys : Slice({M1::Op::Any, Term::Dict})
 
   defrecord TemplateBacksysQ,
-    template : Term::Dict,
+    edge_template : Term::Dict,
     backsys : Slice({M1::Op::Any, Term::Dict})
 
   private def variantQ?(variantsQ : ICache, node : Term) : VariantQ?
@@ -88,10 +88,9 @@ module Ww::Rack::Backsys
   end
 
   private def step(hg, proposals, node : D7::Node, variant : TemplateBacksysQ) : D7::Patch?
-    targets = Pf::Kit.stack_array(FillTemplateTarget)
-
-    input = Rack.fill?(hg, node.addr, variant.template) do |target|
-      targets << target
+    members = Pf::Kit.stack_array(EdgeTemplateMember::Any)
+    input = Rack.fill_edge_template?(hg, node.addr, variant.edge_template) do |member|
+      members << member
     end
 
     return unless input
@@ -102,11 +101,8 @@ module Ww::Rack::Backsys
     return unless input.itemsize == output.itemsize
 
     # "Destructure" the output and fill in the corresponding cells.
-    D7.patches(targets) do |target|
-      value1 = output[target.key]?
-      next if target.value? == value1
-
-      D7.patch(target.node, {2, value1})
+    D7.patches(members) do |member|
+      member.patch(value1: output[member.key]?)
     end
   end
 end

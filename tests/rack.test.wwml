@@ -6763,3 +6763,36 @@
         (changes (sync @x)
           (assoc (count) 4))))))
     ;; ...
+
+;; `optional` in edge template (from docs)
+(rack
+  (frame
+    (backsys {x: (optional @x), @:y}
+      {¦ x: none -y_} <> {y: "Y is nonempty now"}
+      {¦ -x_} <> {x: (some 100)}
+      {¦ x: (some n_)} <> {n: ^(+ n 1)})
+    (guard (@y _)
+      (cell @x))
+    (cell @y))
+
+  (frame/tail
+    (guard (@y _)
+      (cell @x))
+    (cell @y "Y is nonempty now"))
+
+  (frame/tail
+    (guard (@y _)
+      (cell @x 100))
+    (cell @y "Y is nonempty now"))
+
+  (frame/tail
+    (guard (@y _)
+      (cell @x 101))
+    (cell @y "Y is nonempty now"))
+
+  (frame/tail
+    (guard (@y _)
+      (cell @x 102))
+    (cell @y "Y is nonempty now")))
+  ;; ...
+
