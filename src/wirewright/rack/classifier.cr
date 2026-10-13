@@ -4347,6 +4347,99 @@ module Ww::Rack
         D7.gnd(node)
       end
 
+      # |@ rack.timer
+      #
+      # |@pattern
+      # [timer delay_]
+      # [timer delay_ action_]
+      #
+      # |@key delay duration
+      # The time to wait for after the timer is started.
+      #
+      # |@key action
+      # The action *for* the timer or *that the timer is running*.
+      #
+      # - *Missing*: There is no action. The timer is inert.
+      # - `start`: Starts the timer. You are expected to put this as *action* when
+      #   you want the timer to start.
+      # - `(wait instant_string)`: The timer will replace `start` with `wait` as quickly
+      #   as possible, and will start waiting until *instant*. This is the timer's *own*
+      #   action, it puts it instead of `start` for itself. You should generally not
+      #   touch this action, unless you wish to cancel the timer. In that case you
+      #   can simply remove the action. *instant* describes the instant the timer
+      #   is waiting for; the meaning of this description should be entirely
+      #   irrelevant to you. *instant*s are process-local so you cannot share one
+      #   *instant* between two processes, machines, etc.
+      # - `ready`: The timer is done waiting.
+      #
+      # |@summary
+      # Waits for a set amount of time; can be started and stopped arbitrarily.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (timer (1 s) start)
+      #
+      # ;; Frame 1
+      #
+      # ;; NOTE: Instead of "..." you will see a cryptic string describing the exact
+      # ;; instant the timer is waiting for.
+      # (timer (1 s) (wait "..."))
+      #
+      # ;; After roughly 1s (remember, Rack is not realtime and it does not give you
+      # ;; any realtime guarantees!)
+      #
+      # (timer (1 s) ready)
+      # ```
+      #
+      # Below is an example of a very simple timer app using `mxrack`.
+      #
+      # ```wwml
+      # (window style: "bg-ui-base content-center flow-col gap-5"
+      #   (cell @seconds 1)
+      #   (frag @timer (timer (1 s)))
+      #
+      #   (visual
+      #     (^when (@timer (timer _ (wait _)))
+      #       (p style: "p-1 bg-ui-warn bg-okl-50% border-xs border-ui-warn rounded \
+      #                  center-y text-lg/6 text-ui-content"
+      #         "Waiting..." )))
+      #
+      #   (p ^"⸢@seconds⸣s" style: "text-5xl font-light text-ui-content center-x")
+      #
+      #   (guard (@timer (timer _))
+      #     (cell @normal))
+      #   (guard (@timer (timer _ (wait _)))
+      #     (cell @waiting))
+      #   (group style: "flow-row min-w-5xs item-fr-1"
+      #     ($Button (@normal dec) "-1")
+      #     ($Button (@normal start) "Start")
+      #     ($Button (@waiting cancel) "Cancel")
+      #     ($Button (@normal inc) "+1"))
+      #
+      #   (backsys
+      #     {¦ normal_} <> {(normal): ()}
+      #     {¦ waiting_} <> {(waiting): ()}
+      #     {¦ normal: inc ±seconds}
+      #       <> {seconds: ^(+ seconds 1)}
+      #     {¦ normal: dec seconds_: (%number _ > 1)}
+      #       <> {seconds: ^(- seconds 1)}
+      #     {¦ normal: start ±seconds timer: (timer (±n s) `action)}
+      #       <> {n: ^seconds, action: start}
+      #     {¦ waiting: cancel timer: (timer _ action←(wait _))}
+      #       <> {(action): ()}
+      #     {¦ timer: (timer _ action←ready)}
+      #       <> {(action): ()}))
+      # ```
+      #
+      # Note that the timer node does not do countdown. For a timer that counts down (think
+      # a smartphone timer app where milliseconds, seconds, etc. count down while the timer
+      # is waiting), use the `rack.countdown` node.
+      matchpi %{[timer _ _?]} do
+        D7.gnd(node)
+      end
+
       # |@ rack.form
       #
       # |@pattern

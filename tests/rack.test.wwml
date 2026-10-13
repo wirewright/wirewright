@@ -5704,6 +5704,40 @@
 ;; TODO: lfo
 ;; I don't know how we can test this because it's all continuous...
 
+;; timer
+(group
+  (rack
+    (frame
+      (timer (1 s)))
+
+    end)
+
+  ;; Malformed instant string.
+  (rack
+    (frame
+      (timer (1 s) (wait ""))
+      (timer (1 s) (wait "abcdef"))
+      (timer (1 s) (wait "abcdef:xyz")))
+
+    (frame
+      (timer (1 s) (wait ""))
+      (timer (1 s) (wait "abcdef"))
+      (timer (1 s))) ;; < This one happens to be a valid instant string but it's not the right epoch.
+
+    end)
+
+  (rack
+    (frame
+      (timer (1 s) start))
+
+    (frame pattern: true
+      ((timer (1 s) (wait _string))))
+
+    (frame
+      (timer (1 s) ready))
+
+    end))
+
 ;; Make sure circuit policy overloads work.
 (rack
   (frame

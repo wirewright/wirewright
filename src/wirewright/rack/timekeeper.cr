@@ -6,7 +6,8 @@ module ::Ww::Rack::Timekeeper
   defcase State,
     origin : Time::Instant,
     checkpoint : Time::Span,
-    periods : Set(Time::Span)
+    periods : Set(Time::Span),
+    deadlines : Set(Time::Span)
 
   class State
     setter checkpoint
@@ -16,18 +17,19 @@ module ::Ww::Rack::Timekeeper
     origin = Time.instant
     checkpoint = Time::Span.zero
     periods = Set(Time::Span).new
-    State.new(origin, checkpoint, periods)
+    deadlines = Set(Time::Span).new
+    State.new(origin, checkpoint, periods, deadlines)
   end
 
   def pending?(state : State) : Bool
-    state.periods.present?
+    state.periods.present? || state.deadlines.present?
   end
 
   def deadline?(state : State) : Time::Instant?
     now = Time.instant
     elapsed = now - state.origin
 
-    state.periods.min_of? do |period|
+    period_t = state.periods.min_of? do |period|
       if period.zero?
         now
       else
@@ -35,33 +37,53 @@ module ::Ww::Rack::Timekeeper
         state.origin + period * n
       end
     end
+
+    deadline_t = state.deadlines.min_of? do |deadline|
+      state.origin + deadline
+    end
+
+    if period_t && deadline_t
+      {period_t, deadline_t}.min
+    else
+      period_t || deadline_t
+    end
   end
 
   defrecord StepContext,
     checkpoint : Time::Span,
     now : Time::Span,
-    periods : Set(Time::Span)
+    periods : Set(Time::Span),
+    deadlines : Set(Time::Span)
 
   def step(state : State, & : Propose -> T) : T forall T
     now = Time.instant - state.origin
+
     seen_periods = Set(Time::Span).new
+    seen_deadlines = Set(Time::Span).new
 
     propose = Propose.new do |hg, proposals|
-      ctx = StepContext.new(state.checkpoint, now, seen_periods)
+      ctx = StepContext.new(state.checkpoint, now, seen_periods, seen_deadlines)
       propose(ctx, hg, proposals)
     end
 
     result = yield propose
 
     state.checkpoint = now
+
     state.periods.clear
+    state.deadlines.clear
+
     state.periods.concat(seen_periods)
+    state.deadlines.concat(seen_deadlines)
 
     result
   end
 
+  # :nodoc:
+  EPOCH = Random::Secure.rand(UInt64)
+
   private def propose(ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
-    hg.propose(proposals, :sequencer, :ticker, :lfo) do |node|
+    hg.propose(proposals, :sequencer, :ticker, :lfo, :timer) do |node|
       nodeQ = node.term
 
       Term.case(nodeQ) do
@@ -125,7 +147,46 @@ module ::Ww::Rack::Timekeeper
           D7.patch(node, {2, output})
         end
 
-        # debounce?
+        matchpiT %{[timer delayQ_ start]} do
+          next unless delay = DurationLanguage.decode?(delayQ)
+
+          deadline = (ctx.now + delay).total_nanoseconds.to_u64
+          instant = String.build do |io|
+            # NOTE: We never show them the epoch, only its hash, which is supposed to
+            # be one-way, so that the epoch remains a secret. The hash is itself randomly
+            # seeded so it will be different on every run of the binary.
+            EPOCH.hash.to_s(io, base: 62)
+            io << ':'
+            deadline.to_s(io, base: 62)
+          end
+
+          D7.patch(node, {2, {:wait, instant}})
+        end
+
+        matchpiT %{[timer _ (wait instant_string)]}, instant: String do
+          parts = instant.split(':', limit: 2)
+          continue unless parts.size == 2
+
+          epoch, deadline_ns = parts
+          continue unless epoch = epoch.to_u64?(base: 62)
+          continue unless deadline_ns = deadline_ns.to_u64?(base: 62)
+
+          deadline = deadline_ns.nanoseconds
+
+          # If epoch does not match, we re-seed the timer node with `now`.
+          unless epoch == EPOCH.hash
+            next D7.patch(node, {2, nil})
+          end
+
+          if ctx.now < deadline
+            # Keep waiting
+            ctx.deadlines << deadline
+            next
+          end
+
+          # We're past the deadline.
+          D7.patch(node, {2, :ready})
+        end
 
         otherwise { }
       end
