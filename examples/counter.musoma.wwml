@@ -1,7 +1,7 @@
-(window title: "Counter" style: "backdrop-theme-base center"
-  (group style: "flow-col bg-theme-surface p-5 rounded-3xl gap-5"
+(window title: "Counter" style: "backdrop-ui-base center"
+  (group style: "flow-col bg-ui-surface p-5 rounded-3xl gap-5"
     (node @count
-      (p 0 style: "center text-6xl text-theme-text font-medium"))
+      (p 0 style: "center text-6xl text-ui-content font-medium"))
 
     (group style: "flow-wrap gap-3"
       ($OutlinedButton (@msg (sub 1)) "Decrement")
