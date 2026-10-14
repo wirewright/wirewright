@@ -4,7 +4,7 @@
 
 What if a program was not a sequence of instructions, but a world? A world you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can poke *as it evolves*, introducing new things and removing old ones.
 
-Wirewright is an experimental research project built around this idea.
+Wirewright is an experimental project built around this idea.
 
 Programs in most programming languages ultimately look like this:
 
@@ -385,7 +385,7 @@ Then build the doctool:
 ```
 ## References
 
-I think Wirewright combines a lot of existing ideas into something coherent.
+I think Wirewright combines a lot of existing ideas into something (hopefully) coherent.
 
 The relevant ideas come mainly from the field of *cybernetics*: see, for instance, Francisco Varela, Humberto Maturana,  Niklas Luhmann, Norbert Wiener.
 
