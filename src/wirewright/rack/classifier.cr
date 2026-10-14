@@ -4370,6 +4370,8 @@ module Ww::Rack
       # ;; instant the timer is waiting for.
       # (timer (1 s) (wait "..."))
       #
+      # ;; Frame 2
+      # ;;
       # ;; After roughly 1s (remember, Rack is not realtime and it does not give you
       # ;; any realtime guarantees!)
       #
@@ -4380,8 +4382,8 @@ module Ww::Rack
       #
       # ```wwml
       # (window style: "bg-ui-base content-center flow-col gap-5"
-      #   (cell @seconds 1)
       #   (frag @timer (timer (1 s)))
+      #   (part (@timer @seconds) (timer (±seconds s) _?))
       #
       #   (visual
       #     (^when (@timer (timer _ (wait _)))
@@ -4408,8 +4410,8 @@ module Ww::Rack
       #       <> {seconds: ^(+ seconds 1)}
       #     {¦ normal: dec seconds_: (%number _ > 1)}
       #       <> {seconds: ^(- seconds 1)}
-      #     {¦ normal: start ±seconds timer: (timer (±n s) `action)}
-      #       <> {n: ^seconds, action: start}
+      #     {¦ normal: start timer: (timer _ `action)}
+      #       <> {action: start}
       #     {¦ waiting: cancel timer: (timer _ action←(wait _))}
       #       <> {(action): ()}
       #     {¦ timer: (timer _ action←ready)}
