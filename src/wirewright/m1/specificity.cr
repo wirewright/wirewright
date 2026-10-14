@@ -15,8 +15,8 @@ module Ww::M1
   #
   # The following is a non-exhaustive list of rules that apply to the third tier.
   #
-  # We rank patterns in the third tier, in order, by the number of *literals*, *choices*,
-  # *constraints*, *details*, *rfield*, and *members* they have.
+  # We rank patterns in the third tier by the number of *constraints* plus *literals*,
+  # *choices*, *details*, *rfield*, and *members* they have, *in this exact order*.
   #
   # - `%literal`s count toward *literals* (dict %literals count N times where N
   #   is the number of their non-dict leaves).
@@ -129,7 +129,7 @@ module Ww::M1
 
     # :nodoc:
     def rank
-      {literals, choices, constraints, details, rfield, members}
+      {constraints + literals, choices, details, rfield, members}
     end
 
     def <=>(other : Pattern)
