@@ -38,6 +38,12 @@ module Ww::Scenery
       new(tl: Point.min(a.tl, b.tl), br: Point.max(a.br, b.br))
     end
 
+    # Returns the union of rects corresponding to *objects*, converting each
+    # object to a rect using the block.
+    def self.union(objects : Enumerable(T), & : T -> Rect) : Rect forall T
+      objects.reduce(empty) { |memo, rect| union(memo, yield rect) }
+    end
+
     # Returns the intersection of two rectangles.
     def self.intersection(a : Rect, b : Rect) : Rect
       new(tl: Point.max(a.tl, b.tl), br: Point.min(a.br, b.br))

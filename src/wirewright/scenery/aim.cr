@@ -128,9 +128,7 @@ module Ww::Scenery
     end
 
     # Union through child bounds to determine the content rect.
-    content_rect = box.children.reduce(Rect.empty) do |memo, child|
-      Rect.union(memo, child.bounds)
-    end
+    content_rect = Rect.union(box.children, &.bounds)
 
     # Resolve offsets.
     total_size = Point.max(box.bounds.size, content_rect.size)

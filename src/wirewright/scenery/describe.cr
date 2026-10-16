@@ -330,9 +330,7 @@ module Ww::Scenery
     descriptions = describe(cache, node.children, box.children, hit)
 
     describe = -> do
-      content_rect = box.children.reduce(Rect.empty) do |memo, child|
-        Rect.union(memo, child.bounds)
-      end
+      content_rect = Rect.union(box.children, &.bounds)
 
       result = Term::Dict.build do |commit|
         commit << :clip

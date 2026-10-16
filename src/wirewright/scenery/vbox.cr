@@ -8,12 +8,7 @@ module Ww::Scenery
 
   private def vbox!(cache, node : TransformMatrix, box : OriginBox) : VBox
     vbox = vbox(cache, node.children, box.children)
-
-    bounds = Rect.empty
-    vbox.children.each do |child|
-      bounds = Rect.union(bounds, node.tf.map(child.bounds))
-    end
-
+    bounds = Rect.union(vbox.children) { |child| node.tf.map(child.bounds) }
     VBox.new(bounds, vbox.children)
   end
 
