@@ -117,8 +117,12 @@ module Ww::Scenery
       dirty = Rect.empty
 
       dirty_rects.each do |dirty_rect|
-        # Add 8px margin to conceal any float/rasterization artifacts.
-        dirty_rect = dirty_rect.snap.margin(Point[8, 8])
+        # Protect against infinite x, y, w, h.
+        # HACK: Add 8px margin to conceal any float/rasterization artifacts.
+        dirty_rect = Rect.intersection(dirty_rect, Rect[0, 0, screen.width, screen.height])
+          .snap
+          .margin(Point[8, 8])
+
         PlutoVG.canvas_add_rect(canvas, dirty_rect.x, dirty_rect.y, dirty_rect.w, dirty_rect.h)
         dirty = Rect.union(dirty, dirty_rect)
       end
