@@ -130,13 +130,34 @@
 
 ;; /
 (group
+  (ni= (/ 2) 1/2)
+  (ni= (/ 1 2) 1/2)
+  (ni= (/ 1 2 3) (/ (/ 1 2) 3))
   (ni= (nan? (/ ≈0 ≈0)) true))
 
 ;; //
+(group
+  (ni= (// 1 2) 0)
+  (ni= (// 20 5) 4)
+
+  (ni= (// 10 0) 0)
+  (ni= (// 0 0) 0)
+  (ni= (// "qux" 0) 0))
 
 ;; mod
+(group
+  (ni= (mod 1 2) 1)
+  (ni= (mod 20 3) 2)
+
+  (ni= (mod 10 0) 0)
+  (ni= (mod 0 0) 0)
+  (ni= (mod "qux" 0) 0))
 
 ;; **
+(group
+  (ni= (** 2 4) 16)
+  (ni= (** 2 -4) 0.0625)
+  (ni= (** 2 1/2) ≈1.4142135))
 
 ;; sqrt
 (group
@@ -148,7 +169,8 @@
   (ni= (sqrt ≈1) ≈1)
   (ni= (sqrt ≈1/2) (/ (sqrt 2) 2))
   (ni= (sqrt ≈0) ≈0)
-  (ni= (nan? (sqrt ≈-1)) true))
+  (ni= (nan? (sqrt ≈-1)) true)
+  (ni= (sqrt "qux") ≈NaN))
 
 ;; isqrt
 (group
@@ -161,13 +183,17 @@
   (ni= (isqrt ≈1) ≈1)
   (ni= (isqrt ≈1/2) ≈0)
   (ni= (isqrt ≈0) ≈0)
-  (ni= (nan? (isqrt ≈-1)) true))
+  (ni= (nan? (isqrt ≈-1)) true)
+  (ni= (isqrt "qux") ≈NaN))
 
 ;; sci
 (group
+  (ni= 12e3 12000)
+  (ni= 12e-3 0.012)
   (ni= ≈3.40282347e+38 (* ≈3.40282347 (** 10 38)))
   (ni= ≈3.40282347e+39 ≈Infinity)
-  (ni= ≈-3.40282347e+39 ≈-Infinity))
+  (ni= ≈-3.40282347e+39 ≈-Infinity)
+  (ni= (sci "abc" "def") 0))
 
 ;; nan?
 (group
@@ -210,6 +236,16 @@
   (ni= (sum (1 2 3 4 5)) 15)
   (ni= (sum (1 2 ∞ 4 5)) ∞))
 
+;; product
+(group
+  (ni= (product ()) 1)
+  (ni= (product (100)) 100)
+  (ni= (product (1 2 3 4 5)) 120)
+  (ni= (product (1 2 ∞ 4 5)) ∞)
+  (ni= (product (1 2 "qux" 3 4 false 5)) 120)
+  (ni= (product "qux") 0))
+
+
 ;; (sum attn)
 (group
   (ni= (sum (attn ())) 0)
@@ -221,19 +257,28 @@
   (ni= (sum (attn (1 2 3 4 5 x: 100 y: 200))) 315)
   (ni= (sum (attn (1 2 3 4 5 x: 100 y: 200) {+ 1 x})) 102))
 
-;; <
-
-;; <=
-;; NOTE: This is necessary because when doing comparison, ≈0 is considered
-;; to be equal to 0 (and so on for approx-exact comparisons). `==` is
-;; too strict as it requires both parties to be approx or exact.
-
-;; >
-
-;; >=
+;; cmp
+(group
+  (ni= (< 1) true)
+  (ni= (< 1 2) true)
+  (ni= (< 1 2 3) true)
+  (ni= (< 1 5 3) false)
+  (ni= (>= 10 10) true)
+  (ni= (>= 10 10.1) false)
+  (ni= (> 1 5) false)
+  (ni= (> 5 1) true)
+  (ni= (>= 10 ≈10) true)
+  (ni= (<= 10 ≈10) true)
+  (ni= (= 10 ≈10) false))
 
 ;; =
-(ni= (= 0 ≈0) false)
+(group
+  (ni= (= 100) true)
+  (ni= (= 100 200) false)
+  (ni= (= 100 100) true)
+  (ni= (= "a" "b" "c") false)
+  (ni= (= "a" "a" "a") true)
+  (ni= (= 0 ≈0) false))
 
 ;; floor (toward negative infinity)
 (group
@@ -326,12 +371,52 @@
   (ni= (finite ≈-Infinity or: infinite) infinite))
 
 ;; exact
+(group
+  (ni= (exact 100) 100)
+  (ni= (exact 100.23) 100.23)
+  (ni= (exact ≈100.23) 100.23000335693359375)
+  (ni= (exact "foo") 0)
+  (ni= (exact ≈Infinity) 0)
+  (ni= (exact ≈-Infinity) 0)
+  (ni= (exact ≈NaN) 0))
 
 ;; approx
+(group
+  (ni= (approx 100) ≈100)
+  (ni= (approx 100.23) ≈100.23)
+  (ni= (approx ≈100.23) ≈100.23)
+  (ni= (approx "foo") ≈NaN))
 
 ;; min
+(group
+  (ni= (min ()) ∞)
+  (ni= (min (1)) 1)
+  (ni= (min (1 2 3)) 1)
+  (ni= (min (1 -∞ 15)) -∞)
+  (ni= (min (1 "qux" -123)) -123)
+  (ni= (min ("a" "b" "c")) ∞)
+  (ni= (min "qux") ∞)
+
+  (ni= (min 1 2 3) 1)
+  (ni= (min 1 -∞ 3) -∞)
+  (ni= (min 1 "qux" -123) -123)
+  (ni= (min "a" "b" "c") ∞))
 
 ;; max
+(group
+  (ni= (max ()) -∞)
+  (ni= (max (1)) 1)
+  (ni= (max (1 2 3)) 3)
+  (ni= (max (1 -∞ 15)) 15)
+  (ni= (max (1 "qux" -123)) 1)
+  (ni= (max ("a" "b" "c")) -∞)
+  (ni= (max "qux") -∞)
+
+  (ni= (max 1 2 3) 3)
+  (ni= (max 1 -∞ 3) 3)
+  (ni= (max 1 ∞ 3) ∞)
+  (ni= (max 1 "qux" -123) 1)
+  (ni= (max "a" "b" "c") -∞))
 
 ;; clamp
 (group
@@ -345,6 +430,11 @@
   (ni= (clamp 100 10 ..= 0) 10))
 
 ;; abs
+(group
+  (ni= (abs 10) 10)
+  (ni= (abs -10) 10)
+  (ni= (abs ≈-10.123) ≈10.123)
+  (ni= (abs -∞) ∞))
 
 ;; not
 

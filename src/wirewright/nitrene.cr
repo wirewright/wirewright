@@ -148,6 +148,15 @@ module Ww::Nitrene
   end
 
   # :nodoc:
+  def abs(a : ArithPosInf | ArithNegInf | ArithConst) : Arith
+    case a
+    in ArithConst  then ArithConst.new(a.value.abs)
+    in ArithPosInf then ArithPosInf.new
+    in ArithNegInf then ArithPosInf.new
+    end
+  end
+
+  # :nodoc:
   def sub(a : Arith, b : Arith) : Arith
     case {a, b}
     in {ArithConst, ArithConst}         then ArithConst.new(a.value - b.value)
@@ -727,13 +736,13 @@ module Ww::Nitrene
     end
 
     Term.case(expr, block_type: {:proc, it : Interpreter, vars : Term::Dict}) do
-      # |@ nitrene.sum
+      # |@ nitrene.add
       #
       # |@pattern
       # (+ args_*)
       #
       # |@summary
-      # Returns the sum of *args*.
+      # Addition.
       #
       # |@block
       # Returns the sum of arithmetic units in *args* (see `nitrene.arith`).
@@ -741,7 +750,6 @@ module Ww::Nitrene
       # If *args* contains no arithmetic units, the sum is zero.
       #
       # |@example
-      #
       # ```wwml
       # (+ 1 2)  ;; => 3
       # (+ ∞ -∞) ;; => indet
@@ -756,10 +764,13 @@ module Ww::Nitrene
         end
       end
 
-      # |@ nitrene.difference
+      # |@ nitrene.sub
       #
       # |@pattern
       # (- args_*)
+      #
+      # |@summary
+      # Subtraction.
       #
       # |@block
       # Returns the difference of arithmetic units in *args* (see `nitrene.arith`).
@@ -770,6 +781,7 @@ module Ww::Nitrene
       # - If *args* contains two or more arithmetic units, the difference is
       #   the result of subtracting those units in the order they appear in *args*.
       #
+      # |@example
       # ```wwml
       # (-)       ;; => 0
       # (- a b c) ;; => 0
@@ -789,10 +801,13 @@ module Ww::Nitrene
         end
       end
 
-      # |@ nitrene.product
+      # |@ nitrene.mul
       #
       # |@pattern
       # (* args_*)
+      #
+      # |@summary
+      # Multiplication.
       #
       # |@block
       # Returns the product of arithmetic units in *args* (see `nitrene.arith`).
@@ -802,6 +817,7 @@ module Ww::Nitrene
       # - If *args* contains one or more arithmetic unit, returns the product
       #   of those units.
       #
+      # |@example
       # ```wwml
       # (*)           ;; => 1
       # (* 3 5)       ;; => 15
@@ -819,6 +835,24 @@ module Ww::Nitrene
         end
       end
 
+      # |@ nitrene.div
+      #
+      # |@pattern
+      # (/ args_+)
+      #
+      # |@summary
+      # Division.
+      #
+      # |@block
+      # Returns the quotient of one or more arithmetic unit *args*.  If there is
+      # just one arg, returns `1/arg`.
+      #
+      # |@example
+      # ```wwml
+      # (/ 2)   ;; => 1/2
+      # (/ 1 2) ;; => 1/2
+      # ```
+
       matchpi %{(/ _)} do
         calc(expr, args: expr.items.move(1)) do |(operand, *_)|
           render(div(ArithConst.new(Term[1]), operand))
@@ -831,16 +865,89 @@ module Ww::Nitrene
         end
       end
 
+      # |@ nitrene.idiv
+      #
+      # |@pattern
+      # (// a_ b_)
+      #
+      # |@summary
+      # Integer division.
+      #
+      # |@block
+      # Returns the quotient of integer division of number *a* by number *b*. If
+      # either argument is not a number, or if *b* is zero, returns `0`.
+      #
+      # |@example
+      # ```wwml
+      # (// 1 2)     ;; => 0
+      # (// 20 5)    ;; => 4
+      # (// 10 0)    ;; => 0
+      # (// 0 0)     ;; => 0
+      # (// "qux" 0) ;; => 0
+      # ```
+
       matchpiT %{(// ±a (%all ±b (%not 0)))} do
         Term.of(a // b)
       end
+
+      matchpi %{(// _ _)} do
+        Term.of(0)
+      end
+
+      # |@ nitrene.mod
+      #
+      # |@pattern
+      # (mod a_ b_)
+      #
+      # |@summary
+      # Modulo.
+      #
+      # |@block
+      # Returns the remainder of division of number *a* by number *b*. If either
+      # or both arguments are not a number, or if *b* is zero, returns `0`.
+      #
+      # |@example
+      # ```wwml
+      # (mod 1 2)     ;; => 1
+      # (mod 20 3)    ;; => 2
+      # (mod 10 0)    ;; => 0
+      # (mod 0 0)     ;; => 0
+      # (mod "qux" 0) ;; => 0
+      # ```
 
       matchpiT %{(mod ±a (%all ±b (%not 0)))} do
         Term.of(a % b)
       end
 
+      matchpi %{(mod _ _)} do
+        Term.of(0)
+      end
+
+      # |@ nitrene.pow
+      #
+      # |@pattern
+      # (** a_ b_)
+      #
+      # |@summary
+      # Power.
+      #
+      # |@block
+      # Raises number *a* to the power of number *b*. If either or both arguments
+      # are not a number, returns `0`.
+      #
+      # |@example
+      # ```wwml
+      # (** 2 4)   ;; => 16
+      # (** 2 -4)  ;; => 0.0625
+      # (** 2 1/2) ;; => ≈1.4142135 (approximate!)
+      # ```
+
       matchpiT %{(** ±a ±b)} do
         Term.of(a ** b)
+      end
+
+      matchpiT %{(** a_ b_)} do
+        Term.of(0)
       end
 
       # |@ nitrene.sqrt
@@ -848,19 +955,24 @@ module Ww::Nitrene
       # |@pattern
       # (sqrt arg_)
       #
+      # |@summary
+      # Square root.
+      #
       # |@block
       # Returns the approximate square root of *arg*. For negative numbers and non-
       # numbers, returns `≈NaN`.
       #
+      # |@example
       # ```wwml
       # (sqrt 4) ;; => ≈2
       # (sqrt 2) ;; => ≈1.4142135
       # ```
+
       matchpiT %{(sqrt ±arg)} do
         Term.of(arg.sqrt)
       end
 
-      matchpiT %{(sqrt _)} do
+      matchpi %{(sqrt _)} do
         Term.of(Term::Num.nan)
       end
 
@@ -869,6 +981,9 @@ module Ww::Nitrene
       # |@pattern
       # (isqrt arg_)
       #
+      # |@summary
+      # Integer square root.
+      #
       # |@block
       # Returns the **integer** square root of *arg*.
       #
@@ -876,6 +991,7 @@ module Ww::Nitrene
       # - For negative integers and non-numbers, the result is `≈NaN`.
       # - For non-integers, the result is approximate.
       #
+      # |@example
       # ```wwml
       # (isqrt 4)   ;; => 2
       # (isqrt 2)   ;; => 1
@@ -883,15 +999,44 @@ module Ww::Nitrene
       # (isqrt 1/2) ;; => ≈0
       # (isqrt -1)  ;; => ≈NaN
       # ```
-      matchpiT %{(isqrt ±a)} do
-        Term.of(a.isqrt)
+
+      matchpiT %{(isqrt ±arg)} do
+        Term.of(arg.isqrt)
       end
 
       matchpiT %{(isqrt _)} do
         Term.of(Term::Num.nan)
       end
 
-      matchpi %{(< _*)} do
+      # |@ nitrene.cmp
+      #
+      # |@pattern
+      # (< args_+)
+      # (<= args_+)
+      # (> args_+)
+      # (>= args_+)
+      #
+      # |@summary
+      # Comparison of one or more arithmetic units.
+      #
+      # |@example
+      # ```wwml
+      # (< 1) ;; => true
+      # (< 1 2) ;; => true
+      # (< 1 2 3) ;; => true
+      # (< 1 5 3) ;; => false
+      # (>= 10 10) ;; => true
+      # (>= 10 10.1) ;; => false
+      #
+      # ;; Importantly:
+      # (>= 10 ≈10) ;; => true
+      # (<= 10 ≈10) ;; => true
+      #
+      # ;; ... even though:
+      # (= 10 ≈10) ;; => false
+      # ```
+
+      matchpi %{(< _+)} do
         calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
@@ -906,7 +1051,7 @@ module Ww::Nitrene
         end
       end
 
-      matchpi %{(<= _*)} do
+      matchpi %{(<= _+)} do
         calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
@@ -926,7 +1071,7 @@ module Ww::Nitrene
         end
       end
 
-      matchpi %{(> _*)} do
+      matchpi %{(> _+)} do
         calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
@@ -941,7 +1086,7 @@ module Ww::Nitrene
         end
       end
 
-      matchpi %{(>= _*)} do
+      matchpi %{(>= _+)} do
         calc(expr, args: expr.items.move(1), allow: ArithConst | ArithPosInf | ArithNegInf) do |operands|
           result = true
 
@@ -961,14 +1106,36 @@ module Ww::Nitrene
         end
       end
 
-      matchpi %{(=)} do
-        Term.of(true)
-      end
-
-      matchpi %{(= ref_ _*)} do
-        args = expr.items.move(2)
-
-        Term.of(args.all? { |other| ref == other })
+      # |@ nitrene.equals
+      #
+      # |@pattern
+      # (= args_+)
+      #
+      # |@summary
+      # Term equality.
+      #
+      # |@block
+      # Returns `true` if one or more terms are equal (When I say equal, I mean equal
+      # by value. There is no other kind of equality in Wirewright, since e.g.
+      # the notion of reference equality is way below our target abstraction level.)
+      # If there is just one *arg*, this function returns `true`.
+      #
+      # |@example
+      # ```wwml
+      # (= 100)         ;; => true
+      # (= 100 200)     ;; => false
+      # (= 100 100)     ;; => true
+      # (= "a" "b" "c") ;; => false
+      # (= "a" "a" "a") ;; => true
+      # ```
+      matchpi %{(= _+)} do
+        args = expr.items.move(1)
+        if args.size >= 2
+          ref = args.first
+          Term.of(args.move(1).all? { |other| ref == other })
+        else
+          Term.of(true)
+        end
       end
 
       # |@ nitrene.floor
@@ -976,9 +1143,22 @@ module Ww::Nitrene
       # |@pattern
       # (floor arg_)
       #
+      # |@summary
+      # Rounds toward negative infinity.
+      #
       # |@block
       # Rounds number *arg*s toward negative infinity. Returns `0` for all
       # other *arg*s.
+      #
+      # |@example
+      # ```wwml
+      # (floor 100.23)  ;; => 100
+      # (floor -100.23) ;; => -100
+      # (floor 100.5)   ;; => 100
+      # (floor 100.99)  ;; => 100
+      # (floor "qux")   ;; => 0
+      # ```
+
       matchpiT %{(floor ±arg)} do
         Term.of(arg.floor)
       end
@@ -992,9 +1172,22 @@ module Ww::Nitrene
       # |@pattern
       # (ceil arg_)
       #
+      # |@summary
+      # Rounds toward positive infinity.
+      #
       # |@block
       # Rounds number *arg*s toward positive infinity. Returns `0` for all
       # other *arg*s.
+      #
+      # |@example
+      # ```wwml
+      # (ceil 100.23)  ;; => 101
+      # (ceil -100.23) ;; => -99
+      # (ceil 100.5)   ;; => 101
+      # (ceil 100.99)  ;; => 101
+      # (ceil "qux")   ;; => 0
+      # ```
+
       matchpiT %{(ceil ±arg)} do
         Term.of(arg.ceil)
       end
@@ -1008,9 +1201,25 @@ module Ww::Nitrene
       # |@pattern
       # (round arg_)
       #
+      # |@summary
+      # Banker's rounding.
+      #
       # |@block
-      # Rounds number *arg*s using Banker's rounding. Returns `0` for all
-      # other *arg*s.
+      # Rounds number *arg*s using Banker's rounding (round half `.5` to even).
+      # Returns `0` for all other *arg*s.
+      #
+      # |@example
+      # ```wwml
+      # (round 100.23)  ;; => 100
+      # (round -100.23) ;; => -100
+      # (round 100.5)   ;; => 101
+      # (round 101.5)   ;; => 102 (to even)
+      # (round 102.5)   ;; => 102 (to even)
+      # (round 103.5)   ;; => 104 (to even)
+      # (round 100.99)  ;; => 101
+      # (round "qux")   ;; => 0
+      # ```
+
       matchpiT %{(round ±arg)} do
         Term.of(arg.round)
       end
@@ -1019,21 +1228,102 @@ module Ww::Nitrene
         Term.of(0)
       end
 
-      matchpiT %{(finite arg_ or: alt_)} do
-        a = arith?(arg)
-        a.is_a?(ArithConst) && !(a.value.infinite? || a.value.nan?) ? arg : alt
-      end
+      # |@ nitrene.exact
+      #
+      # |@pattern
+      # (exact arg_)
+      #
+      # |@summary
+      # Forces an exact number.
+      #
+      # |@block
+      # Converts *arg*, a number, to an exact number. For non-number *arg*s,
+      # returns `0`.
+      #
+      # |@example
+      # ```wwml
+      # (exact 100)     ;; => 100
+      # (exact 100.23)  ;; => 100.23
+      # (exact ≈100.23) ;; => 100.2300...
+      # (exact "foo")   ;; => 0
+      # ```
+      #
+      # There are a few unfortunate edge cases with approximate numbers. Right
+      # now we handle them by returning zero:
+      #
+      # ```wwml
+      # (exact ≈Infinity)  ;; => 0
+      # (exact ≈-Infinity) ;; => 0
+      # (exact ≈NaN)       ;; => 0
+      # ```
 
       matchpiT %{(exact ±arg)} do
-        Term.of(Term::Num.exact(arg))
+        result = Term::Num.exact(arg)
+        if result.approx? # One of edge cases
+          Term.of(0)
+        else
+          Term.of(result)
+        end
       end
+
+      matchpi %{(exact _)} do
+        Term.of(0)
+      end
+
+      # |@ nitrene.approx
+      #
+      # |@pattern
+      # (approx arg_)
+      #
+      # |@summary
+      # Forces an approximate number.
+      #
+      # |@block
+      # Converts *arg*, a number, to an approximate number. For non-number *arg*s,
+      # returns `≈NaN`.
+      #
+      # |@example
+      # ```wwml
+      # (approx 100)     ;; => ≈100
+      # (approx 100.23)  ;; => ≈100.23
+      # (approx ≈100.23) ;; => ≈100.23
+      # (approx "foo")   ;; => ≈NaN
+      # ```
 
       matchpiT %{(approx ±arg)} do
         Term.of(Term::Num.approx(arg))
       end
 
+      matchpiT %{(approx _)} do
+        Term.of(Term::Num.nan)
+      end
+
+      # |@ nitrene.sci
+      #
+      # |@pattern
+      # (sci mantissa_ exponent_)
+      #
+      # |@summary
+      # Evaluates scientific notation.
+      #
+      # |@block
+      # Converts scientific notation to decimal. WwML in particular expands e.g. `12e3`
+      # to `(sci 12 3)`; evaluating such terms is why this function exists.
+      #
+      # Returns `0` if *mantissa*, *exponent*, or both are invalid.
+      #
+      # |@example
+      # ```wwml
+      # 12e3  ;; => 12000
+      # 12e-3 ;; => 0.012
+      # ```
+
       matchpiT %{(sci ±mantissa ±exponent)} do
         Term.of(mantissa * Term[10]**exponent)
+      end
+
+      matchpi %{(sci _ _)} do
+        Term.of(0)
       end
 
       # |@ nitrene.nan
@@ -1041,15 +1331,20 @@ module Ww::Nitrene
       # |@pattern
       # (nan? arg_)
       #
+      # |@summary
+      # Checks for the approximate NaN.
+      #
       # |@block
       # Returns `true` if *arg* is the approximate `≈NaN`.
       #
+      # |@example
       # ```wwml
       # (nan? 100)       ;; => false
       # (nan? x)         ;; => false
       # (nan? ≈NaN)      ;; => true
       # (nan? ≈Infinity) ;; => false
       # ```
+
       matchpiT %{(nan? ±arg)} do
         Term.of(arg.nan?)
       end
@@ -1063,10 +1358,16 @@ module Ww::Nitrene
       # |@pattern
       # (infinite? arg_)
       #
+      # |@summary
+      # Checks for positive and negative approximate or arithmetic infinity.
+      #
       # |@block
       # Returns `true` if *arg* is a positive or negative approximate or
       # arithmetic infinity.
       #
+      # Returns `false` if *arg* is invalid.
+      #
+      # |@example
       # ```wwml
       # (infinite? 100)        ;; => false
       # (infinite? x)          ;; => false
@@ -1075,7 +1376,9 @@ module Ww::Nitrene
       # (infinite? ≈-Infinity) ;; => true
       # (infinite? ∞)          ;; => true
       # (infinite? -∞)         ;; => true
+      # (infinite? "qux")      ;; => false
       # ```
+
       matchpiT %{(infinite? ±arg)} do
         Term.of(arg.infinite?)
       end
@@ -1120,22 +1423,28 @@ module Ww::Nitrene
       # |@ nitrene.sum
       #
       # |@pattern
-      # (sum args_dict)
+      # (sum arg_)
       #
-      # |@key args
-      # A dictionary containing arithmetic unit values (see `nitrene.arith`).
+      # |@summary
+      # Adds arithmetic unit items of a dict.
       #
       # |@block
-      # Returns the sum of arithmetic units in *args* (see `nitrene.arith`).
+      # Returns the sum of arithmetic units in *arg* (see `nitrene.arith`).
       #
+      # Returns `0` if *arg* is invalid.
+      #
+      # |@example
       # ```wwml
-      # (sum (1 2 3 4 5)) ;; => 15
-      # (sum (1 2 ∞ 4 5)) ;; => ∞
+      # (sum (1 2 3 4 5))             ;; => 15
+      # (sum (1 2 ∞ 4 5))             ;; => ∞
+      # (sum (1 2 "qux" 3 4 false 5)) ;; => 15
+      # (sum "qux")                   ;; => 0
       # ```
-      matchpi %{(sum args_dict)} do
+
+      matchpiT %{(sum arg_dict)} do
         a = ArithConst.new(Term[0])
 
-        args.each_entry do |_, value|
+        arg.each_entry do |_, value|
           next unless b = arith?(value)
 
           a = add(a, b)
@@ -1148,32 +1457,186 @@ module Ww::Nitrene
         Term.of(0)
       end
 
-      # TODO: use arith in product!
+      # |@ nitrene.product
+      #
+      # |@pattern
+      # (product arg_)
+      #
+      # |@summary
+      # Multiplies arithmetic unit items of a dict.
+      #
+      # |@block
+      # Returns the product of arithmetic units in *arg* (see `nitrene.arith`).
+      #
+      # Returns `0` if *arg* is invalid.
+      #
+      # |@example
+      # ```wwml
+      # (product ())                      ;; => 1
+      # (product (1 2 3 4 5))             ;; => 120
+      # (product (1 2 ∞ 4 5))             ;; => ∞
+      # (product (1 2 "qux" 3 4 false 5)) ;; => 120
+      # (product "qux")                   ;; => 0
+      # ```
 
-      matchpi %{(product ())} do
-        Term.of(1)
+      matchpiT %{(product arg_dict)} do
+        a = ArithConst.new(Term[1])
+
+        arg.each_entry do |_, value|
+          next unless b = arith?(value)
+
+          a = mul(a, b)
+        end
+
+        render(a)
       end
 
-      matchpi %{(product args←(_number+))} do
-        Term.of(args.items.reduce { |a, b| a.as_n * b.as_n })
+      matchpi %{(product _)} do
+        Term.of(0)
       end
 
-      matchpi %{(min _number+)} do
+      # |@ nitrene.min
+      #
+      # |@summary
+      # Returns the minimum among arguments or items.
+
+      # |@ nitrene.min
+      #
+      # |@pattern
+      # (min arg_dict)
+      #
+      # |@block
+      # Returns the minimum arithmetic unit item in *arg*. If there are no
+      # arithmetic units in arg, or if *arg* is invalid, returns `∞`.
+      #
+      # |@example
+      # ```wwml
+      # (min (1 2 3))        ;; => 1
+      # (min (1 -∞ 15))      ;; => -∞
+      # (min (1 "qux" -123)) ;; => -123
+      # (min ("a" "b" "c"))  ;; => ∞
+      # (min "qux")          ;; => ∞
+      # ```
+
+      matchpiT %{(min arg_dict)} do
+        min = ArithPosInf.new
+
+        arg.items.each do |arg|
+          next unless n = arith?(arg)
+          next if n.is_a?(ArithIndet)
+          next unless lt?(n, min) # n < min
+
+          min = n
+        end
+
+        render(min)
+      end
+
+      matchpi %{(min _)} do
+        render(ArithPosInf.new)
+      end
+
+      # |@ nitrene.min
+      #
+      # |@pattern
+      # (min a_ b_ cs_*)
+      #
+      # |@block
+      # Returns the minimum arithmetic unit among *a*, *b*, *cs*. If there are no
+      # arithmetic units, returns `∞`.
+      #
+      # |@example
+      # ```wwml
+      # (min 1 2 3)        ;; => 1
+      # (min 1 -∞ 15)      ;; => -∞
+      # (min 1 "qux" -123) ;; => -123
+      # (min "a" "b" "c")  ;; => ∞
+      # ```
+      matchpi %{(min _ _ _*)} do
+        min = ArithPosInf.new
+
         args = expr.items.move(1)
-        Term.of(args.min_by(&.as_n))
+        args.each do |arg|
+          next unless n = arith?(arg)
+          next if n.is_a?(ArithIndet)
+          next unless lt?(n, min) # n < min
+
+          min = n
+        end
+
+        render(min)
       end
 
-      matchpi %{(min args←(_number+))} do
-        Term.of(args.items.min_by(&.as_n))
+      # |@ nitrene.max
+      #
+      # |@summary
+      # Returns the maximum among arguments or items.
+
+      # |@ nitrene.max
+      #
+      # |@pattern
+      # (max arg_dict)
+      #
+      # |@block
+      # Returns the maximum arithmetic unit item in *arg*. If there are no
+      # arithmetic units in arg, or if *arg* is invalid, returns `-∞`.
+      #
+      # |@example
+      # ```wwml
+      # (max (1 2 3))        ;; => 3
+      # (max (1 -∞ 15))      ;; => 15
+      # (max (1 "qux" -123)) ;; => 1
+      # (max ("a" "b" "c"))  ;; => -∞
+      # (max "qux")          ;; => -∞
+      # ```
+
+      matchpiT %{(max arg_dict)} do
+        max = ArithNegInf.new
+
+        arg.items.each do |arg|
+          next unless n = arith?(arg)
+          next if n.is_a?(ArithIndet)
+          next unless lt?(max, n) # max < n
+
+          max = n
+        end
+
+        render(max)
       end
 
-      matchpi %{(max _number+)} do
+      matchpi %{(max _)} do
+        render(ArithNegInf.new)
+      end
+
+      # |@ nitrene.max
+      #
+      # |@pattern
+      # (max a_ b_ cs_*)
+      #
+      # |@block
+      # Returns the maximum arithmetic unit among *a*, *b*, *cs*. If there are no
+      # arithmetic units, returns `-∞`.
+      #
+      # |@example
+      # ```wwml
+      # (max 1 2 3)        ;; => 3
+      # (max 1 -∞ 15)      ;; => 15
+      # (max 1 "qux" -123) ;; => 1
+      # (max "a" "b" "c")  ;; => -∞
+      # ```
+      matchpi %{(max _ _ _*)} do
+        max = ArithNegInf.new
+
         args = expr.items.move(1)
-        Term.of(args.max_by(&.as_n))
-      end
+        args.each do |arg|
+          next unless n = arith?(arg)
+          next if n.is_a?(ArithIndet)
+          next unless lt?(max, n) # max < n
 
-      matchpi %{(max args←(_number+))} do
-        Term.of(args.items.max_by(&.as_n))
+          max = n
+        end
+
+        render(max)
       end
 
       # |@ nitrene.clamp
@@ -1234,9 +1697,35 @@ module Ww::Nitrene
         Term.of(0)
       end
 
-      matchpi %{(abs _number+)} do
-        args = expr.items.move(1)
-        Term.of(args.reduce { |memo, arg| memo - arg }.abs)
+      # |@ nitrene.abs
+      #
+      # |@pattern
+      # (abs arg_)
+      #
+      # |@summary
+      # Absolute value of an arithmetic unit.
+      #
+      # |@block
+      # Returns the absolute value of an arithmetic unit *arg*. If *arg* is not a valid
+      # arithmetic unit, returns `0`.
+      #
+      # |@example
+      # ```wwml
+      # (abs 10)  ;; => 10
+      # (abs -10) ;; => 10
+      # (abs -∞)  ;; => ∞
+      # ```
+
+      # Fast path
+      matchpiT %{(abs ±arg)} do
+        Term.of(arg.abs)
+      end
+
+      matchpiT %{(abs arg_)} do
+        next Term.of(0) unless a = arith?(arg)
+        next Term.of(0) if a.is_a?(ArithIndet)
+
+        render(abs(a))
       end
 
       matchpi %{(not false)} do
@@ -2099,6 +2588,11 @@ module Ww::Nitrene
       # ```
       matchpiT %{(unclassify arg_blob)} do
         Term.of(Term::Blob.unclassify(arg))
+      end
+
+      matchpiT %{(finite arg_ or: alt_)} do
+        a = arith?(arg)
+        a.is_a?(ArithConst) && !(a.value.infinite? || a.value.nan?) ? arg : alt
       end
 
       otherwise { Inert.new }
