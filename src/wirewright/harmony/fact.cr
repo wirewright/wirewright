@@ -81,7 +81,7 @@ class Ww::Harmony
     brief: true
 
   # Indicates that the local side has spare capacity for one or more messages. It is
-  # the reflection of the `MessageCapacity` goal on the fact side. `LocalMessageDemand`
+  # the reflection of the `MessageCapacity` goal on the goal side. `LocalMessageDemand`
   # is realized only when the remote side has been notified of the local side's
   # readiness to accept more messages.
   defcase LocalMessageDemand, endpoint_id : EndpointId, brief: true
