@@ -333,6 +333,17 @@
 
 ;; max
 
+;; clamp
+(group
+  (ni= (clamp -10 0 ..= 10) 0)
+  (ni= (clamp 5 0 ..= 10) 5)
+  (ni= (clamp 20 0 ..= 10) 10)
+  (ni= (clamp "xyz" 0 ..= 10) 0)
+  (ni= (clamp 5 "xyz" ..= 10) 0)
+  (ni= (clamp 5 0 ..= "xyz") 0)
+  (ni= (clamp 5 10 ..= 0) 5)
+  (ni= (clamp 100 10 ..= 0) 10))
+
 ;; abs
 
 ;; not

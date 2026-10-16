@@ -1176,6 +1176,64 @@ module Ww::Nitrene
         Term.of(args.items.max_by(&.as_n))
       end
 
+      # |@ nitrene.clamp
+      #
+      # |@pattern
+      # (clamp ±arg ±b ..= ±e)
+      #
+      # |@key arg
+      # The number to clamp.
+      #
+      # |@key b
+      # Begin of the clamp range.
+      #
+      # |@key e
+      # End of the clamp range.
+      #
+      # |@summary
+      # Clamps a number into bounds.
+      #
+      # |@block
+      # Clamps *arg* between *b* and *e* (inclusive).
+      #
+      # |@example
+      # ```wwml
+      # (clamp -10 0 ..= 10) ;; => 0
+      # (clamp   5 0 ..= 10) ;; => 5
+      # (clamp  20 0 ..= 10) ;; => 10
+      # ```
+      #
+      # Non-numbers return 0:
+      #
+      # ```wwml
+      # (clamp "xyz" 0 ..= 10) ;; => 0
+      # (clamp 5 "xyz" ..= 10) ;; => 0
+      # (clamp 5 0 ..= "xyz")  ;; => 0
+      # ```
+      #
+      # The order of *b* and *e* in range is fixed if necessary:
+      #
+      # ```wwml
+      # (clamp 5 10 ..= 0) ;; => 5, range fixed to 5 ..= 10
+      # ```
+
+      matchpiT %{(clamp ±arg ±b ..= ±e)} do
+        lo = Math.min(b, e)
+        hi = Math.max(b, e)
+
+        if arg < lo
+          Term.of(lo)
+        elsif arg > hi
+          Term.of(hi)
+        else
+          Term.of(arg)
+        end
+      end
+
+      matchpi %{(clamp _ _ ..= _)} do
+        Term.of(0)
+      end
+
       matchpi %{(abs _number+)} do
         args = expr.items.move(1)
         Term.of(args.reduce { |memo, arg| memo - arg }.abs)
