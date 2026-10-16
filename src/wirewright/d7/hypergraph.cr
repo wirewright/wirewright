@@ -19,6 +19,12 @@ module Ww::D7
       objects.reduce(empty) { |addr, object| addr.append(yield object) }
     end
 
+    def self.new?(dict : Term::Dict) : NodeAddr?
+      return unless dict.itemsonly?
+
+      new(dict.items) { |item| item.index32? || return }
+    end
+
     def self.empty : NodeAddr
       NodeAddr.new(Pf::UPath32[])
     end
