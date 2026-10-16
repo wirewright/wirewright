@@ -767,10 +767,10 @@ module Ww::Scenery
       # |@key children scenery
       #
       # |@key x
-      # Whether to disable downbound size propagation on the X-axis.
+      # Whether to disable upbound size propagation on the X-axis.
       #
       # |@key y
-      # Whether to disable downbound size propagation on the Y-axis.
+      # Whether to disable upbound size propagation on the Y-axis.
       #
       # |@block
       # Disables upbound size propagation for a z-stack of *children* on either
@@ -794,10 +794,10 @@ module Ww::Scenery
       # |@key children scenery
       #
       # |@key x
-      # Whether to disable upbound size propagation on the X-axis.
+      # Whether to disable downbound size propagation on the X-axis.
       #
       # |@key y
-      # Whether to disable upbound size propagation on the Y-axis.
+      # Whether to disable downbound size propagation on the Y-axis.
       #
       # |@block
       # Disables downbound size propagation for a z-stack of *children* on either or
@@ -1144,8 +1144,8 @@ module Ww::Scenery
       #   pivot-t⋮ 0
       #   dl_⋮ 0
       #   dt_⋮ 0
-      #   angle: 0
-      #   scale: 1)
+      #   angle⋮ 0
+      #   scale⋮ 1)
       #
       # |@key children scenery
       #
