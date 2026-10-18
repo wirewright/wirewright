@@ -1,0 +1,80 @@
+(frag @window
+  (window form: floating width: 800 height: 400 style: "backdrop-black"
+    (group style: "flow-row"
+      (frag @score-l
+        (p 0 style: "fr-1 center-x font-3xl font-light text-white m-1"))
+      (frag @score-r
+        (p 0 style: "fr-1 center-x font-3xl font-light text-white m-1")))
+    (frag @keyboard
+      (keyboard focus: always))
+    (frag @paddle-l
+      (transform dl: 0 dt: 0
+        (rect style: "fill-white max-w-10px max-h-50px")))
+    (frag @paddle-r
+      (transform dl: 790 dt: 0
+        (rect style: "fill-white max-w-10px max-h-50px")))
+    (frag @ball
+      (transform dl: 100 dt: 100 velocity-x: 7 velocity-y: 7
+        (rect style: "fill-white radius-full max-10px")))))
+
+(frag @beat
+  (sequencer (33 ms) (> true) false))
+(cell @frame)
+
+(backsys
+  ∥;; Automatically clear frame for all rules below.
+   {¦ frame_}
+     <> {(frame): ()}
+
+   ;; Transiently set frame on each new frame.
+   {¦ beat: ⟨a←(> true) b←false⟩ -frame_}
+     <> {a: true, b: (> false), frame: true}
+
+   ;; Move left paddle up.
+   {¦ frame keyboard: ⟨(key "w")⟩ paddle-l: {¦ ±dt}}
+     <> {dt: ^(max 0 (- dt 10))}
+
+   ;; Move left paddle down.
+   {¦ frame keyboard: ⟨(key "s")⟩ paddle-l: {¦ ±dt} window: {¦ ±height}}
+     <> {dt: ^(min (+ dt 10) (- height 50))}
+
+   ;; Move right paddle up.
+   {¦ frame keyboard: ⟨(key up)⟩ paddle-r: {¦ ±dt}}
+     <> {dt: ^(max 0 (- dt 10))}
+
+   ;; Move right paddle down.
+   {¦ frame keyboard: ⟨(key dn)⟩ paddle-r: {¦ ±dt} window: {¦ ±height}}
+     <> {dt: ^(min (+ dt 10) (- height 50))}
+
+   ;; Apply velocity to ball.
+   {¦ frame ball: {¦ ±dl⫽t ±velocity-x⫽y} window: {¦ ±⸨width,height⸩}}
+     <> {dl⫽t: ^(clamp (+ dl⫽t velocity-x⫽y) 0 ..= (- ⸨width,height⸩ 10))}
+
+   ;; Detect collision with left, up wall.
+   {¦ frame ball: {¦ ±dl⫽t ⋮collides-l⫽t}}
+     <> {collides-l⫽t: ^(<= dl⫽t 0)}
+
+   ;; Detect collision with down, right wall.
+   {¦ frame ball: {¦ ±dl⫽t ⋮collides-r⫽b} window: {¦ ±⸨width,height⸩}}
+     <> {collides-r⫽b: ^(>= (+ dl⫽t 10) ⸨width,height⸩)}
+
+   ;; Detect collision with left paddle.
+   {¦ frame ball: {¦ ±dl ±dt ⋮collides-paddle-l⫽r} paddle-⸨l,r⸩: {¦ dl: ±Pdl dt: ±Pdt}}
+     <> {collides-paddle-l⫽r: ^(intersects? (rect l: dl t: dt w: 10 h: 10) (rect l: Pdl t: Pdt w: 10 h: 50))}
+
+   ;; Reflect top, bottom.
+   {¦ frame ball: {¦ collides-t⫽b: true velocity-y_: (%number _ <⫽> 0)}}
+     <> {velocity-y: ^(* velocity-y -1)}
+
+   ;; Reflect paddle left, right.
+   {¦ frame ball: {¦ collides-paddle-l⫽r: true velocity-x_: (%number _ <⫽> 0)}}
+     <> {velocity-x: ^(* (+ velocity-x 1) -1)}
+
+   ;; Increase right's score on left wall hit.
+   ;; Increase left's score on right wall hit.
+   {¦ frame ball: {¦ ±dl ±dt collides-paddle-l⫽r: false collides-l⫽r_: true} window: {¦ ±width ±height} score-⸨r,l⸩: [p ±score]}
+     <> {collides-l⫽r: false, dl: ^(/ width 2), dt: ^(/ height 2), score: ^(+ score 1)}
+
+   ;; Handle window closure by closing the application.
+   {¦ window_: {¦ form: closed} beat_}
+     <> {(window): (), (beat): ()}∥)
