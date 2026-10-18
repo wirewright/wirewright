@@ -2,9 +2,9 @@
 
 <img width="300" alt="Wirewright MuSoma Logo" src="https://github.com/user-attachments/assets/0bb06a8f-8ddf-4e49-99fe-0c0b1f44b760" align="right" />
 
-What if a program was not a sequence of instructions, but a world? A world you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can poke *as it evolves*, introducing new things and removing old ones.
+What if a program was not a sequence of instructions, but a world? A world you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can poke, live, introducing new things and removing the things you don't like.
 
-Wirewright is an experimental project built around this idea.
+Wirewright is an experimental project built around this idea: that a program is a live world containing symbolic things, and these things are subject to laws of physics -- *symbolic physics*; and also to an invisible "force" called the runtime.
 
 Programs in most programming languages ultimately look like this:
 
@@ -14,7 +14,7 @@ do B;
 do C;
 ```
 
-Even in cases where the surface appears declarative, there is still a machine down there and you're telling it how to carry out a task. The machine can be a CPU, or it can be a virtual machine — JVM, BEAM, or something else.
+Even in cases where the surface appears declarative, there is still a machine down there and you're telling it how to carry out a task, step-by-step. The machine can be a CPU, or it can be a virtual machine — JVM, BEAM, or something else.
 
 Wirewright is different. A Wirewright program is effectively a serialized snapshot of a world:
 
@@ -28,7 +28,7 @@ In this snippet, there are three *things*, called *nodes*: two `cell`s and one `
 
 The snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions, and there is no machine that can "execute" it. Instead, it is a description of a symbolic world frozen in time — a *seed*.
 
-So instead of telling an existing general-purpose machine how to do things step-by-step, through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you build specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, devices, links, producers, consumers, black boxes, and so forth.
+So instead of telling an existing general-purpose machine how to do things step-by-step, through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you build specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, managers, homeostatic and cybernetic loops, devices, chains, producers, consumers, black boxes, and so forth.
 
 As an interesting  consequence, machine-building machines become possible; as do machine-controlling machines, and so forth. One of the central themes of Wirewright is, in fact, its attempt to make programming be more about *nouns* and systems of interacting nouns (machines; organisms, even, if you forgive me my metaphor) — nouns rather than verbs (algorithms, plans, and so on). In other words, instead of telling the machine what to do in each case, you set up a world, and let that world react to its surroundings: "relax" its way into equilibria, *generating* or *synthesizing* behavior along the way; grow structure in response to stimuli, etc. To give a simple example of the approach, you do not *select* or *query* (both are not at all nouns), but have a *sensor* (a noun!) supplying a continuous view of things; and instead of *notifying* a sensor you maintain an *appearance* (a noun!) that the sensor can see.
 
@@ -50,7 +50,7 @@ In Wirewright:
 Wirewright is an *ecosystem*. The major components of this ecosystem are:
 - **Data and syntax**: Terms (immutable values such as numbers, strings, dictionaries, etc.), WwML (a notation for expressing terms)
 - **Pattern matching, transformation, and evaluation** of terms: Alloy (a structural templating language, a bit like JSX), Nitrene (an expression language, a bit like Excel formulas), M1 (a pattern matching engine).
-- **Styling and graphics**: Microfold (a styling engine; imagine if CSS went the Tailwind way, that's roughly what Microfold is), Scenery (layout and graphics).
+- **Styling and graphics**: Microfold (a styling engine; imagine if Tailwind was CSS, that's roughly what Microfold is), Scenery (layout and graphics).
 - **Symbolic physics and IO**: Rack (symbolic physics), Harmony (something remotely resembling Kubernetes but for IO).
 - **Interface**: MuSoma (an interactive graphical environment for Rack), irack (a command-line interface to Rack).
 
