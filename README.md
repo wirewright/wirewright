@@ -30,7 +30,7 @@ The snippet is not a piece of code in the conventional sense. It isn't a sequenc
 
 So instead of telling an existing general-purpose machine how to do things step-by-step, through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you build specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, devices, links, producers, consumers, black boxes, and so forth.
 
-As an interesting  consequence, machine-building machines become possible; as do machine-controlling machines, and so forth. One of the central themes of Wirewright is, in fact, its attempt to make programming be more about *nouns* and systems of interacting nouns (machines; organisms, even, if you forgive me my metaphor) — nouns rather than verbs (algorithms, plans, and so on). In other words, instead of telling the machine what to do in each case, you set up a world, and let that world react to its surroundings: "relax" its way into equilibria, *generating* or *synthesizing* behavior along the way; grow structure in response to stimuli, etc. To give a simple example of the approach, you do not *select* or *query* (both are not at all nouns), but have a *sensor* (a noun!) supplying a continuous view of things. You do not *store* or *call* but have an *appearance* (a noun!), an entity the sensor can see.
+As an interesting  consequence, machine-building machines become possible; as do machine-controlling machines, and so forth. One of the central themes of Wirewright is, in fact, its attempt to make programming be more about *nouns* and systems of interacting nouns (machines; organisms, even, if you forgive me my metaphor) — nouns rather than verbs (algorithms, plans, and so on). In other words, instead of telling the machine what to do in each case, you set up a world, and let that world react to its surroundings: "relax" its way into equilibria, *generating* or *synthesizing* behavior along the way; grow structure in response to stimuli, etc. To give a simple example of the approach, you do not *select* or *query* (both are not at all nouns), but have a *sensor* (a noun!) supplying a continuous view of things; and instead of *notifying* a sensor you maintain an *appearance* (a noun!) that the sensor can see.
 
 The terminology of *seed*s, *evolution*, and so on is borrowed primarily from the field of cellular automata. Cellular automata is a good reference point for understanding what Wirewright is. Roughly speaking, Wirewright is an automaton which uses *symbols*, *numbers*, *strings* etc. instead of *on/off* for state, and *trees* instead of grids for spatial arrangement. Importantly, trees can also be used for state. Do note that cellular automata and Wirewright are as similar to each other as a stickman and a real human being.
 
@@ -389,17 +389,17 @@ I think Wirewright combines a lot of existing ideas into something (hopefully) c
 
 The relevant ideas come mainly from the field of *cybernetics*: see, for instance, Francisco Varela, Humberto Maturana,  Niklas Luhmann, Norbert Wiener.
 
-Another bunch of ideas come from cellular automata, in particular from Stephen Wolfram's A New Kind of Science book and his Physics Project.
+Another bunch of ideas comes from cellular automata, in particular from Stephen Wolfram's A New Kind of Science book and his Physics Project.
 
-There is a lot of interesting ideas in the works of Michael Levin and Joscha Bach. 
+Some inspiration came, and still comes, from the work of Michael Levin, and also Joscha Bach. 
 
-Complex systems and systems theory and philosophy are also quite relevant. Wirewright's notion of a *world* or a *circuit* is very similar is not the same as the notion of a *system* in the most general sense of the world, although an important difference is, I think, the fact that a system's behavior is determined by its composition more than any imposed *laws* (as in laws of physics); although of course laws act as the thing that "evaluates" or time-steps the system eventually. Put simply, a *world* in Wirewright terms is matter under law; whereas a system is more like a set of interacting components.
+Complex systems and systems theory and philosophy are also quite relevant. Wirewright's notion of a *world* or a *circuit* is very similar if not the same as the notion of a *system* in the most general sense of the word; although an important difference is, I think, the fact that a system's behavior is determined by its composition more than any imposed *laws* (as in laws of physics); although of course laws act as the thing that "evaluates" or time-steps the system eventually. Put plainly, a *world* in Wirewright's sense is matter under law; whereas a system is more like a set of interacting components.
 
 Bret Victor demonstrated what interactivity means, and Wirewright tries to follow his advice.
 
 *Obviously* I must reference Casey Muratori and Jonathan Blow. The ideas of Alan Key have proved useful as well.
 
-The *term* side of the project and the project's focus on immutability would not have been possible without the work and talks of Rich Hickey.
+The *term* side of the project and the project's focus on immutability are greatly inspired by the work and talks of Rich Hickey.
 
 Wirewright is influenced and inspired by biology, in particular cellular biology and neurobiology.
 
@@ -407,7 +407,7 @@ There are significant influences from philosophy as well, especially from the fi
 
 Since the project is in active development, it is very early to attribute and link things precisely. Hopefully, that would be possible later.
 
-The project did not start with a "research" phase but rather with improvisation, so it is hard to pinpoint exactly what influenced me and where it comes from. I am sure no part of Wirewright is truly new. A lot of things Wirewright touches are well-studied in academia: in automata theory, in term rewriting, in reactive systems, transition systems, and so on. I am not smart enough to explore these topics deeply, so all I know about them are the names and their very loose meanings. The *synthesis* of the aforementioned ideas, and the *practicality* of Wirewright is where my hopes on the project's usefulness are.
+The project did not start with a "research" phase but rather with improvisation, so it is hard to pinpoint exactly what influenced me and where it comes from; hence the very vague words "ideas" and "work" in the references above. I am sure no part of Wirewright is truly new, though. Clearly, a lot of things Wirewright touches are well-studied in academia: in automata theory, in term rewriting, in reactive systems, transition systems, graph and hypergraph rewriting, and so on. I am not smart enough (or interested? or both?) to explore these topics deeply, so all I know about them are their names and their very loose meanings. The *synthesis* of the aforementioned ideas and stuff, together with the goal of *practicality*, is where my hopes on the project's usefulness are.
 
 ### Misc
 
