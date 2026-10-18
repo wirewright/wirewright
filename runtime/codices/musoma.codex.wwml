@@ -1614,8 +1614,8 @@ scroll: {}
                   in-focused:sel-theme-editor-selection-bg in-editor-hidden:sel-theme-highlight-high \
                   sel-text-theme-text in-focused:sel-text-theme-editor-selection-fg \
                   text-theme-subtle in-focused:text-theme-text"
-          selection-anchor: ^(charcount l)
-          selection-span: ^(- anchor (charcount l))
+          selection-anchor: ^anchor
+          selection-span: ^(- (charcount l) anchor) ;; Movable part of selection
          ^(~ l r)))
 
 ;; NOTE: We use selections to draw the compose buffer to avoid dealing with multiline l/r

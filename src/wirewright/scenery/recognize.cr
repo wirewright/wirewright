@@ -1600,11 +1600,12 @@ module Ww::Scenery
     #   selection-clearance-line⋮ false)
     #
     # |@key selection-anchor
-    # The modular index of the starting grapheme of the selection.
+    # The modular index of the grapheme of the selection before which the static end
+    # of a selection resides.
     #
     # |@key selection-span
-    # The number of graphemes before (negative) or after (positive) the anchor
-    # to select. If zero, an I-beam is drawn at the anchor instead.
+    # The number of graphemes before (negative) or after (positive) the anchor to
+    # select. If zero, an I-beam is drawn at the anchor.
     #
     # |@key selection-fill pigment
     # The fill color for selection rect(s). Selection rects are drawn *below*
@@ -1655,8 +1656,8 @@ module Ww::Scenery
     #
     # |@block
     # Defines a master selection in the text. Use `selection: true selections: (...)` to
-    # provide more selections. It is not necessary to have the master selection. You can
-    # simply add selections via `selection: true selections: (...)`.
+    # specify more selections. A master selection is not required. You can simply add
+    # selections via `selection: true selections: (...)`.
     #
     # Like underlines, selections use modulo caption size plus one arithmetic for
     # `selection-anchor` and `selection-span`.

@@ -50,7 +50,7 @@ module Ww::Scenery
             next unless spec.aim
 
             # Skip glyphs in the middle of a selection.
-            next unless decoration.anchor_to_left || decoration.anchor_to_right
+            next unless decoration.focus_to_left || decoration.focus_to_right
 
             case item
             in ShapedStyledGlyph

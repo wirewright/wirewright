@@ -181,8 +181,8 @@ module Ww::Scenery
   # Describes a decoration attached to a particular shaped glyph.
   defrecord GlyphDecoration,
     spec : Decoration,
-    anchor_to_left : Bool,
-    anchor_to_right : Bool
+    focus_to_left : Bool,
+    focus_to_right : Bool
 
   # Splits *line* by one or more whitespace characters. Whitespace sticks to what
   # came before it (if anything). We do this primarily to make less calls to
@@ -253,9 +253,9 @@ module Ww::Scenery
 
       node.decorations.each do |decoration|
         if frag.text.begin.in?(decoration.range)
-          anchor_to_left = frag.text.begin == decoration.anchor
-          anchor_to_right = frag.text.end == decoration.anchor
-          decorations << GlyphDecoration.new(decoration, anchor_to_left, anchor_to_right)
+          focus_to_left = frag.text.begin == decoration.focus
+          focus_to_right = frag.text.end == decoration.focus
+          decorations << GlyphDecoration.new(decoration, focus_to_left, focus_to_right)
           next
         end
 
