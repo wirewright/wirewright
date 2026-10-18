@@ -56,6 +56,8 @@ Wirewright is an *ecosystem*. The major components of this ecosystem are:
 
 ## Gallery
 
+Like in Blender you can have one or more projections of the same cube (say), in Wirewright, you can have one or more projections of the same *circuit*. In most screenshots and videos below, you'll see two projections of the same circuit: on the left is the *visual* projection (a window and so on), and on the right is a pretty-printed term. What I want to say is, both are effectively *views* of the same thing (and let me not digress on what that thing is!).
+
 ### Todo list
 
 This is an example of a basic CRUD TODO app. It also supports search and filtering. The whole app spans about 250 lines of code,
@@ -63,7 +65,17 @@ counting comments and blank lines. If you remove them it's about 130 lines, and 
 the near future. Of course the number means nothing but it *can* act as a loose "compression success score", as in how well
 Wirewright manages to compress the concept and the implementation of an interactive app.
 
-<img width="1920" height="1026" alt="musoma-shot-5" src="https://github.com/user-attachments/assets/454f5604-bce6-49aa-9694-dcfb426c1314" />
+<img width="1920" height="1026" alt="TODO list app running in MuSoma" src="https://github.com/user-attachments/assets/454f5604-bce6-49aa-9694-dcfb426c1314" />
+
+Reference: `examples/todo-list.musoma.wwml`.
+
+### Pong
+
+A simple implementation of the Pong game.
+
+<img width="1920" height="1026" alt="Pong running in MuSoma" src="https://github.com/user-attachments/assets/325875fb-8d8a-4401-b931-53e39421308f" />
+
+Reference: `examples/pong.musoma.wwml`.
 
 ### Calculator
 
