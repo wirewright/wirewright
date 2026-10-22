@@ -232,7 +232,7 @@ module Ww
     #   perform approximate equality.
     #
     # This should never return `nil` since we guard against `NaN`s during
-    # construction; by the look of it, comparison appears fails with `nil` only
+    # construction; by the look of it, comparison appears to fail with `nil` only
     # on NaN floats.
     def <=>(other : Num) : Int32
       repr_map do |a|
