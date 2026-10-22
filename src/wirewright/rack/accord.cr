@@ -664,7 +664,7 @@ module Ww::Rack::Accord
       # |@pattern
       # (json @edge_ top_)
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # Tells where to look for the JSON schema node (see `rack.schema`).
       #
       # |@key top
@@ -971,7 +971,7 @@ module Ww::Rack::Accord
   #   (client (@in -> (ws local 5000 key: "Bob's connection") -> @out)))
   # ```
   #
-  # The key can be a `rack.edge`:
+  # The key can be a `rack.[edge]`:
   #
   # ```wwml
   # (cell @id "Alice's connection")

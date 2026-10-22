@@ -177,7 +177,7 @@ module Ww::Rack
       # [cell (policy_symbol @edge_)]
       # [cell (policy_symbol @edge_) value_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The hyperedge ("group") the cell should be a member of.
       #
       # |@key policy rack.[merge policy]
@@ -233,7 +233,7 @@ module Ww::Rack
       # |@pattern
       # [cell (@edge_ pattern_) whole_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The hyperedge ("group") the cell should be a member of. The name of this
       # edge (e.g. `foo` in `@foo`) is also used to retrieve the value of the cell
       # from the match env of *pattern* applied to *whole*.
@@ -302,7 +302,7 @@ module Ww::Rack
       # |@pattern
       # [feed (%group edges_ (%past @_ min: 3))]
       #
-      # |@key edges rack.edge
+      # |@key edges rack.[edge]
       # A sequence of three or more edges.
       #
       # |@block
@@ -366,7 +366,7 @@ module Ww::Rack
       # |@key destination rack.feed.destination
       # Destination(s) of the feed.
       #
-      # |@key inhibitors rack.edge
+      # |@key inhibitors rack.[edge]
       # One or more inhibitor edges.
       #
       # |@block
@@ -492,7 +492,7 @@ module Ww::Rack
       # |@pattern
       # [discard @edge_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge where the node should search for places to clear.
       #
       # |@block
@@ -545,7 +545,7 @@ module Ww::Rack
       # |@pattern
       # [discard @edge_ pattern_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge where the node should search for places to clear.
       #
       # |@key pattern m1.operator
@@ -701,7 +701,7 @@ module Ww::Rack
       # |@pattern
       # [locals locals←((%past @_ min: 0)) children_*]
       #
-      # |@key locals rack.edge
+      # |@key locals rack.[edge]
       # A list of edges to keep local to *children*.
       #
       # |@key children rack
@@ -754,7 +754,7 @@ module Ww::Rack
       # |@pattern
       # [guard (@edge_) children_*]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge to search for empty places at. The guard node will only attempt a match
       # if there is exactly one empty place at *edge*. The node is "confused" by many
       # places (even if some or all of them are empty).
@@ -801,7 +801,7 @@ module Ww::Rack
       # |@pattern
       # [guard (@edge_ pattern_) children_*]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge to search for places at. The guard node will only attempt a match
       # if there is exactly one place at *edge*. The node is "confused" by many places
       # (even if some or all of them match).
@@ -1171,7 +1171,7 @@ module Ww::Rack
       # [frag (policy_symbol @edge_)]
       # [frag (policy_symbol @edge_) child_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge at which to expose a snapshot of *child* at the start of the frame.
       # Writes to this edge propose a new *child*. Writes take precedence over evolution
       # of the *child*.
@@ -1332,7 +1332,7 @@ module Ww::Rack
       # |@pattern
       # [frag (edge←(%'edge capture_) pattern_) child_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge where to expose the captured part of *child*.
       #
       # |@key capture
@@ -1425,7 +1425,7 @@ module Ww::Rack
       # [manipulator (@edge_ -> patterns_*) child_]
       # [manipulator (@edge_ selector_ -> patterns_*) child_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge identifying the source place.
       #
       # |@key selector m1.operator
@@ -1579,7 +1579,7 @@ module Ww::Rack
       # |@pattern
       # [transfer (@src_ pattern_ @dst_) template_]
       #
-      # |@key src rack.edge
+      # |@key src rack.[edge]
       # The edge identifying a place from which to take the input. It must be
       # nonempty for the transfer to be carried out.
       #
@@ -1587,7 +1587,7 @@ module Ww::Rack
       # The pattern used to filter input terms. The captures it makes are made
       # available in *template* as Alloy variables.
       #
-      # |@key dst rack.edge
+      # |@key dst rack.[edge]
       # The edge identifying a place where to put the output. It must be empty for
       # the transfer to be carried out.
       #
@@ -1622,7 +1622,7 @@ module Ww::Rack
       # |@pattern
       # [transfer (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]
       #
-      # |@key srcs rack.edge
+      # |@key srcs rack.[edge]
       # One or more edges identifying places to take input values from. All of
       # them must be nonempty for the transfer to be carried out.
       #
@@ -1632,7 +1632,7 @@ module Ww::Rack
       # passed in matching order: e.g., for `(@x @y @z)` where `(cell @x 100)`,
       # `(cell @y 200)`, `(cell @z 300)`, *pattern* will be shown `(100 200 300)`.
       #
-      # |@key dst rack.edge
+      # |@key dst rack.[edge]
       # The edge identifying a place where to put the output. It must be empty for
       # the transfer to be carried out.
       #
@@ -1674,11 +1674,11 @@ module Ww::Rack
       # |@pattern
       # [transfer ((not (%group inhibitors_ (%past @_))) srcs←((%past @_ min: 1)) pattern_ @dst_) template_]
       #
-      # |@key inhibitors rack.edge
+      # |@key inhibitors rack.[edge]
       # Zero or more *inhibitor* edges. They identify places that, if nonempty, prevent
       # this `transfer` from carrying out its job even if all other conditions are satisfactory.
       #
-      # |@key srcs rack.edge
+      # |@key srcs rack.[edge]
       # One or more edges identifying places to take input values from. All of
       # them must be nonempty for the transfer to be carried out.
       #
@@ -1688,7 +1688,7 @@ module Ww::Rack
       # passed in matching order: e.g., for `(@x @y @z)` where `(cell @x 100)`,
       # `(cell @y 200)`, `(cell @z 300)`, *pattern* will be shown `(100 200 300)`.
       #
-      # |@key dst rack.edge
+      # |@key dst rack.[edge]
       # The edge identifying a place where to put the output. It must be empty for
       # the transfer to be carried out.
       #
@@ -1833,7 +1833,7 @@ module Ww::Rack
       # |@pattern
       # [backsys @target_ backmaps_*]
       #
-      # |@key target rack.edge
+      # |@key target rack.[edge]
       # The edge of the cell whose value should be rewritten.
       #
       # |@key backmaps m1.backmap
@@ -2082,13 +2082,13 @@ module Ww::Rack
       # |@pattern
       # [rewriter (@input_ -> spec_ -> @output_) data_*]
       #
-      # |@key input rack.edge
+      # |@key input rack.[edge]
       # The edge of the input cell.
       #
       # |@key spec
-      # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
+      # Either an edge (`rack.[edge]`) or an inline Rho rewriter spec `rho`.
       #
-      # |@key output rack.edge
+      # |@key output rack.[edge]
       # The edge of the output cell.
       #
       # |@key data
@@ -2415,13 +2415,13 @@ module Ww::Rack
       # |@pattern
       # [rewriter (@input_ - spec_ - @output_) data_*]
       #
-      # |@key input rack.edge
+      # |@key input rack.[edge]
       # The edge of the input cell.
       #
       # |@key spec
-      # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
+      # Either an edge (`rack.[edge]`) or an inline Rho rewriter spec `rho`.
       #
-      # |@key output rack.edge
+      # |@key output rack.[edge]
       # The edge of the output cell.
       #
       # |@key data
@@ -2495,10 +2495,10 @@ module Ww::Rack
       # [rewriter (spec_ - target_) _*]
       #
       # |@key spec
-      # Either an edge (`rack.edge`) or an inline Rho rewriter spec `rho`.
+      # Either an edge (`rack.[edge]`) or an inline Rho rewriter spec `rho`.
       #
       # |@key target
-      # Either an edge (`rack.edge`) or an edge template (`rack.[edge template]`).
+      # Either an edge (`rack.[edge]`) or an edge template (`rack.[edge template]`).
       #
       # |@block
       # The *regime* variant of the rewriter node allows you to maintain a *rewrite
@@ -2703,7 +2703,7 @@ module Ww::Rack
       # [reading @edge_]
       # [reading @edge_ value_]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge to read from.
       #
       # |@key value
@@ -2764,7 +2764,7 @@ module Ww::Rack
       # |@pattern
       # [log (@edge_ ⍊ limit_: (%optional 10 (%number +i32))) history_*]
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge to observe.
       #
       # |@key limit
@@ -3191,10 +3191,10 @@ module Ww::Rack
       # |@pattern
       # [fs @request_ @response_]
       #
-      # |@key request rack.edge
+      # |@key request rack.[edge]
       # The edge of a cell containing a file system request. See `rack.fs.request`.
       #
-      # |@key response rack.edge
+      # |@key response rack.[edge]
       # The edge of a cell where a file system response should be placed in
       # response to a *request*. See `rack.fs.response`.
       #
@@ -3364,7 +3364,7 @@ module Ww::Rack
       # [db (@stmt_ -> uri_string -> @response_)]
       # [db (@stmt_ -> uri_string -> @response_) status_]
       #
-      # |@key stmt rack.edge
+      # |@key stmt rack.[edge]
       # The edge identifying a place from which to take the SQL code. Its value must
       # be one a `rack.db.stmt`.
       #
@@ -3373,7 +3373,7 @@ module Ww::Rack
       # are supported:
       # - SQLite3: for example, `sqlite:/tmp/people.db`.
       #
-      # |@key response rack.edge
+      # |@key response rack.[edge]
       # The edge identifying a place where to put the response of the database. The response
       # can be of several forms:
       # - `(ok ±rows-affected)` for successful `exec` statements.
@@ -3527,7 +3527,7 @@ module Ww::Rack
       # [server (@pool_ config_) template_*]
       # [server (@pool_ config_ status_) template_*]
       #
-      # |@key pool rack.edge
+      # |@key pool rack.[edge]
       # The edge of the client device pool.
       #
       # |@key config rack.server.config
@@ -4122,10 +4122,10 @@ module Ww::Rack
       # |@pattern
       # [supervisor (@tasks_ @task_ pattern_ - @pool_) children_*]
       #
-      # |@key tasks rack.edge
+      # |@key tasks rack.[edge]
       # The edge identifying the place with a list of tasks.
       #
-      # |@key task rack.edge
+      # |@key task rack.[edge]
       # When a supervisor associates a task with a device, it equips the device with
       # a cell storing the task. The cell is at the edge specified by *task*.
       #
@@ -4159,7 +4159,7 @@ module Ww::Rack
       # and device(s) are ignored -- the supervisor node is "confused" by them so it
       # chooses not to interact with them in any way.
       #
-      # |@key pool rack.edge
+      # |@key pool rack.[edge]
       # The edge of the pool where member devices should be maintained.
       #
       # |@key children rack
@@ -4531,7 +4531,7 @@ module Ww::Rack
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`, and
       # related nodes, the default merge policy for `form` is `exclusive`.
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge at which to expose the form projection of *children*.
       #
       # |@key children rack
@@ -4550,7 +4550,7 @@ module Ww::Rack
       # the aggregation forming a live, bidirectional dashboard to simplify control.
       #
       # Forms are the third "communication axis" or "connectivity axis" in Rack, the other
-      # two being edges (`rack.edge`) and termspaces (`rack.tspace`, `rack.sensor`,
+      # two being edges (`rack.[edge]`) and termspaces (`rack.tspace`, `rack.sensor`,
       # `rack.appearance`).
       #
       # It is useful to change the wording briefly and talk about the parent circuit
@@ -4867,7 +4867,7 @@ module Ww::Rack
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`,
       # and related nodes, the default merge policy for `outlet` is `exclusive`.
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge at which a nonempty outlet should expose its *value*. This works exactly
       # like in `rack.cell`.
       #
@@ -4979,7 +4979,7 @@ module Ww::Rack
       # Optionally, the merge policy to use for writes at *edge*. Like `cell`, `circuit`,
       # and related nodes, the default merge policy for `field` is `exclusive`.
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge at which a nonempty field should expose its *value*. This works exactly
       # like in `rack.cell`.
       #
@@ -5136,7 +5136,7 @@ module Ww::Rack
       # changes to it. It is conceptually a kind of "lock" or mutual exclusion mechanism
       # (of changes vs. the world).
       #
-      # |@key edge rack.edge
+      # |@key edge rack.[edge]
       # The edge referring to the cell to watch (or a similar node such as `rack.outlet`).
       #
       # |@key limit
