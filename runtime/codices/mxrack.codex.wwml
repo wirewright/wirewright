@@ -11,7 +11,7 @@
 ;;
 ;; Inspired by: [Material Design 3](https://m3.material.io).
 
---- theme ;; Extensions to the Microfold color palette (ufold.codex.wwml, table colors).
+--- theme ;; Extensions to Microfold (ufold.codex.wwml)
 
 (var base): "#191724"
 (var surface): "#1f1d2e"
