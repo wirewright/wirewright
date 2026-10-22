@@ -1560,6 +1560,10 @@ vantage: ""
 "serif": "IBM Plex Serif"
 "condensed": "IBM Plex Sans Condensed"
 "icons": "Material Icons"
+"notation":
+  (list
+    (font "IBM Plex Mono")
+    (font "Julia Mono"))
 
 
 --- (table font-sizes)
