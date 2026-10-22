@@ -1216,6 +1216,12 @@ vantage: ""
 ;; Overlay
 ;;
 
+(for page-box
+  (utility "page" {page: true}))
+
+(for page-box
+  (utility "-page" {page: false}))
+
 (for overlay-box
   (utility "overlay" {overlay: true}))
 
@@ -1343,6 +1349,7 @@ vantage: ""
   viewport-box
   floating-box
   overlay-box
+  page-box
   vantage-box
   tag-box        ;; < virtual
   outermost-box) ;; < virtual
@@ -1445,9 +1452,9 @@ vantage: ""
                ^*children)))
          (when _ ^*children))))))
 
-(defn ⸨aim,overlay⸩-box
-  (box (children_dict {¦ ⸨aim,overlay⸩: true})
-    ((⸨aim,overlay⸩ ^*children))))
+(defn ⸨aim,overlay,page⸩-box
+  (box (children_dict {¦ ⸨aim,overlay,page⸩: true})
+    ((⸨aim,overlay,page⸩ ^*children))))
 
 (defn vantage-box
   (box (children_dict {¦ id_})

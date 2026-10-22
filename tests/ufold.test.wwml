@@ -1052,3 +1052,18 @@
   (container
     (vantage id: (a b c)
       (text caption: "hi"))))
+
+;; page-box
+(group
+  (µfold=
+    (container "Hi" "Bye" style: "page")
+    (container
+      (page
+        (text caption: "Hi")
+        (text caption: "Bye"))))
+
+  (µfold=
+    (container "Hi" "Bye" style: "page -page")
+    (container
+      (text caption: "Hi")
+      (text caption: "Bye"))))
