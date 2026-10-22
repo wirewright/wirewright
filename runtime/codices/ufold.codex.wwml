@@ -1717,9 +1717,11 @@ vantage: ""
 "resize-tl-br": resize-tl-br
 "resize-bl-tr": resize-bl-tr
 "resize": resize
+"move": resize ;; alias
 "resize-x": resize-x
 "resize-y": resize-y
 "not-allowed": not-allowed
+"disabled": not-allowed ;; alias
 "pointer": pointer
 "resize-tl": resize-tl
 "resize-t": resize-t
