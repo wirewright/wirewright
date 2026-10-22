@@ -1,0 +1,907 @@
+;;
+;;  __  __          _____                   _
+;; |  \/  |        |  __ \                 | |
+;; | \  / | __  __ | |__) |   __ _    ___  | | __   Wirewright MxRack
+;; | |\/| | \ \/ / |  _  /   / _` |  / __| | |/ /   https://github.com/wirewright/wirewright [iota]
+;; | |  | |  >  <  | | \ \  | (_| | | (__  |   <
+;; |_|  |_| /_/\_\ |_|  \_\  \__,_|  \___| |_|\_\
+;;
+;;
+;; A component library for Media extensions for Rack (MxRack).
+;;
+;; Inspired by: [Material Design 3](https://m3.material.io).
+
+--- theme ;; Extensions to the Microfold color palette (ufold.codex.wwml, table colors).
+
+(var base): "#191724"
+(var surface): "#1f1d2e"
+(var overlay): "#26233a"
+(var muted): "#6e6a86"
+(var subtle): "#908caa"
+(var text): "#e0def4"
+(var love): "#eb6f92"
+(var gold): "#f6c177"
+(var rose): "#ebbcba"
+(var pine): "#31748f"
+(var foam): "#9ccfd8"
+(var iris): "#c4a7e7"
+(var highlight-low): "#21202e"
+(var highlight-med): "#403d52"
+(var highlight-high): "#524f67"
+
+(table colors):
+  {"ui-base": ^base,
+   "ui-surface": ^surface,
+   "ui-overlay": ^overlay,
+
+   "ui-muted": ^muted,
+   "ui-subtle": ^subtle,
+
+   "ui-content": ^text,
+   "ui-supplementary": ^subtle,
+
+   "ui-decoration-low": ^highlight-low,
+   "ui-decoration-med": ^highlight-med,
+   "ui-decoration-high": ^highlight-high,
+
+   "ui-checked": ^foam
+   "ui-accent": ^iris
+   "ui-warn": ^gold}
+
+
+--- library ;; Components
+
+;; NOTE: Most of the designs below are simplified versions of the corresponding
+;; component in Material Design 3. Due to implementation limitations we cannot
+;; (yet?) do "fancy" visual things like press animations, etc. -- nor should we,
+;; perhaps. We largely ignore keyboard focus/control on mouse-driven components
+;; as well (and the corresponding focus states). This isn't particularly nice
+;; of course and has to be implemented at some point.
+
+(Trigger (%any° ((@input_ keys_*) @msgs_ msg_) (@msgs_ msg_)) view_)
+  => (component {@:input, @:msgs}
+       (template (cell @msg ^msg))
+       (template (cell @keys ^keys))
+
+       (rewriter ((stageR (rulesetR exh: true)) - {@:input, @:keys, @:msg, msgs: (optional @msgs), @:mousearea, @:visuals})
+         (stage
+           ;; For now, we only support one mouse. Any more mice and we're confused.
+           {¦ mousearea: [mousearea mouse_] -mouse: >mouse}
+             <> {>mouse: ^mouse}
+
+           ;; The mouse is over our visuals, no buttons pressed. We're being hovered over!
+           {¦ -hover_ mouse: (mouse _)}
+             <> {hover: true}
+
+           ;; The mouse had previously entered and remains within our visuals. We're
+           ;; being hovered over!
+           {¦ -hover_ mouse visuals: {¦ hover}}
+             <> {hover: true}
+
+           ;; The left mouse button is down over our visuals. We're active!
+           {¦ -active_ -msgs hover mouse: {¦ left}}
+             <> {active: true}
+
+           ;; The left mouse button was just released while the button was active,
+           ;; still over our visuals. That's a click!
+           {¦ -clicked_ hover mouse: {¦ -left} visuals: {¦ active}}
+             <> {clicked: true}
+
+           ;; If the messages cell already contains this button's message, then
+           ;; this button is currently pressed.
+           {¦ msg_ msgs: (some msg_) -pressed_}
+             <> {pressed: true}
+
+           ;; Translate input into clicks if possible.
+           {¦ keys: ⟨key_⟩ input: ⟨K←key_ ⍊ focus: (%any true seized always)⟩ -clicked_}
+             <> {(K): (), clicked: true})
+
+         (stage
+           ;; The only decision a button makes is this: place our message at
+           ;; the messages edge if it's empty.
+           {¦ clicked msg_ -msgs_ -pressed_}
+             <> {msgs: (some ^msg), pressed: true})
+
+         (stage
+           ;; Sync input focus with visual focus.
+           {¦ -input visuals: {¦ focus_}}
+             <> {(focus): ()}
+           {¦ input: {¦ focus: (%- true)} visuals: {¦ focus_}}
+             <> {(focus): ()}
+           {¦ input: {¦ focus: true} visuals: {¦ -focus_}}
+             <> {focus: true}
+
+           ;; Maintain disabled based on the presence of the messages cell.
+           {¦ msgs: none visuals: {¦ ⋮disabled}}
+             <> {disabled: true}
+           {¦ msgs: (%- none) visuals: {¦ disabled_}}
+             <> {(disabled): ()}
+
+           ;; Maintain `hover` on *visuals* in sync.
+           {¦ hover visuals: {¦ ⋮hover}} <> {hover: true}
+           {¦ -hover visuals: {¦ hover_}} <> {(hover): ()}
+
+           ;; Maintain `active` on *visuals* in sync. Us doing so serves a double duty,
+           ;; since we also use `active` from *visuals* as a memory of our previous state.
+           {¦ active visuals: {¦ ⋮active}} <> {active: true}
+           {¦ -active visuals: {¦ active_}} <> {(active): ()}
+
+           ;; Maintain `pressed` on *visuals* in sync.
+           {¦ pressed visuals: {¦ ⋮pressed}} <> {pressed: true}
+           {¦ -pressed visuals: {¦ pressed_}} <> {(pressed): ()}))
+
+       (frag @visuals
+         (box style: "membrane disabled:cue-disabled -disabled:cue-enabled hover:cue-hover \
+                      -disabled:active:cue-active pressed:cue-active focus:cue-focused"
+           (module {:@mousearea}
+             (template ^view)))))
+
+
+(ButtonFocusIndicator)
+  => (box style: "absent in-focused:present bg-ui-accent bottom right dl-1 dt-1 \
+                  rounded-full text-ui-accent text-okl-30%"
+       (icon "pan_tool_alt" style: "text-xl"))
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Filled button"
+(FilledButtonBox child_)
+  => (box
+       (box style: ^"px-4 py-2 rounded-full content-center bg-ui-accent text-ui-accent \
+                     in-enabled:bg-okl-70% text-sm/5 font-medium in-enabled:text-okl-15% \
+                     in-hover:cursor-pointer in-hover:bg-okl-75% in-active:bg-okl-80% \
+                     in-disabled:opacity-25% in-disabled:in-hover:cursor-disabled"
+         ^child)
+       ^(embed (ButtonFocusIndicator))
+       (frag @mousearea (mousearea)))
+
+(FilledButtonView caption_)
+  => ($FilledButtonBox (p ^caption))
+
+(FilledButtonView icon_ caption_)
+  => ($FilledButtonBox
+       (group style: "flow-row gap-2"
+         (icon ^icon style: "text-xl")
+         (p ^caption)))
+
+(FilledButton spec_ args_*)
+  => ($Trigger ^spec ($FilledButtonView ^*args))
+
+
+(IconButtonView icon_)
+  => (box
+       (box style: "rounded-full p-2 content text-ui-content in-hover:cursor-pointer \
+                    in-hover:bg-ui-surface in-active:bg-ui-overlay in-disabled:opacity-25% \
+                    in-disabled:in-hover:cursor-disabled"
+         (icon ^icon style: "text-lg"))
+       ^(embed (ButtonFocusIndicator))
+       (frag @mousearea (mousearea)))
+
+(IconButton spec_ args_*)
+  => ($Trigger ^spec ($IconButtonView ^*args))
+
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Tonal button"
+(TonalButtonBox child_)
+  => (box
+       (box style: ^"px-3 py-1 rounded-full content-center bg-ui-overlay text-ui-content \
+                     text-sm/5 font-medium in-hover:cursor-pointer in-hover:bg-okl-30% \
+                     in-active:bg-okl-40% in-disabled:opacity-25% in-disabled:in-hover:cursor-disabled"
+         ^child)
+       ^(embed (ButtonFocusIndicator))
+       (frag @mousearea (mousearea)))
+
+(TonalButtonView caption_)
+  => ($TonalButtonBox (p ^caption))
+
+(TonalButtonView icon_ caption_)
+  => ($TonalButtonBox
+       (group style: "flow-row gap-1"
+         (icon ^icon style: "text-xl")
+         (p ^caption)))
+
+(Button spec_ args_*)
+  => ($Trigger ^spec ($TonalButtonView ^*args))
+
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Outlined button"
+(OutlinedButtonBox child_)
+  => (box
+       (box style: ^"px-4 py-2 rounded-full content-center border-xs border-ui-decoration-high \
+                     text-ui-content text-sm/5 font-medium in-hover:cursor-pointer in-hover:bg-ui-surface \
+                     in-hover:border-ui-muted in-active:bg-ui-overlay in-disabled:opacity-25% \
+                     in-disabled:cursor-disabled"
+         ^child)
+       ^(embed (ButtonFocusIndicator))
+       (frag @mousearea (mousearea)))
+
+(OutlinedButtonView caption_)
+  => ($OutlinedButtonBox (p ^caption))
+
+(OutlinedButtonView icon_ caption_)
+  => ($OutlinedButtonBox
+       (group style: "flow-row gap-1"
+         (icon ^icon style: "text-xl")
+         (p ^caption)))
+
+(OutlinedButton spec_ args_*)
+  => ($Trigger ^spec ($OutlinedButtonView ^*args))
+
+
+;; Reference: https://m3.material.io/components/buttons/specs, "Text button"
+(TextButtonBox child_)
+  => (box
+       (box style: ^"px-4 py-2 rounded-full content-center text-ui-accent text-sm/5 font-medium \
+                     border-sm in-focused:border-ui-accent in-hover:cursor-pointer in-hover:bg-ui-surface \
+                     in-active:bg-ui-overlay in-disabled:opacity-25% in-disabled:cursor-disabled"
+         ^child)
+       ^(embed (ButtonFocusIndicator))
+       (frag @mousearea (mousearea)))
+
+(TextButtonView caption_)
+  => ($TextButtonBox (p ^caption))
+
+(TextButtonView icon_ caption_)
+  => ($TextButtonBox
+       (group style: "flow-row gap-1"
+         (icon ^icon style: "text-xl")
+         (p ^caption)))
+
+(TextButton spec_ args_*)
+  => ($Trigger ^spec ($TextButtonView ^*args))
+
+
+;; This is an internal component used by `SegmentedButton`.
+(SegmentedOption (@current_ @next_ option_) view_dict)
+  => (component {@:current, @:next}
+       (template (cell @option ^option))
+
+       (rewriter ((stageR (rulesetR exh: true)) - {@:current, @:mousearea, @:next, @:option, @:visuals})
+         (stage
+           {¦ mousearea: [mousearea mouse_] -mouse: >mouse} <> {>mouse: ^mouse}
+           {¦ -hover_ mouse: (mouse _)} <> {hover: true}
+           {¦ -hover_ mouse visuals: {¦ hover}} <> {hover: true}
+           {¦ -active_ hover mouse: {¦ left}} <> {active: true}
+           {¦ -clicked_ hover mouse: {¦ -left} visuals: {¦ active}}
+             <> {clicked: true})
+         (stage
+           ;; If we're the "reigning" option and someone asks for a turnover, we submit
+           ;; and do the turnover.
+           {¦ option_ current_: option_ next_}
+             <> {current: ^next, (next): ()}
+           ;; If the user clicks on us and we're already active, just consume their
+           ;; click and move on.
+           {¦ clicked_ option_ current: option_}
+             <> {(clicked): ()}
+           ;; If the user clicks on us and we're NOT already active, we have to
+           ;; ask the "reigning" option for a turnover.
+           {¦ clicked_ option_ -next_}
+             <> {(clicked): (), next: ^option})
+         (stage
+           {¦ option_ current_ visuals: {¦ ⋮checked ⋮disabled}}
+             <> {checked: ^(= option current), disabled: false}
+           {¦ -current visuals: {¦ ⋮checked ⋮disabled}}
+             <> {checked: false, disabled: true}
+           {¦ current hover visuals: {¦ ⋮hover}}
+             <> {hover: true}
+           {¦ current -hover visuals: {¦ hover_}}
+             <> {(hover): ()}
+           {¦ current active visuals: {¦ ⋮active}}
+             <> {active: true}
+           {¦ current -active visuals: {¦ active_}}
+             <> {(active): ()}))
+
+       ;;| Since the view would otherwise have no access to @first and @last, because
+       ;;| the `box` would block that, we have to pass them down as cues.
+       (frag @visuals
+         (box style: "membrane @first:cue-first @last:cue-last -disabled:checked:cue-checked \
+                      disabled:cue-disabled -disabled:cue-enabled -disabled:hover:cue-hover \
+                      -disabled:active:cue-active"
+           (module {:@mousearea}
+             (template ^view)))))
+
+(SegmentedOptionView title_)
+  => (box
+       (box style: "clip content-center item-center-y border-l in-last:border-r border-y \
+                    in-first:rounded-l-full in-last:rounded-r-full border-ui-subtle \
+                    text-ui-content in-hover:bg-ui-surface in-hover:cursor-pointer \
+                    in-checked:bg-ui-overlay text-sm/5 font-medium px-8 py-2 \
+                    in-disabled:opacity-25% active:bg-okl-30%"
+         (icon "check" style: "floating-x -dl-2 absent in-checked:present")
+         (p ^title style: "in-checked:dl-2"))
+       (frag @mousearea (mousearea)))
+
+;; Presents one or more *options*, of the form `(label_string id_)`, as a segmented
+;; button, allowing only one choice.
+;;
+;; Reference: https://m3.material.io/components/segmented-buttons/specs
+(SegmentedButton @state_ options_+)
+  => (component {@:state}
+       (cell @next)
+       (group style: "flow-row item-fr-1"
+         (template
+           (^each (options as (label_string id_))
+             ($SegmentedOption (@state @next ^id)
+               ($SegmentedOptionView ^label))))))
+
+
+(Toggle @state_ view_)
+  => (component {@:state}
+       ;;| This rewriter is the tiny "brain" of the toggle. Just like some of the other
+       ;;| components, it consists of three explicit stages: observe, reconcile (decide),
+       ;;| and act.
+       (rewriter ((stageR (rulesetR exh: true)) - {@:mousearea, @:visuals, @:state})
+         (stage
+           {¦ mousearea: [mousearea mouse_] -mouse: >mouse} <> {>mouse: ^mouse}
+           {¦ -hover_ mouse: (mouse _)} <> {hover: true}
+           {¦ -hover_ mouse visuals: {¦ hover}} <> {hover: true}
+           {¦ -active_ hover mouse: {¦ left}} <> {active: true}
+           {¦ -clicked_ hover mouse: {¦ -left} visuals: {¦ active}}
+             <> {clicked: true})
+         (stage
+           ;; "Decide" to toggle state when clicked.
+           {¦ clicked state_boolean} <> {state: ^(not state)})
+         (stage
+           ;; Maintain `checked` on *visuals* in sync.
+           {¦ state_boolean visuals: {¦ ⋮checked}} <> {checked: ^state}
+           ;; Maintain `hover` on *visuals* in sync.
+           {¦ hover visuals: {¦ ⋮hover}} <> {hover: true}
+           {¦ -hover visuals: {¦ hover_}} <> {(hover): ()}
+           ;; Maintain `active` on *visuals* in sync. Us doing so serves a double duty,
+           ;; since we also use `active` from *visuals* as a memory of our previous state.
+           {¦ active visuals: {¦ ⋮active}} <> {active: true}
+           {¦ -active visuals: {¦ active_}} <> {(active): ()}
+           ;; Maintain `disabled` on *visuals* in sync.
+           {¦ state: (%- _boolean) visuals: {¦ -disabled_}} <> {disabled: true}
+           {¦ state: _boolean visuals: {¦ disabled_}} <> {(disabled): ()}))
+
+       (frag @visuals
+         (box style: "membrane -disabled:checked:cue-checked disabled:cue-disabled \
+                      -disabled:hover:cue-hover -disabled:active:cue-active"
+           (module {:@mousearea}
+             (template ^view)))))
+
+(Checkbox)
+  => (box style: "content"
+       (box style: "in-hover:cursor-pointer in-disabled:opacity-25% in-disabled:in-hover:cursor-arrow"
+         ;; The circle thing around the checkbox on hover.
+         (box style: "bg-ui-subtle in-hover:bg-ui-checked scale-5/3 pivot-center \
+                      rounded-full transparent in-hover:opacity-25% in-active:bg-okl-95%")
+         ;; The check and the box.
+         (box style: "rounded-xs border-sm border-ui-subtle text-sm text-ui-content \
+                      in-checked:bg-ui-decoration-high in-checked:border-ui-checked \
+                      in-checked:bg-ui-checked text-ui-checked text-okl-10%"
+           (icon "check" style: "transparent in-checked:opaque")))
+       (frag @mousearea (mousearea)))
+
+(Checkbox @state_)
+  => ($Toggle ^state ($Checkbox))
+
+
+(Switch)
+  => (box style: "content"
+       (group style: "flow-row border-sm border-ui-subtle bg-ui-surface rounded-full \
+                      in-checked:border-ui-accent in-checked:bg-ui-accent in-hover:cursor-pointer \
+                      in-disabled:opacity-25%"
+         ;; The unchecked half.
+         (box style: "opaque in-checked:transparent in-disabled:transparent content p-1"
+           (box style: "rounded-full bg-min-4 bg-ui-subtle")
+           ;; The circle thing for hovering when disabled.
+           (box style: "bg-ui-subtle scale-5/2 pivot-center rounded-full transparent \
+                        in-hover:opacity-20% in-checked:transparent"))
+         ;; The middle part to indicate the disabled state.
+         (box style: "floating absent -dl-3 in-disabled:present content p-1"
+           (box style: "rounded-full bg-min-4 bg-ui-subtle"))
+         ;; The checked half.
+         (box style: "transparent in-checked:opaque content p-1 bg-ui-accent bg-okl-20% \
+                      text-ui-accent rounded-full"
+           (icon "check")
+           ;; The circle thing for hovering when checked.
+           (box style: "bg-ui-accent bg-okl-30% scale-5/2 pivot-center rounded-full \
+                        transparent in-checked:in-hover:opacity-20%")))
+       (frag @mousearea (mousearea)))
+
+(Switch @state_)
+  => ($Toggle ^state ($Switch))
+
+
+(Setting (title_))
+  => (group style: "is-stretched flow-row item-center-y content-y px-3 py-3"
+       (p ^title style: "fr-1 text-ui-content text-base/6")
+       (box style: "center-y"
+         ($Switch)))
+
+(Setting (title_ subtitle_))
+  => (group style: "is-stretched flow-row content-y px-3 py-1"
+       (group style: "flow-col fr-1"
+         (p ^title style: "text-ui-content text-base/6")
+         (p ^subtitle style: "text-ui-supplementary text-sm/5"))
+       (box style: "center-y"
+         ($Switch)))
+
+(Setting (title_ subtitle0_ subtitle1_))
+  => (group style: "is-stretched flow-row content-y px-3 py-1"
+       (group style: "flow-col fr-1"
+         (p ^title style: "text-ui-content text-base/6")
+         (p ^subtitle0 style: "present in-checked:absent text-ui-supplementary text-sm/5")
+         (p ^subtitle1 style: "absent in-checked:present text-ui-supplementary text-sm/5"))
+       (box style: "center-y"
+         ($Switch)))
+
+(Setting @state_ spec_)
+  => ($Toggle ^state ($Setting ^spec))
+
+
+(Scroll @signal_)
+  => (component {@:signal}
+       ;;| These are the visuals of the viewport. Deep in here we see `site`, which
+       ;;| is where the visuals of the *content* go.
+       (box style: "flow-row"
+         (box style: "fr-1 flow-col"
+           (frag @view
+             (box style: "fr-1" ?w: _ ?h: _ ?aim-x: _ ?aim-y: _ ?aim-offset-x: _ ?aim-offset-y: _
+               (viewport page-x: (0 px) page-y: (0 px) aim-through: true aim-pan: false
+                 (frag @interior
+                   ;; NOTE: We maintain a small padding to ensure decorations such as I-beams
+                   ;; are always visible, and also to fix some zero size... issues for text?
+                   ;; But really, I'm not in the mood for treating the cause so let's fix
+                   ;; the symptom, right?
+                   (box style: "px-3px" ?visual-w: _ ?visual-h: _
+                     (site))))))
+
+           ;; Horizontal scrollbar.
+           (box style: "max-h-3 py-2/3 bg-transparent membrane absent has-thumb:present"
+             (frag (@x-track-mouse [mousearea x-track-mouse_])
+               (mousearea position: on-press))
+             (frag (space @x-thumb)
+               (transform dl: 0
+                 (limit max-w: 0
+                   (mousearea position: on-press)
+                   ($ThumbView))))))
+
+         ;; Vertical scrollbar.
+         (box style: "max-w-3 px-2/3 bg-transparent membrane absent has-thumb:present"
+           (frag (@y-track-mouse [mousearea y-track-mouse_])
+             (mousearea position: on-press))
+           (frag (space @y-thumb)
+             (transform dt: 0
+               (limit max-h: 0
+                 (mousearea position: on-press)
+                 ($ThumbView))))))
+
+       ;;| Maintain bindings to useful parts of both thumbs.
+       (part (@x-thumb @thumb-dl) ⟪(transform _* ⍊ dl: ±thumb-dl)⟫)
+       (part (@x-thumb @thumb-w) ⟪(limit _* ⍊ max-w: ±thumb-w)⟫)
+       (part (@x-thumb @x-hover) ⟪(thumb ⍊ hover: (%optional false x-hover_))⟫)
+       (part (@x-thumb @x-active) ⟪(thumb ⍊ active: (%optional false x-active_))⟫)
+       (part (@x-thumb @x-visible) ⟪(thumb ⍊ visible: (%optional false x-visible_))⟫)
+
+       (part (@y-thumb @thumb-dt) ⟪(transform _* ⍊ dt: ±thumb-dt)⟫)
+       (part (@y-thumb @thumb-h) ⟪(limit _* ⍊ max-h: ±thumb-h)⟫)
+       (part (@y-thumb @y-hover) ⟪(thumb ⍊ hover: (%optional false y-hover_))⟫)
+       (part (@y-thumb @y-active) ⟪(thumb ⍊ active: (%optional false y-active_))⟫)
+       (part (@y-thumb @y-visible) ⟪(thumb ⍊ visible: (%optional false y-visible_))⟫)
+
+       ;;| Maintain bindings to useful parts of the view.
+       (part (@view @page-x) [box {¦ page-x: (±page-x px)}])
+       (part (@view @page-y) [box {¦ page-y: (±page-y px)}])
+
+       ;;| Keep track of what we've aimed the viewport at before.
+       (cell @aimed)
+
+       (rewriter (stageR (rulesetR exh: true))
+         (stage
+          ∥;; Define shorthands for view width and height.
+           {¦ view: {¦ ?w: ±w ?h: ±h} -view-w_ -view-h_}
+             <> {view-w: ^(round w), view-h: ^(round h)}
+
+           ;; Define shorthands for content width and height.
+           {¦ interior: {¦ ?visual-w: ±w ?visual-h: ±h} -interior-w_ -interior-h_}
+             <> {interior-w: ^(round w), interior-h: ^(round h)}
+
+           ;; Here we make the very reckless yet highly practical assumption of
+           ;; there being only one mouse.
+           {¦ x⫽y-thumb: ⟪[mousearea mouse_]⟫ -x⫽y-thumb-mouse_}
+             <> {x⫽y-thumb-mouse: ^mouse}
+
+           ;; When the thing the viewport is aiming at moves, we want to scroll it into
+           ;; view because the user might have scrolled away.
+           {¦ -signal_ view: {¦ ?aim-x: ±x ?aim-y: ±y ?aim-offset-x: ±ox ?aim-offset-y: ±oy} -aimed_}
+             <> {signal: (aim? ^ox ^oy), aimed: (^x ^y)}
+           {¦ -signal_ view: {¦ ?aim-x: ±x ?aim-y: ±y ?aim-offset-x: ±ox ?aim-offset-y: ±oy} aimed_}
+             <> {signal: (^unless (= aimed (x y)) (aim? ^ox ^oy)), aimed: (^x ^y)}
+
+           ;; Accept or decline potential aim.
+           {¦ signal_: (aim? ±x ±y) ±page-x ±page-y ±view-w ±view-h}
+             <> {signal: (aim ^(and (< page-x x (+ page-x view-w)) (< page-y y (+ page-y view-h))) ^x ^y)}
+           {¦ signal_: (aim true _ _)}
+             <> {(signal): ()}
+           {¦ signal: (aim visible←false _ _)}
+             <> {(visible): ()}∥)
+
+         (stage
+          ∥;; Thumb hover.
+           {¦ x⫽y-thumb-mouse: {¦ -left} x⫽y-hover_: false}
+             <> {x⫽y-hover: true}
+
+           ;; Thumb unhover.
+           {¦ -x⫽y-thumb-mouse x⫽y-hover_: true}
+             <> {x⫽y-hover: false}
+
+           ;; Thumb activate.
+           {¦ x⫽y-thumb-mouse: {¦ left} x⫽y-hover x⫽y-active_: false}
+             <> {x⫽y-active: true}
+
+           ;; Thumb deactivate.
+           {¦ x⫽y-thumb-mouse: {¦ -left} x⫽y-active_: true}
+             <> {x⫽y-active: false}
+
+           ;; Thumb deactivate on unhover.
+           {¦ -x⫽y-thumb-mouse x⫽y-active_: true}
+             <> {x⫽y-active: false}
+
+           ;; Press on track to put the center of the thumb there.
+           {¦ x⫽y-track-mouse: {¦ left_ ±dl⫽t} ±thumb-dl⫽t ±thumb-w⫽h -x⫽y-dragged_}
+             <> {(left): (), thumb-dl⫽t: ^(max 0 (- dl⫽t (/ thumb-w⫽h 2))), x⫽y-dragged: true}
+
+           ;; Scroll up over track or thumb.
+           {¦ x⫽y-⟦track,thumb⟧-mouse: {¦ wheel-up: ±n} ±thumb-dl⫽t -x⫽y-dragged_}
+             <> {(n): (), thumb-dl⫽t: ^(max 0 (- thumb-dl⫽t (* n 10))), x⫽y-dragged: true}
+
+           ;; Scroll down over track or thumb.
+           {¦ x⫽y-⟦track,thumb⟧-mouse: {¦ wheel-dn: ±n} ±thumb-dl⫽t -x⫽y-dragged_}
+             <> {(n): (), thumb-dl⫽t: ^(max 0 (+ thumb-dl⫽t (* n 10))), x⫽y-dragged: true}
+
+           ;; Drag thumb.
+           {¦ x⫽y-active: true ±view-w⫽h ±thumb-w⫽h ±thumb-dl⫽t x⫽y-thumb-mouse: {¦ ±dl⫽t ±l⫽t} -x⫽y-dragged_}
+             <> {thumb-dl⫽t: ^(clamp (- l⫽t dl⫽t) 0 ..= (- view-w⫽h thumb-w⫽h)), x⫽y-dragged: true}
+
+           ;; Maintain page-x/y based on the thumb when x/y-dragged.
+           {¦ x⫽y-dragged_ ±view-w⫽h ±page-x⫽y ±interior-w⫽h ±thumb-dl⫽t ±thumb-w⫽h}
+             <> {page-x⫽y: (^br (<= view-w⫽h thumb-w⫽h) 0 ^(* (/ thumb-dl⫽t (- view-w⫽h thumb-w⫽h)) (- interior-w⫽h view-w⫽h)))}
+
+           ;; ... but by default, maintain thumb-dl/dt based on page-x/y.
+           {¦ -x⫽y-dragged ±view-w⫽h ±page-x⫽y ±interior-w⫽h ±thumb-dl⫽t ±thumb-w⫽h}
+             <> {thumb-dl: ^(* (/ page-x view-w) thumb-w),
+                 thumb-dt: ^(* (/ page-y view-h) thumb-h)}
+
+           ;; Maintain thumb size.
+           {¦ ±view-w⫽h interior-w⫽h_: (%number _ > 0) ±thumb-w⫽h}
+             <> {thumb-w⫽h: ^(* view-w⫽h (clamp (/ view-w⫽h interior-w⫽h) 0 ..= 1))}
+
+           ;; Interpret the `aim` signal.
+           {¦ signal_: (aim ±l ±t) ±page-x ±page-y}
+             <> {(signal): (), page-x: ^l, page-y: ^t}
+
+           ;; Interpret the `scroll` signal.
+           {¦ signal_: (scroll ±dx ±dy) ±thumb-dl ±thumb-dt -x-dragged_ -y-dragged_}
+             <> {(signal): (),
+                 thumb-dl: ^(+ thumb-dl dx),
+                 thumb-dt: ^(+ thumb-dt dy),
+                 x-dragged: true,
+                 y-dragged: true}∥)
+
+         (stage
+          ∥;; Maintain page-x/y in bounds.
+           {¦ ±page-x⫽y ±interior-w⫽h ±view-w⫽h}
+             <> {page-x⫽y: (^br (<= interior-w⫽h view-w⫽h) 0 ^(clamp page-x⫽y 0 ..= (- interior-w⫽h view-w⫽h)))}
+
+           ;; Maintain thumb offsets in bounds.
+           {¦ ±view-w⫽h ±interior-w⫽h ±thumb-w⫽h ±thumb-dl⫽t}
+             <> {thumb-dl⫽t: ^(clamp thumb-dl⫽t 0 ..= (- view-w⫽h thumb-w⫽h))}
+
+           ;; Maintain thumb visibility.
+           {¦ x⫽y-visible_ ±thumb-w⫽h ±view-w⫽h}
+             <> {x⫽y-visible: ^(> (abs (- thumb-w⫽h view-w⫽h)) 1)}∥)))
+
+
+(ThumbView)
+  => (thumb style: "bg-ui-decoration-med hover:bg-ui-decoration-high active:bg-ui-subtle \
+                    rounded-full visible:is-thumb")
+
+
+(Input @content_ view_)
+  => (component {@:content}
+       ;;| This is the cell we use to communicate with the view's Scroll (if present),
+       ;;| to tell it to scroll up or down on e.g. mouse wheel.
+       (cell @scroll-signal)
+
+       ;;| We have to remember the content string *we* have last seen. This way we
+       ;;| can detect changes to @content.
+       (cell @seen-content)
+
+       ;;| The input's visuals go here.
+       (frag @view
+         (box style: "membrane hover:cue-hovered focus:cue-focused disabled:cue-disabled"
+           (module {:@content, :@text, :@scroll-signal, :@mouse}
+             (template ^view))))
+
+       ;;| Maintain bindings to useful parts of the text.
+       (part (@text @anchor) {¦ selection-anchor: ±anchor})
+       (part (@text @span) {¦ selection-span: ±span})
+
+       (frag @input (input))
+       (frag @keyboard (keyboard focus: disabled))
+       (frag @mouse-device (mouse *))
+
+       ;;| This rewriter is the "brain" of the input.
+       (rewriter (stageR (rulesetR exh: true))
+         (stage
+           ;; If the content has changed since the time we submitted it, move the cursor
+           ;; back to the beginning.
+           {¦ content_ -content-hashcode_}
+             <> {content-hashcode: ^(hashcode content)}
+           {¦ content-hashcode_ seen-content_: content-hashcode_}
+             <> {(content-hashcode): (), (seen-content): ()}
+           {¦ content-hashcode_ seen-content_ ±anchor ±span}
+             <> {(content-hashcode): (), (seen-content): (), anchor: 0, span: 0}
+
+           {¦ -motions_} <> {motions: ()}
+           {¦ text: {¦ ?nav: (l_ <I> _)} -l: >l} <> {>l: ^l}
+           {¦ text: {¦ ?nav: (_ <I> r_)} -r: >r} <> {>r: ^r}
+           {¦ text: {¦ ?aim: aim←(%not _)} -aim: >aim} <> {>aim: ^aim}
+           {¦ input: ⟨(key _ ⍊ shift)⟩ -shift_} <> {shift: true}
+
+           {¦ input: {¦ focus: (%not false wanted disabled)} -focused_}
+             <> {focused: true}
+
+           {¦ keyboard: [keyboard [key (shift _)]] input: [input] -shift_}
+             <> {shift: true})
+
+         (stage
+          ∥;; Go to rune left, right.
+           {¦ input: ⟨K←[key ⸨left,right⸩]⟩ l⫽r: {¦ rune: ±stride} motions: (_* `motion)}
+             <> {(K): (), motion: (extend ⸨left,right⸩ ^stride)}
+
+           ;; Go to word left, right.
+           {¦ input: ⟨K←(key ⸨left,right⸩ ⍊ ctrl)⟩ l⫽r: {¦ word: ±stride} motions: (_* `motion)}
+             <> {(K): (), motion: (extend ⸨left,right⸩ ^stride)}
+
+           ;; Go to line start, end.
+           {¦ input: ⟨K←[key ⸨home,end⸩]⟩ l⫽r: {¦ ⸨behind,ahead⸩: ±stride} motions: (_* `motion)}
+             <> {(K): (), motion: (extend ⸨left,right⸩ ^stride)}
+
+           ;; Go up, down.
+           {¦ input: ⟨K←[key ⸨up,dn⸩]⟩ l⫽r: {¦ ⸨above,below⸩: ±stride} motions: (_* `motion)}
+             <> {(K): (), motion: (extend ⸨left,right⸩ ^stride)}
+
+           ;; Insert rune.
+           {¦ input: ⟨K←(rune chr_string)⟩ motions: (_* `motion)}
+             <> {(K): (), (motion): ((replace ^chr) (extend 1) (collapse right))}
+
+           ;; Insert newline.
+           {¦ input: ⟨K←(key enter)⟩ motions: (_* `motion)}
+             <> {(K): (), (motion): ((replace "\n") (extend 1) (collapse right))}
+
+           ;; Remove rune behind/ahead.
+           {¦ input: ⟨K←[key ⸨backspace,delete⸩]⟩ l⫽r: {¦ rune: ±stride} motions: (_* `motion)}
+             <> {(K): (), motion: (replace (extend ^stride) "")}
+
+           ;; Remove word behind/ahead.
+           {¦ input: ⟨K←(key ⸨backspace,delete⸩ ⍊ ctrl)⟩ l⫽r: {¦ word: ±stride} motions: (_* `motion)}
+             <> {(K): (), motion: (replace (extend ^stride) "")}
+
+           ;; Select all (C-a)
+           {¦ input: ⟨K←(key "a" ⍊ ctrl)⟩ motions: (_* `motion)}
+             <> {(K): (), motion: (select all)}
+
+           ;; Undo (C-z)
+           {¦ input: ⟨K←(key "z" ⍊ ctrl)⟩ motions: (_* `motion)}
+             <> {(K): (), motion: undo}
+
+           ;; Redo (C-r)
+           {¦ input: ⟨K←(key "r" ⍊ ctrl)⟩ motions: (_* `motion)}
+             <> {(K): (), motion: redo}
+
+           ;; Hover.
+           {¦ mouse view: {¦ -hover_}}
+             <> {hover: true}
+
+           ;; Unhover.
+           {¦ -mouse view: {¦ hover_}}
+             <> {(hover): ()}
+
+           ;; Focus keyboard.
+           {¦ focused keyboard: {¦ focus_: disabled}}
+             <> {focus: always}
+
+           ;; Unfocus keyboard.
+           {¦ -focused keyboard: (keyboard keys_* ⍊ focus_: always)}
+             <> {focus: disabled, (keys): ()}
+
+           ;; Focus view.
+           {¦ focused view: {¦ -focus_}}
+             <> {focus: true}
+
+           ;; Unfocus view.
+           {¦ -focused view: {¦ focus_}}
+             <> {(focus): ()}
+
+           ;; Focus on mouse left button pressed outside the text but still inside
+           ;; the input. This is effective mainly when the text is empty.
+           {¦ -focused mouse: {¦ left} -aim input: {¦ -focus_}}
+             <> {focus: wanted}
+
+           ;; When mouse buttons are pressed outside of input, unfocus.
+           {¦ focused -mouse mouse-device: (mouse _ ¦ (%keytest left middle right)) input: {¦ focus_}}
+             <> {(focus): ()}
+
+           ;; Click to go before rune.
+           {¦ mouse: {¦ left: 1 holding⋮ false} aim: {¦ rune: (±b ..< _)} shift⋮ false motions: (_* `motion)}
+             <> {(motion): (focus ((^br (or shift holding) extend-to goto) ^b)), holding: true}
+
+           ;; Double click to select word.
+           {¦ mouse: {¦ left: 2 holding⋮ false} aim: {¦ word: (±b ..< ±e)} shift⋮ false motions: (_* `motion)}
+             <> {(motion): (focus ((^br (or shift holding) extend-to goto) ^b) (extend ^(- e b))), holding: true}
+
+           ;; Triple click to select line.
+           {¦ mouse: {¦ left: 3 holding⋮ false} aim: {¦ line: (±b ..< ±e)} shift⋮ false motions: (_* `motion)}
+             <> {(motion): (focus ((^br (or shift holding) extend-to goto) ^b) (extend ^(- e b))), holding: true}
+
+           ;; When the left mouse button is released, unset `holding`.
+           {¦ mouse: {¦ -left holding_: true}}
+             <> {(holding): ()}
+
+           ;; Scroll up.
+           {¦ mouse: {¦ wheel-up: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll 0 ^(* n -10))}
+
+           ;; Scroll down.
+           {¦ mouse: {¦ wheel-dn: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll 0 ^(* n 10))}
+
+           ;; Scroll left.
+           {¦ mouse: {¦ wheel-left: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll ^(* n -10) 0)}
+           {¦ shift mouse: {¦ wheel-up: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll ^(* n -10) 0)}
+
+           ;; Scroll right.
+           {¦ mouse: {¦ wheel-right: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll ^(* n 10) 0)}
+           {¦ shift mouse: {¦ wheel-dn: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll ^(* n 10) 0)}∥)
+
+         (stage
+          ∥;; Unclog on invalid or mismatching motions.
+           {¦ motions: (M_ _*)}
+             <> {(M): ()}
+
+           ;; `focus` requests focus if not focused already.
+           {¦ motions: (M←focus _*) input: {¦ -focus_}}
+             <> {(M): (), focus: wanted}
+
+           ;; `extend` unconditionally extends the selection by *delta*.
+           {¦ motions: (M←(extend ±delta) _*) ±span}
+             <> {(M): (), span: ^(+ span delta)}
+
+           ;; `goto` collapses the selection and goes to the given *index*.
+           {¦ motions: (M←(goto ±index) _*) ±anchor ±span}
+             <> {(M): (), anchor: ^index, span: 0}
+
+           ;; `extend-to` extends the selection to the given *index*.
+           {¦ motions: (M←(extend-to ±index) _*) ±anchor ±span}
+             <> {(M): (), span: ^(- index anchor)}
+
+           ;; `collapse` collapses in the preferred direction.
+           {¦ motions: (M←(collapse ⸨left,right⸩) _*) ±anchor ±span}
+             <> {(M): (), anchor: ^(⸨min,max⸩ anchor (+ anchor span)), span: 0}
+
+           ;; Modal `extend` collapses toward a preferred direction depending Shift.
+           {¦ shift motions: ((extend dir_ _) _*)}
+             <> {(dir): ()}
+           {¦ -shift motions: ((extend dir_ _) `M _*)}
+             <> {(dir): (), M: (collapse ^dir)}
+
+           ;; Conditional replace may grow the selection using its *extend* arm if
+           ;; nothing is currently selected.
+           {¦ motions: ((replace extend_ _) _*)}
+             <> {(extend): ()}
+           {¦ motions: (`M (replace extend_ _) _*) span: 0}
+             <> {M: ^extend, (extend): ()}
+
+           ;; Finally, unconditional `replace` replaces the string, collapsing the selection
+           ;; toward the minimum end (which is guaranteed to be valid after removals, insertions,
+           ;; and replacements).
+           {¦ motions: ((replace _ ⍊ -focus_) _*) anchor_: (%number _ >= 0) ±span}
+             <> {focus: ^(+ anchor span)}
+           {¦ motions: ((replace _ ⍊ ±focus -b_ -e_) _*) ±anchor}
+             <> {b: ^(min anchor focus), e: ^(max anchor focus)}
+           {¦ motions: (M←(replace rep_string ⍊ ±b ±e) _*) content_string ±anchor ±span future_}
+             <> {(M): (), future: (), content: ^(~ (runes content 0 ..< b) rep (runes content e ..= -1)), anchor: ^b, span: 0}
+
+           ;; select all` should make a selection spanning the entire *content*, with
+           ;; focus at the end.
+           {¦ motions: (M←(select all) _*) content_string ±anchor ±span}
+             <> {(M): (), anchor: 0, span: ^(charcount content)}
+
+           ;; Implement `undo` and `redo` through manipulation of the history zipper, content,
+           ;; and text's selection-anchor and span.
+           {¦ motions: (M←undo _*) content_string past: (_* record←(pred_ anchor'_ span'_)) future: (`succ _*) ±anchor ±span}
+             <> {content: ^pred, anchor: ^anchor', span: ^span', (record): (), succ: (^content ^anchor ^span)}
+           {¦ motions: (M←redo _*) content_string past: (_* `pred) future: (record←(succ_ anchor'_ span'_) _*) ±anchor ±span}
+             <> {pred: (^content ^anchor ^span), content: ^succ, anchor: ^anchor', span: ^span', (record): ()}∥)
+
+         (stage
+           ;; Update the @seen-content cell with the new content hashcode (or old content
+           ;; hashcode, if nothing has changed!).
+           {¦ -seen-content_ content_string}
+             <> {seen-content: ^(hashcode content)}
+
+           ;; Maintain `disabled` on the view in sync.
+           {¦ content: (%- _string) view: {¦ ⋮disabled} input: {¦ ⋮focus}}
+             <> {disabled: true, focus: disabled}
+           {¦ content_string view: {¦ disabled_}}
+             <> {(disabled): ()}
+
+           ;; Release focus when the content cell is lost for some reason.
+           {¦ focused content: (%- _string) input: {¦ focus_}}
+             <> {focus: disabled}))
+
+       (section "History (undo/redo)"
+         ;;| NOTE: The way we handle undo/redo is pretty degenerate. In particular
+         ;;| because you often need to double tap Ctrl-Z because it manages to save
+         ;;| the current state before you get to hit Ctrl-Z so you have to skip through
+         ;;| said state first . . .
+         (guard (@input (input _* ⍊ focus: (%not false wanted)))
+           (frag @beat
+             (sequencer (1 s)
+               (> true) false)))
+
+         (rewriter (rulesetR exh: true)
+           ;; When the beat is true, immediately snap it back to false and announce
+           ;; a turn.
+           {¦ beat: (sequencer _ a←(> true) b_) -turn_}
+             <> {a: true, b: (> false), turn: true}
+
+           ;; Keep at most 64 entries in *past*.
+           {¦ turn past: (oldest_ (%plural min: 63))}
+             <> {(oldest): ()}
+
+           ;; Prepare a submission.
+           {¦ turn content_string ±anchor ±span -submission_ future: ()}
+             <> {submission: (^content ^anchor ^span), backup: true}
+
+           ;; If the submission is a duplicate, decline it.
+           {¦ submission_: record_ past: (_* record_)}
+             <> {(submission): ()}
+
+           ;; If the submission is not a duplicate, add it to the end of history.
+           {¦ submission_ past: (_* `record)}
+             <> {(submission): (), record: ^submission})
+
+         (cell @past ())
+         (cell @future ())))
+
+(Input @content_ ¦ options_)
+  => ($Input ^content ($InputView ^… options))
+
+
+;; Reference: https://m3.material.io/components/text-fields/specs
+(InputView ⍊ label⋮ "" placeholder⋮ "" wrap⋮ true content-style⋮ "")
+  => (box style: "bg-ui-surface border-b-sm border-ui-decoration-med in-focused:border-ui-accent \
+                  p-2 rounded-t-sm flow-col gap-1 in-disabled:opacity-25% in-focused:input"
+       (^unless (= label "")
+         (p ^label style: "upcase font-condensed font-medium text-ui-supplementary text-xs/4"))
+       (box style: "fr-1"
+         ;;| NOTE: We use on-press here to make sure the mousearea is aware of *dragging*,
+         ;;| and doesn't lose a dragging mouse once it's outside the mousearea. In our specific
+         ;;| case this may occur when you do selection dragging.
+         (frag (@mouse [mousearea mouse_])
+           (mousearea position: on-press))
+         (ensemble
+           ($Scroll @scroll-signal)
+           (box style: ^"-wrap:content-x content-y font-sans font-text text-base/6 ⸢content-style⸣"
+                ^:wrap
+             (^unless (= placeholder "")
+               (p style: "text-ui-muted present hide:absent in-focused:absent"
+                  hide: ^^(> (charcount @content) 0)
+                 ^placeholder))
+             (frag @text
+               (p style: "text-ui-content sel sel-clearance-line sel-endl sel-aim \
+                          beam-transparent in-focused:beam-thick sel-ui-decoration-med \
+                          sel-text-ui-supplementary in-focused:sel-ui-accent \
+                          in-focused:sel-text-ui-base in-hovered:cursor-text"
+                  selection-anchor: 0
+                  selection-span: 0
+                  ?nav: _
+                  ?aim: _
+                 @content))))))

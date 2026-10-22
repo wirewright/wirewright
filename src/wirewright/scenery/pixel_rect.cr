@@ -42,6 +42,12 @@ module Ww::Scenery
       end
     end
 
+    # Paints all pixels in this rect with the given *color*.
+    def fill(color : Pigment::RGBA) : Nil
+      pixelsptr = @pixels.as(Pixel*)
+      pixelsptr.fill(@width * @height, Pixel.of(color))
+    end
+
     # Converts this pixel rect to a PPM image.
     def to_ppm : Term::Blob
       Term::Blob.build do |io|

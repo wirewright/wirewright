@@ -142,7 +142,7 @@ module Ww::Scenery
     part : Rect,
     copying: true
 
-  private def hit(node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
     unless vbox.bounds.intersects?(itf.map(query.rect))
@@ -159,7 +159,7 @@ module Ww::Scenery
     end
   end
 
-  private def hit_index(node : ShapedText, box : OriginBox, point : Point) : Int32
+  private def hit_index(node : ShapedText, box : Box, point : Point) : Int32
     if point.y <= 0
       return 0 # before begin
     end
@@ -169,6 +169,7 @@ module Ww::Scenery
     cursor = 0
 
     line_wrap(node, at: box.bounds.w) do |line|
+      # Quickly skip this line if the point falls below it.
       if point.y > y + node.line_height
         line.items.each do |item|
           case item
@@ -207,10 +208,10 @@ module Ww::Scenery
     node.caption.size # after end
   end
 
-  private def hit(node : ShapedText, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : ShapedText, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    unless vbox.bounds.intersects?(itf.map(query.rect))
+    unless query.mode.single? || vbox.bounds.intersects?(itf.map(query.rect)) || box.bounds.intersects?(query.rect)
       return HitEmpty.new
     end
 
@@ -228,22 +229,22 @@ module Ww::Scenery
     HitTextLeaf.new(anchor_index, focus_index, seln, hover, part)
   end
 
-  private def hit(node : TransformMatrix, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : TransformMatrix, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, Tf[node.tf, tf], query)
   end
 
-  private def hit(node : Clip, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Clip, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, Tf[Tf.translate(-node.offset), tf], query)
   end
 
-  private def hit(node : Padding | Align | XYStack | ZStack | Composite | Vantage | Gate, box : OriginBox, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
+  private def hit(node : Padding | Align | XYStack | ZStack | Composite | Vantage | Gate, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     box_hit(node, box, vbox, tf, tf, query)
   end
 
-  private def box_hit(node : AimedNode, box : OriginBox, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
+  private def box_hit(node : AimedNode, box : Box, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    unless vbox.bounds.intersects?(itf.map(query.rect))
+    unless query.mode.single? || vbox.bounds.intersects?(itf.map(query.rect)) || box.bounds.intersects?(query.rect)
       return HitEmpty.new
     end
 
@@ -266,8 +267,8 @@ module Ww::Scenery
 
       translated_child_tf = Tf[Tf.translate(child_box.bounds.tl), child_tf]
       child_vbox = VBox.new(child_vbox.bounds.translate(-child_box.bounds.tl), child_vbox.children)
-      child_origin_box = OriginBox.new(child_box.bounds.size, child_box.children)
-      child_hit = hit(child_node, child_origin_box, child_vbox, translated_child_tf, query)
+      child_box = child_box.translate(box.bounds.tl)
+      child_hit = hit(child_node, child_box, child_vbox, translated_child_tf, query)
 
       present ||= !child_hit.is_a?(HitEmpty)
       hits << child_hit
@@ -284,7 +285,7 @@ module Ww::Scenery
 
   # Constructs a hit tree for *root*, *box*, and *vbox* according to *query*.
   def hit(root : Root(AimedNode), box : OriginBox, vbox : VBox, query : HitQuery) : HitNode
-    hit(root.node, box, vbox, Tf.new, query)
+    hit(root.node, box.translate(Point[0, 0]), vbox, Tf.new, query)
   end
 
   # Constructs a hit tree for *scene* according to *query*.

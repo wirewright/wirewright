@@ -1,0 +1,21 @@
+(window style: "p-5 flow-col gap-5 content-clip" height: 600
+  ;;| Input without placeholder
+  (cell @input0 "")
+  (cell @input1 "")
+  (cell @input2 "")
+  (cell @input3 "")
+  ($Input @input0)
+  ($Input @input1 placeholder: "Input with placeholder")
+  ($Input @input2 label: "Input with label")
+  ($Input @input3 label: "Input with label" placeholder: "...and placeholder")
+  ;;| Usage example
+  (module {}
+    (group style: "max-h-xs gap-1"
+      (cell @ml "(x⫽y⫽z ^a⫽b⫽c) => ^(* a⫽b⫽c 2)")
+      (box style: "fr-1"
+        ($Input @ml content-style: "font-notation"))
+      (view (@ml text_string @view)
+        (^match (ml/document text)
+          (when [ok document_] (code ^\document))
+          (when (err ⍊ detail_string) (p ^detail style: "text-theme-attention-fg"))))
+      (node @view))))

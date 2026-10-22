@@ -358,6 +358,8 @@ module Ww::Scenery
     end
   end
 
+  # NOTE: `FontMetrics#line_height` does not take leading into account whereas
+  # `line_height` does.
   defcase ShapedText,
     caption : Pf::GraphemeSeln,
     seq : Slice(ShapedItem),
@@ -371,11 +373,11 @@ module Ww::Scenery
   # NOTE: This struct is rather large, and is intended for storage in groups
   # (e.g. `Slice`) rather than standalone.
   #
-  # NOTE: *cluster* is absolute, meaning it refers into the full text
-  # string (`Text#caption`) as opposed to, say, `ShapedParagraph#text`.
+  # *grapheme index* is a char index.
   defrecord ShapedStyledGlyph,
     font : Asset::Font,
     grapheme_index : Int32,
+    grapheme_chrsize : Int32,
     glyph_index : UInt32,
     break_policy : BreakPolicy,
     advance : Point,
@@ -388,9 +390,16 @@ module Ww::Scenery
   # Represents the relevant measurements of a glyph.
   defrecord GlyphMeasurement, advance : Magnitude, extents : Rect
 
+  # *grapheme index* is a char index.
   defrecord Endl,
     grapheme_index : Int32,
     decorations : Slice(GlyphDecoration)
+
+  struct Endl
+    def grapheme_chrsize : Int32
+      1
+    end
+  end
 
   defrecord IBeam, selection : Selection
 
@@ -607,6 +616,7 @@ module Ww::Scenery
     offset : Point,
     aim : Point,
     aim_visible : Bool,
+    aim_rect : Rect?,
     radii : RectRadii,
     goal : Point?,
     caches_hash: true

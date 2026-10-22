@@ -293,6 +293,7 @@ module Ww::Scenery
       seq << ShapedStyledGlyph.new(
         font: frag.glyph.font,
         grapheme_index: frag.text.begin,
+        grapheme_chrsize: frag.text.size,
         glyph_index: frag.glyph.info.index,
         break_policy: break_policy,
         advance: frag.glyph.info.advance,

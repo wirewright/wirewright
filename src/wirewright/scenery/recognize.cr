@@ -15,7 +15,7 @@ module Ww::Scenery
       Term.of(:svg),
       Term.of(:img),
       Term.of(:loading),
-      Term.of(:"hit-area"),
+      Term.of(:hitarea),
     }
 
     # :nodoc:
@@ -1498,10 +1498,10 @@ module Ww::Scenery
         Gate.new(children)
       end
 
-      # |@ scenery.hit-area
+      # |@ scenery.hitarea
       #
       # |@pattern
-      # [hit-area payload_]
+      # [hitarea payload_]
       #
       # |@key payload
       # The *payload* can be any term whatsoever.
@@ -1510,8 +1510,8 @@ module Ww::Scenery
       # An internal utility node which fills all available space and denotes it as
       # a *hit area*: an area which participates in hit testing. This node acts as
       # the foundation for `mxrack.mousearea`. In fact, `mousearea`s are lowered to
-      # `hit-area` nodes eventually.
-      matchpi %{[hit-area payload_]} do
+      # `hitarea` nodes eventually.
+      matchpi %{[hitarea payload_]} do
         HitArea.new(payload)
       end
 

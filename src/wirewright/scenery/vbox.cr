@@ -2,8 +2,20 @@ module Ww::Scenery
   # :nodoc:
   defrecord VBox, bounds : Rect, children : Slice(VBox)
 
-  private def vbox!(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph | ShapedText, box : OriginBox) : VBox
+  private def vbox!(cache, node : Inert | RectShape | HitArea | Pending | Img | Svg | IconGlyph, box : OriginBox) : VBox
     VBox.new(box.bounds, children: Slice(VBox).empty)
+  end
+
+  private def vbox!(cache, node : ShapedText, box : OriginBox) : VBox
+    w = Magnitude.new(0)
+    h = Magnitude.new(0)
+
+    line_wrap(node, at: box.bounds.w) do |line|
+      w = Math.max(w, line.advance)
+      h += node.line_height
+    end
+
+    VBox.new(Rect[box.bounds.x, box.bounds.y, w, h], children: Slice(VBox).empty)
   end
 
   private def vbox!(cache, node : TransformMatrix, box : OriginBox) : VBox

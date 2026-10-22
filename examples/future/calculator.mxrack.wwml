@@ -1,0 +1,227 @@
+(KeypadTextButton (@msgs_ msg_ ¦ accent⋮ none) caption_string)
+  => ($Trigger (^msgs ^msg)
+       (box
+         (p style: "py-3 content-center text-xl leading-tight text-neutral-200 \
+                    accent/bright:text-blue-300 accent/control:text-purple-300 \
+                    in-hover:bg-neutral-800 in-hover:cursor-pointer in-active:bg-neutral-700 \
+                    rounded-lg"
+            ^:accent
+           ^caption)
+         (frag @mousearea (mousearea))))
+
+(KeypadIconButton (@msgs_ msg_ ¦ accent⋮ none) icon_string)
+  => ($Trigger (^msgs ^msg)
+       (box
+         (icon style: "py-3 content-center text-xl leading-none text-neutral-200 \
+                       accent/bright:text-blue-300 in-hover:bg-neutral-800 \
+                       accent/control:text-purple-300 in-hover:cursor-pointer \
+                       in-active:bg-neutral-700 rounded-lg"
+               ^:accent
+           ^icon)
+         (frag @mousearea (mousearea))))
+
+(window title: "Calculator"
+        width: 393
+        height: 786
+        style: "backdrop-neutral-900 px-5 py-7 flow-col gap-12 input"
+
+  (section "State"
+    (cell @workspace (top (in "")))
+    (cell @history ()))
+
+  (section "Display"
+    (module {:@history :@workspace}
+      (group style: "flow-col fr-1 gap-1 bottom"
+        ;;| This piece of machinery looks at the last expression in history and
+        ;;| pretty-prints it as math. Remember that our base representation is symbolic,
+        ;;| so we have to work some to get to a string one.
+        (part (@history @prev) (_* prev_))
+        (rewriter (@prev - ascR - @prev-display)
+          (in caption_string) => ^caption
+          (- a_string) => ^"-⸢a⸣"
+          (op←(%any + - * /) a_string b_string)
+            => ^"(⸢a⸣ ⸢op⸣ ⸢b⸣)"
+          (top expr_string)
+            => (p style: "text-neutral-500 right clip"
+                 ^expr))
+        (node @prev-display)
+
+        ;;| Use ascR (ascending rewriter) to convert the contents of the workspace
+        ;;| to Microfold.
+        (rewriter (@workspace - ascR - @display)
+           (impassable [in _string])
+           wait => (icon "hourglass_top" style: "text-neutral-200")
+           operand_string => (p ^operand style: "text-neutral-50 center-y")
+           (- a_)
+             => (group style: "flow-row border border-neutral-800 bg-neutral-900 \
+                               p-1 gap-1 rounded"
+                  (p "-" style: "text-blue-300 center-y") ^a)
+           (op←(%any + - * /) a_ b_)
+             => (group style: "flow-row border border-neutral-800 bg-neutral-900 \
+                               p-1 gap-1 rounded"
+                  ^a
+                  (p style: "text-blue-300 center-y"
+                    (^match op
+                      (when * "×")
+                      (when / "÷")
+                      (when _ ^\op)))
+                  ^b)
+           (in buffer_string)
+             => (p style: "text-neutral-50 bg-neutral-800 bg-min-none sel sel-aim \
+                           sel-clearance-3 beam-thick sel-violet-400 rounded-sm center-y"
+                   selection-anchor: ^(charcount buffer)
+                   selection-span: 0
+                  ^buffer)
+           (in child_)
+             => (group style: "aim center-y flow-col border-b-md border-violet-400"
+                  ^child)
+           (top node_)
+             => (group style: "clip right p-1"
+                  (group style: "font-3xl leading-none content"
+                    ^node)))
+        (node @display))))
+
+  (section "Keypad"
+    (module {:@actions}
+      (cell @action)
+      (feed @action @actions)
+      (frag @input (input focus: always))
+
+      ;;| Translate key presses to actions.
+      (backsys
+        {¦ input: ⟨K←(rune digit←(%any "0" "1" "2" "3" "4" "5" "6" "7" "8" "9" "."))⟩ -action_}
+          <> {(K): (), action: ^digit}
+        {¦ input: ⟨K←(rune "+")⟩ -action_}
+          <> {(K): (), action: +}
+        {¦ input: ⟨K←(rune "-")⟩ -action_}
+          <> {(K): (), action: -}
+        {¦ input: ⟨K←(rune "*")⟩ -action_}
+          <> {(K): (), action: *}
+        {¦ input: ⟨K←(rune "/")⟩ -action_}
+          <> {(K): (), action: /}
+        {¦ input: ⟨K←(rune "%")⟩ -action_}
+          <> {(K): (), action: %}
+        {¦ input: ⟨K←(rune "=")⟩ -action_}
+          <> {(K): (), action: eq}
+        {¦ input: ⟨K←(rune "s")⟩ -action_}
+          <> {(K): (), action: sign}
+        {¦ input: ⟨K←(key key←(%any up dn left right))⟩ -action_}
+          <> {(K): (), action: ^key}
+        {¦ input: ⟨K←(key delete)⟩ -action_}
+          <> {(K): (), action: clear}
+        {¦ input: ⟨K←(key backspace)⟩ -action_}
+          <> {(K): (), action: backspace})
+
+      ;;| Display a visual keypad and translate presses of buttons to actions.
+      (group style: "flow-col min-h-md item-fr-1"
+        (group style: "flow-row item-fr-1"
+          ($KeypadTextButton (@action clear accent: bright) "C")
+          ($KeypadIconButton (@action backspace accent: bright) "backspace")
+          ($KeypadTextButton (@action % accent: bright) "%")
+          ($KeypadTextButton (@action / accent: bright) "÷"))
+        (group style: "flow-row item-fr-1"
+          ($KeypadTextButton (@action "7") "7")
+          ($KeypadTextButton (@action "8") "8")
+          ($KeypadTextButton (@action "9") "9")
+          ($KeypadTextButton (@action * accent: bright) "×"))
+        (group style: "flow-row item-fr-1"
+          ($KeypadTextButton (@action "4") "4")
+          ($KeypadTextButton (@action "5") "5")
+          ($KeypadTextButton (@action "6") "6")
+          ($KeypadTextButton (@action - accent: bright) "-"))
+        (group style: "flow-row item-fr-1"
+          ($KeypadTextButton (@action "1") "1")
+          ($KeypadTextButton (@action "2") "2")
+          ($KeypadTextButton (@action "3") "3")
+          ($KeypadTextButton (@action + accent: bright) "+"))
+        (group style: "flow-row item-fr-1"
+          ($KeypadTextButton (@action sign) "±")
+          ($KeypadTextButton (@action "0") "0")
+          ($KeypadIconButton (@action up accent: control) "keyboard_arrow_up")
+          ($KeypadTextButton (@action eq accent: bright) "="))
+        (group style: "flow-row item-fr-1"
+          ($KeypadTextButton (@action ".") ".")
+          ($KeypadIconButton (@action left accent: control) "keyboard_arrow_left")
+          ($KeypadIconButton (@action dn accent: control) "keyboard_arrow_down")
+          ($KeypadIconButton (@action right accent: control) "keyboard_arrow_right")))))
+
+  ;;| Buttons from the Keypad report actions to a centralized queue.
+  (queue (@action @actions) ())
+
+  (section "Control"
+    ;;| The following somewhat intimidating backsystem handles input; that is, moves
+    ;;| the cursor according to what the buttons say, appends digits, surrounds
+    ;;| the cursor with more complex structure such as the infixes and so on.
+
+    (backsys
+      {¦ action_}
+        <> {(action): ()}
+      {¦ action_string workspace: ⟪(in buffer_string)⟫}
+        <> {(action): (), buffer: ^(~ buffer action)}
+      {¦ action: clear workspace_: ⟪(in _)⟫}
+        <> {(action): (), workspace: (top (in ""))}
+      {¦ action_: backspace workspace: ⟪(in buffer_dict)⟫}
+        <> {(action): (), buffer: ""}
+      {¦ action_: backspace workspace: ⟪(in buffer_string)⟫}
+        <> {(action): (), buffer: ^(runes buffer 0 ..= -2)}
+      {¦ action_: (%any + - * /) workspace: ⟪cursor←(in buffer←(%not ""))⟫}
+        <> {(action): (), cursor: (^action ^buffer (in ""))}
+      ;; Precedence
+      {¦ action_: (%any + -)
+         workspace: ⟪((%any + -) _ parent←((%any * /) _ cursor←(in buffer←(%not ""))))⟫}
+        <> {(action): (), cursor: ^buffer, parent: (^action ^(up parent) (in ""))}
+      {¦ action_: up
+         workspace: (top ⟪parent←⟨cursor←(in buffer←(%not ""))⟩⟫)}
+        <> {(action): (), cursor: ^buffer, parent: (in ^(up parent))}
+      {¦ action_: dn
+         workspace: ⟪cursor←(in (head_ l_ rest_*))⟫}
+        <> {(action): (), cursor: (^head (in ^l) ^*rest)}
+      {¦ action_: left
+         workspace: ⟪(_ l_ r←(in buffer←(%not "")))⟫}
+        <> {(action): (), l: (in ^l), r: ^buffer}
+      {¦ action_: right
+         workspace: ⟪(_ l←(in buffer←(%not "")) r_)⟫}
+        <> {(action): (), l: ^buffer, r: (in ^r)}
+      {¦ action_: sign,
+         workspace: ⟪(in buffer←(%not ""))⟫}
+        <> {(action): (), buffer: (- ^buffer)}
+      {¦ action_: sign,
+         workspace: ⟪(in buffer←(- interior←(%not "")))⟫}
+        <> {(action): (), buffer: ^interior}
+      {¦ action_: %,
+         workspace: ⟪(in buffer←(%not ""))⟫}
+        <> {(action): (), buffer: (/ ^buffer "100")}
+      {¦ action_: %,
+         workspace: ⟪(in buffer←(/ interior←(%not "") "100"))⟫}
+        <> {(action): (), buffer: ^interior}
+      {¦ action_: eq,
+         workspace_: (top expr←⟪cursor←(in buffer←(%not ""))⟫),
+         history: (_* `past),
+         -engine-in_}
+        <> {(action): (),
+            cursor: ^buffer,
+            workspace: (top wait),
+            past: ^(up workspace),
+            engine-in: ^(up expr)}))
+
+  (section "Engine (expression evaluator)"
+    (cell @engine-in)
+    (cell @engine-out)
+    (module {@in: @engine-in @out: @engine-out}
+      (rewriter (@in -> ascR -> @out)
+        n_string => ^(ml/term n)
+        [err] => 0
+        [ok _] => 0
+        [ok ±n] => ^n
+        (+ ±a ±b) => ^(+ a b)
+        (- ±a) => ^(- 0 a)
+        (- ±a ±b) => ^(- a b)
+        (* ±a ±b) => ^(* a b)
+        (/ ±a ±b) => ^(/ a b))))
+
+  (section "Answer transfer"
+    (backsys
+      {¦ workspace: (top expr←wait) ±engine-out}
+        <> {expr: (in ^(ml/compact engine-out)), (engine-out): ()})))
+
+((I modify: true structural: true multiline: true compose: true) ("" * "") 0)

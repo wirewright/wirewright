@@ -72,6 +72,7 @@ require "./wirewright/d7"
 require "./wirewright/alloy"
 require "./wirewright/harmony"
 require "./wirewright/rack"
+require "./wirewright/mxrack"
 
 Log.setup_from_env(
   default_level: :warn,

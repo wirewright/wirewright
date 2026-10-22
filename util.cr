@@ -524,6 +524,10 @@ abstract struct Int
     Int.mix(x ^ y.rotate_left(5))
   end
 
+  def self.mix(x : UInt64, y : UInt64, *zs : UInt64) : UInt64
+    mix(mix(x, y), *zs)
+  end
+
   def bit_set?(index)
     !bit(index).zero?
   end
@@ -5179,5 +5183,39 @@ end
 struct MIME::MediaType
   def self.parse(string : String, &block : String -> NoReturn)
     parse_impl(string) { |err| yield err }
+  end
+end
+
+struct ::Pf::GraphemeView
+  def to_chr? : Char?
+    return unless bytesize <= 4 # ?!
+
+    reader = Char::Reader.new(@string, pos: @byte_start)
+    reader.current_char
+  end
+end
+
+struct ::Pf::GraphemeSeln
+  # Grows this selection by one grapheme on the right.
+  def grow : GraphemeSeln
+    if @end == @trunk.total
+      return after_end
+    end
+
+    GraphemeSeln.new(@trunk, begin: @begin, end: @end + 1)
+  end
+
+  def starts_with?(& : Char -> Bool) : Bool
+    return false unless size >= 1
+    return false unless chr = first.grapheme.to_chr?
+
+    yield chr
+  end
+
+  def ends_with?(& : Char -> Bool) : Bool
+    return false unless size >= 1
+    return false unless chr = last.grapheme.to_chr?
+
+    yield chr
   end
 end

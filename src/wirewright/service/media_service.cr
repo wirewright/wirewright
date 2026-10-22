@@ -1006,15 +1006,11 @@ module Ww
         end
 
         # Make a scene source or use the latest one.
-        scenesrc0 = session.scenesrc
-        scenesrc1 = Scenery::Safe.scenesrc(session.cache, session.spec.content, Magnitude.new(width), Magnitude.new(height))
-        unless scenesrc0 == scenesrc1
-          session.scenesrc = scenesrc1
-        end
+        session.scenesrc = scenesrc = Scenery::Safe.scenesrc(session.cache, session.scenesrc, session.spec.content)
 
         # Poll the source for the latest version of the scene. It changes as more
         # images and fonts load and so on.
-        scene = Scenery::Safe.poll(session.cache, scenesrc1).unwrap
+        scene = Scenery::Safe.poll(session.cache, scenesrc, Magnitude.new(width), Magnitude.new(height)).unwrap
 
         invalidated = size_changed || backdrop_changed
 

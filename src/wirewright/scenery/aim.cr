@@ -163,7 +163,7 @@ module Ww::Scenery
       target_offset = page_offset
     end
 
-    aimed_node = Clip.new(aimed_children, target_offset, view_offset, aim_visible, node.radii, node.goal)
+    aimed_node = Clip.new(aimed_children, target_offset, view_offset, aim_visible, aim_rect, node.radii, node.goal)
 
     if node.aim_through
       foci = foci.to_readonly_slice(&.translate(-target_offset))

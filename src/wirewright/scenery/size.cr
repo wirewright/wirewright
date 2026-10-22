@@ -139,7 +139,7 @@ module Ww::Scenery
   # text *node*.
   #
   # *limit* is allowed to be infinite, in which case no wrapping is performed.
-  def line_wrap(node : ShapedText, at limit : Magnitude, & : ShapedLine ->) : Nil
+  def line_wrap(node : ShapedText, at limit : Magnitude, *, collapse : Bool = true, & : ShapedLine ->) : Nil
     bol = node.seq
     cursor = bol
     state = nil
@@ -173,7 +173,11 @@ module Ww::Scenery
         in .preserve?
           state = {bol.upto(cursor + 1), advance, cursor + 1}
         in .collapse?
-          state = {bol.upto(cursor), advance, cursor + 1}
+          if collapse
+            state = {bol.upto(cursor), advance, cursor + 1}
+          else
+            state = {bol.upto(cursor + 1), advance, cursor + 1}
+          end
         end
 
         advance += item.advance.x
@@ -217,7 +221,7 @@ module Ww::Scenery
 
       case item
       in Endl
-        yield ShapedLine.new(word.upto(cursor), advance)
+        yield ShapedLine.new(word.upto(cursor + 1), advance)
       in ShapedStyledGlyph
         case item.break_policy
         in .no_break?

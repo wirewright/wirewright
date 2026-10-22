@@ -31,6 +31,28 @@
 # `Scenery` are public for documentation purposes only. Most public objects under
 # the namespace `Scenery` are public for the same reason; you almost never
 # interact with them directly.
+#
+# TODO: I made several design mistakes in Scenery that we should fix in
+# the future. First of all, there are generics in `Node` (see `AimedNode` etc.).
+# I don't think they were the right decision because Crystal doesn't like them
+# sometimes. The second mistake is separating Box, OriginBox, and others. The
+# idea is to do more rewriting instead of zipping. Recognize rewrites a term
+# into a source tree. Assets rewrite a source tree into a prepared tree. Sizing
+# rewrites a prepared tree into a sized tree (where each node gains a size).
+# Positioning rewrites a sized tree into a positioned tree (where sizes are
+# replaced with bounding boxes). There are further passes as well: aim, elevate
+# operate similarly, and they can be run in one's order of choice. Importantly,
+# as we move through these passes, the number of nodes we have to worry about
+# should shrink. Aim removes aim-related nodes. Elevate removes Overlay and
+# Page. Positioning + sizing removes padding, x/y-stack, and many other nodes.
+# In the end we have to worry only about a very small number of primitive
+# nodes: things like Img, IconGlyph, ShapedText, TransformMatrix, ZStack.
+# Additionally, many nodes in the current design accept `children : Slice(Node)`
+# where they could have simply accepted `child : Node` or `child : ZStack`.
+# Turning everything into pure tree rewriting, in other words, will be generally
+# advantageous, at least I think so. This implementation is only halfway through
+# and that makes it not very convenient to work with. I'd expect a correct
+# implementation to be much simpler than what we have here.
 module Ww::Scenery
   extend self
 
@@ -110,23 +132,14 @@ module Ww::Scenery
   # Scene sources are immutable. It is safe to pass them around between different threads.
   class SceneSource
     # :nodoc:
-    getter width : Magnitude
-
-    # :nodoc:
-    getter height : Magnitude
-
-    # :nodoc:
     getter recognized_root : Root(RecognizedNode)
 
     # :nodoc:
     getter pending : Slice(Asset::Pending)
 
     # :nodoc:
-    def initialize(@width, @height, @recognized_root, @pending)
+    def initialize(@recognized_root, @pending)
     end
-
-    # Scenes are compared by width, height, and content.
-    def_equals_and_hash width, height, recognized_root
   end
 
   # Front-facing, thread-safe API for `Scenery`.
@@ -151,52 +164,69 @@ module Ww::Scenery
       CacheSet.new
     end
 
-    # Compiles a *document* into a scene.
+    # Compiles an entirely new *document* into a scene (no previous scene). If there
+    # is a previous scene, consider using the other overload so that pending assets
+    # are reused rather than re-queried (if possible).
     #
-    # - *cache* is the cache set to use (see `cache`).
-    # - *width* is the width to use for layout at the top-level (e.g., screen or
-    #   window width).
-    # - *height* is the height to use for layout at the top-level (e.g., screen or
-    #   window height).
-    def scenesrc(cache : CacheSet, document : Term, width : Magnitude, height : Magnitude) : SceneSource
+    # *cache* is the cache set to use (see `cache`).
+    def scenesrc(cache : CacheSet, document : Term) : SceneSource
       @@lock.synchronize do
         recognized_root = Scenery.recognize(cache, document: document)
         queries = Scenery.queries(cache, recognized_root)
         pending = Scenery.schedule(queries)
 
-        SceneSource.new(width, height, recognized_root, pending)
+        SceneSource.new(recognized_root, pending)
+      end
+    end
+
+    def scenesrc(cache : CacheSet, previous : SceneSource?, document : Term) : SceneSource
+      @@lock.synchronize do
+        recognized_root = Scenery.recognize(cache, document: document)
+        if previous && previous.recognized_root == recognized_root
+          return previous
+        end
+
+        queries = Scenery.queries(cache, recognized_root)
+        pending = Scenery.schedule(queries)
+
+        SceneSource.new(recognized_root, pending)
       end
     end
 
     # Polls assets and returns the resulting `Scene`. Pending assets usually show as
     # a placeholder of some sort.
-    def poll(cache : CacheSet, scenesrc : SceneSource) : Outcome::Accepted(Scene)
+    #
+    # - *width* is the width to use for layout at the top-level (e.g., screen or
+    #   window width).
+    # - *height* is the height to use for layout at the top-level (e.g., screen or
+    #   window height).
+    def poll(cache : CacheSet, scenesrc : SceneSource, width : Magnitude, height : Magnitude) : Outcome::Accepted(Scene)
       @@lock.synchronize do
         Scenery.poll(cache, scenesrc.pending).map do |assets|
           asset_resn = Scenery.resolve(cache, assets, scenesrc.recognized_root)
           shaped_root = Scenery.shape(cache, asset_resn)
-          sized_root, size_root = Scenery.size(cache, shaped_root, Cst.new(0, scenesrc.width, 0, scenesrc.height))
+          sized_root, size_root = Scenery.size(cache, shaped_root, Cst.new(0, width, 0, height))
           box_root = Scenery.box(cache, sized_root, size_root)
           elevated_root, elevated_box = Scenery.elevate(cache, sized_root, box_root)
           aimed_root = Scenery.aim(cache, elevated_root, elevated_box)
           vbox = Scenery.vbox(cache, aimed_root, elevated_box)
 
-          Scene.new(scenesrc.width, scenesrc.height, aimed_root, elevated_box, vbox)
+          Scene.new(width, height, aimed_root, elevated_box, vbox)
         end
       end
     end
 
     # Waits for all assets to load (or fail loading) and returns the resulting `Scene`.
-    def wait(cache : CacheSet, scenesrc : SceneSource) : Outcome::Accepted(Scene)
+    def wait(cache : CacheSet, scenesrc : SceneSource, width : Magnitude, height : Magnitude) : Outcome::Accepted(Scene)
       scenesrc.pending.each(&.promise.wait)
 
-      poll(cache, scenesrc)
+      poll(cache, scenesrc, width, height)
     end
 
     # A shorthand for constructing a scene source (see `scenesrc`) and waiting for
     # all assets to load.
     def scene(cache : CacheSet, document : Term, width : Magnitude, height : Magnitude) : Outcome::Accepted(Scene)
-      wait(cache, scenesrc: scenesrc(cache, document, width, height))
+      wait(cache, scenesrc(cache, document), width, height)
     end
 
     # Converts a compiled *scene* to a tree of draw commands. The draw commands can
@@ -229,7 +259,8 @@ module Ww::Scenery
 
     # Writes the raster image for *command* to *screen*.
     #
-    # See `.rasterize(PixelRect, DrawCommand, Slice(Rect))` for more info.
+    # Infinite rectangles are supported in *dirty rects* to mark the entirety of
+    # *screen* as dirty.
     #
     # EXPERIMENTAL: *dirty_rects* support is experimental. It can improve performance
     # substantially, but I don't know whether what we do right now actually covers all
@@ -324,6 +355,32 @@ module Ww::Scenery
       @@lock.synchronize do
         Scenery.describe(cache, scene, Scenery.hit(scene, query))
       end
+    end
+  end
+
+  def first?(node : AimedNode, box : Box, &fn : AimedNode, Box -> T?) : T? forall T
+    if result = fn.call(node, box)
+      return result
+    end
+
+    return unless node.responds_to?(:children)
+
+    node.children.zip(box.children) do |child, child_box|
+      next unless result = first?(child, child_box.translate(box.bounds.tl), &fn)
+      return result
+    end
+  end
+
+  def first?(node : AimedNode, box : Box, cls : T.class) : T? forall T
+    first?(node, box) { |candidate_node, _| candidate_node.as?(T) }
+  end
+
+  def hitarea?(node : AimedNode, box : Box, payload : Term) : {HitArea, Box}?
+    first?(node, box) do |candidate_node, candidate_box|
+      next unless hitarea = candidate_node.as?(HitArea)
+      next unless hitarea.payload == payload
+
+      {hitarea, candidate_box}
     end
   end
 end
