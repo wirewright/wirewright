@@ -51,10 +51,6 @@ module Ww
     def make(cls : {Window.class, Renderer.class}, title : String, width : Int32, height : Int32, flags = WindowFlags::None) : {Window, Renderer}
       assert_true LibSDL.create_window_and_renderer(title, width, height, flags, out window, out renderer)
 
-      if LibSDL.set_render_vsync(renderer, LibSDL::RENDERER_VSYNC_ADAPTIVE) == FALSE
-        Log.notice { "setting Vsync to ADAPTIVE failed, continuing with SDL defaults..." }
-      end
-
       {window, renderer}
     end
 
@@ -111,6 +107,10 @@ module Ww
       end
     end
 
+    def set(renderer : Renderer, *, color : {UInt8, UInt8, UInt8, UInt8}) : Nil
+      assert_true LibSDL.set_render_draw_color(renderer, *color)
+    end
+
     def resize(window : Window, width : Int32, height : Int32) : Nil
       assert_true LibSDL.set_window_size(window, width, height)
     end
@@ -123,6 +123,10 @@ module Ww
       ensure
         LibSDL.unlock_texture(texture)
       end
+    end
+
+    def clear(renderer : Renderer) : Nil
+      LibSDL.render_clear(renderer)
     end
 
     def copy(src texture : Texture, dst renderer : Renderer, width : Int32, height : Int32)
@@ -199,6 +203,21 @@ module Ww
 
       transcribe(event)
     end
+
+    # @@watches = [] of {(Event -> Bool), Void*}
+
+    # def watch(&fn : Event -> Bool) : Nil
+    #   fn_boxed = Box.box(fn)
+    #   @@watches << {fn, fn_boxed}
+
+    #   filter = LibSDL::EventFilter.new do |userdata, eventptr|
+    #     event = transcribe(eventptr.value)
+    #     fn_unboxed = Box(typeof(fn)).unbox(userdata)
+    #     fn_unboxed.call(event) ? TRUE : FALSE
+    #   end
+
+    #   LibSDL.add_event_watch(filter, fn_boxed)
+    # end
 
     def modifiers : Slice(KeyModifier)
       modifiers = Pf::Kit.stack_array(KeyModifier, 4)
