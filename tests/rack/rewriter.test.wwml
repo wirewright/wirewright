@@ -513,3 +513,76 @@
   (frame/tail
     (cell @x)
     (cell @y (200 100 200))))
+
+;; Edge inference (layer)
+(rack
+  (frame
+    (rewriter (rulesetR exh: true)
+      {¦ ±x} <> {x: ^(+ x 1)}
+      {¦ ±y ±z} <> {y: ^(- y 1), z: ^(* z 2)})
+    (cell @x 0)
+    (cell @y 10)
+    (cell @z 5))
+
+  (frame/tail
+    (cell @x 1)
+    (cell @y 9)
+    (cell @z 10))
+
+  (frame/tail
+    (cell @x 2)
+    (cell @y 8)
+    (cell @z 20)))
+  ;; ...
+
+;; Edge inference (dict)
+(rack
+  (frame
+    (rewriter (rulesetR exh: true)
+      {| ±x ±y} <> {x: ^(+ x 1), y: ^(- y 1)})
+    (cell @x 0)
+    (cell @y 10))
+
+  (frame/tail
+    (cell @x 1)
+    (cell @y 9))
+
+  (frame/tail
+    (cell @x 2)
+    (cell @y 8)))
+  ;; ...
+
+;; Edge inference (stage)
+(rack
+  (frame
+    (rewriter (stageR (rulesetR exh: true))
+      (stage
+        {¦ ±x} <> {x: ^(+ x 1)}
+        {¦ ±y} <> {y: ^(- y 1)})
+      (stage
+        {¦ ±y} <> {y: ^(* y 2)}))
+
+    (cell @x 0)
+    (cell @y 10))
+
+  (frame/tail
+    (cell @x 1)
+    (cell @y 18))
+
+  (frame/tail
+    (cell @x 2)
+    (cell @y 34))
+
+  (frame/tail
+    (cell @x 3)
+    (cell @y 66)))
+  ;; ...
+
+;; Edge inference (private)
+(rack
+  (frame
+    (rewriter (rulesetR)
+      {¦ -#x_} <> {x: 100})
+    (cell @#x))
+
+  end)

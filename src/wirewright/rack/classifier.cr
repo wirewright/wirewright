@@ -131,6 +131,36 @@ module Ww::Rack
     OneReplacer.new(update, part0)
   end
 
+  private def keysof(rules : Enumerable(Term)) : Set(Term)
+    keys = Set(Term).new
+
+    rules.each do |rule|
+      Term.case(rule) do
+        matchpi %{[(%any rule backmap) (%'%layer _ side_dict) _]} do
+          side.each_entry(in: Term::Dict.pairspart) do |key, _|
+            next unless keysym = key.as_sym?
+            next if keysym.prefixed_by?('#')
+
+            keys << key
+          end
+        end
+
+        matchpi %{[(%any rule backmap) pattern_dict _]} do
+          pattern.each_entry(in: Term::Dict.pairspart) do |key, _|
+            next unless keysym = key.as_sym?
+            next if keysym.prefixed_by?('#')
+
+            keys << key
+          end
+        end
+
+        otherwise { }
+      end
+    end
+
+    keys
+  end
+
   # :nodoc:
   def classify!(node : Term) : D7::Feature
     M1::PatternSet.case(node, block_type: :proc) do
@@ -1781,29 +1811,9 @@ module Ww::Rack
       #   {¦ ±y} <> {y: ^(- y 1)})
       # ```
       matchpi %{[backsys [backmap _ _] _*]} do
-        keys = Set(Term).new
-
-        backmaps = node.items.move(1)
-        backmaps.each do |(_, pattern, _)|
-          Term.case(pattern) do
-            matchpi %{(%'%layer _ side_dict)} do
-              side.each_entry(in: Term::Dict.pairspart) do |key, _|
-                keys << key
-              end
-            end
-
-            matchpi %{_dict} do
-              pattern.each_entry(in: Term::Dict.pairspart) do |key, _|
-                keys << key
-              end
-            end
-
-            otherwise { }
-          end
-        end
+        keys = keysof(rules: node.items.move(1))
 
         edges = Set(Term).new
-
         template = Term::Dict.build do |commit|
           keys.each do |key|
             edge = Term.of(:edge, key)
@@ -2570,6 +2580,90 @@ module Ww::Rack
         end
 
         edges.empty? ? D7.inert(node) : D7.gnd(node, edges)
+      end
+
+      # |@ rack.rewriter
+      #
+      # |@pattern
+      # [rewriter spec_ [(%any rule backmap) _*] _*]
+      # [rewriter spec_ [stage _*] _*]
+      #
+      # |@key spec
+      # An edge or an inline Rho rewriter spec (`rho`).
+      #
+      # |@block
+      # Edge inference shorthand for `rewriter`. Works like the similar shorthand for
+      # `rack.backsys`. Instead of providing (and having to maintain) an explicit list
+      # of edges, this variant of `rewriter` lets you infer those edges from keys in
+      # rules or backmaps (potentially wrapped in `stage`s for `rho.stageR`).
+      #
+      # This variant is not very smart, nor should it be. It just looks at the keys you
+      # refer to in your rules and backmaps, "attaches" an at-sign in front of each,
+      # and declares it as an edge of the rewriter. This may not always be the best
+      # treatment because of keys assigned-and-consumed entirely inside the rewriter,
+      # so there is a way to mark a key private: the `#` prefix. Only symbol keys participate
+      # in inference. You will still have to resort to the explicit variant if you
+      # want `optional` from `rack.[edge template]`.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @x 0)
+      # (cell @y 10)
+      # (rewriter (rulesetR exh: true)
+      #   {¦ ±x} <> {x: ^(+ x 1)}
+      #   {¦ ±y} <> {y: ^(- y 1)})
+      #
+      # ;; Frame 1
+      #
+      # (cell @x 1)
+      # (cell @y 9)
+      # ;; (rewriter (rulesetR exh: true) ...)
+      #
+      # ;; Frame 2
+      #
+      # (cell @x 2)
+      # (cell @y 8)
+      # ;; (rewriter (rulesetR exh: true) ...)
+      #
+      # ;; etc...
+      # ```
+
+      matchpi %{[rewriter spec_ [(%any rule backmap) _*] _*]} do
+        keys = keysof(rules: node.items.move(1))
+
+        edges = Set(Term).new
+        template = Term::Dict.build do |commit|
+          keys.each do |key|
+            edge = Term.of(:edge, key)
+            edges << edge
+            commit.with(key, edge)
+          end
+        end
+
+        defn = Term.morph(node, {1, {spec, :-, template}})
+        D7.gnd(node, edges, defn: defn)
+      end
+
+      matchpi %{[rewriter spec_ [stage _*] _*]} do
+        keys = Set(Term).new
+        stages = node.items.move(1)
+        stages.each do |stage|
+          keys.concat(keysof(stage.items.move(1)))
+        end
+
+        edges = Set(Term).new
+        template = Term::Dict.build do |commit|
+          keys.each do |key|
+            edge = Term.of(:edge, key)
+            edges << edge
+            commit.with(key, edge)
+          end
+        end
+
+        defn = Term.morph(node, {1, {spec, :-, template}})
+        D7.gnd(node, edges, defn: defn)
       end
 
       # |@ rack.rule
