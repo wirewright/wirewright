@@ -1,4 +1,3 @@
-
 ;;| The todo list will store the state of all existing todos, as fetched from
 ;;| the database (with the `space` merge policy, meaning diff-based merges
 ;;| are allowed arbitrarily deep).
