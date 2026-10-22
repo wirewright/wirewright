@@ -2595,6 +2595,31 @@ module Ww::Nitrene
         a.is_a?(ArithConst) && !(a.value.infinite? || a.value.nan?) ? arg : alt
       end
 
+      matchpi %{(intersects? _+)} do
+        rects = Pf::Kit.stack_array(Scenery::Rect, 8)
+
+        args = expr.items.move(1)
+        args.each do |arg|
+          Term.case(arg) do
+            matchpi %{(rect ⍊ ±l ±t ±w ±h)}, l: Float32, t: Float32, w: Float32, h: Float32 do
+              rects << Scenery::Rect[l, t, w, h]
+            end
+
+            otherwise { }
+          end
+        end
+
+        result = false
+        if rects.present?
+          master = rects.first
+          result = (1...rects.size).any? do |index|
+            master.intersects?(rects[index])
+          end
+        end
+
+        Term.of(result)
+      end
+
       otherwise { Inert.new }
     end
   end
