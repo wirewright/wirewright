@@ -73,7 +73,9 @@ module Ww::D7
 
     # NOTE: Only `term` is considered in the hash so that objects with the same
     # head term but different arities collide and are stored in the same "bucket".
-    # When the lookup algorithm then calls `==`, we get more detailed.
+    # When the lookup algorithm then calls `==`, we get more precise. This gives
+    # us O(1) dedupe/hashing based on *term*, followed by an O(N) equality pass over
+    # the bucket.
     def_hash term
   end
 
@@ -569,6 +571,19 @@ module Ww::D7
     def parse(circuit : Term) : ParseTree
       @cache.epoch do
         D7.parse(@clf, circuit, cache: @cache)
+      end
+    end
+
+    # Returns the parse trees for circuits obtained using the block from *objects*.
+    # The same cache is reused for all circuits, which is why this method is useful.
+    #
+    # See `D7.parse` for more info.
+    def parse(objects : Enumerable(T), & : T -> Term) : Array(ParseTree) forall T
+      @cache.epoch do
+        objects.map do |object|
+          circuit = yield object
+          D7.parse(@clf, circuit, cache: @cache)
+        end
       end
     end
   end
