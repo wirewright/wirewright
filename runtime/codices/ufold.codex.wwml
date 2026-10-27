@@ -1571,6 +1571,7 @@ vantage: ""
   (list
     (font "IBM Plex Mono")
     (font "Julia Mono"))
+"emoji": (font "Noto Emoji")
 
 
 --- (table font-sizes)
