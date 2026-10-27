@@ -128,7 +128,7 @@ module Ww
   # and immutable.
   struct Term
     macro finished
-      # Tagged union of term instance types.
+      # The tagged union of term instance types.
       #
       # Internally, we store terms as *tagged pointers*. The three last bits of
       # a pointer wrapped by the `Term` struct designate the stored type, and
@@ -1383,12 +1383,17 @@ module Ww
       b
     end
 
-    # Shallow merge of two terms *a* and *b*.
-    #
-    # For *a* and *b* of different types, *b* is preferred.
-    # For *a* and *b* that are both a Dict, their entries are merged.
+    # :ditto:
     def self.union(a : Term, b : Term) : Term
       Term.of(union(Term[a], Term[b]))
+    end
+
+    # Shallow merge of *terms*.
+    #
+    # For two terms *a* and *b*, if they are of different types, *b* is the result.
+    # If both are dicts, their entries are merged shallowly.
+    def self.union(a, *bs) : Term
+      Term.of(bs.reduce(a) { |result, b| union(result, b) })
     end
 
     # Strips *a* of all keys but the ones in *mask*.
