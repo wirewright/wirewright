@@ -4420,6 +4420,27 @@ module Ww::Rack
       #
       # ;; And so on...
       # ```
+      #
+      # In MxRack, consider also the following example of a simple marquee:
+      #
+      # ```wwml
+      # (window style: "center backdrop-ui-base"
+      #   (box style: "border-xs border-ui-decoration-low pivot-center scale-2"
+      #     (frag @control
+      #       (limit max-w: (50 px)
+      #         (lfo ((33 ms) (sin (0.1 hz))))
+      #         (viewport page-x: (0 px)
+      #           (p style: "content text-base/6 text-ui-content"
+      #              ?visual-w: _
+      #             "Lorem ipsum dolor sit amet"))))))
+      #
+      # (backsys @control
+      #   ⟪(p _ ⍊ ?visual-w: ±w) {¦ max-w: (±W px)} {¦ page-x: (±x px)} (lfo _ ±factor)⟫
+      #     <> {x: ^(max 0 (* (- w W) factor))})
+      # ```
+      #
+      # In the example, the lfo node is used to modulate the `viewport`'s `page-x`,
+      # with the help of other properties and a visual query.
       matchpi %{[lfo (_ _) _?]} do
         D7.gnd(node)
       end
