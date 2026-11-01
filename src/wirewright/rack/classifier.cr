@@ -3883,7 +3883,7 @@ module Ww::Rack
       # The outgoing cell is for *just one message*, not a queue of messages.
       # You can queue messages using the queue node `rack.queue`, or by other means
       # (e.g. through a backsystem `rack.backsys` that eventually drains something
-      # to the cell at *outgoing*; or using `rack.part`, etc.)
+      # to the outgoing cell; or using `rack.part`, etc.)
       #
       # The client clears the outgoing cell when the message is *filed* or *received
       # by the remote endpoint*, depending on the link `rack.[network].link` of
@@ -4253,7 +4253,8 @@ module Ww::Rack
       #
       # |@key steps
       # One or more sequencer *steps*. The current step is highlighted using `(> _)`,
-      # which is called *the needle*. There can be zero or more needles in *steps*.
+      # which is called *the needle* (as in a compass). There can be zero or more
+      # needles in *steps*.
       #
       # |@summary
       # Selects the next item on every cycle, with wraparound, based on the global clock.

@@ -1128,7 +1128,7 @@ module Ww::Rack::Accord
       # (client (@in -> (ws local 5000) -> @out))
       # ```
       #
-      # If the server is a simple echo server, the above would evolve as follows:
+      # If the server is a simple echo server, the above will evolve as follows:
       #
       # ```wwml
       # ;; Frame 1 (assuming the client connected successfully)
