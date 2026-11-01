@@ -35,6 +35,7 @@ module Ww::M1
                    ExaminePairspart |
                    ExamineRange |
                    ExamineResidue |
+                   ExamineSubstring |
                    InsertEntry |
                    InsertItem
 
@@ -158,6 +159,16 @@ module Ww::M1
       def inspect(io)
         io << "examine " << part << " residue after removing "
         removed.join(io, ", ")
+      end
+    end
+
+    defrecord ExamineSubstring, byte_range : Range(UInt32, UInt32) do
+      assert byte_range.begin <= byte_range.end
+    end
+
+    struct ExamineSubstring
+      def inspect(io)
+        io << "examine string byte range " << byte_range
       end
     end
 

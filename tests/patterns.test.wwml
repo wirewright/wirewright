@@ -245,6 +245,44 @@
   (+ "a" "abc" "John Doe")
   (- 1 qux true () ""))
 
+;; %string first
+;; NOTE: we mainly test it in backmap tests. ScanKit is mainly tested in rack parser tests.
+(group
+  ;; Basic
+  (pattern (%string "(day)←%|dd| (month)←%|dd| (year)←%|dddd|")
+    (= "00 00 0000" {day: "00", month: "00", year: "0000"})
+    (= "00  00   \n0000" {day: "00", month: "00", year: "0000"})
+    (= "12 34 5678" {day: "12", month: "34", year: "5678"})
+    (- 123 true () (+ "x" "y"))
+    (- "" "00" "00 00" "00 00 000" "0 00 0000" "00 0 0000" "12 34 5a67")) ;; etc...
+
+  ;; Detach begin
+  (pattern (%string "…n←%d")
+    (- "" "a" "ab" "0b")
+    (= "a0" {n: "0"})
+    (= "abc0" {n: "0"})
+    (= "1234" {n: "4"}))
+
+  ;; Detach end
+  (pattern (%string "n←%d…")
+    (- "" "a" "ab" "b0")
+    (= "0a" {n: "0"})
+    (= "0abc" {n: "0"})
+    (= "1234" {n: "1"}))
+
+  ;; Detach both
+  (pattern (%string "…n←%d…")
+    (- "" "a" "ab")
+    (= "0a" {n: "0"})
+    (= "a0" {n: "0"})
+    (= "0abc" {n: "0"})
+    (= "abc0" {n: "0"})
+    (= "1234" {n: "1"}))
+
+  ;; Duplicate capture name
+  (pattern (%string "a←%d a←%d")
+    (- "" "0" "0 1"))) ;; etc...
+
 ;; %pipe binary numeric
 ;;
 ;; The following tests are stupid but I don't know how to write better ones without

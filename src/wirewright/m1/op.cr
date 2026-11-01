@@ -1,12 +1,19 @@
 module Ww::M1
   # Short for *operator*, this module holds data structures used to represent
-  # compiled operators and associated groups/categories of operators (represented
-  # using aliases).
+  # compiled representations of operators.
   module Op
-    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean | Dict | Blob | Itemsonly | Pairsonly | Guard | Literal | Capture | CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition | Edge | LiteralWhitelist | ChoiceSource | Keypool | Charcount | Size | Type | ParseML | Clamp | Bin | Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll | DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value | NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource | EntriesAll | Str | KeypathCapture | Keytest | ValueLiteral | Filter | Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef | Prepend | MimeString | MimeTypeAndParams | CompositionExclusively
-
-    # TODO: Inline, this is not used anywhere!!
-    alias Bin = Add | Sub | Mul | Div | Idiv | Mod | Pow | Map
+    alias Any = Pass | Never | Num | Sym | Atom | SymBlank | SymNonblank | Boolean |
+                Dict | Blob | Itemsonly | Pairsonly | Guard | Literal | Capture |
+                CaptureItemsonly | Seq | ItemFirst | ItemLast | SingularSeq | Partition |
+                Edge | LiteralWhitelist | ChoiceSource | Keypool | Charcount | Size |
+                Type | ParseML | Clamp | Add | Sub | Mul | Div | Idiv | Mod | Pow | Map |
+                Both | LiteralBlacklist | Layer | ScanFirst | ScanSource | ScanAll |
+                DfsFirst | DfsSource | DfsAll | BfsFirst | BfsSource | BfsAll | Value |
+                NegativeValue | NegativeValueKeypath | EntriesFirst | EntriesSource |
+                EntriesAll | Str | KeypathCapture | Keytest | ValueLiteral | Filter |
+                Pluck | Flat | Split | Adjacent | Untracked | Matches | FrontRef | BackRef |
+                Prepend | MimeString | MimeTypeAndParams | CompositionExclusively |
+                StringFirst
 
     INSTANCE_PASS = Pass.new
 
@@ -203,6 +210,8 @@ module Ww::M1
       type : AtomTermType,
       min : Term::Dict::Histogram::Unsaturated,
       max : Term::Dict::Histogram::Unsaturated?
+
+    defcase StringFirst, pattern : ScanKit::Pattern
   end
 
   # Compiled sequence operators such as `(⏏_⏏ ⏏(%optional 0 x_)⏏ ⏏y_⏏)`.

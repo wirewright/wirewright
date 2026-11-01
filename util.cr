@@ -4233,7 +4233,7 @@ struct ::Pf::StringSeln
     @byte_end &- @byte_start
   end
 
-  def byte_bounds : Range(UInt32, UInt32)
+  def byte_range : Range(UInt32, UInt32)
     @byte_start...@byte_end
   end
 

@@ -29,7 +29,8 @@ module Ww::M1
   #   is strictly non-recursive: parents look at their children's attached `proposal`s
   #   to figure out their own one.
   # - The loop that goes bottom to top, giving each layer attention, we refer to as
-  #   *backpropagation*, because it superficially resembles neural nets.
+  #   *backpropagation*, because it superficially resembles a similar process
+  #   in neural nets.
   # - `up` and `dn` lookups work similarly by traversing the tree -- top-down, bottom-up,
   #   etc. Their implementations can be somewhat confusing, because for performance, we do
   #   lookups on the same tree that we're currently working on -- both lookup and backprop
@@ -214,9 +215,10 @@ module Ww::M1
 
     alias Node = Slot | Leaf
 
+    # Existing stuff, possibly with fanout (in `form`).
     defcase Slot,
       initial : Term,
-      form : Dict | Blank | Nil,
+      form : Dict | Blank | Str | Nil,
       endpoint : Endpoint,
       depth : UInt32,
       proposal : Term::Rep? = nil,
@@ -224,6 +226,7 @@ module Ww::M1
       agents : Pf::USet32? = nil,
       mutation: true
 
+    # Nonexistent stuff, e.g. `-x_`.
     defcase Leaf,
       endpoint : Endpoint,
       depth : UInt32,
@@ -277,6 +280,8 @@ module Ww::M1
                          Trace::ExamineBlankType
 
     defcase Blank, name : Node, type : Node
+
+    defcase Str, initial : Term::Str, subranges : Array({Range(UInt32, UInt32), Endpoint})
 
     defcase DictEntry, key : Node, value : Node
 
@@ -421,6 +426,17 @@ module Ww::M1
       response
     end
 
+    private def mount(ctx, node : Slot, step : Trace::ExamineSubstring, steps, depth, action) : MountOut
+      unless form = node.form
+        assert initial = node.initial.as_s?
+        node.form = form = Str.new(initial, [] of {Range(UInt32, UInt32), Endpoint})
+      end
+
+      response = mount(ctx, form, step, steps, depth, action)
+      node.mutates ||= response.mutates || node.endpoint.mutates?
+      response
+    end
+
     private def mount(ctx, form : Dict, step : Trace::ExamineItemspart | Trace::ExaminePairspart, steps, depth, action) : MountOut
       assert steps.empty?
 
@@ -521,6 +537,26 @@ module Ww::M1
       raise ArgumentError.new
     end
 
+    private def mount(ctx, form : Str, step : Trace::ExamineSubstring, steps, depth, action) : MountOut
+      assert steps.empty?
+
+      index = form.subranges.index { |byte_range, _| byte_range == step.byte_range }
+      if index
+        _, endpoint = form.subranges[index]
+        endpoint = action.call(ctx, endpoint)
+        form.subranges[index] = {step.byte_range, endpoint}
+      else
+        endpoint = action.call(ctx, Endpoint.new)
+        form.subranges << {step.byte_range, endpoint}
+      end
+
+      Mounted.new(mutates: true) # ?!
+    end
+
+    private def mount(ctx, form : Str, step, steps, depth, action) : MountOut
+      raise ArgumentError.new
+    end
+
     # Returns the set of ids of agents that mutate *nodes*.
     def agents(*nodes) : Pf::USet32
       Pf::USet32.transaction do |sink|
@@ -572,14 +608,20 @@ module Ww::M1
       node.fanout.each { |_, successor| agents0(successor, sink) }
     end
 
-    private def agents0(node : DictEntry, sink)
+    private def agents0(node : DictEntry, sink) : Nil
       agents0(node.key, sink)
       agents0(node.value, sink)
     end
 
-    private def agents0(node : Blank, sink)
+    private def agents0(node : Blank, sink) : Nil
       agents0(node.name, sink)
       agents0(node.type, sink)
+    end
+
+    private def agents0(node : Str, sink) : Nil
+      node.subranges.each do |(_subrange, endpoint)|
+        agents0(endpoint, sink)
+      end
     end
 
     # Represents a dict patch.
@@ -735,7 +777,7 @@ module Ww::M1
         end
       end
 
-      # Looks up *ref* using the *up-to-date*, alternatively top-down strategy.
+      # Looks up *ref* using the *up-to-date* (top-down) strategy.
       #
       # This method first searches for up-to-date *ref* in the lower half of
       # the tree (as per `@depth`, excluding `@depth`).
@@ -802,7 +844,7 @@ module Ww::M1
         cons.value?
       end
 
-      # Looks up *ref* using the *up-to-date*, bottom-up strategy. The name `dn?`
+      # Looks up *ref* using the *up-to-date* (bottom-up) strategy. The name `dn?`
       # is used for symmetry with `up?` and for brevity.
       #
       # This method searches for *ref* starting at the bottom of the tree and going
@@ -1046,6 +1088,67 @@ module Ww::M1
       # name : Term::Sym
       # type : TermType
       Render.one(Term::Sym.blank(name.to(String), type, mult: :one))
+    end
+
+    def render(µ : MutContext?, form : Str) : RenderOut
+      substs = Pf::Kit.stack_array({Range(UInt32, UInt32), String}, 4)
+
+      form.subranges.each do |byte_range, endpoint|
+        render_out = render(µ, endpoint, this: Term.of(form.initial))
+        if render_out.is_a?(Conflict)
+          return render_out
+        end
+
+        next if render_out.is_a?(Render::None)
+
+        rep = render_out.object
+        # render_out : Render::Some(Term::Rep)
+        # rep : Term::Rep
+
+        subst = String.build do |io|
+          rep.each do |member|
+            if member_str = member.as_s?
+              io << member_str.to(String)
+              next
+            end
+
+            # Use ML.compact to stringify other terms.
+            ML.compact(io, member)
+          end
+        end
+
+        substs << {byte_range, subst}
+      end
+
+      substs.sort_by! { |(byte_range, _)| byte_range.begin }
+
+      # Check for overlaps. If there are any that's a conflict.
+      substs.each_cons_pair do |(pred_range, _), (succ_range, _)|
+        overlaps = Math.max(pred_range.begin, succ_range.begin) < Math.min(pred_range.end, succ_range.end)
+        if overlaps
+          # Just mark everyone as responsible. We don't need to be very
+          # serious for now.
+          return conflict(form)
+        end
+      end
+
+      start = 0u32
+      source = form.initial.to_slice
+      # Assume the result is approximately as large as the input. If it isn't,
+      # Crystal will shrink the resulting buffer later on (internally).
+      result = String.build(source.size) do |io|
+        substs.each do |(byte_range, subst)|
+          assert byte_range.exclusive?
+
+          io.write(source[start...byte_range.begin])
+          io << subst
+          start = byte_range.end
+        end
+
+        io.write(source[start..]) # possibly nothing
+      end
+
+      Render.some(Term.rep_of(result))
     end
 
     def render(µ : MutContext?, form : Dict) : RenderOut

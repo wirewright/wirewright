@@ -172,7 +172,6 @@ module Ww::M1
 
     def ref(key : Term) : Trace::Sealed | Trace::None
       trace = Trace.append(@trace, Trace::ExamineValue.new(key))
-
       Trace.seal(Trace.simplify(trace))
     end
 
@@ -349,7 +348,6 @@ module Ww::M1
       end
 
       action = Trace::ExamineResidue.new(removed.to_readonly_slice(&.itself))
-
       Tzip.new(Term.of(dict1), Trace.append(@trace, action))
     end
 
@@ -653,6 +651,13 @@ module Ww::M1
       pluck?(spec) || Tzip.new(Term.of, Trace.none)
     end
 
+    # TODO: performance
+    def substring(byte_range : Range(UInt32, UInt32)) : Tzip
+      assert string = @term.as_s?
+      substring = string.to(String).byte_slice(byte_range)
+      Tzip.new(Term.of(substring), Trace.append(@trace, Trace::ExamineSubstring.new(byte_range)))
+    end
+
     def inspect(io)
       @term.inspect(io)
       io << "//"
@@ -850,16 +855,15 @@ module Ww::M1
     # items view.
     def ref(*, ord : UInt32) : Trace::Sealed | Trace::None
       trace = Trace.append(@tzip.trace, Trace::ExamineRange.new(@begin.to_u32, @end.to_u32, ord: ord))
-
       Trace.seal(Trace.simplify(trace))
     end
 
     # Returns a tzip of the items in this view (as a dict).
     def collect : Tzip
       iv = @tzip.term.items(@begin.to_i, @end.to_i)
-
       # FIXME: It is unclear whether `trace` is enough here or whether we should
-      # construct a mapping. Assuming disciplined use, `trace` *is* enough.
+      # construct a mapping containing only the selected items. Assuming disciplined
+      # use, `trace` *is* enough.
       Tzip.new(Term.of(iv.collect), trace)
     end
 

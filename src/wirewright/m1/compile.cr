@@ -802,6 +802,10 @@ module Ww::M1
           max: max == Term.of(:∞) ? nil : Term::Dict::Histogram::Unsaturated.new(max.to(UInt8)),
         )
       end
+
+      matchpi %{[%'%string pattern_string]}, pattern: String, cue: :"%string" do
+        Op::StringFirst.new(ScanKit.recognize(pattern))
+      end
     end
   end
 

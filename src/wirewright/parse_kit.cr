@@ -175,7 +175,7 @@ module Ww::ParseKit
       # > what you probably think it does, and will instead match `%d` (a digit) followed
       # > by literal `*` (asterisk). Instead, you have to remember that only character
       # > sets accept quantifiers; so put the `%d` in a character set like so: `[%d]`;
-      # > and then attach the qualifier: `[%d]*`. To reiterate, something like `%d*%l*`
+      # > and then attach the quantifier: `[%d]*`. To reiterate, something like `%d*%l*`
       # > matches digit-asterisk-letter-asterisk, whereas `[%d]*[%l]*` matches zero
       # > or more digits followed by zero or more letters. And something like `%d*%d`
       # > matches digit-asterisk-digit.

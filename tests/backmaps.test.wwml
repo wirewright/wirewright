@@ -1266,3 +1266,237 @@
     (g . . m . . . . . .)
     (g . m . . . . . . .)
     (g m . . . . . . . .)))
+
+;; %string first
+(group
+  ;; Replace zero
+  (backmap ((%string "hello") {})
+    (= "hello" "hello")
+    (- "world"))
+
+  ;; Replace full (empty)
+  (backmap ((%string "x←(hello)") {x: ""})
+    (= "hello" ""))
+
+  ;; Replace full (smaller)
+  (backmap ((%string "x←(hello)") {x: "bye"})
+    (= "hello" "bye"))
+
+  ;; Replace full (larger)
+  (backmap ((%string "x←(hello)") {x: "lorem ipsum"})
+    (= "hello" "lorem ipsum"))
+
+  ;; Replace one
+  (backmap ((%string "x←(h)ello") {x: "B"})
+    (= "hello" "Bello"))
+
+  ;; Replace multiple
+  (backmap ((%string "a←(h)ellb←(o)") {a: "B", b: "y"})
+    (= "hello" "Belly"))
+
+  ;; Replace with zero
+  (backmap ((%string "a←(h)ello") {(a): ()})
+    (= "hello" "ello"))
+
+  ;; Replace with zero (multiple runes)
+  (backmap ((%string "a←(hel)lo") {(a): ()})
+    (= "hello" "lo"))
+
+  ;; Replace with zero (all)
+  (backmap ((%string "a←(hello)") {(a): ()})
+    (= "hello" ""))
+
+  ;; Replace with many
+  (backmap ((%string "a←(h)ello") {(a): ("x" "y" "z")})
+    (= "hello" "xyzello"))
+  (backmap ((%string "a←(h)ello") {(a): ("x" ^a "y" "z")})
+    (= "hello" "xhyzello"))
+
+  ;; Stringify
+  (backmap ((%string "a←(h)ello") {a: 123})
+    (= "hello" "123ello"))
+  (backmap ((%string "a←(h)ello") {(a): ("x" 123 "y" {z: 45})})
+    (= "hello" "x123y{z: 45}ello"))
+
+  ;; Deep replace
+  (backmap ({¦ input: (%string "a←(h)ello")} {a: "B"})
+    (- "hello")
+    (= {input: "hello"} {input: "Bello"}))
+
+  ;; Surround
+  (backmap ((%string "…n←[%d]+…") {(n): ("(" ^n ")")})
+    (- "" "hello")
+    (= "1" "(1)")
+    (= "123" "(123)")
+    (= "123hello" "(123)hello")
+    (= "hello123" "hello(123)")
+    (= "123hello456" "(123)hello456")
+    (= "(123)" "((123))")
+    (= "(123)hello456" "((123))hello456"))
+
+  ;; System, disjoint replace
+  (backsys
+    ((%string "a←(h)ello") <> {(a): ()}
+     (%string "hellb←(o)") <> {b: "y!"})
+    (seq "hello" "elly!"))
+
+  ;; System, same range replace (no conflict)
+  (backsys
+    ((%string "a←(h)ello") <> {a: "B"}
+     (%string "a←(h)ello") <> {a: "B"})
+    (seq "hello" "Bello"))
+
+  ;; System, same range replace (conflict)
+  (backsys
+    ((%string "a←(h)ello") <> {a: "foo"}
+     (%string "a←(h)ello") <> {a: "bar"})
+    (seq "hello" "barello"))
+  (backsys
+    ((%string "a←(h)ello") <> {a: "bar"}
+     (%string "a←(h)ello") <> {a: "foo"})
+    (seq "hello" "fooello"))
+
+  ;; System, overlapping range replace (conflict)
+  (backsys
+    ((%string "a←(h)ello") <> {a: "foo"}
+     (%string "a←(he)llo") <> {a: "bar"})
+    (seq "hello" "barllo"))
+  (backsys
+    ((%string "a←(he)llo") <> {a: "bar"}
+     (%string "a←(h)ello") <> {a: "foo"})
+    (seq "hello" "fooello"))
+
+  ;; Rune nav system
+  (backsys
+    ((l_string r←(%string "(x)←%_…"))
+       <> {l: ^(~ l x), (x): ()})
+    (seq
+      ("" "Lorem ipsum dolor sit amet")
+      ("L" "orem ipsum dolor sit amet")
+      ("Lo" "rem ipsum dolor sit amet")
+      ("Lor" "em ipsum dolor sit amet")
+      ("Lore" "m ipsum dolor sit amet")))
+      ;; ...
+
+  ;; Word nav system
+  (backsys
+    ((l_string r←(%string "(prefix)←[^%w%v]*(word)←[%w]*…"))
+       <> {l: ^(~ l prefix word), (prefix): (), (word): ()})
+    (seq
+      ("" "Lorem ipsum dolor sit amet")
+      ("Lorem" " ipsum dolor sit amet")
+      ("Lorem ipsum" " dolor sit amet")
+      ("Lorem ipsum dolor" " sit amet")
+      ("Lorem ipsum dolor sit" " amet")
+      ("Lorem ipsum dolor sit amet" ""))
+    (seq
+      ("" "Lorem ipsum\ndolor sit amet")
+      ("Lorem" " ipsum\ndolor sit amet")
+      ("Lorem ipsum" "\ndolor sit amet")
+      ;; quiescence: can't jump past newline according to our rule
+      ("Lorem ipsum" "\ndolor sit amet")))
+
+  ;; Line nav system (go to next line begin)
+  (backsys
+    ((l_string r←(%string "(prefix)←[^%v]*(sep)←%v…"))
+       <> {l: ^(~ l prefix sep), (prefix): (), (sep): ()})
+
+    (seq
+      ("" "Lorem ipsum\ndolor\nsit\namet")
+      ("Lorem ipsum\n" "dolor\nsit\namet")
+      ("Lorem ipsum\ndolor\n" "sit\namet")
+      ("Lorem ipsum\ndolor\nsit\n" "amet")
+      ;; quiescence: no next line
+      ("Lorem ipsum\ndolor\nsit\n" "amet"))
+
+    (seq
+      ("Lo" "rem ipsum\ndolor\nsit\namet")
+      ("Lorem ipsum\n" "dolor\nsit\namet")))
+      ;; ...
+
+  ;; Increment dash-separated system
+  (backsys
+    (x_string
+       <> {x: ("" ^x)}
+     x←(l_string "")
+       <> {x: ^l}
+     (_ `m r←(%string "(n)←[%d]+-(rest)←[%_]*"))
+       <> {m: ^n, r: ^rest}
+     (_ `m r←(%string "(n)←[%d]+"))
+       <> {m: ^n, r: ""}
+     ;; Parsing can't fail here because we know *n* is a [%d]+, which is
+     ;; under all circumstances a valid ML number.
+     (_ n_string _)
+       <> {n: (^when ((ml/term n) (ok ±value)) ^value)}
+     (_ ±n _)
+       <> {n: (next ^(+ n 1))}
+     (l_string m←(next ±n) _)
+       <> {l: ^(~ l n "-"), (m): ()}
+     (l_string m←(next ±n) "")
+       <> {l: ^(~ l n), (m): ()})
+
+     (seq
+       "12"
+       ("" "12")
+       ("" "12" "")
+       ("" 12 "")
+       ("" (next 13) "")
+       ("13" "")
+       "13")
+
+     (seq
+       "12-34"
+       ("" "12-34")
+       ("" "12" "34")
+       ("" 12 "34")
+       ("" (next 13) "34")
+       ("13-" "34")
+       ("13-" "34" "")
+       ("13-" 34 "")
+       ("13-" (next 35) "")
+       ("13-35" "")
+       "13-35")
+
+     (seq
+       "12-34-56"
+       ("" "12-34-56")
+       ("" "12" "34-56")
+       ("" 12 "34-56")
+       ("" (next 13) "34-56")
+       ("13-" "34-56")
+       ("13-" "34" "56")
+       ("13-" 34 "56")
+       ("13-" (next 35) "56")
+       ("13-35-" "56")
+       ("13-35-" "56" "")
+       ("13-35-" 56 "")
+       ("13-35-" (next 57) "")
+       ("13-35-57" "")
+       "13-35-57"))
+
+  ;; Surround all system
+  (backsys
+    (x_string
+       <> {x: ("" ^x)}
+     x←(l_string r_string)
+       <> {x: ^(~ l r)}
+     (l_string (%string "(prefix)←[^%d]*(n)←[%d]+…"))
+       <> {l: ^(~ l prefix "(" n ")"), (prefix): (), (n): ()})
+
+    (seq
+      "hello 123world 456"
+      ("" "hello 123world 456")
+      ("hello (123)" "world 456")
+      ("hello (123)world (456)" "")
+      "hello (123)world (456)"))
+
+  ;; Docs
+  (backsys
+    ((%string "l←[%d]+-r←[%d]+")
+       <> {l: ^r, r: ^l})
+
+    (seq
+      "123-456"
+      "456-123"
+      "123-456")))
+    ;; ...

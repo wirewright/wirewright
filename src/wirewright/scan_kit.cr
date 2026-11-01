@@ -18,7 +18,7 @@ module Ww::ScanKit
     Vspace
     Space
     Word
-    Char
+    Wildcard
     Alphabetic
     Emoji
     Numeric
@@ -41,7 +41,7 @@ module Ww::ScanKit
 
   private def category?(qual : Char) : Char | Category | Nil
     case qual
-    when '_' then Category::Char
+    when '_' then Category::Wildcard
     when 'a' then Category::Alphabetic
     when 'b' then Category::BinaryDigit
     when 'c' then Category::Control
@@ -526,7 +526,7 @@ module Ww::ScanKit
   private def member?(category : Category, text : Pf::StringSeln) : Bool
     return false if text.empty?
 
-    if category.char?
+    if category.wildcard?
       return true
     end
 
@@ -550,6 +550,10 @@ module Ww::ScanKit
   end
 
   private def member?(category : Category, chr : Char) : Bool
+    if category.wildcard?
+      return true
+    end
+
     if (category.space? || category.hspace?) && chr.hspace?
       return true
     end
@@ -622,9 +626,11 @@ module Ww::ScanKit
   end
 
   private def member?(charset : Charset, text : Pf::StringSeln) : Bool
+    return false if text.empty?
+
     # If the positive side is empty as in the pattern [^a-z], only consider
-    # the negative side, because otherwise the positive side would be a nevermatch
-    # that blocks any progress.
+    # the negative side. Otherwise, the positive side would be a nevermatch
+    # that blocks all progress.
     if empty?(charset.positive)
       return !member?(charset.negative, text)
     end
@@ -704,22 +710,21 @@ module Ww::ScanKit
     text
   end
 
-  def match?(pattern : Pattern, text : Pf::StringSeln) : {Term::Dict, Pf::StringSeln}?
+  def match?(pattern : Pattern, text : Pf::StringSeln, &)
     journal_entries = Pf::Kit.stack_array(CaptureEntry)
     journal = CaptureJournal.new(journal_entries)
 
-    text.each_before_and_after do |_, after|
+    text.each_before_and_after do |_before, after|
       checkpoint = checkpoint(journal)
 
       if ahead = match?(pattern.scanner, journal, after)
-        # If the pattern is anchored to the right and there are things ahead,
-        # then this isn't a match.
-        if pattern.anchor_r && !ahead.empty?
-          rollback(journal, checkpoint)
-          next
+        if !pattern.anchor_r || ahead.empty?
+          return (yield journal, ahead)
         end
 
-        return render(journal), ahead
+        # If the pattern is anchored to the right and there are things ahead,
+        # then this isn't a match.
+        rollback(journal, checkpoint)
       end
 
       # If scanner did not match and we are anchored to the left, we can't
@@ -732,17 +737,32 @@ module Ww::ScanKit
     end
   end
 
-  def match?(pattern : Pattern, text : String, **kwargs) : {Term::Dict, Pf::StringSeln}?
-    match?(pattern, Pf::StringSeln.new(text), **kwargs)
+  def match?(pattern : Pattern, text : String, &)
+    match?(pattern, Pf::StringSeln.new(text)) do |journal, ahead|
+      yield journal, ahead
+    end
+  end
+
+  def match?(pattern : Pattern, text, **kwargs, &)
+    match?(pattern, text, **kwargs) do |journal, ahead|
+      yield journal, ahead
+    end
+  end
+
+  def match?(pattern : Pattern, text, **kwargs) : {Term::Dict, Pf::StringSeln}?
+    match?(pattern, text, **kwargs) do |journal, ahead|
+      {render(journal), ahead}
+    end
   end
 
   def test?(pattern : Pattern, text : Pf::StringSeln) : Pf::StringSeln?
     text.each_before_and_after do |_, after|
       if ahead = match?(pattern.scanner, NoJournal.new, after)
+        if !pattern.anchor_r || ahead.empty?
+          return ahead
+        end
         # If the pattern is anchored to the right and there are things ahead,
         # then this isn't a match.
-        next if pattern.anchor_r && !ahead.empty?
-        return ahead
       end
 
       # If scanner did not match and we are anchored to the left, we can't

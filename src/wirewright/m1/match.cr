@@ -494,6 +494,42 @@ module Ww::M1
 
   # :nodoc:
   #
+  # (%string "(username)←[%w]+ (date)←%|dd-dd-dddd|")
+  def match(ctx, op : Op::StringFirst, matchee : Tzip, plan)
+    return Fb[] unless str = matchee.term.as_s?
+
+    ahead = plan
+
+    # matched : true | nil
+    matched = ScanKit.match?(op.pattern, str.to(String)) do |journal, _remainder|
+      journal.entries.each_with_index do |entry, i|
+        # There are usually very few captures so we check for duplicates in O(N)
+        # and allocation free.
+        journal.entries.each_with_index do |candidate, j|
+          next if i == j
+          next unless candidate.name == entry.name
+          return Fb[] # duplicate capture
+        end
+
+        substr = matchee.substring(entry.capture.byte_range)
+        ahead = ctx.interject(ahead, Action.capture(Term.of(entry.name), substr))
+      end
+
+      true
+    end
+
+    return Fb[] unless matched
+
+    cons(ctx, ahead)
+  end
+
+  # :nodoc:
+  def probably_matches?(op : Op::StringFirst, matchee : Term) : Bool
+    matchee.type.string?
+  end
+
+  # :nodoc:
+  #
   # (%symbol blank name_ type_)
   def match(ctx, op : Op::SymBlank, matchee : Tzip, plan)
     return Fb[] unless row = matchee.blank?

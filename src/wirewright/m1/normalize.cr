@@ -3003,6 +3003,40 @@ module Ww::M1
       # TODO: (%mime type_ subtype_ params_)
       # E.g. (%mime "text" _ {charset: "utf-8"})
 
+      # |@ m1.operator.string
+      #
+      # |@pattern
+      # [%'%string pattern_string]
+      #
+      # |@key pattern scankit
+      # The ScanKit pattern to match. Captures by the pattern are made available to
+      # M1, and can be used in backmaps to do string replacement/manipulation.
+      #
+      # |@block
+      # Matches a string based on the given `scankit` *pattern*.
+      #
+      # |@example
+      # ```wwml
+      # (%string "l←[%d]+-r←[%d]+")
+      #   <> {l: ^r, r: ^l}
+      #
+      # ;; Step 0
+      # "123-456"
+      #
+      # ;; Step 1
+      # "456-123"
+      #
+      # ;; Step 2
+      # "123-456"
+      #
+      # ;; ...
+      # ```
+      matchpi %{[%'%string _string]}, cue: :"%string" do
+        pattern
+      end
+
+      # TODO: %string°, %strings?
+
       # NOTE: Insert new matchpis here, especially if they are infrequent. Below we
       # have raw dict/literal treatment. If your matchpi does not start with a %,
       # make sure to update the dict fast path above.

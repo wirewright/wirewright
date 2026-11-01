@@ -166,7 +166,7 @@ module Ww::ML
               io << chr
             end
 
-            if byte_index.in?(@text.byte_bounds) && !(byte_index + chr.bytesize).in?(@text.byte_bounds)
+            if byte_index.in?(@text.byte_range) && !(byte_index + chr.bytesize).in?(@text.byte_range)
               styles.pop(:focus)
             end
           end
