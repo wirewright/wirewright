@@ -1,58 +1,47 @@
 # Wirewright [![Discord](https://badgen.net/badge/icon/discord?icon=discord&label=Wirewright)](https://discord.com/invite/bkgmGU7FFQ)
 
 <img width="300" alt="Wirewright MuSoma Logo" src="https://github.com/user-attachments/assets/0bb06a8f-8ddf-4e49-99fe-0c0b1f44b760" align="right" />
+Wirewright treats programs as evolving worlds. You describe the initial state, symbolically, and Wirewright evolves it step-by-step. Changes between steps become your program's effects: from UI updates to file writes.
 
-What if a program was not a sequence of instructions, but a world? A world you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can manipulate, live, introducing new things and removing the things you don't like.
+Here are some interesting aspects of Wirewright:
 
-Wirewright is an experimental project built around this idea: that a program is a live world containing symbolic things, and these things are subject to laws of physics -- *symbolic physics*; and also to an invisible "force" called the runtime.
-
-Programs in most programming languages ultimately look like this:
-
-```text
-do A;
-do B;
-do C;
-```
-
-Even in cases where the surface appears declarative, there is still a machine down there and you're telling it how to carry out a task, step-by-step. The machine can be a CPU, or it can be a virtual machine — JVM, BEAM, or something else.
-
-Wirewright is different. A Wirewright program is effectively a serialized snapshot of a world:
-
-```wwml
-(cell @x 100)
-(cell @y)
-(feed @x @y)
-```
-
-In this snippet, there are three *things*, called *nodes*: two `cell`s and one `feed`. One of the cells holds the number `100`.
-
-The snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions, and there is no machine that can "execute" it. Instead, it is a description of a symbolic world frozen in time — a *seed*.
-
-So instead of telling an existing general-purpose machine how to do things step-by-step, through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you arrange specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, managers, homeostatic and other cybernetic loops, devices, chains, producers, consumers, black boxes, and so forth.
-
-As an interesting consequence, machine-building machines become possible; as do machine-controlling machines, and so forth. One of the central themes of Wirewright is, in fact, its attempt to make programming be more about *nouns* and systems of interacting nouns (machines; organisms, even, if you forgive me my metaphor) — nouns rather than verbs (algorithms, plans, and so on). In other words, instead of telling the machine what to do in each case, you set up a world, and let that world react to its surroundings: "relax" its way into equilibria, *generating* or *synthesizing* behavior along the way; grow structure in response to stimuli, etc. To give a simple example of the approach, you do not *select* or *query* (both are not at all nouns), but have a *sensor* (a noun!) supplying a continuous view of things; and instead of *notifying* a sensor you maintain an *appearance* (a noun!) that the sensor can see.
-
-The terminology of *seed*s, *evolution*, and so on is borrowed primarily from the field of cellular automata. Cellular automata is a good reference point for understanding what Wirewright is. Roughly speaking, Wirewright is an automaton which uses *symbols*, *numbers*, *strings* etc. instead of *on/off* for state, and *trees* instead of grids for spatial arrangement. Importantly, trees can also be used for state. Do note that cellular automata and Wirewright are as similar to each other as a stickman and a real human being.
-
-Wirewright can also be seen through the lens of a game analogy. Imagine Wirewright as implementing a game, but instead of entities you have data structures, and instead of graphics you have extended S-expressions; and physics is not about boxes and vectors and collisions and other kinds of math, but about making data structures interact with each other in various ways through rewrite rules.
-
-In Wirewright:
-
-- Buttons and inputs have insides, the same way a button in the real world is a box with a mechanism inside it. A Wirewright button is a tiny "organism" containing a symbolic model of the mouse. The button is capable of observing this model as well as a symbolic description of its own visuals, and reacting to the behavior of the user.
+- Interactive components have insides, the same way a button in the real world is a box with a mechanism inside it. A Wirewright button is a tiny machine containing models of its own appearance, mice, inputs, and so on.
 - Programs can look around and move!
 - Editors inhabit the same world they edit.
 - Sorting is understood as a law that reduces disorder.
 - Some of the core distinctions of modern programming do not apply. The same _term_ can act as data, state, code, and UI.
 - Instead of *evaluation*, Wirewright has *evolution* and *simulation*.
 
-## An overview of Wirewright
+## Outline
 
-Wirewright is an *ecosystem*. The major components of this ecosystem are:
-- **Data and syntax**: Terms (immutable values such as numbers, strings, dictionaries, etc.), WwML (a notation for expressing terms)
-- **Pattern matching, transformation, and evaluation** of terms: Alloy (a structural templating language, a bit like JSX), Nitrene (an expression language, a bit like Excel formulas), M1 (a pattern matching engine).
-- **Styling and graphics**: Microfold (a styling engine; imagine if Tailwind was CSS, that's roughly what Microfold is), Scenery (layout and graphics).
-- **Symbolic physics and IO**: Rack (symbolic physics), Harmony (something remotely resembling Kubernetes but for IO).
-- **Interface**: MuSoma (an interactive graphical environment for Rack), irack (a command-line interface to Rack).
+This README is unfortunately quite long so I made this outline to make the whole thing easier to navigate.
+
+The guides are more practically oriented and are my attempt to carefully introduce various parts of Wirewright. If you want to jump right into Wirewright, follow the guides:
+- [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
+- [Wirewright: The Guide (Part 1)](<guides/Guide (Part 1).md>)
+- [Wirewright: The Guide (Part 2)](<guides/Guide (Part 2).md>)
+- ... TODO ...
+
+The guides and the associated assets are stored in the `guides/` directory. They are also shipped with each Wirewright release.
+
+There's the [Gallery](#Gallery) section where I maintain a selection of screenshots and videos of Wirewright. Some of them can be outdated, but they should give you a rough idea of how Wirewright looks like regardless.
+
+Then there are the more philosophical sections of this README:
+- [Introduction to Wirewright](<#Introduction to Wirewright>) — What Wirewright is trying to do.
+- [An overview of Wirewright](<#An overview of Wirewright>) —  What Wirewright is in practice.
+- [A more detailed overview of Wirewright](<#A more detailed overview of Wirewright>) — Just like the title says.
+- [References](#References) — How Wirewright relates to other things and work of other people.
+
+Now to more technical sections:
+- [Running Wirewright](<#Running Wirewright>) — Describes how to download and run Wirewright.
+- [Docs](#Docs) — Describes where to find the documentation for the project.
+- [Building Wirewright](<#Building Wirewright>) — Describes how to build Wirewright from source.
+
+I spend a lot of time in my dev cave isolated from the rest of the world, so I can be unavailable at times. But I do publish occasional videos on the YouTube channel of Wirewright: [Wirewright — YouTube](https://www.youtube.com/@wirewright). I'm also happy to discuss the project via GitHub Discussions, Discord, or if you want to talk to me directly, at homonoidian on Telegram — pick whichever one you like most, although if you were to ask me, Telegram is by far the most reliable choice.
+
+Most documentation is still in progress, but the guides above will get you started, and the doctool has much of the rest.
+
+The big disclaimer is that Wirewright is still deeply experimental (it isn't even versioned properly yet!), and can change quite a lot without much notice. So if you have any questions, or if you want to do something but don't know how, or if the thing wrecks itself in a fun way, feel free to communicate that to me.
 
 ## Gallery
 
@@ -111,94 +100,80 @@ Reference: `examples/msort.rack.wwml`.
 
 ### WebSocket server
 
-In this example, I time-travel through a small "conversation". You can see how each connection is given its own `device`, and devices interact with each other using `sensor`s and `appearance`s. There is no centralized "chat" state inside the program; *the symbolic world itself* plays the role of centralized state, so to speak. 
+In this example, I time-travel through a small "conversation". You can see how each connection is given its own `device`, and devices interact with each other using `sensor`s and `appearance`s. There is no centralized "chat" state inside the program; *the symbolic world itself* plays the role of centralized state, so to speak.
 
 https://github.com/user-attachments/assets/a3141c05-4242-4b40-8a05-f2c632a659f3
 
 Reference: `examples/websocket-chat.rack.wwml`.
-## Running Wirewright
+## Introduction to Wirewright
 
-You should hopefully be able to just [download the latest release](https://github.com/wirewright/wirewright/releases/latest).
+What if a program was not a sequence of instructions, but a world? A world you can populate with things, then watch how they evolve one step at a time — how they give rise to new things as old things disappear and change; a world you can manipulate, live, introducing new things and removing the things you don't like.
 
-It's an archive which you will have to extract. Inside the archive are:
-- `musoma-x86_64.AppImage`, an AppImage for MuSoma, a GUI for Rack.
-- `irack`, short for *interactive Rack*, a static binary which you can use to interact with Rack directly, if MuSoma doesn't work for you (e.g. you're on a server or using WSL), is too slow, or feels bloated.  `irack` is used in some of the basic tutorials.
-- `doctool`, a static binary to serve Wirewright docs as `127.0.0.1:9811`.
-- `examples/`, the examples directory (the same one as in the repo).
+Wirewright is an experimental project built around this idea: that a program is a live world containing symbolic things, and these things are subject to laws of physics -- *symbolic physics*; and also to an invisible "force" called the runtime.
 
-To run MuSoma, make the AppImage executable if it isn't already:
+Programs in most programming languages ultimately look like this:
 
-```console
-chmod +x musoma-x86_64.AppImage
+```text
+do A;
+do B;
+do C;
 ```
 
-Then you should be able to run one of the examples.
+Even in cases where the surface appears declarative, there is still a machine down there and you're telling it how to carry out a task, step-by-step.  Your program may be a beautiful Haskell program, but to run, it must be compiled or in other ways translated to a sequence of instructions just like the one above. The underlying machine can then be an actual CPU, or it can be virtual — JVM, BEAM, and so on.
 
-```console
-./musoma-x86_64.AppImage examples/calculator.musoma.wwml
+Wirewright is different. A Wirewright program is effectively a serialized snapshot of a world:
+
+```wwml
+(cell @x 100)
+(cell @y)
+(feed @x @y)
 ```
 
-If you want to start MuSoma with an empty file, you'd probably want to have an editor in it. You can create the file and put the editor in it like so:
+In this snippet, there are three *things*, called *nodes*: two `cell`s and one `feed`. One of the cells holds the number `100`.
 
-```console
-echo '((I modify: true structural: true multiline: true compose: true) ("" * "") 0)' > /tmp/example.wwml
+The snippet is not a piece of code in the conventional sense. It isn't a sequence of instructions, and there is no machine that can "execute" it. Instead, it is a description of a symbolic world frozen in time. This description is called a *circuit* in Wirewright, and the term is synonymous to *symbolic world*, although the latter is mainly used in prose and the former in actual code. The snippet you see above can be *evolved*. In that sense it is a *seed*, the *zeroth* *frame* of evolution. As you turn the "crank of time", you get *frames*. All frames are immutable.
+
+Now, all of this is very nice, but what does your CPU actually do when you run a Wirewright circuit, ifit can't be run in the conventional sense of the word?
+
+Imagine *symbolic physics* as a function that takes a frame, and produces the next frame. The result is two frames: the predecessor and the successor frame. The seed above, with Rack (which you can imagine as a particular instance of symbolic physics — a particular function), produces the following frame:
+
+```wwml
+(cell @x)
+(cell @y 100)
+(feed @x @y)
 ```
 
-The `((I ...) ...)` thing *is* the editor, and you've just placed it in the world.
+That's the first thing your CPU does when it's running a circuit. It takes the current frame and uses a symbolic physics to produce the next frame, via pattern matching, rewriting, and so on.
 
-Then you can run MuSoma:
+The beautiful thing about having two frames, a predecessor and a successor frame, is that you can *diff* them: you can compute, algorithmically, a sequence of *actions* which tell you what has changed. That is, you can turn an otherwise opaque "physics" frame transition into a sequence of actions.
 
-```console
-./musoma-x86_64.AppImage /tmp/example.wwml
-```
+That's the second thing you CPU does when it's running a circuit. Given two successive frames, it diffs them (though most of the times only conceptually; see below), and obtains a list of actions. Some of these actions are treated as *effects*. They are used to manipulate real world assets through the operating system: create and destroy sockets, read and write files, and so on.
 
-If you hit `Shift-R` in normal mode (which MuSoma starts in), you'll be able to edit `/tmp/example.wwml` and MuSoma will live-reload. Do note that any running state will be lost on reload.
+Then there's the third thing that's sort of intertwined with the second in practice. The CPU is busy making *projections* — various bidirectional views — of the circuit. The same circuit can be *looked at* as a collection of windows containing graphical and interactive elements of all sorts. It can be *looked at* as a collection of socket servers and clients, too. Another way to *look at* the same circuit can be as an audio graph. These projections are constantly being derived and inspected by the CPU, and the *intertwined* part above refers to how the projections themselves are viewed as frames, to be diffed, and the resulting actions analyzed.
 
-> [!NOTE]
-> A notable inconvenience which is actually a feature for now is that Wirewright doesn't quit when you close the window (by pressing "X"); it only hides the window. You'll have to Ctrl-C by hand. 
-> 
-> This isn't exactly a bug, more of a "design complication". MuSoma can be thought of as a "server" which "watches" the file you give it. When you close the window, well, you close the window... One action among many, that's it. If the program wanted to react to that, it should be able to, since the window, like many other things in Wirewright, is too a symbolic object, which the program can observe.
-## Docs
+The fourth thing Wirewright does when it's running a circuit is it listens for real world events (user interactions, file changes, network packets, and so on) and *manipulates* the circuit symbolically to incorporate those changes.
 
-### In MuSoma
+Now let's look at how day-to-day programming looks like in Wirewright. Instead of telling an existing general-purpose machine how to do things step-by-step through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you arrange specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, managers, homeostatic and other cybernetic loops, devices, chains, producers, consumers, black boxes, and so forth.
 
-Hover over things to learn more about them in the MuSoma app (or, well, at least about things I've bothered implementing tooltips for...)
+As an interesting consequence, machine-building machines become possible; as do machine-controlling machines, and so forth. The limit is, really, your imagination.
 
-The main things of interest right now are the examples. See the `examples/` directory.
+One of the central themes of Wirewright is an attempt to make programming be more about *nouns* and systems of interacting nouns (machines; organisms, even, if you forgive me my metaphor) — nouns rather than verbs (algorithms, plans, sequences of instructions, decisions, and so on). In other words, instead of telling the machine what to do in each case, you set up a world, and let that world react to its surroundings: "relax" its way into equilibria (through symbolic physics), *generating* or *synthesizing* behavior along the way (through diffing); grow structure in response to stimuli (through those stimuli manipulating the world with their "God's hand"), etc. To give a simple example of this noun-oriented approach, you do not *select* or *query* (both are not at all nouns), but have a *sensor* (a noun!) that supplies a continuous view; and instead of *notifying* a sensor you maintain an *appearance* (a noun!) that sensors can see and incorporate into their view.
 
-If you feel like exploring, look into the `runtime/` directory and the `*.wwml` files in it.
+As a side note, the terminology of *seed*s, *evolution*, and so on is borrowed primarily from the field of cellular automata, which Wirewright can be related to (I am deliberately loose here, see the References section at the bottom).
 
-Consider opening MuSoma with the various examples and clicking the arrows and panning around. 
+Wirewright can also be seen through the lens of a game analogy. Imagine Wirewright as implementing a game, but instead of entities you have data structures, and instead of graphics you have extended S-expressions; and physics is not about boxes and vectors and collisions and other kinds of math, but about making data structures interact with each other in various ways through rewrite rules.
 
-Hit `?` in MuSoma in Normal mode to open the help pane. Right now it's pretty much empty, but in the future, I hope to make it into a help center with access to the `doctool`.
+## An overview of Wirewright
 
-#### Basic controls
+Wirewright is an *ecosystem*. The major components of this ecosystem are:
+- **Data and syntax**: Terms (immutable values such as numbers, strings, dictionaries, etc.), WwML (a notation for expressing terms)
+- **Pattern matching, transformation, and evaluation** of terms: Alloy (a structural templating language, a bit like JSX), Nitrene (an expression language, a bit like Excel formulas), M1 (a pattern matching engine).
+- **Styling and graphics**: Microfold (a styling engine; imagine if Tailwind was CSS, that's roughly what Microfold is), Scenery (layout and graphics).
+- **Symbolic physics and IO**: Rack (symbolic physics), Harmony (something remotely resembling Kubernetes but for IO).
+- **Interface**: MuSoma (an interactive graphical environment for Rack), irack (a command-line interface to Rack).
 
-- In the right pane (the circuit pane) you can pan around by pressing
-  the Left button and dragging.
-- You can also zoom in/out using the mouse wheel while over the circuit
-  pane. Use the Middle button to reset zoom.
-- In Normal mode, *you* control the pan. In Insert mode, *the editor* in
-  the circuit controls the pan. Imagine the circuit pane as a "camera", which
-  follows your instructions in Normal mode, but tracks/follows the editor
-  in Insert mode. You can still pan/zoom in Insert mode, but the "camera"
-  will force the editor to remain in focus, preventing you from zooming or
-  panning it out of view.
-- Use `+` and `-` in Normal mode to increase / decrease REM, which is the root
-  font size on which most of the UI depends. Note, however, that certain designs/
-  examples may start overflowing & get clipped as you increase the size,
-  in particular because the window size in the left pane is defined in pixels...
-  but, I digress, I know.
 
-### For Wirewright in general
-
-Use the `doctool` binary that is shipped with the latest release. It serves docs, which are baked into the binary. It serves them at `127.0.0.1:9811`. Just run the doctool using something like `./doctool`. The doctool is a static binary which doesn't depend on anything else.
-
-### Misc
-
-Note also that you check out the tests in `tests/` to get a feel of what the system is capable of at the moment, and the approximate scope of the project. The names may all sound a little bit weird, but that's not something I can control, unfortunately; the names work, they're short, and have nice abbreviations; so I'm all for them. Referring to things with foo, bar, X, Y, or Greek letters is more or less in the past at this point, although some components of the project are still named this way.
-
-## A deep dive
+## A more detailed overview of Wirewright
 
 So what is Wirewright? Good question. As a software project (as opposed to a philosophical endeavor of mine), [my definition of Wirewright](https://youtu.be/rkWXB-3ReV0) is an ecosystem of components which together support a particular "style" of symbolic computation -- one that is heavily inspired by physics. I call this "style" *symbolic physics*.
 
@@ -251,18 +226,93 @@ Here, things starting with `^` pertain to Alloy.
 
 **Scenery** is a vector graphics and layout engine. Microfold is lowered to Scenery, emitting descriptions of the UI containing things like `img`s, `svg`s, `text` nodes, `x-stack`s and `y-wrap`s. Scenery is then tasked with converting those descriptions to arrays of pixels.
 
-**Rack** is a specimen of *symbolic physics* defined using Delta7, D7 for short. The latter is related to Rack in the same way a trigonometry or integration library is related to a physics engine. Rack introduces concepts like `cell`s, `backsys`tems (a system of backmaps) and so on. Rack is one of the central components of Wirewright. In fact, in many descriptions of Wirewright (such as the one in the very beginning of this readme), we are actually talking about Rack. 
+**Rack** is a specimen of *symbolic physics* defined using Delta7, D7 for short. The latter is related to Rack in the same way a trigonometry or integration library is related to a physics engine. Rack introduces concepts like `cell`s, `backsys`tems (a system of backmaps) and so on. Rack is one of the central components of Wirewright. In fact, in many descriptions of Wirewright (such as the one in the very beginning of this readme), we are actually talking about Rack.
 
 **Harmony** is the thing managing servers, clients, and other kinds of IO for Rack — restarting them and so on
 
 Finally, there's **MuSoma**. It is an interactive graphical environment for Rack. Like some systems divide themselves into a *graphical interface* and a *kernel*, Wirewright has the division between MuSoma and Rack.
-## Tutorials and guides
+## Running Wirewright
 
-See the `guides/` directory.
+You should hopefully be able to just [download the latest release](https://github.com/wirewright/wirewright/releases/latest).
 
-- [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
-- [Wirewright: The Guide (Part 1)](<guides/Guide (Part 1).md>)
-- [Wirewright: The Guide (Part 2)](<guides/Guide (Part 2).md>)
+It's an archive which you will have to extract. Inside the archive are:
+- `musoma-x86_64.AppImage`, an AppImage for MuSoma, a GUI for Rack.
+- `irack`, short for *interactive Rack*, a static binary which you can use to interact with Rack directly, if MuSoma doesn't work for you (e.g. you're on a server or using WSL), is too slow, or feels bloated.  `irack` is used in some of the basic tutorials.
+- `doctool`, a static binary to serve Wirewright docs as `127.0.0.1:9811`.
+- `examples/`, the examples directory (the same one as in the repo).
+
+To run MuSoma, make the AppImage executable if it isn't already:
+
+```console
+chmod +x musoma-x86_64.AppImage
+```
+
+Then you should be able to run one of the examples.
+
+```console
+./musoma-x86_64.AppImage examples/calculator.musoma.wwml
+```
+
+If you want to start MuSoma with an empty file, you'd probably want to have an editor in it. You can create the file and put the editor in it like so:
+
+```console
+echo '((I modify: true structural: true multiline: true compose: true) ("" * "") 0)' > /tmp/example.wwml
+```
+
+The `((I ...) ...)` thing *is* the editor, and you've just placed it in the world.
+
+Then you can run MuSoma:
+
+```console
+./musoma-x86_64.AppImage /tmp/example.wwml
+```
+
+If you hit `Shift-R` in normal mode (which MuSoma starts in), you'll be able to edit `/tmp/example.wwml` and MuSoma will live-reload. Do note that any running state will be lost on reload.
+
+> [!NOTE]
+> A notable inconvenience which is actually a feature for now is that Wirewright doesn't quit when you close the window (by pressing "X"); it only hides the window. You'll have to Ctrl-C by hand.
+>
+> This isn't exactly a bug, more of a "design complication". MuSoma can be thought of as a "server" which "watches" the file you give it. When you close the window, well, you close the window... One action among many, that's it. If the program wanted to react to that, it should be able to, since the window, like many other things in Wirewright, is too a symbolic object, which the program can observe.
+## Docs
+
+### In MuSoma
+
+Hover over things to learn more about them in the MuSoma app (or, well, at least about things I've bothered implementing tooltips for...)
+
+The main things of interest right now are the examples. See the `examples/` directory.
+
+If you feel like exploring, look into the `runtime/` directory and the `*.wwml` files in it.
+
+Consider opening MuSoma with the various examples and clicking the arrows and panning around.
+
+Hit `?` in MuSoma in Normal mode to open the help pane. Right now it's pretty much empty, but in the future, I hope to make it into a help center with access to the `doctool`.
+
+#### Basic controls
+
+- In the right pane (the circuit pane) you can pan around by pressing
+  the Left button and dragging.
+- You can also zoom in/out using the mouse wheel while over the circuit
+  pane. Use the Middle button to reset zoom.
+- In Normal mode, *you* control the pan. In Insert mode, *the editor* in
+  the circuit controls the pan. Imagine the circuit pane as a "camera", which
+  follows your instructions in Normal mode, but tracks/follows the editor
+  in Insert mode. You can still pan/zoom in Insert mode, but the "camera"
+  will force the editor to remain in focus, preventing you from zooming or
+  panning it out of view.
+- Use `+` and `-` in Normal mode to increase / decrease REM, which is the root
+  font size on which most of the UI depends. Note, however, that certain designs/
+  examples may start overflowing & get clipped as you increase the size,
+  in particular because the window size in the left pane is defined in pixels...
+  but, I digress, I know.
+
+### For Wirewright in general
+
+Use the `doctool` binary that is shipped with the latest release. It serves docs, which are baked into the binary. It serves them at `127.0.0.1:9811`. Just run the doctool using something like `./doctool`. The doctool is a static binary which doesn't depend on anything else.
+
+### Misc
+
+Note also that you check out the tests in `tests/` to get a feel of what the system is capable of at the moment, and the approximate scope of the project. The names may all sound a little bit weird, but that's not something I can control, unfortunately; the names work, they're short, and have nice abbreviations; so I'm all for them. Referring to things with foo, bar, X, Y, or Greek letters is more or less in the past at this point, although some components of the project are still named this way.
+
 
 ## Building Wirewright
 
@@ -284,9 +334,9 @@ It will eventually output musoma-dist.tar.gz. The archive contains the AppImage 
 
 > [!NOTE]
 > AppImages built this way may produce OpenSSL errors on some distros, breaking Wirewright's networking.
-> 
+>
 > The hacky way to fix them is to run MuSoma (or `irack`) with the SSL_CERT_DIR environment variable pointing to your distro's SSL certificates directory. See also: https://github.com/rustls/openssl-probe/blob/main/src/lib.rs
-> 
+>
 > Hopefully I'll have time to fix this sometime. The idea is to do what the Rust library I've linked does, as far as I understand.
 
 ### Building without Docker
@@ -403,7 +453,7 @@ The relevant ideas come mainly from the field of *cybernetics*: see, for instanc
 
 Another bunch of ideas comes from cellular automata, in particular from Stephen Wolfram's A New Kind of Science book and his Physics Project.
 
-Some inspiration came, and still comes, from the work of Michael Levin, and also Joscha Bach. 
+Some inspiration came, and still comes, from the work of Michael Levin, and also Joscha Bach.
 
 Complex systems and systems theory and philosophy are also quite relevant. Wirewright's notion of a *world* or a *circuit* is very similar if not the same as the notion of a *system* in the most general sense of the word; although an important difference is, I think, the fact that a system's behavior is determined by its composition more than any imposed *laws* (as in laws of physics); although of course laws act as the thing that "evaluates" or time-steps the system eventually. Put plainly, a *world* in Wirewright's sense is matter under law; whereas a system is more like a set of interacting components.
 
@@ -428,9 +478,4 @@ Wirewright's Microfold is heavily inspired by (and in some places copies!)  [Tai
 Wirewright MuSoma includes colors from the following themes.
 
 - [Rose Pine](https://rosepinetheme.com)
-## Want to learn more?
 
-Visit the YouTube channel of Wirewright for videos about Wirewright: [Wirewright — YouTube](https://www.youtube.com/@wirewright).
-## Feedback
-
-I'd be happy to know what you think about Wirewright and answer any questions; a lot of documentation is in the *unwritten* state right now so I'm the only reliable source. You can use the GitHub Discussions pane or Discord, whichever one you like most. If you learn my email address, you can write there too.
