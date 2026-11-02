@@ -89,6 +89,7 @@ module Ww::D7
     signature = pass do
       next unless dict = defn.as_d?
       next unless head = dict.items.first?
+      next unless head.type.symbol?
 
       NodeSignature.new(head, dict.uitemsize)
     end
@@ -185,8 +186,11 @@ module Ww::D7
   def parent(node : Term::Dict, range : Range(UInt32, UInt32)) : Parent
     assert range.exclusive?
 
-    if head = node.items.first?
-      signature = NodeSignature.new(head, node.uitemsize)
+    signature = pass do
+      next unless head = node.items.first?
+      next unless head.type.symbol?
+
+      NodeSignature.new(head, node.uitemsize)
     end
 
     Parent.new(node, range, Passable, signature)
@@ -196,8 +200,11 @@ module Ww::D7
   def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : PassablePredicate) : Parent
     assert range.exclusive?
 
-    if head = node.items.first?
-      signature = NodeSignature.new(head, node.uitemsize)
+    signature = pass do
+      next unless head = node.items.first?
+      next unless head.type.symbol?
+
+      NodeSignature.new(head, node.uitemsize)
     end
 
     Parent.new(node, range, passable, signature)
