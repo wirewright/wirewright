@@ -173,6 +173,8 @@ module Ww::D7
 
   # :nodoc:
   def gather(level : GatherLevel, addr : NodeAddr, tree : CircuitNode, target_depth : UInt32) : Nil
+    return if tree.feature.autonomous
+
     if target_depth.zero?
       level << {addr, tree.to_group}
       return

@@ -224,18 +224,21 @@ module Ww::D7
   # *leaf*s in turn; never considering them as circuits. In other words, if
   # *leaf* contains or is a circuit, that circuit is always also treated as a leaf,
   # and so its *leaf* is used, and so on, until some sort of base case.
+  #
+  # If *autonomous* is `true`, the circuit will not be stepped in `D7.step`.
   defcase Circuit,
     node : Term::Dict,
     range : Range(UInt32, UInt32),
-    leaf : Feature
+    leaf : Feature,
+    autonomous : Bool
 
   # Constructs a circuit feature.
   #
   # See `Circuit`.
-  def circuit(node : Term::Dict, range : Range(UInt32, UInt32), leaf : Feature) : Circuit
+  def circuit(node : Term::Dict, range : Range(UInt32, UInt32), leaf : Feature, *, autonomous : Bool = false) : Circuit
     assert range.exclusive? && range.subrange_of?(0u32...node.uitemsize)
 
-    Circuit.new(node, range, leaf)
+    Circuit.new(node, range, leaf, autonomous)
   end
 
   alias ParseTree = InertLeaf | GndLeaf | MixtureNode | ScopeNode | ParentNode
