@@ -324,18 +324,19 @@ Note also that you check out the tests in `tests/` to get a feel of what the sys
 This is probably the easiest way to build Wirewright. Note that I'm not an expert
 on Docker, so the Dockerfiles may not be the best ones on the planet.
 
-You can use the `build-mu` shell script:
+You can use the `build` shell script:
 
 ```console
-sh build-mu.sh
+sh build.sh
 ```
 
-It will eventually output musoma-dist.tar.gz. The archive contains the AppImage and miscellaneous files.
+It will eventually output ww-dist.tar.gz (which is the same ww-dist I put in Releases).
+The archive contains the AppImages, binaries, and miscellaneous files.
 
 > [!NOTE]
 > AppImages built this way may produce OpenSSL errors on some distros, breaking Wirewright's networking.
 >
-> The hacky way to fix them is to run MuSoma (or `irack`) with the SSL_CERT_DIR environment variable pointing to your distro's SSL certificates directory. See also: https://github.com/rustls/openssl-probe/blob/main/src/lib.rs
+> The hacky way to fix them is to run MuSoma (or `irack`, or MxRack) with the SSL_CERT_DIR environment variable pointing to your distro's SSL certificates directory. See also: https://github.com/rustls/openssl-probe/blob/main/src/lib.rs
 >
 > Hopefully I'll have time to fix this sometime. The idea is to do what the Rust library I've linked does, as far as I understand.
 

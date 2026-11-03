@@ -1,0 +1,8 @@
+Thank you for checking out Wirewright!
+
+- Most interesting examples use MuSoma (think of it as a UI for `irack`). They're
+  labeled with `.musoma.`. MuSoma is a hard requirement for them.
+- If you can't run MuSoma (either it's too bloated for you or perhaps you're on a server
+  or WSL), use `irack`. It is a static binary.
+- To browse the docs, run the doctool: `./doctool`. Then go to 127.0.0.1:9811 in your
+  favorite browser. The doctool, too, is a static binary.

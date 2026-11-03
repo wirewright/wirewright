@@ -18,6 +18,7 @@ _*
 !NEWS
 !AppRun
 !Makefile
+!dist-README
 
 ### Above combination will ignore all files without extension ###
 /junk/
