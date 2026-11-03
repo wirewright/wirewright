@@ -2,12 +2,13 @@ module Ww
   # |@ rho
   #
   # |@summary
-  # A set of composable rewriters.
+  # A collection of composable rewriters.
   #
   # |@block
-  # Wirewright Rho is a set of composable rewriters. Think parser combinators,
-  # but for term rewriting.
+  # Wirewright Rho is a collection of composable rewriters. They are like parser
+  # combinators, but for term rewriting.
   #
+  # |@example
   # ```wwml
   # (chainR
   #   (adjR (rulesetR phase: move))
@@ -162,6 +163,25 @@ module Ww
       workspace
     end
 
+    # See `rho.guardR`.
+    def guardR(pattern : M1::Op::Any, successor : Rewriter) : Rewriter
+      finite do |attachments, input|
+        guardR(pattern, successor, attachments, input)
+      end
+    end
+
+    private def guardR(pattern, successor, attachments, input : Term) : Term::Rep
+      unless M1.probably_matches?(pattern, input)
+        return Term.rep(input)
+      end
+
+      unless M1.probe?(Term[], pattern, input)
+        return Term.rep(input)
+      end
+
+      successor.call(input, attachments.cache, attachments.ping)
+    end
+
     private def leaf?(passable, impassable, input : Term) : Bool
       return true unless input.type.dict?
 
@@ -184,7 +204,7 @@ module Ww
       end
     end
 
-    private def descR(successor, part, leafp, attachments, input : Term)
+    private def descR(successor, part, leafp, attachments, input : Term) : Term::Rep
       if rep = attachments.cache.get?({attachments.id, input})
         return rep
       end
@@ -218,7 +238,7 @@ module Ww
       end
     end
 
-    private def scanR(successor, part, leafp, attachments, input : Term)
+    private def scanR(successor, part, leafp, attachments, input : Term) : Term::Rep
       if rep = attachments.cache.get?({attachments.id, input})
         return rep
       end
@@ -249,7 +269,7 @@ module Ww
       end
     end
 
-    private def ascR(successor, part, leafp, attachments, input : Term)
+    private def ascR(successor, part, leafp, attachments, input : Term) : Term::Rep
       if rep = attachments.cache.get?({attachments.id, input})
         return rep
       end
@@ -282,7 +302,7 @@ module Ww
       end
     end
 
-    private def bidiR(successor, part, leafp, attachments, input : Term)
+    private def bidiR(successor, part, leafp, attachments, input : Term) : Term::Rep
       if rep = attachments.cache.get?({attachments.id, input})
         return rep
       end
@@ -434,7 +454,7 @@ module Ww
       end
     end
 
-    private def exhR(successor, attachments, input : Term, limit : UInt32)
+    private def exhR(successor, attachments, input : Term, limit : UInt32) : Term::Rep
       limit.times do |epoch|
         attachments.ping.call
 
@@ -566,6 +586,91 @@ module Ww
       end
     end
 
+    # See `rho.rulesysR`.
+    def rulesysR(ruleset : Ruleset) : Rewriter
+      finite do |attachments, input|
+        rulesysR(ruleset, attachments, input)
+      end
+    end
+
+    private def rulesysR(ruleset : Ruleset, attachments, input : Term) : Term::Rep
+      proposals = Pf::Kit.stack_array(Term, 8)
+
+      ruleset.each_candidate(input) do |op, rule|
+        case rule
+        in Rule::Template
+          next unless env = M1.match?(Term[], op, input)
+
+          rep = Alloy.render_rep(rule.body, locals: env)
+        in Rule::Backmap
+          matches_and_traces = M1.matches_and_traces(Term[], op, input)
+          backmap = {matches_and_traces, rule.backspec.as_d}
+          backsys = {backmap}
+          rep = M1.backmapR(backsys, input)
+        end
+
+        proposals << Term.collapse(rep)
+      end
+
+      if proposals.empty?
+        return Term.rep(input)
+      end
+
+      programs = Pf::Kit.stack_array(Array(Term::Diff::Action) | Term, 8)
+      proposals.each do |proposal|
+        program = Term.diff?(input, proposal) || proposal
+        programs << program
+      end
+
+      if program = programs.single?
+        if program.is_a?(Term)
+          # E.g. 100 -> 200 replacement.
+          return Term.rep(program)
+        end
+
+        # Accept immediately if there is just one program.
+        accepted = program
+      else
+        accepted = Pf::Kit.stack_array(Term::Diff::Action)
+        rejected = Pf::USet32.new
+
+        programs.zip(0u32...programs.size) do |program0, i|
+          next if i.in?(rejected)
+
+          if program0.is_a?(Term)
+            return Term.rep(input) # General replacement conflicts with everything else.
+          end
+
+          # Decline if any other program conflicts with this one.
+          accept = true
+          (i + 1...programs.size).each do |j|
+            program1 = programs[j]
+            if program1.is_a?(Term)
+              return Term.rep(input) # General replacement conflicts with everything else.
+            end
+
+            unless Term::Diff.compatible?(program0, program1)
+              rejected = rejected.add(i).add(j)
+              accept = false
+              break
+            end
+          end
+
+          next unless accept
+
+          accepted.concat(program0)
+        end
+      end
+
+      mutation = Term::Diff::Mutation.new
+      accepted.each do |action|
+        mutation << action
+      end
+
+      output = mutation.apply(input.as_d)
+      Term.rep_of(output)
+    end
+
     # Same as `rewriter`, but avoids hitting the rewriter cache.
     def rewriter!(spec : Term, data : Term) : Rewriter
       Term.case(spec) do
@@ -574,8 +679,26 @@ module Ww
         # |@pattern
         # noR
         #
+        # |@summary
+        # Noop (null, identity) rewriter.
+        #
         # |@block
-        # Noop (identity) rewriter: keeps the input term as-is.
+        # Keeps the input term as-is.
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> noR -> @out))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (+ 1 2))
+        # (rewriter (@in -> noR -> @out))
+        # ```
         matchpi %{noR} do
           noR
         end
@@ -585,10 +708,80 @@ module Ww
         # |@pattern
         # [constR offspring_*]
         #
+        # |@summary
+        # Constant rewriter.
+        #
         # |@block
         # Replaces the input term with zero or more constant *offspring* terms.
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> (constR 100) -> @out))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out 100)
+        # (rewriter (@in -> (constR 100) -> @out))
+        # ```
+        #
+        # Or, for example, with `rho.scanR`:
+        #
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> (scanR (constR 100)) -> @out))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (100 100 100)) ;; All items replaced with 100.
+        # (rewriter (@in -> (scanR (constR 100)) -> @out))
+        # ```
         matchpi %{[constR offspring_*]} do
           constR(Term.rep(offspring.items))
+        end
+
+        # |@ rho.rulesetR
+        #
+        # |@summary
+        # Ruleset rewriter.
+
+        # |@ rho.rulesetR
+        #
+        # |@pattern
+        # rulesetR
+        #
+        # |@block
+        # A basic ruleset rewriter. Only one rule is given the opportunity to rewrite
+        # the input term. The most specific rule wins (according to M1 pattern specificty).
+        #
+        # The data term at the invokation spot is parsed as the ruleset.
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> (scanR rulesetR) -> @out)
+        #   ±n => ^(+ n 1))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (+ 2 3)) ;; Number items incremented
+        # ;; (rewriter (@in -> (scanR rulesetR) -> @out) ...)
+        # ```
+        matchpi %{rulesetR} do
+          ruleset = Ruleset.select(data)
+          rulesetR(ruleset, exh: false)
         end
 
         # |@ rho.rulesetR
@@ -641,12 +834,62 @@ module Ww
         # Constructs a *ruleset rewriter*: a rewriter that finds and applies rules
         # from a *rulebase* to input terms.
         matchpi %{(rulesetR ⍊ exh⋮ false)} do
-          selector = spec[:selector]? || Ruleset::DEFAULT_SELECTOR
+          continue unless rulebase = data.as_d?
 
           phase = spec[:phase]?
-          rulebase = data
 
-          rulesetR(Ruleset.select(selector, rulebase, phase: phase), exh: exh.true?)
+          unless selector = spec[:selector]?
+            selector = Ruleset::DEFAULT_SELECTOR
+
+            # Preprocess the rulebase to support multi-pattern rules and backmaps. Currently
+            # we support them in just this corner of the system. TODO: We should add support
+            # for them to Ruleset, though, where it belongs.
+            (0u32...rulebase.uitemsize).reverse_each do |index|
+              member = rulebase[index]
+
+              # [rule (%plural min: 3)]
+              # [backmap (%plural min: 3)]
+              next unless member = member.as_d?
+              next unless member.itemsize >= 4
+              head = member.items.first
+              next unless head.in?(Term.of(:rule), Term.of(:backmap))
+
+              # Duplicate body for each pattern.
+              patterns = member.items.move(1).grow(-1)
+              body = member.items.last
+              reps = patterns.to_readonly_slice do |pattern|
+                Term.of(head, pattern, body)
+              end
+
+              # Splice.
+              rulebase = rulebase.replace(index, Term.rep(reps))
+            end
+          end
+
+          rulesetR(Ruleset.select(selector, Term.of(rulebase), phase: phase), exh: exh.true?)
+        end
+
+        # |@ rho.rulesysR
+        #
+        # |@pattern
+        # rulesysR
+        #
+        # |@summary
+        # Rule system rewriter.
+        #
+        # |@block
+        # An experimental rewriter that uses the term diff algorithm to merge changes
+        # from two or more rules.
+        #
+        # All rules are shown the same input term. They can then rewrite it. Rewrites
+        # are merged into the input term by taking a diff between the input term and
+        # rewritten term(s).
+        #
+        # This rewriter is strict. All conflicting changes are rejected (i.e. there
+        # is no preference for one change or another, no precedence, etc.).
+        matchpi %{rulesysR} do
+          ruleset = Ruleset.select(data)
+          rulesysR(ruleset)
         end
 
         # |@ rho.exhR
@@ -660,10 +903,29 @@ module Ww
         # Sets the maximum number of cycles. If set, exhR becomes a finite rewriter.
         # Minimum: 1. Maximum: 32 (inclusive).
         #
+        # |@summary
+        # Exhaustive rewriter.
+        #
         # |@block
-        # Rewrites using *successor* until fixed point or until *limit* is exceeded.
-        # Effectively, unless *limit* is set, converts a finite or infinite rewriter
-        # to an infinite rewriter.
+        # Rewrites using *successor* until quiescence or until *limit* is exceeded.
+        # Effectively, unless *limit* is set, converts a finite or infinite *successor*
+        # to an infinite one.
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in 100)
+        # (cell @out)
+        # (rewriter (@in -> (exhR rulesetR) -> @out)
+        #   n←(%number _ < 110) => ^(+ n 1))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out 110) ;; The rewriter incremented the number in a loop until it hit 110.
+        # ;; (rewriter (@in -> (exhR rulesetR) -> @out) ...)
+        # ```
         matchpi %{[exhR successor_]} do
           limit = pass do
             next unless candidate = spec[:limit]?
@@ -686,9 +948,48 @@ module Ww
         # |@key pairs
         # See `rho.ascR` to learn more about the pairs accepted by this rewriter.
         #
+        # |@summary
+        # Scan rewriter.
+        #
         # |@block
-        # *Scan rewriter*: rewrites the input dictionary's items, pairs, or both
-        # (depending on `part: _` in *pairs*).
+        # Rewrites the input dictionary's items, pairs, or both (depending on
+        # `part: _` in *pairs*).
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (1 2 3 x: 100 y: 200))
+        # (cell @out)
+        # (rewriter (@in -> (scanR rulesetR) -> @out)
+        #   ±n => ^(+ n 1))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (2 3 4 x: 100 y: 200)) ;; All items were incremented, pairs intact.
+        # ;; (rewriter (@in -> (scanR rulesetR) -> @out) ...)
+        # ```
+        #
+        # The same circuit with `part: pairs`:
+        #
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (1 2 3 x: 100 y: 200))
+        # (cell @out)
+        # (rewriter (@in -> (scanR rulesetR part: pairs) -> @out)
+        #   ±n => ^(+ n 1))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (1 2 3 x: 101 y: 201)) ;; All pairs were incremented, items intact.
+        # ;; (rewriter (@in -> (scanR rulesetR part: pairs) -> @out) ...)
+        # ```
+        #
+        # Similarly, if you set `part: entries`, both items and pairs will
+        # be incremented.
         matchpi %{[scanR successor_]} do
           dirR(spec, data) do |successorR, part, leafp|
             scanR(successorR, part, leafp)
@@ -697,8 +998,22 @@ module Ww
 
         # |@ rho.ascR
         #
+        # |@summary
+        # Ascending rewriter.
+
+        # |@ rho.ascR
+        #
         # |@pattern
         # ascR
+        #
+        # |@block
+        # The shorthand form of `ascR`. It is equivalent to writing:
+        #
+        # ```wwml
+        # (ascR (rulesetR exh: true)
+        #   passable: [passable pattern_]
+        #   impassable: [impassable pattern_])
+        # ```
         matchpi %{ascR} do
           rewriter(SHORTHAND_ASCR, data)
         end
@@ -731,7 +1046,7 @@ module Ww
         # editR should be interested in the term.
         #
         # |@block
-        # *Ascending rewriter*: post-order depth-first rewrite of a dictionary *part*.
+        # Post-order depth-first rewrite of a dictionary *part*.
         matchpi %{[ascR _]} do
           dirR(spec, data) do |successorR, part, leafp|
             ascR(successorR, part, leafp)
@@ -740,8 +1055,22 @@ module Ww
 
         # |@ rho.descR
         #
+        # |@summary
+        # Descending rewriter.
+
+        # |@ rho.descR
+        #
         # |@pattern
         # descR
+        #
+        # |@block
+        # The shorthand form of `descR`. It is equivalent to writing:
+        #
+        # ```wwml
+        # (descR (rulesetR exh: true)
+        #   passable: [passable pattern_]
+        #   impassable: [impassable pattern_])
+        # ```
         matchpi %{descR} do
           rewriter(SHORTHAND_DESCR, data)
         end
@@ -766,7 +1095,7 @@ module Ww
         # See `rho.ascR`.
         #
         # |@block
-        # *Descending rewriter*: pre-order depth-first rewrite of a dictionary *part*.
+        # Pre-order depth-first rewrite of a dictionary *part*.
         matchpi %{[descR _]} do
           dirR(spec, data) do |successorR, part, leafp|
             descR(successorR, part, leafp)
@@ -775,8 +1104,22 @@ module Ww
 
         # |@ rho.bidiR
         #
+        # |@summary
+        # Bidirectional rewriter.
+
+        # |@ rho.bidiR
+        #
         # |@pattern
         # bidiR
+        #
+        # |@block
+        # The shorthand form of `bidiR`. It is equivalent to writing:
+        #
+        # ```wwml
+        # (bidiR (rulesetR exh: true)
+        #   passable: [passable pattern_]
+        #   impassable: [impassable pattern_])
+        # ```
         matchpi %{bidiR} do
           rewriter(SHORTHAND_BIDIR, data)
         end
@@ -801,10 +1144,9 @@ module Ww
         # See `rho.ascR`.
         #
         # |@block
-        # *Bidirectional rewriter*: first, attempts a pre-order rewrite with
-        # *successor*; if no change, then applies recursively to *part*, if
-        # possible; if the rewritten version changed, attempts to apply
-        # *successor* again.
+        # First, attempts a pre-order rewrite with *successor*; if no change,
+        # then applies recursively to *part*, if possible; if the rewritten
+        # version changed, attempts to apply *successor* again.
         matchpi %{[bidiR _]} do
           dirR(spec, data) do |successorR, part, leafp|
             bidiR(successorR, part, leafp)
@@ -813,8 +1155,22 @@ module Ww
 
         # |@ rho.waveR
         #
+        # |@summary
+        # Wave rewriter.
+
+        # |@ rho.waveR
+        #
         # |@pattern
         # waveR
+        #
+        # |@block
+        # The shorthand form of `waveR`. It is equivalent to writing:
+        #
+        # ```wwml
+        # (waveR (rulesetR exh: true)
+        #   passable: [passable pattern_]
+        #   impassable: [impassable pattern_])
+        # ```
         matchpi %{waveR} do
           rewriter(SHORTHAND_WAVER, data)
         end
@@ -833,9 +1189,9 @@ module Ww
         # See `rho.ascR`.
         #
         # |@block
-        # The *wave rewriter* lets you recurse down the itemspart tree, proceeding
-        # if you modify the pairspart of the current node, or do not modify anything;
-        # but stopping if you modify its itemspart.
+        # Lets you recurse down the itemspart tree, proceeding if you modify
+        # the pairspart of the current node, or do not modify anything; but
+        # stopping if you modify its itemspart.
         #
         # In other words, you must not modify anything "in front of" the rewriter,
         # anything the rewriter will soon visit.
@@ -865,19 +1221,153 @@ module Ww
 
         # |@ rho.chainR
         #
+        # |@summary
+        # Chain rewriter.
+
+        # |@ rho.chainR
+        #
         # |@pattern
         # [chainR successors_+]
         #
         # |@key successors rho
         #
         # |@block
-        # Rewrites the input term with each *successor* in turn. If one successor
-        # doesn't terminate the rest of them won't be reached. Use limited `exhR`
-        # if you want to guarantee termination.
+        # Rewrites the input term with each *successor* in turn.
+        #
+        # The data term is broadcast to all *successors*.
+        #
+        # If one successor doesn't terminate the rest of them won't be reached.
+        # Use limited `exhR` if you want to guarantee termination.
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> (chainR (scanR rulesetR) rulesetR) -> @out)
+        #   ;; Increment numbers. Since our toplevel term is a dict, this is only
+        #   ;; reached by (scanR rulesetR).
+        #   ±n => ^(+ n 1)
+        #   ;; Evaluate sum. This will only apply to our toplevel term.
+        #   (+ ±a ±b) => ^(+ a b))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out 5) ;; (+ 1 2) -> (+ 2 3) -> 5
+        # ;; (rewriter (@in -> (chainR (scanR rulesetR) rulesetR) -> @out) ...)
+        # ```
         matchpi %{[chainR head_ successors_*]} do
           successors.items.reduce(rewriter(head, data)) do |memoR, successor|
             chainR(memoR, rewriter(successor, data))
           end
+        end
+
+        # |@ rho.chainR
+        #
+        # |@pattern
+        # chainR
+        #
+        # |@block
+        # This variant works similarly to `rho.stageR` but allows each individual
+        # `step` to specify its own rewriter, unlike `rho.stageR` which uses
+        # the same rewriter for all of its `stage`s.
+        #
+        # |@example
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> chainR -> @out)
+        #   ;; Zero or more steps, each takes a Rho rewriter followed by zero or
+        #   ;; more items for the data term that should be passed to the rewriter.
+        #   (step (scanR rulesetR)
+        #     ±n => ^(+ n 1))
+        #   (step rulesetR
+        #     (+ ±a ±b) => ^(+ a b)))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out 5) ;; (+ 1 2) -> (+ 2 3) -> 5
+        # ;; (rewriter (@in -> chainR -> @out) ...)
+        # ```
+        matchpi %{chainR} do
+          continue unless document = data.as_d?
+
+          steps = Pf::Kit.stack_array(Rewriter, 4)
+
+          document.items.each do |item|
+            Term.matchpi?(item, %{[step rwspec_ stepdata_*]}) do
+              steps << rewriter(rwspec, stepdata)
+            end
+          end
+
+          if steps.empty?
+            return noR
+          end
+
+          steps.reduce { |predecessor, successor| chainR(predecessor, successor) }
+        end
+
+        # |@ rho.guardR
+        #
+        # |@pattern
+        # [guardR pattern_ successor_]
+        #
+        # |@key pattern m1.operator
+        # The input term must match this operator to be rewritten with *successor*.
+        #
+        # |@key successor rho
+        # The guarded rewriter.
+        #
+        # |@summary
+        # Guard rewriter.
+        #
+        # |@block
+        # Guards *successor* with an M1 *pattern*. An input term is only passed to
+        # *successor* if it matches *pattern*. Otherwise, it escapes from this
+        # rewriter unchanged (in that case this rewriter works like `rho.noR`).
+        #
+        # |@example
+        # Here the guardR's pattern says that the only allowed input term is
+        # an itemsonly dictionary:
+        #
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2))
+        # (cell @out)
+        # (rewriter (@in -> (guardR (_*) (scanR rulesetR)) -> @out)
+        #   ±n => ^(+ n 1))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (+ 2 3))
+        # ;; (rewriter (@in -> (guardR (_*) (scanR rulesetR))) ...)
+        # ```
+        #
+        # So if we add some pairs, the rewriter will not change the input:
+        #
+        # ```wwml
+        # ;; Frame 0 (seed)
+        #
+        # (cell @in (+ 1 2 x: 100 y: 200))
+        # (cell @out)
+        # (rewriter (@in -> (guardR (_*) (scanR rulesetR)) -> @out)
+        #   ±n => ^(+ n 1))
+        #
+        # ;; Frame 1
+        #
+        # (cell @in)
+        # (cell @out (+ 1 2 x: 100 y: 200)) ;; Nothing changed
+        # ;; (rewriter (@in -> (guardR (_*) (scanR rulesetR))) ...)
+        # ```
+        matchpi %{[guardR pattern_ successor_]} do
+          guardR(M1.operator(pattern), rewriter(successor, data))
         end
 
         # |@ rho.adjR
@@ -887,11 +1377,13 @@ module Ww
         #
         # |@key successor rho
         #
+        # |@summary
+        # Adjacent rewriter.
+        #
         # |@block
-        # The *adjacent rewriter* rewrites each item in an input dictionary
-        # using *successor*. Each item is also paired with its left and right
-        # neighbors. The resulting dictionary `{| l m r}` is rewritten using
-        # *successor*, which must return `{¦ m}`.
+        # Rewrites each item in an input dictionary using *successor*. Each item is
+        # also paired with its left and right neighbors. The resulting dictionary
+        # `{| l m r}` is rewritten using *successor*, which must return `{¦ m}`.
         matchpi %{[adjR successor_]} do
           adjR(rewriter(successor, data))
         end
@@ -903,9 +1395,11 @@ module Ww
         #
         # |@key successor rho
         #
+        # |@summary
+        # Value rewriter.
+        #
         # |@block
-        # The *value rewriter* uses *successor* to rewrite the value of an entry
-        # with the given *key*.
+        # Uses *successor* to rewrite the value of an entry with the given *key*.
         matchpi %{[valueR key_ successor_]} do
           valueR(key, rewriter(successor, data))
         end
@@ -917,19 +1411,22 @@ module Ww
         #
         # |@key successor rho
         #
+        # |@summary
+        # Stage rewriter.
+        #
         # |@block
-        # The *stage rewriter* lets you split the rulebase into zero or more sections,
-        # called *stages*. *successor* is instantiated for each stage, the stage being
-        # the instance's rulebase, and the resulting rewriters are "stitched" together
-        # into a sequence using `rho.chainR`.
+        # Lets you split the rulebase into zero or more sections, called *stages*.
+        # *successor* is instantiated for each stage, the stage being the instance's
+        # rulebase, and the resulting rewriters are "stitched" together into a sequence
+        # using `rho.chainR`.
         #
         # |@example
-        # This is how `stageR` can be used with `rack.rewriter`:
-        #
         # ```wwml
         # ;; Frame 0 (seed)
         #
-        # (rewriter (@x -> (stageR (scanR (rulesetR))) -> @y)
+        # (cell @in (a b a))
+        # (cell @out)
+        # (rewriter (@in -> (stageR (scanR rulesetR)) -> @out)
         #  (stage
         #    a => b
         #    b => a)
@@ -937,17 +1434,19 @@ module Ww
         #    a => 100
         #    b => 200))
         #
-        # (cell @x (a b a))
-        # (cell @y)
+        # ;; Frame 1
         #
-        # ;; Frame 1 (rewriter omitted because it does not change)
-        # (cell @x)
-        # (cell @y (200 100 200))
+        # (cell @in)
+        # (cell @out (200 100 200))
+        # ;; (rewriter (@in -> (stageR (scanR rulesetR)) -> @out) ...)
+        # ```
         #
-        # ;; Rewriting proceeded in two stages:
-        # ;;   Input: (a b a)
-        # ;; Stage 1: (b a b)
-        # ;; Stage 2: (200 100 200)
+        # In the above, rewriting proceeded in two stages:
+        #
+        # ```text
+        #   Input: (a b a)
+        # Stage 1: (b a b)
+        # Stage 2: (200 100 200)
         # ```
         matchpi %{[stageR successor_]} do
           continue unless document = data.as_d?
@@ -960,14 +1459,11 @@ module Ww
             end
           end
 
-          return noR if stages.empty?
-
-          zero = stages[0]
-          stages.each(within: 1..) do |successor|
-            zero = chainR(zero, successor)
+          if stages.empty?
+            return noR
           end
 
-          zero
+          stages.reduce { |predecessor, successor| chainR(predecessor, successor) }
         end
 
         # |@ rho.section
@@ -979,6 +1475,9 @@ module Ww
         # Name of the section to use.
         #
         # |@key successor rho
+        #
+        # |@summary
+        # Selects a section of the data term for its successor rewriter.
         #
         # |@block
         # Defines the section of the rulebase where rulesets in *successor* must
@@ -998,15 +1497,15 @@ module Ww
         #
         # --- rewriter
         # (chainR
-        #   (section main (rulesetR))
-        #   (section calculate (rulesetR)))
+        #   (section main rulesetR)
+        #   (section calculate rulesetR))
         # ```
         #
         # Notice how we use `section` to refer to sections of the same document
         # the rewriter is in. By convention, Rho front-ends search for the `rewriter`
         # section in any dict they receive. When found, a front-end passes the entire
         # document to the rewriter. Thus, for instance, a rewriter may access itself.
-        # Writing `(section rewriter (rulesetR))` in the above makes perfect sense;
+        # Writing `(section rewriter rulesetR)` in the above makes perfect sense;
         # there is no need to separate the rules from the rewriter provided the general
         # arrangement makes sense:
         #
@@ -1016,7 +1515,7 @@ module Ww
         # b => 200
         # (±a ±b) => ^(+ a b)
         #
-        # (ascR (section rewriter (rulesetR)))
+        # (ascR (section rewriter rulesetR))
         # ```
         #
         # NOTE: The rewriter spec must be located at the very end of the `rewriter`

@@ -1,3 +1,56 @@
+;; noR
+(rack
+  (frame
+    (rewriter (@in -> noR -> @out))
+    (cell @in (+ 1 2))
+    (cell @out))
+
+  (frame/tail
+    (cell @in)
+    (cell @out (+ 1 2)))
+
+  end)
+
+;; constR
+(group
+  (rack
+    (frame
+      (rewriter (@in -> (constR 100) -> @out))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (cell @in)
+      (cell @out 100))
+
+    end)
+
+  (rack
+    (frame
+      (rewriter (@in -> (scanR (constR 100)) -> @out))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (cell @in)
+      (cell @out (100 100 100)))
+
+    end))
+
+;; rulesetR (simple)
+(rack
+  (frame
+    (rewriter (@in -> (scanR rulesetR) -> @out)
+      ±n => ^(+ n 1))
+    (cell @in (+ 1 2))
+    (cell @out))
+
+  (frame/tail
+    (cell @in)
+    (cell @out (+ 2 3)))
+
+  end)
+
 ;; rulesetR
 (rack
   (frame
@@ -104,6 +157,20 @@
     (cell @c 306)
     (cell @d 401)))
   ;; ...
+
+;; scanR with part: pair
+(rack
+  (frame
+    (rewriter (@in -> (scanR rulesetR part: pairs) -> @out)
+      ±n => ^(+ n 1))
+    (cell @in (1 2 3 x: 100 y: 200))
+    (cell @out))
+
+  (frame/tail
+    (cell @in)
+    (cell @out (1 2 3 x: 101 y: 201)))
+
+  end)
 
 ;; ascR: elementary
 (rack
@@ -586,3 +653,48 @@
     (cell @#x))
 
   end)
+
+;; chainR steps
+(rack
+  (frame
+    (rewriter (@in -> chainR -> @out)
+      (step (scanR rulesetR)
+        ±n => ^(+ n 1))
+      (step rulesetR
+        (+ ±a ±b) => ^(+ a b)))
+    (cell @in (+ 1 2))
+    (cell @out))
+
+  (frame/tail
+    (cell @in)
+    (cell @out 5))
+
+  end)
+
+;; guardR
+(group
+  (rack
+    (frame
+      (rewriter (@in -> (guardR (_*) (scanR rulesetR)) -> @out)
+        ±n => ^(+ n 1))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (cell @in)
+      (cell @out (+ 2 3)))
+
+    end)
+
+  (rack
+    (frame
+      (rewriter (@in -> (guardR (_*) (scanR rulesetR)) -> @out)
+        ±n => ^(+ n 1))
+      (cell @in (+ 1 2 x: 100 y: 200))
+      (cell @out))
+
+    (frame/tail
+      (cell @in)
+      (cell @out (+ 1 2 x: 100 y: 200)))
+
+    end))
