@@ -1,19 +1,221 @@
 module Ww::MxRack
-  alias Projection = Window # | AudioGraph | ... (?)
+  # ... | AudioGraph | ... (?)
+  alias Projection = Window | Automaton | ThemeMixin
+
+  defcase Automaton,
+    addr : D7::NodeAddr,
+    key : Term,
+    clf : D7::Classifier,
+    workspace : Term::Dict,
+    tree : D7::GroupNode,
+    draft : Term
+
+  # :nodoc:
+  def automata(tree : D7::InertLeaf | D7::GndLeaf) : Slice(Automaton)
+    Slice(Automaton).empty
+  end
+
+  # :nodoc:
+  def automata(tree : D7::MixtureNode | D7::ScopeNode) : Slice(Automaton)
+    automata(tree.child)
+  end
+
+  # :nodoc:
+  def automata(tree : D7::CircuitNode) : Slice(Automaton)
+    automata(tree.to_group)
+  end
+
+  # :nodoc:
+  SYM_AUTOMATON = Term.of(:automaton)
+
+  # :nodoc:
+  def automata(tree : D7::GroupNode) : Slice(Automaton)
+    automata = Pf::Kit.stack_array(Automaton, 4)
+
+    Term.case(tree.feature.node) do
+      matchpiT %{[automaton ((clfQ_ key_) workspace_dict) draft_*]} do
+        case clfQ
+        when Term.of(:rack)
+          clf = Rack.clf
+        when Term.of(:mxrack)
+          clf = MxRack.clf
+        when Term.of(:musoma)
+          # clf = MuSoma.clf
+          raise ""
+        else
+          continue
+        end
+
+        group = D7::GroupNode.new(D7.parent(draft.as_d), tree.children)
+        automata << Automaton.new(D7::NodeAddr.empty, key, clf, workspace, group, draft)
+      end
+
+      otherwise { }
+    end
+
+    if tree.summary.has_head?(SYM_AUTOMATON)
+      tree.children.zip(tree.feature.range) do |child, key|
+        addr = D7::NodeAddr[key]
+
+        automata(child).each do |automaton|
+          automata << automaton.copy_with(addr: D7::NodeAddr.concat(addr, automaton.addr))
+        end
+      end
+    end
+
+    automata.to_unsafe_readonly_slice!
+  end
+
+  {% if flag?(:docs) %}
+    # Returns automata projections of the given circuit *tree*.
+    def automata(tree : D7::ParseTree) : Slice(Automaton)
+    end
+  {% end %}
+
+  defrecord ThemeMixin, mixin : Term::Dict
+
+  # Recognizes a theme mixin definition *defn*.
+  def theme_mixin(defn : Term) : ThemeMixin
+    mixin = Term[]
+
+    unless defn = defn.as_d?
+      return ThemeMixin.new(mixin)
+    end
+
+    vars = Term::Dict.build do |commit|
+      defn.each_entry(in: Term::Dict.pairspart) do |key, value|
+        Term.matchpi?(key, %{(var name_)}) do
+          commit.with(name, Nitrene.eval(Term[], value))
+        end
+      end
+    end
+
+    defn.each_entry(in: Term::Dict.pairspart) do |section, extension|
+      Term.matchpi?(section, %{(table _)}) do
+        next unless contribution = Alloy.render(extension, locals: vars).as_d?
+
+        contribution.each_entry do |key, value|
+          mixin = Term.morph(mixin, {section, key, value})
+        end
+      end
+    end
+
+    ThemeMixin.new(mixin)
+  end
+
+  def theme_mix(mixins : Enumerable(Term::Dict)) : Term::Dict
+    mix = Term[]
+
+    mixins.each do |mixin|
+      mixin.each_entry do |section, contribution|
+        contribution.each_entry do |key, value|
+          mix = Term.morph(mix, {section, key, value})
+        end
+      end
+    end
+
+    mix
+  end
+
+  # :nodoc:
+  def theme_mixins(tree : D7::InertLeaf) : Slice(ThemeMixin)
+    Slice(ThemeMixin).empty
+  end
+
+  # :nodoc:
+  def theme_mixins(tree : D7::GndLeaf) : Slice(ThemeMixin)
+    node = tree.feature.node
+
+    Term.case(node) do
+      matchpi %{[theme]} do
+        Slice[theme_mixin(node)]
+      end
+
+      otherwise do
+        Slice(ThemeMixin).empty
+      end
+    end
+  end
+
+  # :nodoc:
+  def theme_mixins(tree : D7::MixtureNode | D7::ScopeNode) : Slice(ThemeMixin)
+    theme_mixins(tree.child)
+  end
+
+  # :nodoc:
+  def theme_mixins(tree : D7::CircuitNode) : Slice(ThemeMixin)
+    theme_mixins(tree.to_group)
+  end
+
+  # :nodoc:
+  SYM_THEME = Term.of(:theme)
+
+  # :nodoc:
+  def theme_mixins(tree : D7::GroupNode) : Slice(ThemeMixin)
+    unless tree.summary.has_head?(SYM_THEME)
+      return Slice(ThemeMixin).empty
+    end
+
+    mixins = Pf::Kit.stack_array(ThemeMixin, 4)
+
+    tree.children.zip(tree.feature.range) do |child, key|
+      mixins.concat(theme_mixins(child))
+    end
+
+    mixins.to_unsafe_readonly_slice!
+  end
+
+  {% if flag?(:docs) %}
+    # Returns the Microfold theme mixins in the given circuit's *tree*.
+    def theme_mixins(tree : D7::ParseTree) : Slice(Automaton)
+    end
+  {% end %}
+
+  private def visual_component_rules(tree : D7::ParseTree) : Slice({Term, Term})
+    case tree
+    in D7::InertLeaf
+      Slice({Term, Term}).empty
+    in D7::GndLeaf
+      Term.case(tree.feature.node) do
+        matchpi %{[rule pattern_ body_]} do
+          Slice[{pattern, body}]
+        end
+
+        otherwise do
+          Slice({Term, Term}).empty
+        end
+      end
+    in D7::MixtureNode, D7::ScopeNode
+      visual_component_rules(tree.child)
+    in D7::ParentNode
+      unless tree.summary.has_signature?(D7::NodeSignature.new(Term.of(:rule), 3))
+        return Slice({Term, Term}).empty
+      end
+
+      rules = Pf::Kit.stack_array({Term, Term}, 8)
+      tree.children.each do |child|
+        rules.concat(visual_component_rules(child))
+      end
+
+      rules.to_unsafe_readonly_slice!
+    end
+  end
 
   # Returns multimedia and interactivity nodes in *circuit*.
-  def projections(microfold : Microfold::SyncCodex, circuit : D7::ParseTree) : Array(Projection)
+  def projections(microfold : Microfold::SyncCodex, circuit : D7::ParseTree, *, interactive : Bool = true) : Array(Projection)
     projections = [] of Projection
 
     hg = D7::Hypergraph.new(circuit)
     Rack::Prepass.call(hg) do |hg| # shadow
-      projections = projections(microfold, circuit, hg)
+      projections = projections(microfold, circuit, hg, interactive)
     end
 
     projections
   end
 
-  private def projections(microfold : Microfold::SyncCodex, circuit : D7::ParseTree, hg : D7::Hypergraph) : Array(Projection)
+  private def projections(microfold : Microfold::SyncCodex, circuit : D7::ParseTree, hg : D7::Hypergraph, interactive : Bool) : Array(Projection)
+    components = visual_component_rules(circuit)
+
     # Walk the circuit and find all [window _*]s. We need to know their parse trees,
     # addresses, and keys.
     window_trees_and_keys = {} of D7::NodeAddr => {D7::GroupNode, Term}
@@ -36,7 +238,7 @@ module Ww::MxRack
       window_key_blacklist << window_key
     end
 
-    windows = [] of Window
+    projections = [] of Projection
 
     window_trees_and_keys.each do |window_addr, (window_tree, window_key)|
       window_node = WindowNode.new(window_addr, window_tree)
@@ -55,41 +257,77 @@ module Ww::MxRack
         # as an opt-in, though, e.g. `key: random` or something like that which should
         # rewrite to key: "UUID" or something like that before we even have a chance to
         # look at the window).
-        window_key = Term.of(window_addr)
+        window_key = Term.of(window_node.addr)
       end
 
-      visuals, questions = visualize(microfold, hg, window_node)
+      visuals, questions = visualize(microfold, components, hg, window_node, interactive)
+
       # It always returns Outcome::Accepted though so no worries about the unwrap.
       # By unwrapping we just discard the diagnostics here (for now).
       scenery = Microfold.render(microfold, visuals).unwrap
 
       next unless window_spec = window_spec?(scenery)
 
-      window = Window.new(window_key, window_addr,
+      window = Window.new(window_key, window_node.addr,
         scenery,
-        inputs(window_node),
-        mice(window_node),
-        mouseareas(window_node),
+        interactive ? inputs(window_node) : Slice(Input).empty,
+        interactive ? mice(window_node) : Slice(Mouse).empty,
+        interactive ? mouseareas(window_node) : Slice(MouseArea).empty,
         questions,
         window_spec,
       )
 
-      windows << window
+      projections << window
     end
 
-    windows
+    projections.concat(automata(circuit))
+    projections.concat(theme_mixins(circuit))
+
+    projections
   end
 
-  private def present(ctx : PresentContext, projection : Window) : Nil
-    session = ctx.wm.connect(projection.key)
-    session.submit(projection.spec, projection.scenery)
-  end
+  def repr(tree : D7::ParseTree) : Term
+    case tree
+    in D7::InertLeaf
+      Term.of(:inert, tree.feature.node)
+    in D7::GndLeaf
+      Term.of(:gnd, Term[], tree.feature.node)
+    in D7::MixtureNode
+      Term.of(:inert, tree.feature.node)
+    in D7::ScopeNode
+      repr(tree.child)
+    in D7::ParentNode
+      parent = tree.feature
 
-  defrecord PresentContext, wm : WindowManager
+      repr = parent.node.pairspart.transaction do |commit|
+        commit << :parent << Term[]
 
-  def present(ctx : PresentContext, projections : Array(Projection)) : Nil
-    projections.each do |projection1|
-      present(ctx, projection1)
+        parent.node.items.each_with_index do |item, key|
+          key = key.to_u32
+
+          unless key.in?(parent.range)
+            commit << {:inert, item}
+            next
+          end
+
+          index = key - parent.range.begin
+          child = tree.children[index]
+          child_repr = repr(child)
+
+          # Prepend key to child addrs on unwind.
+          Term.case(child_repr) do
+            matchpi %{[gnd addr←(_*) _]}, %{[parent addr←(_*) _*]} do
+              commit << Term.morph(child_repr, {1, addr.prepend(key)})
+            end
+
+            matchpi %{[inert _]} do
+              commit << child_repr
+            end
+          end
+        end
+      end
+
+      Term.of(repr)
     end
   end
 
@@ -146,6 +384,8 @@ module Ww::MxRack
     assignments = Pf::Kit.stack_array({Int32, Int32, InputFocus}, 4)
 
     projections.each_with_index do |projection, projection_index|
+      next unless projection.is_a?(Window)
+
       wanted = false
       seized = false
       projection.inputs.each do |input|
@@ -189,6 +429,10 @@ module Ww::MxRack
     end
 
     projections = projections.map_with_index do |projection, projection_index|
+      unless projection.is_a?(Window)
+        next projection
+      end
+
       unless assignments.any? { |(candidate_projection_index, _, _)| candidate_projection_index == projection_index }
         next projection
       end
@@ -208,69 +452,6 @@ module Ww::MxRack
     end
 
     {projections, adjustments.to_unsafe_readonly_slice!}
-  end
-
-  private def process(window : Window, session : WindowSession, message : WindowSizeChanged) : Slice(Adjustment)
-    unless window.spec.flags.wants_size?
-      return Slice(Adjustment).empty
-    end
-
-    Slice(Adjustment).of(AdjustWindowSize.new(window.addr, message.width, message.height))
-  end
-
-  private def process(window : Window, session : WindowSession, message : WindowFocusChanged) : Slice(Adjustment)
-    unless window.spec.flags.wants_focus?
-      return Slice(Adjustment).empty
-    end
-
-    Slice(Adjustment).of(AdjustWindowFocus.new(window.addr, message.focus))
-  end
-
-  private def process(window : Window, session : WindowSession, message : WindowHoverChanged) : Slice(Adjustment)
-    adjustments = Pf::Kit.stack_array(Adjustment)
-
-    if window.spec.flags.wants_hover?
-      adjustments << AdjustWindowHover.new(window.addr, message.hover)
-    end
-
-    if message.hover
-      return adjustments.to_unsafe_readonly_slice!
-    end
-
-    # Window was UNhovered
-
-    window.mouseareas.each do |mousearea|
-      next if mousearea.mice.empty?
-
-      # When the OS tells us that the mouse has left the window, this necessarily
-      # means there are no mice over the window, nor are there any mice "captured"
-      # by the window, so there's no drag either. Therefore it is safe for us to
-      # clear all mouseareas.
-      adjustments << AdjustMouseareaClear.new(mousearea.addr)
-    end
-
-    adjustments.to_unsafe_readonly_slice!
-  end
-
-  private def process(window : Window, session : WindowSession, message : WindowFormChanged) : Slice(Adjustment)
-    unless window.spec.flags.wants_form?
-      return Slice(Adjustment).empty
-    end
-
-    Slice(Adjustment).of(AdjustWindowForm.new(window.addr, message.form))
-  end
-
-  private def process(window : Window, session : WindowSession, message : MouseMoved) : Slice(Adjustment)
-    adjustments = Pf::Kit.stack_array(Adjustment)
-
-    window.mice.each do |mouse|
-      next unless mouse.id?.in?(nil, message.mouse_id)
-      next unless mouse.flags.wants_position_always? || (mouse.flags.wants_position_on_press? && session.mouse_pressed?(message.mouse_id))
-
-      adjustments << AdjustMousePosition.new(mouse.addr, Scenery::Point[message.x, message.y])
-    end
-
-    adjustments.to_unsafe_readonly_slice!
   end
 
   private def hitarea_leaf?(hit_node : Scenery::HitNode) : Scenery::HitAreaLeaf?
@@ -325,7 +506,7 @@ module Ww::MxRack
 
       if session.mouse_pressed?(mouse_id)
         window.mouseareas.each do |mousearea|
-          next unless mousearea.flags.wants_position_always? || (mousearea.flags.wants_position_on_press? && session.mouse_pressed?(mouse_id))
+          next unless mousearea.flags.wants_position_always? || (mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
           next unless mouse = mousearea.mice.find { |candidate| candidate.id == mouse_id }
 
           if hit_row && hit_row[0].addr == mousearea.addr
@@ -360,7 +541,7 @@ module Ww::MxRack
           next
         end
 
-        next unless hit_mousearea.flags.wants_position_always? || (hit_mousearea.flags.wants_position_on_press? && session.mouse_pressed?(mouse_id))
+        next unless hit_mousearea.flags.wants_position_always? || (hit_mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
 
         adjustments << AdjustMouseareaDelta.new(hit_mousearea.addr, mouse.key, hit_point)
       end
@@ -377,7 +558,83 @@ module Ww::MxRack
     adjustments.to_unsafe_readonly_slice!
   end
 
-  private def process(window : Window, session : WindowSession, message : MouseButtonPressed) : Slice(Adjustment)
+  private def process(window : Window, message : WindowSizeChanged) : Slice(Adjustment)
+    unless window.spec.flags.wants_size?
+      return Slice(Adjustment).empty
+    end
+
+    Slice(Adjustment).of(AdjustWindowSize.new(window.addr, message.width, message.height))
+  end
+
+  private def process(window : Window, message : WindowFocusChanged) : Slice(Adjustment)
+    unless window.spec.flags.wants_focus?
+      return Slice(Adjustment).empty
+    end
+
+    Slice(Adjustment).of(AdjustWindowFocus.new(window.addr, message.focus))
+  end
+
+  private def process(window : Window, message : WindowHoverChanged) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    if window.spec.flags.wants_hover?
+      adjustments << AdjustWindowHover.new(window.addr, message.hover)
+    end
+
+    if message.hover
+      return adjustments.to_unsafe_readonly_slice!
+    end
+
+    # Window was UNhovered
+
+    window.mouseareas.each do |mousearea|
+      next if mousearea.mice.empty?
+
+      # When the OS tells us that the mouse has left the window, this necessarily
+      # means there are no mice over the window, nor are there any mice "captured"
+      # by the window, so there's no drag either. Therefore it is safe for us to
+      # clear all mouseareas.
+      adjustments << AdjustMouseareaClear.new(mousearea.addr)
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : WindowFormChanged) : Slice(Adjustment)
+    unless window.spec.flags.wants_form?
+      return Slice(Adjustment).empty
+    end
+
+    Slice(Adjustment).of(AdjustWindowForm.new(window.addr, message.form))
+  end
+
+  private def process(window : Window, message : MouseMoved) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment, 4)
+
+    window.mice.each do |mouse|
+      next unless mouse.id?.in?(nil, message.mouse_id)
+      next unless mouse.flags.wants_position_always?
+
+      adjustments << AdjustMousePosition.new(mouse.addr, Scenery::Point[message.x, message.y])
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : MouseDragged) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    window.mice.each do |mouse|
+      next unless mouse.id?.in?(nil, message.mouse_id)
+      next unless mouse.flags.wants_position_drag?
+
+      adjustments << AdjustMousePosition.new(mouse.addr, Scenery::Point[message.x, message.y])
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : MouseButtonPressed) : Slice(Adjustment)
     adjustments = Pf::Kit.stack_array(Adjustment)
 
     window.mice.each do |mouse|
@@ -395,7 +652,7 @@ module Ww::MxRack
     adjustments.to_unsafe_readonly_slice!
   end
 
-  private def process(window : Window, session : WindowSession, message : MouseButtonReleased) : Slice(Adjustment)
+  private def process(window : Window, message : MouseButtonReleased) : Slice(Adjustment)
     adjustments = Pf::Kit.stack_array(Adjustment)
 
     window.mice.each do |mouse|
@@ -407,14 +664,14 @@ module Ww::MxRack
     window.mouseareas.each do |mousearea|
       next unless mouse = mousearea.mice.find { |candidate| candidate.id == message.mouse_id }
 
-      reset_delta = mousearea.flags.wants_position_on_press?
+      reset_delta = mousearea.flags.wants_position_drag?
       adjustments << AdjustMouseareaRelease.new(mousearea.addr, mouse.key, message.button, reset_delta)
     end
 
     adjustments.to_unsafe_readonly_slice!
   end
 
-  private def process(window : Window, session : WindowSession, message : KeyboardMessage) : Slice(Adjustment)
+  private def process(window : Window, message : KeyboardMessage) : Slice(Adjustment)
     adjustments = Pf::Kit.stack_array(Adjustment)
 
     # When an input is unfocused (donor input), it does not make sense to
@@ -528,6 +785,35 @@ module Ww::MxRack
     adjustments.to_unsafe_readonly_slice!
   end
 
+  def transcribe(projection : Window) : Term
+    Term.morph(projection.scenery,
+      {:title, projection.spec.title},
+      {:width, projection.spec.width},
+      {:height, projection.spec.height},
+      {:cursor, transcribe(projection.spec.cursor)},
+      {:backdrop, projection.spec.backdrop},
+      {:form, transcribe(projection.spec.form)},
+    )
+  end
+
+  def transcribe(form : WindowForm) : Term
+    case form
+    in .closed?    then Term.of(:closed)
+    in .floating?  then Term.of(:floating)
+    in .minimized? then Term.of(:minimized)
+    in .maximized? then Term.of(:maximized)
+    end
+  end
+
+  def transcribe(cursor : MouseCursor) : Term
+    # If there are multiple aliases we'd just use whichever happens to be
+    # the first one.
+    term, _ = CURSOR_MAP.find! { |_, candidate| candidate == cursor }
+    term
+  end
+
+  ROOT_AUTOMATON_KEY = Term.of(:root)
+
   private def run(alert : BlockingSignal, eventq : EventQueue) : Nil
     filename = ARGV[0]
     quiet = "--quiet".in?(ARGV)
@@ -553,34 +839,20 @@ module Ww::MxRack
     mxrack = ML.document(ResourceService.read_string(ResourceService.codex("mxrack")))
     library = Rack::Assembler.library(mxrack[:library])
 
-    vars = Term[]
-    mxrack[:theme].each_entry do |key, value|
-      Term.matchpi?(key, %{(var name_)}) do
-        vars = vars.with(name, Nitrene.eval(Term[], value))
-      end
-    end
+    microfold_base_theme = ML.document(ResourceService.read_string(ResourceService.codex("ufold"))).as_d
+    microfold_mxrack_theme = theme_mixin(mxrack[:theme]).mixin
 
-    microfold_doc = ML.document(ResourceService.read_string(ResourceService.codex("ufold")))
+    seed = ML.document(File.read(filename))
 
-    mxrack[:theme].each_entry do |section, extension|
-      Term.matchpi?(section, %{(table _)}) do
-        next unless mixin = Alloy.render(extension, locals: vars).as_d?
+    microfold = nil
+    microfold_mixed_theme = Term.of
 
-        mixin.each_entry do |key, value|
-          microfold_doc = Term.morph(microfold_doc, {section, key, value})
-        end
-      end
-    end
-
-    # TODO: if seed is a document with section --- default, then:
-    #   --- theme
-    #   Can contain extensions to the theme
-
-    microfold = Microfold.codex(microfold_doc).unwrap
+    parsers = {} of D7::Classifier => D7::Parser
+    circuits = {} of Term => Circuit
 
     # Proceed to the mainloop.
     circuit = Circuit.new(clf, alert)
-    circuit.draft = ML.document(File.read(filename))
+    circuit.draft = seed
     projections = [] of Projection
 
     prev_displayed = Term.of
@@ -588,6 +860,21 @@ module Ww::MxRack
     epoch = 0u64
     loop do
       version0 = circuit.version
+
+      # Maintain the Microfold codex up-to-date as a composition of various "ingredients":
+      # some of them coming from the base theme in codices/, some from the MxRack codex,
+      # and others yet, live, from the circuit itself.
+      microfold_circuit_theme = theme_mix(projections.each.select(ThemeMixin).map(&.mixin))
+
+      microfold_mixed_theme_candidate = {
+        microfold_base_theme,
+        microfold_mxrack_theme,
+        microfold_circuit_theme,
+      }
+      if microfold.nil? || microfold_mixed_theme != microfold_mixed_theme_candidate
+        microfold = Microfold.codex(theme_mix(microfold_mixed_theme_candidate)).unwrap
+        microfold_mixed_theme = microfold_mixed_theme_candidate
+      end
 
       # Handle events.
       case event = eventq.shift?
@@ -597,72 +884,169 @@ module Ww::MxRack
       in WindowReceived
         pass do
           next unless key = wm.key?(event.session_id)
-          next unless window = projections.find { |projection| projection.is_a?(Window) && projection.key == key }
+
+          window = projections.leftmost? do |projection|
+            next unless projection.is_a?(Window)
+            next unless projection.key == key
+
+            projection
+          end
+
+          next if window.nil?
           next unless window_session = wm.join?(key)
 
           window_session.accept(event.message)
 
-          adjustments = process(window, window_session, event.message)
+          adjustments = process(window, event.message)
           if adjustments.present?
             circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
           end
         end
       end
 
-      adjustments = Slice(Adjustment).empty
+      # Hit test.
+      pass do
+        adjustments = Slice(Adjustment).empty
 
-      projections.each do |projection|
-        next unless projection.is_a?(Window)
-        next unless session = wm.join?(projection.key)
-        next unless scene = session.scene?
+        projections.each do |projection|
+          next unless projection.is_a?(Window)
+          next unless session = wm.join?(projection.key)
+          next unless scene = session.scene?
 
-        # Update questions ?xyz: _.
-        if projection.questions.present?
-          answers = answer_map(scene)
+          # Update questions ?xyz: _.
+          if projection.questions.present?
+            answers = answer_map(scene)
 
-          projection.questions.each do |question|
-            answer = answers[{question.addr, question.key}]?
-            adjustments = adjustments.append(AdjustQuestion.new(question.addr, question.key, answer))
+            projection.questions.each do |question|
+              answer = answers[{question.addr, question.key}]?
+              adjustments = adjustments.append(AdjustQuestion.new(question.addr, question.key, answer))
+            end
+          end
+
+          # Perform hit testing.
+          #
+          # NOTE: This must go after answer_map() because answer_map() will reset ?aim,
+          # which we later update in hit() for all hit texts. This way, all *un*hit
+          # texts are reset, and all hit texts are updated!
+          adjustments += hit(projection, session)
+        end
+
+        if adjustments.present?
+          circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
+        end
+      end
+
+      # Step the circuit and sub-automata.
+      # frame, projections = step(D7::NodeAddr.empty, circuit, library, microfold, parsers, circuits, alert, paused: false)
+
+      # Step the circuit.
+      frame = pass do
+        # Run physics (in our case of course symbolic physics!)
+        step_out = circuit.step(Rack::Prepass, library)
+
+        # Get all projections of the circuit.
+        projections = projections(microfold, step_out)
+
+        # Make sure deepest automata go last (I mean, the order doesn't matter, but
+        # the fact everything's sorted does).
+        automata = projections.select(Automaton).sort_by!(&.addr.size)
+
+        au_projections = {} of Automaton => Array(Projection)
+        au_projections.compare_by_identity
+
+        projections.select! do |projection|
+          unless projection.is_a?(Window)
+            next true # keep
+          end
+
+          automaton = automata.reverse_each.find do |automaton|
+            next unless projection.addr.size > automaton.addr.size
+            next unless projection.addr.starts_with?(automaton.addr)
+
+            true
+          end
+
+          if automaton.nil?
+            next true # keep
+          end
+
+          bucket = au_projections.put_if_absent(automaton) { [] of Projection }
+          bucket << projection
+
+          false # reject
+        end
+
+        adjustments = Pf::Kit.stack_array(Adjustment, 8)
+
+        automata.reverse_each do |automaton|
+          guest = circuits.put_if_absent(automaton.key) { Circuit.new(automaton.clf, alert) }
+
+          pass do
+            next if automaton.workspace.includes?(:turnover) # The circuit didn't handle turnover yet, don't overwhelm it
+
+            guest.draft = automaton.draft
+
+            # TODO: We want to submit subframes, not frames.
+            _ = guest.step(Rack::Prepass, library)
+
+            next if automaton.draft == guest.draft
+
+            adjustments << AdjustAutomatonUpdateDraft.new(automaton.addr, guest.draft)
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:turnover), Term.of(true))
+          end
+
+          if present = automaton.workspace[:present]?
+            present_tree = guest.parser.parse(present)
+
+            # FIXME: it should be preview() or something like that, no hitareas and such
+            window_transcripts = projections(microfold, present_tree, interactive: false)
+              .select(Window)
+              .map { |window| transcribe(window) }
+
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(present_tree))
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
+          else
+            window_transcripts = (au_projections[automaton]? || [] of Projection).each
+              .select(Window)
+              .map { |window| transcribe(window) }
+
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(automaton.tree))
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           end
         end
 
-        # Perform hit testing.
-        #
-        # NOTE: This must go after answer_map() because answer_map() will reset ?aim,
-        # which we later update in hit() for all hit texts. This way, all *un*hit
-        # texts are reset, and all hit texts are updated!
-        adjustments += hit(projection, session)
-      end
-
-      if adjustments.present?
-        circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
-      end
-
-      # Run physics (in our case of course symbolic physics!)
-      frame = circuit.step(Rack::Prepass, library)
-
-      # Derive and submit projections.
-      pass do
-        # Get all projections of the circuit.
-        projections = projections(microfold, frame)
-
-        # Perform focus exchange if possible, so that `focus: wanted` becomes `focus: true`
-        # and previous foci are released. This must not change node addresses!
-        projections, adjustments = focus_exchange(projections)
         if adjustments.present?
           circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
         end
 
-        # *Present* the projections. For graphical projections this means draw them. In the future,
-        # for audio projections, it'd perhaps mean submit them to the DSP engine and so on.
-        present(PresentContext.new(wm), projections)
+        # Perform focus exchange if possible -- so that `focus: wanted` becomes `focus: true`,
+        # and previous foci are released.
+        projections, adjustments = focus_exchange(projections)
+
+        # Apply adjustments, if any.
+        if adjustments.present?
+          circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
+        end
+
+        circuit.draft
+      end
+
+      # Adjustments below must not change node addresses or rewrite nodes in any way.
+      # They may only annotate or update existing nodes.
+
+      # Present window projections.
+      projections.each do |projection|
+        next unless projection.is_a?(Window)
+
+        session = wm.connect(projection.key)
+        session.submit(projection.spec, projection.scenery)
       end
 
       # DEBUG
       pass do
         next if quiet
 
-        to_display = frame.feature.node
+        to_display = frame
         next if prev_displayed == to_display
 
         puts ML.display(to_display)
@@ -672,14 +1056,19 @@ module Ww::MxRack
       # This is a spot for garbage collection and similar kinds of cleanup.
       wm.gc
 
-      # Finally there is the last section of the loop, which decides how and whether
+      # Then there is this final section of the loop, which decides how and whether
       # to wait, just as in a classical game loop.
+
       next unless version0 == circuit.version
-      next unless eventq.empty? # NOTE: This doesn't appear to be racey. Is it?
+      # Circuit not changed.
+
+      next unless eventq.empty?
+      # No pending events. NOTE: This doesn't appear to be racey. Is it?
 
       break if wm.empty? && !circuit.pending?
+      # Some windows or pending work.
 
-      # Wait
+      # Wait.
       if deadline = circuit.deadline?
         epoch = alert.wait_until(epoch, timeout: deadline - Time.instant)
       else

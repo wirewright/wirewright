@@ -171,6 +171,11 @@ module Ww::MxRack
       return Slice(Input).empty
     end
 
+    # Only visit automata that are focused.
+    Term.matchpi?(tree.feature.node, %{[automaton [_ {¦ focus⋮ false}] _*]}) do
+      return Slice(Input).empty unless focus.true?
+    end
+
     inputs = Pf::Kit.stack_array(Input, 4)
 
     tree.children.zip(tree.feature.range) do |child, key|

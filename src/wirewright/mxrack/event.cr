@@ -13,9 +13,10 @@ module Ww::MxRack
   defrecord WindowFocusChanged, focus : Bool
   defrecord WindowFormChanged, form : WindowForm
 
-  alias MouseMessage = MouseMoved | MouseButtonPressed | MouseButtonReleased
+  alias MouseMessage = MouseMoved | MouseDragged | MouseButtonPressed | MouseButtonReleased
 
   defrecord MouseMoved, mouse_id : UInt64, x : Magnitude, y : Magnitude
+  defrecord MouseDragged, mouse_id : UInt64, x : Magnitude, y : Magnitude
   defrecord MouseButtonPressed, mouse_id : UInt64, button : Term, clicks : UInt32
   defrecord MouseButtonReleased, mouse_id : UInt64, button : Term
 

@@ -448,6 +448,10 @@ module Ww::MxRack
 
     private def handle(window_id : UInt64, handle : WindowHandle, event : SDL::MouseMoved) : Nil
       @eventq << WindowReceived.new(window_id, MouseMoved.new(event.mouse_id, event.x, event.y))
+
+      unless event.buttons.none?
+        @eventq << WindowReceived.new(window_id, MouseDragged.new(event.mouse_id, event.x, event.y))
+      end
     end
 
     private def mouse_button(button : SDL::MouseButton) : Term

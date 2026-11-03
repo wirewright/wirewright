@@ -1,6 +1,8 @@
 module Ww::MxRack
   # See `adjust` to learn what adjustments are.
-  alias Adjustment = AdjustWindow | AdjustMouse | AdjustMousearea | AdjustInput | AdjustTextoscope | AdjustQuestion
+  alias Adjustment = AdjustWindow | AdjustMouse | AdjustMousearea | AdjustInput |
+                     AdjustTextoscope | AdjustQuestion | AdjustAutomatonUpdate |
+                     AdjustAutomatonUpdateDraft
 
   alias AdjustWindow = AdjustWindowSize | AdjustWindowFocus | AdjustWindowForm |
                        AdjustWindowHover
@@ -41,6 +43,9 @@ module Ww::MxRack
   defrecord AdjustTextoscopeView, addr : D7::NodeAddr, view : Term
 
   defrecord AdjustQuestion, addr : D7::NodeAddr, key : Term, answer : Term?
+
+  defrecord AdjustAutomatonUpdate, addr : D7::NodeAddr, key : Term, value : Term
+  defrecord AdjustAutomatonUpdateDraft, addr : D7::NodeAddr, draft : Term
 
   # E.g. (window _* ⏏width: 500⏏ ⏏height: 400⏏) -> (window _* ⏏width: 800⏏ ⏏height: 600⏏)
   private def adjust(target : Term, adjustment : AdjustWindowSize) : Term
@@ -88,7 +93,7 @@ module Ww::MxRack
   # E.g. (mousearea (mouse 0 ⏏l: 0⏏ ⏏t: 0⏏)) -> (mousearea (mouse 0 ⏏l: 100⏏ ⏏t: 100⏏))
   private def adjust(target : Term, adjustment : AdjustMouseareaPosition) : Term
     # Initialize the `dl`, `dt`, or both of the mouse in case it lacks them. This can
-    # happen with mousearea position: on-press. Before press the mousearea is oblivious
+    # happen with mousearea position: drag. Before press the mousearea is oblivious
     # to position and therefore, to `dl` and `dt`. After press the mouse is captured,
     # meaning absolute mouse positions stream directly, and deltas do not, because
     # that would make no sense. The whole point of streaming absolute mouse positions
@@ -209,6 +214,17 @@ module Ww::MxRack
     Term.of(target.with(adjustment.key, adjustment.answer || Term.of(:_)))
   end
 
+  # (automaton ((rack x) {⏏draft: _⏏}) _?)
+  # (automaton ((rack x) {draft: _, ⏏repr: _⏏}) _?)
+  # etc.
+  private def adjust(target : Term, adjustment : AdjustAutomatonUpdate) : Term
+    Term.morph(target, {1, 1, adjustment.key, adjustment.value})
+  end
+
+  private def adjust(target : Term, adjustment : AdjustAutomatonUpdateDraft) : Term
+    Term.of(target.replace(2u32...target.uitemsize, Term.rep(adjustment.draft.items)))
+  end
+
   private def adjust(tree : D7::InertLeaf, router : D7::NodeAddrRouter) : Term
     raise ArgumentError.new
   end
@@ -233,8 +249,8 @@ module Ww::MxRack
   end
 
   private def adjust(tree : D7::GroupNode, router : D7::NodeAddrRouter) : Term
+    # Apply child adjustments first.
     if router.has_children?
-      # Apply child adjustments.
       result = tree.feature.node.transaction do |commit|
         tree.children.zip(tree.feature.range) do |child, key|
           next unless ahead = router.cd?(key)
@@ -279,10 +295,10 @@ module Ww::MxRack
   # even if it can handle most of them just fine.
   #
   # Adjustments currently do not validate their target node. For example,
-  # `AdjustWindowForm` will work on any node and not just on `window` nodes,
+  # `AdjustWindowForm` will work on any node and not just on `window`,
   # although it should probably do the latter eventually. Right now this is not
   # necessary since *adjustments* are expected to come from a trusted source.
-  def adjust(tree : D7::ParseTree, adjustments : Slice(Adjustment)) : Term
+  def adjust(tree : D7::ParseTree, adjustments : Enumerable(Adjustment)) : Term
     # Bucketize adjustments while preserving their original order in-bucket.
     buckets = {} of D7::NodeAddr => Array(Adjustment)
     adjustments.each do |adjustment|

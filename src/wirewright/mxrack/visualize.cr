@@ -137,8 +137,10 @@ module Ww::MxRack
   # :nodoc:
   defrecord VisualizeContext,
     microfold : Microfold::SyncCodex,
+    components : Slice({Term, Term}),
     hg : D7::Hypergraph,
-    questions : Array(Question)
+    questions : Array(Question),
+    interactive : Bool
 
   # :nodoc:
   #
@@ -253,7 +255,9 @@ module Ww::MxRack
     Term.case(node) do
       matchpi %{[visual template_*]} do
         begin
-          instance = Alloy.render(template, composite: visualize_edge_eval(ctx, addr))
+          # TODO: cache (esp recognize+compile)
+          comp = Alloy.compile(Alloy.recognize(template, ctx.components))
+          instance = Alloy.render(comp, composite: visualize_edge_eval(ctx, addr))
         rescue VisualizeEdgeUndefined
           # Omit if not defined.
           #   (module {}
@@ -305,6 +309,8 @@ module Ww::MxRack
       end
 
       matchpi %{[mousearea _*]} do
+        continue unless ctx.interactive
+
         Term.rep(Term.of(:hitarea, addr))
       end
 
@@ -372,21 +378,6 @@ module Ww::MxRack
       matchpi %{[window _*]} do
         Term.rep
       end
-
-      # matchpi %{[textoscope _ _*]} do
-      #   rep = Term.flatten(tree.children) do |child, index|
-      #     key = tree.feature.range.begin + index
-      #     visualize(ctx, ensemble, addr.append(key), child)
-      #   end
-
-      #   result = Term::Dict.build do |commit|
-      #     commit << :vantage # textoscope
-      #     commit.with(:id, addr)
-      #     commit.concat(rep)
-      #   end
-
-      #   Term.rep(visualize_postprocess(ctx, addr, Term.of(result)))
-      # end
 
       matchpi %{[head_ _*]} do
         if visual?(ctx.microfold, node)
@@ -456,9 +447,15 @@ module Ww::MxRack
   # most components in which aren't even visible! Maybe we can have three passes, one is a cacheable
   # "compile" pass, the second gets hypergraph edges and so on to prepare an "environment" for
   # the third pass, and lastly the third pass does cacheable Nitrene.eval, Alloy, etc. on the "environment".
-  def visualize(microfold : Microfold::SyncCodex, hg : D7::Hypergraph, window : WindowNode) : {Term, Array(Question)}
+  def visualize(
+    microfold : Microfold::SyncCodex,
+    components : Slice({Term, Term}),
+    hg : D7::Hypergraph,
+    window : WindowNode,
+    interactive : Bool,
+  ) : {Term, Array(Question)}
     questions = [] of Question
-    ctx = VisualizeContext.new(microfold, hg, questions)
+    ctx = VisualizeContext.new(microfold, components, hg, questions, interactive)
     ensemble = Ensemble.new(args: Deque(Term).new)
     visuals = visualize(ctx, ensemble, window.addr, window.tree.feature, window.tree.children)
     {visuals, questions}

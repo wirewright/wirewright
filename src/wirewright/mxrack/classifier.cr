@@ -161,7 +161,7 @@ module Ww::MxRack
         # The possible values are:
         # - `false`: position should not be tracked.
         # - `always`: position should be tracked at all times.
-        # - `on-press`: position should be tracked only while any mouse button is down.
+        # - `drag`: position should be tracked only while any mouse button is down.
         #
         # The position is exposed on the mouse node as `l: _number` and `t: _number`,
         # both expressed in window coordinates (`l: 0 t: 0` means top-left corner of
@@ -180,7 +180,7 @@ module Ww::MxRack
         # |@example
         # ```wwml
         # (window
-        #   ;; Try changing to position: on-press and observe what happens.
+        #   ;; Try changing to position: drag and observe what happens.
         #   (frag @mouse (mouse * position: always))
         #
         #   (limit max-w: 50 max-h: 50
@@ -328,10 +328,10 @@ module Ww::MxRack
         #   capture dragged mice. (That is, if you press a button while the mouse is inside
         #   the mousearea, then move it out, the mouse will just leave the mousearea.)
         # - `always`: position should be tracked at all times.
-        # - `on-press`: a mouse's position should be tracked only while one of its
+        # - `drag`: a mouse's position should be tracked only while one of its
         #   buttons is down.
         #
-        # With `position: always` and `position: on-press`, the mousearea will "capture"
+        # With `position: always` and `position: drag`, the mousearea will "capture"
         # (will keep showing) mice that are dragged out of it. That is, if you press
         # a button while the mouse is inside the mousearea, then move the mouse out,
         # the mouse will still be in the mousearea, and it will not enter any other mousearea.
@@ -383,6 +383,14 @@ module Ww::MxRack
         # |@key children mxrack
         matchpi %{[ensemble _*]} do
           D7.parent(node.as_d, 1u32...node.uitemsize)
+        end
+
+        matchpi %{[automaton ((_ _) _dict) _*]} do
+          D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node), autonomous: true)
+        end
+
+        matchpi %{[theme]} do
+          D7.gnd(node)
         end
 
         matchpi %{[head_ _*]} do

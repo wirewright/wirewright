@@ -7,17 +7,20 @@ presets:
  "doctool": {source: "src/doctool.cr"},
  "irack": {source: "src/irack.cr"},
  "mt":
-  {flags: {"execution_context": true, "preview_mt": true}},
+   {flags: {"execution_context": true, "preview_mt": true}},
  "musoma":
-  {flags:
-    {"musoma": true,
-     "no_number_autocast": true,
-     "sdl3": true},
-   source: "src/musoma.cr"},
+   {flags:
+      {"musoma": true,
+       "no_number_autocast": true,
+       "sdl3": true},
+    source: "src/musoma.cr"},
+ "mxrack":
+   {flags: {"libsdl3": true, "mxrack": true},
+    source: "src/mxrack.cr"},
  "tests":
-  {flags: {"dwuir": true, "no_number_autocast": true},
-   runvars: {"LOG_LEVEL": "warn"},
-   source: "src/testtool.cr"}}
+   {flags: {"dwuir": true, "no_number_autocast": true},
+    runvars: {"LOG_LEVEL": "warn"},
+    source: "src/testtool.cr"}}
 
 protocol:
 "dev 0"

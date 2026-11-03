@@ -53,12 +53,18 @@ module Ww::Alloy
 
   # Compiles the given Alloy *sheet*.
   #
-  # NOTE: Sheets compilation is not cached on the Alloy side.
+  # NOTE: Sheet compilation is not cached on the Alloy side.
   def compile(sheet : Sheet) : CompiledTemplate
-    unit = recognize(sheet)
-    reftab = refs(unit)
+    compile(recognize(sheet))
+  end
 
-    CompiledTemplate.new(unit, reftab)
+  # Compiles the given Alloy *unit*.
+  #
+  # NOTE: Unit compilation is not cached on the Alloy side. You should cache it
+  # yourself if you want to. You are not advised to cache this overload alone.
+  # Prefer to cache `recognize` that produced *unit* followed by this overload.
+  def compile(unit : Unit) : CompiledTemplate
+    CompiledTemplate.new(unit, refs(unit))
   end
 
   @@bank = ThresholdLRU(Term, CompiledTemplate).new(

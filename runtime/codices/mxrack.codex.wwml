@@ -450,21 +450,21 @@
            ;; Horizontal scrollbar.
            (box style: "max-h-3 py-2/3 bg-transparent membrane absent has-thumb:present"
              (frag (@x-track-mouse [mousearea x-track-mouse_])
-               (mousearea position: on-press))
+               (mousearea position: drag))
              (frag (space @x-thumb)
                (transform dl: 0
                  (limit max-w: 0
-                   (mousearea position: on-press)
+                   (mousearea position: drag)
                    ($ThumbView))))))
 
          ;; Vertical scrollbar.
          (box style: "max-w-3 px-2/3 bg-transparent membrane absent has-thumb:present"
            (frag (@y-track-mouse [mousearea y-track-mouse_])
-             (mousearea position: on-press))
+             (mousearea position: drag))
            (frag (space @y-thumb)
              (transform dt: 0
                (limit max-h: 0
-                 (mousearea position: on-press)
+                 (mousearea position: drag)
                  ($ThumbView))))))
 
        ;;| Maintain bindings to useful parts of both thumbs.
@@ -882,11 +882,11 @@
        (^unless (= label "")
          (p ^label style: "upcase font-condensed font-medium text-ui-supplementary text-xs/4"))
        (box style: "fr-1"
-         ;;| NOTE: We use on-press here to make sure the mousearea is aware of *dragging*,
+         ;;| NOTE: We use drag here to make sure the mousearea is aware of *dragging*,
          ;;| and doesn't lose a dragging mouse once it's outside the mousearea. In our specific
          ;;| case this may occur when you do selection dragging.
          (frag (@mouse [mousearea mouse_])
-           (mousearea position: on-press))
+           (mousearea position: drag))
          (ensemble
            ($Scroll @scroll-signal)
            (box style: ^"-wrap:content-x content-y font-sans font-text text-base/6 ⸢content-style⸣"

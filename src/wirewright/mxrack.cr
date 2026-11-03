@@ -34,11 +34,11 @@ module Ww::MxRack
   alias MediaProgram = WindowProgram
 end
 
+require "./mxrack/adjust"
 require "./mxrack/classifier"
 require "./mxrack/input"
 require "./mxrack/mouse"
 require "./mxrack/visualize"
-require "./mxrack/adjust"
 require "./mxrack/window"
 require "./mxrack/sdl_loop"
 require "./mxrack/textoscope"

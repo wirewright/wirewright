@@ -266,7 +266,7 @@ module Ww
 
     defrecord MouseAdded, mouse_id : MouseId
     defrecord MouseRemoved, mouse_id : MouseId
-    defrecord MouseMoved, window_id : WindowId, mouse_id : MouseId, x : Float32, y : Float32, dx : Float32, dy : Float32
+    defrecord MouseMoved, window_id : WindowId, mouse_id : MouseId, x : Float32, y : Float32, dx : Float32, dy : Float32, buttons : Slice(MouseButton)
     defrecord MouseButtonUp, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
     defrecord MouseButtonDown, window_id : WindowId, mouse_id : MouseId, button : MouseButton, clicks : UInt8
     defrecord MouseWheelScrolled, window_id : WindowId, mouse_id : MouseId, dx : Float32, dy : Float32
@@ -351,13 +351,17 @@ module Ww
       when .mouse_removed?
         MouseRemoved.new(event.mdevice.which)
       when .mouse_motion?
-        MouseMoved.new(event.motion.window_id,
-          mouse_id: event.motion.which,
-          x: event.motion.x,
-          y: event.motion.y,
-          dx: event.motion.xrel,
-          dy: event.motion.yrel,
-        )
+        window_id = event.motion.window_id
+        mouse_id = event.motion.which
+        x = event.motion.x
+        y = event.motion.y
+        dx = event.motion.xrel
+        dy = event.motion.yrel
+
+        buttons = Pf::Kit.stack_array(MouseButton, 4)
+        transcribe(buttons, event.motion.state)
+
+        MouseMoved.new(window_id, mouse_id, x, y, dx, dy, buttons.to_unsafe_readonly_slice!)
       when .mouse_wheel?
         # https://wiki.libsdl.org/SDL3/SDL_MouseWheelEvent
         case event.wheel.direction
@@ -443,6 +447,28 @@ module Ww
       modifiers << :caps_lock if keymod.caps?
       modifiers << :alt_gr if keymod.mode?
       modifiers << :scroll_lock if keymod.scroll?
+    end
+
+    private def transcribe(buttons, flags : LibSDL::MouseButtonFlags) : Nil
+      if flags.left?
+        buttons << MouseButton::Left
+      end
+
+      if flags.middle?
+        buttons << MouseButton::Middle
+      end
+
+      if flags.right?
+        buttons << MouseButton::Right
+      end
+
+      if flags.x1?
+        buttons << MouseButton::X1
+      end
+
+      if flags.x2?
+        buttons << MouseButton::X2
+      end
     end
   end
 end

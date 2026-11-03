@@ -2,7 +2,7 @@ module Ww::MxRack
   @[::Flags]
   enum MouseFlags
     WantsPositionAlways
-    WantsPositionOnPress
+    WantsPositionDrag
   end
 
   # Represents the relevant parts of a `mouse` node (`mxrack.mouse`).
@@ -42,8 +42,8 @@ module Ww::MxRack
         case position
         when Term.of(:always)
           flags |= MouseFlags::WantsPositionAlways
-        when Term.of(:"on-press")
-          flags |= MouseFlags::WantsPositionOnPress
+        when Term.of(:drag)
+          flags |= MouseFlags::WantsPositionDrag
         end
 
         mousearea = MouseArea.new(D7::NodeAddr.empty, mice, flags)
@@ -110,8 +110,8 @@ module Ww::MxRack
         case position
         when Term.of(:always)
           flags |= MouseFlags::WantsPositionAlways
-        when Term.of(:"on-press")
-          flags |= MouseFlags::WantsPositionOnPress
+        when Term.of(:drag)
+          flags |= MouseFlags::WantsPositionDrag
         end
 
         mousearea = Mouse.new(D7::NodeAddr.empty, id, flags)

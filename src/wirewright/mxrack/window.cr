@@ -662,6 +662,7 @@ module Ww::MxRack
       case message
       in MouseMoved
         @mouse_positions[message.mouse_id] = Scenery::Point[message.x, message.y]
+      in MouseDragged
       in MouseButtonPressed
         @mouse_models.update(message.mouse_id) do |model|
           Term.morph(model, {message.button, message.clicks})

@@ -1,0 +1,3 @@
+require "./wirewright"
+
+MxRack.run
