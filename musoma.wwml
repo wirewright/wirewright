@@ -1,0 +1,1124 @@
+;; FIXME: ensemble...site and toggle pane do not interact well
+;; TODO: circuit pane pan, zoom
+;; TODO: allow to load seed from arguments `argv` (?)
+;; TODO: reject mouseareas except the last (frontmost) one except those
+;;       that have active: always (vs. active: hover)
+;;
+;; TODO: basic circuit pretty printing
+;;  - figure
+;;
+;; TODO: very basic insert mode
+;;   - musoma clf (ignore edited nodes)
+;;   - implement essential structural functionality based on editR
+;;
+;; TODO: D7 node-based diff for live editing in mxrack
+;;    * A node that did not change in reference vs. running circuit can be replaced
+;;      with the corresponding node from the modified seed.
+;;
+;; TODO: Make sure MuSoma-dependent examples run:
+;;   - figure.musoma.wwml
+;;   - parser.musoma.wwml
+
+;;
+;; Theme
+;;
+
+;; [Rose Pine Main](https://rosepinetheme.com)
+(theme
+  (var base): "#191724"
+  (var surface): "#1f1d2e"
+  (var overlay): "#26233a"
+  (var muted): "#6e6a86"
+  (var subtle): "#908caa"
+  (var text): "#e0def4"
+  (var love): "#eb6f92"
+  (var gold): "#f6c177"
+  (var rose): "#ebbcba"
+  (var pine): "#31748f"
+  (var foam): "#9ccfd8"
+  (var iris): "#c4a7e7"
+  (var highlight-low): "#21202e"
+  (var highlight-med): "#403d52"
+  (var highlight-high): "#524f67"
+
+  (table colors):
+    {"theme-base": ^base,
+     "theme-surface": ^surface,
+     "theme-overlay": ^overlay,
+     "theme-muted": ^muted,
+     "theme-subtle": ^subtle,
+     "theme-text": ^text,
+     "theme-decor-low": ^highlight-low,
+     "theme-decor-med": ^highlight-med,
+     "theme-decor-high": ^highlight-high,
+     "theme-punct": ^subtle,
+     "theme-number": ^gold,
+     "theme-boolean": ^rose,
+     "theme-key": ^foam,
+     "theme-blob": ^pine,
+     "theme-string": ^gold,
+     "theme-edge": ^love,
+     "theme-comment": ^muted,
+     "theme-section": ^iris,
+     "theme-editor-selection-bg": ^gold,
+     "theme-editor-selection-fg": ^base,
+     "theme-selection-bg": ^foam,
+     "theme-selection-fg": ^base,
+     "theme-grab-bg": ^pine,
+     "theme-grab-fg": ^text,
+     "theme-normal-bg": ^iris,
+     "theme-normal-fg": ^base,
+     "theme-insert-bg": ^gold,
+     "theme-insert-fg": ^base,
+     "theme-attention-fg": ^gold,
+     "theme-err-fg": ^rose,
+     "theme-info-fg": ^foam})
+
+
+;;
+;; Visual components
+;;
+
+
+(MuLogo)
+  => (svg
+       style: ""
+       fit: keep-ratio
+       src:
+         '⎡<svg width="92" height="122" viewBox="0 0 92 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+           <path fill-rule="evenodd" clip-rule="evenodd" d="M66.5789 0C75.2702 0 82.3158 7.24568 82.3158 16.1837V44.8163C82.3158 68.1926 63.8888 87.1429 41.1579 87.1429C18.427 87.1429 0 68.1926 0 44.8163V16.1837C0 7.24568 7.04562 0 15.7368 0H66.5789ZM41.1579 59.7551C49.8491 59.7551 56.8947 52.5094 56.8947 43.5714C56.8947 34.6334 49.8491 27.3878 41.1579 27.3878C32.4667 27.3878 25.4211 34.6334 25.4211 43.5714C25.4211 52.5094 32.4667 59.7551 41.1579 59.7551Z" fill="currentColor"/>
+           <path d="M0 105.816V80.6602C9.87405 92.2636 24.3812 99.5918 40.5526 99.5918C57.1778 99.5918 72.0439 91.8466 81.9253 79.6735H82.3158V102.082C87.6642 102.082 92 106.541 92 112.041C92 117.541 87.6642 122 82.3158 122H15.7368C7.04562 122 0 114.754 0 105.816Z" fill="currentColor"/>
+           </svg>⎤)
+
+(MuBanner)
+  => (group style: "flow-row gap-5"
+       (box style: "color-theme-text max-w-64px max-h-90px" ;; w, h eyeballed
+         (MuLogo))
+       (box style: "flow-col gap-1 text-theme-text px-1 content-center-y"
+         (p "Wirewright MuSoma" style: "text-lg/6 font-medium")
+         (p "A symbolic physics laboratory" style: "text-base/5 font-light")))
+
+(ModeIndicatorText caption_string)
+  => (p style: "font-mono font-semibold text-xs leading-none px-3/2 py-1/3 upcase"
+       ^caption)
+
+(ModeIndicator grab)
+  => (box style: "content-center-y bg-theme-grab-bg text-theme-grab-fg rounded-xs"
+       (ModeIndicatorText "Grab"))
+
+(ModeIndicator normal)
+  => (box style: "content-center-y bg-theme-normal-bg text-theme-normal-fg rounded-xs"
+       (ModeIndicatorText "Normal"))
+
+(ModeIndicator insert)
+  => (box style: "content-center-y bg-theme-insert-bg text-theme-insert-fg rounded-xs"
+       (ModeIndicatorText "Insert"))
+
+;; Here we employ some "positioning"/"sizing" hacking and eyeballed deltas (the text-sm/5
+;; and dt-5 are the same 5, by the way) to get the out-of-layout wrapping effect on overflow.
+(TextIndicator ¦ () icon_string caption_string variant⋮ default)
+  => (group style: "flow-row gap-1 text-theme-subtle variant/ok:text-theme-info-fg \
+                    variant/warn:text-theme-attention-fg variant/err:text-theme-err-fg \
+                    item-center-y bg-theme-overlay floating-y content-y origin-bl dt-5 \
+                    rounded-t px-1"
+            ^:variant
+       (icon ^icon)
+       (p ^caption style: "fr-1 text-sm/5"))
+
+(SeedIndicator ⍊ seed: none seedsrc: none)
+  => (TextIndicator icon: "hide_source" caption: "Seed file unset")
+
+(SeedIndicator ⍊ seedsrc: (some [path (_ reading) [absent _]]))
+  => (TextIndicator icon: "error_outline" caption: "Lost track of seed file" variant: warn)
+
+(SeedIndicator ⍊ seed: none seedsrc: (some [path (_ reading) [present _]]))
+  => (TextIndicator icon: "error_outline" caption: "Syntax error in seed file" variant: err)
+
+(SeedIndicator ⍊ seed: (some _) seedsrc: (some [path ((/ path_*) reading) [present _]]))
+  => (TextIndicator icon: "sync_problem" caption: ^(~ "/" (join path "/")) variant: warn)
+
+(SeedIndicator ⍊ seed: (some {¦ sync}) seedsrc: (some [path ((/ path_*) reading) [present _]]) autoreload: none)
+  => (TextIndicator icon: "sync_disabled" caption: ^(~ "/" (join path "/")))
+
+(SeedIndicator ⍊ seed: (some {¦ sync}) seedsrc: (some [path ((/ path_*) reading) [present _]]) autoreload: (some _))
+  => (TextIndicator icon: "sync" caption: ^(~ "/" (join path "/")) variant: ok)
+
+(SeedIndicator ⍊ seed: (some _) seedsrc: none)
+  => (TextIndicator icon: "memory" caption: "In-memory seed")
+
+;; Display info status.
+(StatusMessage (some (%any° status_string (info status_string))))
+  => (TextIndicator icon: "info" caption: ^status variant: ok)
+
+;; Display error status.
+(StatusMessage (some (err status_string)))
+  => (TextIndicator icon: "warning" caption: ^status variant: err)
+
+(WindowView (window content_* ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false))
+  => (box style: "content p-2 border-xs border-transparent rounded-lg in-focused:border-theme-grab-bg"
+       (group style: "flow-col border border-2px border-theme-overlay rounded-sm"
+         (group style: "floating-x rounded-t-sm px-1 py-1/2 flow-row gap-1 bg-theme-overlay \
+                        text-theme-muted in-focused:text-theme-text item-center-y"
+           (group style: "fr-1 content clip flow-row gap-1 item-center-y"
+             (icon "view_quilt" style: "font-base")
+             (p ^title style: "fr-1 font-medium text-sm leading-5"))
+           (group style: "flow-row gap-1 text-sm text-theme-muted"
+             (icon "minimize")
+             (icon "open_in_full")
+             (icon "close")))
+         (box style: "fr-1 content-clip in-focused:input -input-enabled:-input"
+              input-enabled: ^input
+           (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
+             ;; Nodes in `content` are Scenery already, so let's save Microfold
+             ;; a whole bunch of work by marking this node as `leaf`.
+             (box style: "leaf"
+                  µ-bg: ^backdrop
+                  µ-cursor: (^unless (= cursor arrow) ^cursor)
+               ^*content)))))
+
+(TimeIconName 0) => "pause"
+(TimeIconName _number) => "not_started"
+(TimeIconName ∞) => "play_arrow"
+
+(TimeIndicator charge_)
+  => (box style: "floating-y content"
+       (box style: "-dt-10 px-5 py-3 bg-theme-overlay rounded-tr"
+         (icon style: "text-theme-text font-3xl"
+           (TimeIconName ^charge))))
+
+;; Show everything else as text.
+(TimeFrameIcon label_ ⍊ active⋮ false)
+  => (p style: "content font-mono text-xs/4 text-theme-subtle bg-theme-overlay \
+                dim:bg-theme-surface border-xs border-theme-decor-high \
+                active:border-theme-info-fg dim:border-theme-decor-med \
+                bg-min-none px-1 rounded-sm"
+        ^:active
+        dim: ^(= label " ")
+       ^label)
+
+(TimeFrameZip ±l ±r)
+  => (group style: "flow-row gap-1"
+       (^br (>= l 2)
+         (TimeFrameIcon 0)
+         (TimeFrameIcon " "))
+       (p "…" style: "text-xs/4 text-theme-muted")
+       (^br (>= l 1)
+         (TimeFrameIcon ^(- l 1))
+         (TimeFrameIcon " "))
+       (TimeFrameIcon ^l active: true)
+       ;; Show a "shadow" draft I-beam to make it clear there's still some
+       ;; stuff ahead.
+       (^if (= r 0)
+         (rect style: "max-w-2px bg-min-none bg-theme-decor-med"))
+       (^br (>= r 1)
+         (TimeFrameIcon ^(+ l 1))
+         (TimeFrameIcon " "))
+       (p "…" style: "text-xs/4 text-theme-muted")
+       (^br (>= r 2)
+         (TimeFrameIcon ^(+ l r))
+         (TimeFrameIcon " ")))
+
+(TimeFrameZip ±l *)
+  => (group style: "flow-row gap-1"
+       (^br (>= l 3)
+         (TimeFrameIcon 0)
+         (TimeFrameIcon " "))
+       (p "…" style: "text-xs/4 text-theme-muted")
+       (^br (>= l 2)
+         (TimeFrameIcon ^(- l 2))
+         (TimeFrameIcon " "))
+       (^br (>= l 1)
+         (TimeFrameIcon ^(- l 1))
+         (TimeFrameIcon " "))
+       (rect style: "max-w-2px bg-min-none bg-theme-info-fg")
+       (TimeFrameIcon " ")
+       (p "…" style: "text-xs/4 text-theme-muted")
+       (TimeFrameIcon " "))
+
+(ListingEntry (file name_string ⍊ current⋮ false))
+  => (ListingEntry icon: "description" ^:name ^:current)
+
+(ListingEntry (dir name_string ⍊ current⋮ false))
+  => (ListingEntry icon: "folder" ^:name ^:current)
+
+(ListingEntry ⍊ icon_string name_string current_boolean)
+  => (group style: "p-1 flow-row gap-1 rounded-sm text-theme-text item-center-y \
+                    in-hover:bg-theme-decor-med in-active:bg-theme-decor-high \
+                    in-hover:cursor-pointer current:bg-theme-decor-med current:aim"
+            ^:current
+       (icon ^icon)
+       (p ^name style: "text-base/5"))
+
+(FilePicker origin_  @paths_ @command_)
+  => (component {@:paths, @:command}
+       (group style: "flow-col gap-1 bg-theme-surface rounded"
+         ;; Top bar.
+         (group style: "flow-row gap-2 item-center-y bg-theme-overlay rounded-t"
+           ($IconButton (@action ascend) "arrow_upward" style: "in-hover:bg-theme-decor-med")
+           (visual
+             (^when (@path (/ parts_*))
+               (p style: "text-sm/5 text-theme-text font-medium"
+                  ^"/⸢(join parts "/")⸣"))))
+
+         ;; Listing view.
+         (box style: "fr-1"
+           (frag (@mouse [mousearea mouse_])
+             (mousearea))
+           (cell @scroll-signal)
+           (ensemble ($Scroll @scroll-signal)
+             (group style: "flow-col"
+               (guard (@listing ())
+                 (p "Waiting for files" style: "center text-theme-muted fr-1"))
+               (frag ((@listing) (form _ listing_*))
+                 (form (@listingf)))))))
+
+       (cell @action)
+
+       (frag @fs (template (path (^origin report))))
+       (part (@fs @path) (path (path_ _) _))
+       (part (@fs @report) (path _ report_))
+
+       (supervisor (@report @entry [_ path_string] - @listing)
+         (part (@entry @action) (%any° {¦ action_} {¦ -action_}))
+         (outlet @choice)
+         (backsys
+           {¦ action_} <> {(action): ()}
+           {¦ action: select entry_ -choice_} <> {choice: ^entry})
+         (ensemble
+           ($Trigger (@action select)
+             (box
+               (frag @mousearea (mousearea))
+               (site)))
+           (visual (ListingEntry ^@entry))))
+
+       (backsys
+         {¦ command_}
+           <> {(command): ()}
+
+         {¦ command: (%any up dn) report: (%all (%items () {¦ current} min: 0) ⟨{¦ -current_}⟩)}
+           <> {current: true}
+         {¦ command: up report: ⟨{¦ -current: l} {¦ current: r_}⟩}
+           <> {l: true, (r): ()}
+         {¦ command: dn report: ⟨{¦ current: l_} {¦ -current: r}⟩}
+           <> {(l): (), r: true}
+         {¦ command: ascend -action_}
+           <> {action: ascend}
+         {¦ command: select report: ⟨{¦ current -action_}⟩}
+           <> {action: select}
+
+         {¦ action_}
+           <> {(action): ()}
+         {¦ action: ascend path: (_* name_)}
+           <> {(name): ()}
+         {¦ mouse: {¦ wheel-up: ±n} -scroll-signal_}
+           <> {(n): (), scroll-signal: (scroll 0 ^(* n -2))}
+         {¦ mouse: {¦ wheel-dn: ±n} -scroll-signal_}
+           <> {(n): (), scroll-signal: (scroll 0 ^(* n +2))}
+         {¦ listingf_: ([dir name_string]) path: (/ _* `>name)}
+           <> {(listingf): (), >name: ^name}
+         {¦ listingf_: ([file name_string]) path_: (/ _*) -paths_}
+           <> {(listingf): (), path: (/) paths: (^*path ^name)}))
+
+(MuMenuButton spec_ ¦ () icon_string caption_string shortcut_string)
+  => ($Trigger ^spec
+       (box
+         (frag @mousearea (mousearea))
+         (group style: "flow-row gap-2 item-center-y text-theme-text in-hover:bg-theme-overlay in-hover:cursor-pointer in-active:bg-theme-decor-med text-base/6 px-3 py-2 rounded border border-xs border-theme-decor-med"
+           (icon ^icon)
+           (p ^caption style: "fr-1")
+           (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))))
+
+(MuMenuPicker origin_ @path_ @command_)
+  => (box style: "p-1 dt-1 floating content max-3xs origin-l-0.1"
+       ;; The triangle thing.
+       (rect
+         style: "center-x fill-theme-overlay bg-min-none max-w-4 max-h-4 -dt-2 \
+                 pivot-center rotate-45")
+       ($FilePicker ^origin ^path ^command))
+
+(MuMenu @mode_ @seed_ @seedsrc_)
+  => (component {@:mode, @:seed, @:seedsrc}
+       (cell @path)
+       (cell @action)
+       (frag @input (input focus: always))
+       (cell @command)
+
+       (box
+         ;;| The simplistic backdrop shadow thing.
+         (box style: "bg-black opacity-60%")
+         (box style: "bg-theme-base m-8 p-8 rounded-lg"
+           (group style: "flow-col gap-4 max-w-4xs center-x pt-16 justify"
+             (visual (MuBanner))
+             (group style: "flow-col gap-2"
+               ($MuMenuButton ((@input (key "n")) @action new)
+                  icon: "add"
+                  caption: "New in-memory seed"
+                  shortcut: "n")
+
+               ($MuMenuButton ((@input (key "o")) @action open)
+                  icon: "file_open"
+                  caption: "Open seed"
+                  shortcut: "o")
+
+               (frag @picker))
+
+             (backsys
+               ;; When they hit new, initialize seed and mode. To give the bigger picture,
+               ;; initializing seed is the thing that causes the MuMenu to cease. This doesn't
+               ;; happen here because MuMenu cannot cause or represent its own cessation in
+               ;; a practically useful way :)
+               {¦ action: new -mode_ -seed_}
+                 <> {mode: normal, seed: {document: (("" I ""))}}
+
+               ;; When they hit open, populate the picker fragment with the file picker.
+               {¦ action: open -picker_ -seedsrc}
+                 <> {picker: ($MuMenuPicker (/ "mnt" "Data" "Dev" "wirewright" "kappa" "examples" "future") @path @command)}
+
+               ;; Go to previous file.
+               {¦ input: ⟨K←(key (%any up "k"))⟩ action_: open picker_ -command_}
+                 <> {(K): (), command: up}
+
+               ;; Go to next file.
+               {¦ input: ⟨K←(key (%any dn "j"))⟩ action_: open picker_ -command_}
+                 <> {(K): (), command: dn}
+
+               ;; Go back up.
+               {¦ input: ⟨K←(key (%any backspace "h"))⟩ action_: open picker_ -command_}
+                 <> {(K): (), command: ascend}
+
+               ;; Descend or select.
+               {¦ input: ⟨K←(key (%any enter "l"))⟩ action_: open picker_ -command_}
+                 <> {(K): (), command: select}
+
+               ;; Oops, they want to cancel the picker.
+               {¦ input: ⟨K←(key escape)⟩ action_: open picker_}
+                 <> {(K): (), (action): (), (picker): ()}
+
+               ;; When they have chosen the file, clear the picker and set the seed source.
+               {¦ path_ picker_ -mode_ -seedsrc_}
+                 <> {(path): (), (picker): (), mode: normal, seedsrc: (path (^path reading))})))))
+
+;;
+;; The circuit
+;;
+
+(rewriter (chainR - {@:mode, @:input, @:workspace, @:charge, @:present, @:draft, @:future, @:past, @:seed, @:statuses, @:turnover, @:autoreload, @:seeddst, @:layout})
+  ;; Action handling step / high-level control.
+  (step rulesysR
+    ;; \normal `,`
+    ;; Go backward in history.
+    {¦ mode: normal input: ⟨K←(key ",")⟩ -action_}
+      <> {(K): (), action: (goto pred)}
+
+    ;; \normal `.`
+    ;; Go forward in history. Single-step if at present.
+    {¦ mode: normal input: ⟨K←(key ".")⟩ -action_}
+      <> {(K): (), action: (goto succ)}
+
+    ;; \normal `<` `S-,`
+    ;; Go to the beginning of recorded history.
+    {¦ mode: normal input: ⟨K←(key "," shift: true)⟩ -action_}
+      <> {(K): (), action: (goto begin)}
+
+    ;; \normal `>` `S-.`
+    ;; Go to the end of recorded history.
+    {¦ mode: normal input: ⟨K←(key "." shift: true)⟩ -action_}
+      <> {(K): (), action: (goto end)}
+
+    ;; \normal ` `
+    ;; Toggle time.
+    {¦ mode: normal input: ⟨K←(key " ")⟩ -action_}
+      <> {(K): (), action: (toggle time)}
+
+    ;; \normal `C-/`
+    ;; Cut time.
+    {¦ mode: normal input: ⟨K←(key "/" ctrl: true)⟩ -action_}
+      <> {(K): (), action: (cut time)}
+
+    ;; \normal `r`
+    ;; Reload seed from disk.
+    {¦ mode: normal input: ⟨K←(key "r")⟩ -action_}
+      <> {(K): (), action: reload}
+
+    ;; \normal `R` `S-r`
+    ;; Toggle auto-reload.
+    {¦ mode: normal input: ⟨K←(key "r" shift: true)⟩ -autoreload_}
+      <> {(K): (), autoreload: true}
+    {¦ mode: normal input: ⟨K←(key "r" shift: true)⟩ autoreload_}
+      <> {(K): (), (autoreload): ()}
+    ;; Trigger reload.
+    {¦ autoreload seed: {¦ -sync} -action_}
+      <> {action: reload}
+
+    ;; \normal `W` `S-w`
+    ;; Write present or draft to disk.
+    {¦ mode: normal input: ⟨K←(key "w" shift: true)⟩ -action_}
+      <> {(K): (), action: write}
+
+    ;; \normal `\`
+    ;; Toggle window pane visibility.
+    {¦ mode: normal input: ⟨K←(key "\\")⟩ layout: {¦ pane-l_}}
+      <> {(K): (), (pane-l): ()}
+    {¦ mode: normal input: ⟨K←(key "\\")⟩ layout: {¦ -pane-l_}}
+      <> {(K): (), pane-l: true}
+
+    ;; \normal `S-\`
+    ;; Toggle circuit pane visibility.
+    {¦ mode: normal input: ⟨K←(key "\\" shift: true)⟩ layout: {¦ pane-r_}}
+      <> {(K): (), (pane-r): ()}
+    {¦ mode: normal input: ⟨K←(key "\\" shift: true)⟩ layout: {¦ -pane-r_}}
+      <> {(K): (), pane-r: true}
+
+    ;; \normal `i`
+    ;; Go to Insert mode.
+    {¦ mode_: normal input: ⟨K←(key "i") R←(rune "i")⟩ -present}
+      <> {(K): (), (R): (), mode: insert}
+    ;; Notify the user that they must be at the draft. This is a very confusing
+    ;; thing that one must get accustomed to; I'm not sure I can do anything
+    ;; better on my side, since it makes no sense to rewrite the past while
+    ;; there exists the future dependent on that past. Instead, one must either
+    ;; adhere to the future (`>`), or erase it (`/`), and only then edit.
+    {¦ mode: normal input: ⟨K←(key "i") R←(rune "i")⟩ present -statuses_}
+      <> {(K): (), (R): (), statuses: (err "Cannot edit the past of an existing future. Go to end using `>` followed by `.`.")}
+
+    ;; \normal `g`
+    ;; Go to Grab mode.
+    {¦ mode_: normal input: ⟨K←(key "g")⟩ workspace: {¦ ⋮focus}}
+      <> {(K): (), mode: grab, focus: true}
+
+    ;; \insert `Esc`
+    ;; Go to Normal mode.
+    {¦ mode_: insert input: ⟨K←(key escape)⟩}
+      <> {(K): (), mode: normal}
+
+    ;; \grab `Esc`
+    ;; Go to Normal mode.
+    {¦ mode_: grab input: ⟨K←(key escape)⟩ workspace: {¦ focus_: true}}
+      <> {(K): (), mode: normal, (focus): ()})
+
+  ;; Execute actions or evolve (we make them mutually exclusive to avoid conflicts).
+  (step rulesysR
+    ;; Begin with the seed.
+    {¦ seed: {¦ document_ ⋮sync} -draft_ -turnover_}
+      <> {draft: ^document, sync: true, turnover: true}
+
+    ;; Push frames if they are not inspecting the past.
+    {¦ -action charge_: (%not 0) -present draft_ turnover_}
+      <> {charge: ^(- charge 1), (turnover): ()}
+
+    ;; Keep evolving the draft while they are (possibly) inspecting the history.
+    ;; This saturates the draft with new facts and so on without flooding `past`
+    ;; or `future`. When they get back to the draft, they'll just see it evolved
+    ;; slightly more into the future than they might've expected.
+    {¦ -action charge_: (%not 0) present turnover_}
+      <> {charge: ^(- charge 1), (turnover): ()}
+
+    ;; Help action rules by clearing the action cell for them.
+    {¦ action_} <> {(action): ()}
+
+    ;; Go to predecessor frame.
+    {¦ action: (goto pred) past: (_* pred_) present_ future: (`succ _*)}
+      <> {(pred): (), present: ^pred, succ: ^present}
+    {¦ action: (goto pred) past: (_* pred_) -present_}
+      <> {(pred): (), present: ^pred}
+
+    ;; If we are waiting for a successor, goto pred can reset charge.
+    {¦ action: (goto pred) charge_: (%number _ > 0)}
+      <> {charge: 0}
+
+    ;; Go to successor frame.
+    {¦ action: (goto succ) past: (_* `pred) present_ future: (succ_ _*)}
+      <> {pred: ^present, present: ^succ, (succ): ()}
+    {¦ action: (goto succ) past: (_* `pred) present_ future: ()}
+      <> {pred: ^present, (present): ()}
+
+    ;; Go to successor frame at the end gives one charge point if paused.
+    {¦ action: (goto succ) charge_: 0 -present}
+      <> {charge: 1}
+
+    ;; Go to begin of history.
+    {¦ action: (goto begin) past_: (first_ rest_*) present_ future_: (_*)}
+      <> {past: (), present: ^first, future: (^*rest ^present ^*future)}
+    {¦ action: (goto begin) past_: (first_ rest_*) -present_ future_: ()}
+      <> {past: (), present: ^first, future: ^rest}
+
+    ;; Go to end of history.
+    {¦ action: (goto end) past_: (_*) present_ future_: (prior_* last_)}
+      <> {past: (^*past ^present ^*prior), present: ^last, future: ()}
+
+    ;; Toggle time.
+    {¦ action: (toggle time) charge_: ∞} <> {charge: 0}
+    {¦ action: (toggle time) charge_: 0} <> {charge: ∞}
+
+    ;; Cut time.
+    {¦ action: (cut time) past: (_* `>present) present_ future_ draft_}
+      <> {>present: ^present, (present): (), future: (), draft: ^present}
+
+    ;; Reload seed from disk.
+    {¦ action: reload seed: {¦ document_ ⋮sync} draft_ -statuses_}
+      <> {draft: ^document, sync: true, statuses: (info "Reloaded from disk")}
+
+    ;; Write present or draft to disk.
+    {¦ action: write present_ -seeddst_ -statuses_}
+      <> {seeddst: ^present, statuses: (info "Writing present frame to disk...")}
+    {¦ action: write -present draft_ -seeddst_ -statuses_}
+      <> {seeddst: ^draft, statuses: (info "Writing draft frame to disk...")})
+
+  (step (guardR {¦ mode: insert} (rulesetR exh: true))
+    ;; Prepare the locus.
+    {¦ -locus_ present_} <> {locus: ^present}
+    {¦ -locus_ -present draft_} <> {locus: ^draft}
+
+    ;; Initialize editor motions with current keys.
+    {¦ input: [input keys_+] -motions_}
+      <> {(keys): (), motions: ^keys})
+
+  (step (guardR {¦ motions} rulesetR)
+    ;; Determine whether selection is wanted based on an explicit list of keys.
+    ;; We also clear the shift flag itself to relieve the editor from having
+    ;; to ignore it everywhere.
+    {¦ motions: ⟨(key (%any left right up dn home end) ⍊ shift_)⟩° -selection_}
+      <> {(shift): (), selection: true}
+    {¦ motions: ⟨(key (%any left right up dn home end) ⍊ -shift)⟩ -selection_}
+      <> {(shift): (), selection: false})
+
+  ;; Control selection by setting/unsetting anchor on transition.
+  (step (guardR {¦ motions} rulesetR)
+    ;; Selection is wanted but there is no anchor.
+    {¦ selection_: true locus: ⟪(l_string I _ ⍊ -anchor_)⟫}
+      <> {(selection): (), anchor: ^(charcount l)}
+
+    ;; Selection is not wanted but there is an anchor.
+    {¦ selection_: false locus: ⟪(_ I _ ⍊ anchor_)⟫}
+      <> {(selection): (), (anchor): ()})
+
+  ;; This is the editor. This step handles both text and structural editing.
+  (step (guardR {¦ motions} (exhR (descR rulesetR axis: locus cues: (I) part: entries)))
+    ;; Unclog by removing unknown motions.
+    {¦ motions: (M_ _*) locus: I}
+      <> {(M): ()}
+
+    ;; Insert rune.
+    {¦ motions: (M←(rune rune_string) _*) locus: [_ I _]}
+      <> {M: (subst ^rune)}
+
+    ;; Insert line break.
+    {¦ motions: (M←(key enter) _*) locus: [_ I _]}
+      <> {M: (subst "\n")}
+
+    ;; Insert indent.
+    {¦ motions: (M←(key tab) _*) locus: [_ I _]}
+      <> {M: (subst "  ")}
+
+    ;; Delete rune behind.
+    {¦ motions: (M←(key backspace) _*) locus: ((%string "…l←%_") I _ ⍊ -anchor)}
+      <> {(M): (), (l): ()}
+
+    ;; Delete word behind.
+    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ((%string "…l←([%w]*[^%w]*)") I _ ⍊ -anchor)}
+      <> {(M): (), (l): ()}
+
+    ;; Delete rune ahead.
+    {¦ motions: (M←(key delete) _*) locus: (_ I (%string "r←%_…") ⍊ -anchor)}
+      <> {(M): (), (r): ()}
+
+    ;; Delete word ahead.
+    {¦ motions: (M←(key delete ctrl: true) _*) locus: (_ I (%string "r←([^%w]*[%w]*)…") ⍊ -anchor)}
+      <> {(M): (), (r): ()}
+
+    ;; Clear selection.
+    {¦ motions: (M←[key (%any delete backspace)] _*) locus: [_ I _]}
+      <> {M: (subst "")}
+
+    ;; Go before rune behind.
+    {¦ motions: (M←(key left) _*) locus: [(%string "…l←%_") I r_string]}
+      <> {(M): (), (l): (), r: ^(~ l r)}
+
+    ;; Go before word behind.
+    {¦ motions: (M←(key left ctrl: true) _*) locus: [(%string "…l←([%w]*[^%w]*)") I r_string]}
+      <> {(M): (), (l): (), r: ^(~ l r)}
+
+    ;; Go after rune ahead.
+    {¦ motions: (M←(key right) _*) locus: [l_string I (%string "r←%_…")]}
+      <> {(M): (), l: ^(~ l r), (r): ()}
+
+    ;; Go after word ahead.
+    {¦ motions: (M←(key right ctrl: true) _*) locus: [l_string I (%string "r←([^%w]*[%w]*)…")]}
+      <> {(M): (), l: ^(~ l r), (r): ()}
+
+    ;; Go before text begin.
+    {¦ motions: (M←(key home ctrl: true) _*) locus: [l_string I r_string]}
+      <> {(M): (), l: "", r: ^(~ l r)}
+
+    ;; Go after text end.
+    {¦ motions: (M←(key end ctrl: true) _*) locus: [l_string I r_string]}
+      <> {(M): (), l: ^(~ l r), r: ""}
+
+    ;; Go before line begin. If at line begin go to prev line's begin.
+    {¦ motions: (M←(key home) _*) locus: [(%string "…l←([^%v]*[%v]?)") I r_string]}
+      <> {(M): (), (l): (), r: ^(~ l r)}
+
+    ;; Go before line end. If at line end go to next line's end.
+    {¦ motions: (M←(key end) _*) locus: [l_string I (%string "r←([%v]?[^%v]*)…")]}
+      <> {(M): (), l: ^(~ l r), (r): ()}
+
+    ;; Go to line above.
+    {¦ motions: (M←(key up) _*) locus: [(%string "…(above)←([^%v]*%v)(behind)←[^%v]*") I r_string]}
+      <> {M: (goto ^(charcount behind)), (above): (), (behind): (), r: ^(~ above behind r)}
+
+    ;; Go to line below.
+    {¦ motions: (M←(key dn) _*) locus: [l←(%string "…(behind)←[^%v]*") I (%string "(ahead)←[^%v]*(sep)←%v…")]}
+      <> {M: (goto ^(charcount behind)), l: ^(~ l ahead sep), (ahead): (), (sep): ()}
+
+    ;; Select all.
+    {¦ motions: (M←(key "a" ctrl: true) _*) locus: (l_string I r_string ⍊ -anchor_)}
+      <> {(M): (), l: ^(~ l r), r: "", anchor: 0}
+
+    ;; Cut.
+    {¦ motions: (M←(key "x" ctrl: true) _*) locus: (_ I _ ⍊ ±anchor)}
+      <> {(M): (copy (subst ""))}
+
+    ;; Copy.
+    {¦ motions: (M←(key "c" ctrl: true) _*) locus: (_ I _ ⍊ ±anchor)}
+      <> {M: copy}
+
+    ;; Paste.
+    {¦ motions: (M←(key "v" ctrl: true) _*) locus: (_ I _ ⍊ clipboard_string)}
+      <> {M: (subst ^clipboard)}
+
+    ;; Compose: enter.
+    {¦ motions: (M←(key insert) _*) locus: [_ m←I _]}
+      <> {(M): (), m: (I "")}
+
+    ;; Compose: leave at any point.
+    {¦ motions: (M←(key insert) _*) locus_: (I _string)}
+      <> {(M): (), locus: I}
+
+    ;; Compose: input.
+    {¦ motions: (M←(rune rune_string) _*) locus: (I buffer_string)}
+      <> {(M): (), buffer: ^(~ buffer rune)}
+
+    ;; Compose: backspace.
+    {¦ motions: (M←(key backspace) _*) locus: (I (%string "…(pred)←%_"))}
+      <> {(M): (), (pred): ()}
+
+    ;; Compose: leave on backspace at start.
+    {¦ motions: (M←(key backspace) _*) locus_: (I "")}
+      <> {(M): (), locus: I}
+
+    ;; Compose: lookup table.
+    ;;
+    ;; Feel free to add your own combos here.
+    {¦ motions: (`M _*) locus_: (I " ")} <> {M: (subst " "), locus: I}
+    {¦ motions: (`M _*) locus_: (I "(")} <> {M: (subst "("), locus: I}
+    {¦ motions: (`M _*) locus_: (I ")")} <> {M: (subst ")"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "oo")} <> {M: (subst "°"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "+-")} <> {M: (subst "±"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^0")} <> {M: (subst "⁰"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^1")} <> {M: (subst "¹"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^2")} <> {M: (subst "²"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^3")} <> {M: (subst "³"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^4")} <> {M: (subst "⁴"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^5")} <> {M: (subst "⁵"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^6")} <> {M: (subst "⁶"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^7")} <> {M: (subst "⁷"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^8")} <> {M: (subst "⁸"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^9")} <> {M: (subst "⁹"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_0")} <> {M: (subst "₀"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_1")} <> {M: (subst "₁"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_2")} <> {M: (subst "₂"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_3")} <> {M: (subst "₃"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_4")} <> {M: (subst "₄"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_5")} <> {M: (subst "₅"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_6")} <> {M: (subst "₆"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_7")} <> {M: (subst "₇"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_8")} <> {M: (subst "₈"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_9")} <> {M: (subst "₉"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^+")} <> {M: (subst "⁺"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^-")} <> {M: (subst "⁻"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_+")} <> {M: (subst "₊"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_-")} <> {M: (subst "₋"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "sm")} <> {M: (subst "∈"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "/sm")} <> {M: (subst "∉"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "s=")} <> {M: (subst "⊆"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "s<")} <> {M: (subst "⊂"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^[")} <> {M: (subst "\⸢"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^)")} <> {M: (subst "⸣"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_[")} <> {M: (subst "⸤"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "_)")} <> {M: (subst "⸥"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "{{")} <> {M: (subst "⟨"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "}}")} <> {M: (subst "⟩"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "||")} <> {M: (subst "¦"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "::")} <> {M: (subst "⋮"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "==")} <> {M: (subst "≡"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "..")} <> {M: (subst "…"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "xx")} <> {M: (subst "×"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "<-")} <> {M: (subst "←"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "->")} <> {M: (subst "→"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^|")} <> {M: (subst "↑"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "|v")} <> {M: (subst "↓"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "|[")} <> {M: (subst "⎡"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "|)")} <> {M: (subst "⎤"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "((")} <> {M: (subst "⸨"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "))")} <> {M: (subst "⸩"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "[[")} <> {M: (subst "⟦"), locus: I}
+    {¦ motions: (`M _*) locus_: (I ")]")} <> {M: (subst "⟧"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "//")} <> {M: (subst "⫽"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "**")} <> {M: (subst "⁑"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "|_")} <> {M: (subst "⍊"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "<>")} <> {M: (subst "◇"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "[)")} <> {M: (subst "▢"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "*(")} <> {M: (subst "⟅"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "*)")} <> {M: (subst "⟆"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "\"{")} <> {M: (subst "⟪"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "\"}")} <> {M: (subst "⟫"), locus: I}
+    {¦ motions: (`M _*) locus_: (I "^^")} <> {M: (subst "⏏"), locus: I}
+
+    ;; Utility: go to column.
+    {¦ motions: (M←(goto ±n) _*) locus: [l_string I (%string "(ahead)←[^%v]*…")]}
+      <> {(M): (), l: ^(~ l (runes ahead 0 ..< n)), ahead: ^(runes ahead n ..= -1)}
+
+    ;; Utility: substitute, selection inactive.
+    {¦ motions: (M←(subst rep_string) _*) locus: (l_string I _ ⍊ -anchor)}
+      <> {(M): (), l: ^(~ l rep)}
+
+    ;; Utility: substitute, selection active.
+    {¦ motions: (M←(subst rep_string) _*) locus: (l_string m←I r_string ⍊ ±anchor)}
+      <> {(M): (), (l): (), (r): (), (anchor): (),
+          (m): ^(let text: (~ l r)
+                     lo: (min (charcount l) anchor)
+                     hi: (max (charcount l) anchor)
+                  ((~ (runes text 0 ..< lo) rep) I (runes text hi ..= -1)))}
+
+    ;; Utility: copy.
+    {¦ motions: (M←copy _*) locus: (l_string I r_string ⍊ ±anchor ⋮clipboard)}
+      <> {(M): (),
+          clipboard: ^(let text: (~ l r)
+                           lo: (min (charcount l) anchor)
+                           hi: (max (charcount l) anchor)
+                        (runes text lo ..< hi))}
+
+    ;; Move before previous item.
+    {¦ motions: (M←(key up) _*) locus: ⟨L_ R←["" I ""]⟩}
+      <> {(M): (), L: ^R, R: ^L}
+
+    ;; Move after next item.
+    {¦ motions: (M←(key dn) _*) locus: ⟨L←["" I ""] R_⟩}
+      <> {(M): (), L: ^R, R: ^L}
+
+    ;; Remove previous item.
+    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨L_ ["" I ""]⟩}
+      <> {(M): (), (L): ()}
+
+    ;; Remove next item.
+    {¦ motions: (M←(key delete ctrl: true) _*) locus: ⟨["" I ""] R_⟩}
+      <> {(M): (), (R): ()}
+
+    ;; Escape dict left.
+    {¦ motions: (M←(key left) _*) locus: ⟨P←[E←["" I ""] _*]⟩}
+      <> {(M): (), (P): (^E ^(up P)), (E): ()}
+
+    ;; Escape dict right.
+    {¦ motions: (M←(key right) _*) locus: ⟨P←[_* E←["" I ""]]⟩}
+      <> {(M): (), (P): (^(up P) ^E), (E): ()}
+
+    ;; Enter dict from back.
+    {¦ motions: (M←(key left) _*) locus: ⟨[_* `>E] E←["" I ""]⟩}
+      <> {(M): (), >E: ^E, (E): ()}
+
+    ;; Enter dict from front.
+    {¦ motions: (M←(key right) _*) locus: ⟨E←["" I ""] [`>E _*]⟩}
+      <> {(M): (), >E: ^E, (E): ()}
+
+    ;; Surround with dict.
+    {¦ motions: (M←(rune "(") _*) locus_: ["" I ""]}
+      <> {(M): (), locus: (^locus)}
+
+    ;; Escape dict from back.
+    {¦ motions: (M←(rune ")") _*) locus: ⟨P←[_* E←["" I ""]]⟩}
+      <> {(M): (), (P): (^(up P) ^E), (E): ()}
+
+    ;; Submit left irrespective of position in text.
+    {¦ motions: (M←(key enter ctrl: true) _*) locus: [l_string I r_string]}
+      <> {M: (submit left nop nop)}
+
+    ;; Submit left on right arrow or End at the end.
+    {¦ motions: (M←(key (%any right end)) _*) locus: ⟨[(%string nonempty) I ""]⟩}
+      <> {M: (submit left nop nop)}
+
+    ;; Submit right on left arrow or Home at the start.
+    {¦ motions: (M←(key (%any left home)) _*) locus: ⟨["" I (%string nonempty)]⟩}
+      <> {M: (submit right nop nop)}
+
+    ;; Submit left on whitespace at the end, else append whitespace.
+    {¦ motions: (M←(rune " ") _*) locus: ⟨[(%string nonempty) I ""]⟩}
+      <> {M: (submit left nop (subst " "))}
+
+    ;; Move after next item on whitespace.
+    {¦ motions: (M←(rune " ") _*) locus: ⟨L←["" I ""] R_⟩}
+      <> {(M): (), L: ^R, R: ^L}
+
+    ;; Escape dict right on whitespace.
+    {¦ motions: (M←(rune " ") _*) locus: ⟨P←[_* E←["" I ""]]⟩}
+      <> {(M): (), (P): (^(up P) ^E), (E): ()}
+
+    ;; Utility: Submit.
+    {¦ motions: ((submit _ `parse _ _) _*) locus: [l_string I r_string]}
+      <> {parse: ^(ml/term (~ l r))}
+    {¦ motions: (M←(submit left (ok term_) ok_ _) _*) locus: ⟨E←[l_string I r_string]⟩}
+      <> {M: ^ok, (E): (^term ^(up E)), l: "", r: ""}
+    {¦ motions: (M←(submit right (ok term_) ok_ _) _*) locus: ⟨E←[l_string I r_string]⟩}
+      <> {M: ^ok, (E): (^(up E) ^term), l: "", r: ""}
+    {¦ motions: (M←(submit _ _ _ err_) _*) locus: [_ I _]}
+      <> {M: ^err}
+  )
+
+  ;; Cleanup after the editor.
+  (step rulesetR
+    ;; Put the changes, if any, back into the piece of @workspace we
+    ;; were editing.
+    {¦ locus_ present_} <> {(locus): (), present: ^locus}
+    {¦ locus_ -present draft_} <> {(locus): (), draft: ^locus})
+
+  ;; Update history.
+  (step rulesetR
+    ;; Append draft to history on change.
+    {¦ past: (_* draft_) -present draft_ -history_}
+      <> {history: true}
+    {¦ past: (_* `frame) -present draft_ -history_}
+      <> {frame: ^draft, history: true})
+
+  ;; Maintain history in bounds by removing the head if necessary, until history
+  ;; is in bounds.
+  (step rulesetR
+    {¦ past: (head_ (%plural min: 127))}
+      <> {(head): ()}))
+
+;;| This module manages the @seed cell, the @seedsrc cell, which is the seed
+;;| reader, and the @seeddst cell, which is the seed writer.
+(module {:@seed, :@seedsrc, :@seeddst}
+  (cell @seed)
+  (frag @seedsrc)
+  (cell @seeddst)
+
+  (cell @win)
+  (cell @wout)
+  (fs @win @wout)
+  (discard @wout)
+
+  (backsys
+    ;; Initialize the seed from @seedsrc. Keep the seed up-to-date (updates
+    ;; remove our `parsed` flag and trigger a reparse).
+    ;;
+    ;; Parse errors either do not initialize `seed`, or clear it.
+    {¦ seedsrc: [path _ (present content_string ⍊ -parsed_)] ⋮seed}
+      <> {seed: (^when ((ml/document content) (ok document_)) {^:document}), parsed: true}
+
+    ;; Process writes.
+    {¦ seedsrc: [path ((/ path_* name_string) reading) _] seeddst: document_ -win_ -wout}
+      <> {(document): (), win: (overwrite file ^"/⸢(join path "/")⸣/⸢name⸣.snapshot" ^(ml/display-document document))}))
+
+;;| Manages the yellow status text in the bottom bar (current status
+;;| text is exposed at @status). New statuses should be sent to @statuses.
+(module {:@status, :@statuses}
+  ;;| We use a queue here and expose @status and @statuses explicitly
+  ;;| because it may so happen that any number of new @statuses arrive
+  ;;| as we are showing one at @status. We must be able to notice that
+  ;;| and the easiest way to do that is to have a queue.
+  (queue (@status @statuses) ())
+
+  ;;| The timer we'll use to wait until clearing the status.
+  (frag @timer (timer (3 s)))
+
+  (backsys
+    ;; Start the timer when a status arrives.
+    {¦ status timer: (timer _ `command)}
+      <> {command: start}
+
+    ;; Clear when the timer finishes.
+    {¦ status_ timer: (timer _ command←ready)}
+      <> {(status): (), (command): ()}
+
+    ;; Clear when a new status arrives.
+    {¦ status_ statuses: (_ _*) timer: (timer _ command←ready)}
+      <> {(status): (), (command): ()}))
+
+;;| The timeline stores the past and the future. Ideally we'd store the present
+;;| here too, but in practice `automaton` needs to know it, so present is stored
+;;| in @automaton's workspace.
+(cell @timeline {past: (), future: ()})
+(part (@timeline @past) {¦ past_: (_*)})
+(part (@timeline @future) {¦ future_: (_*)})
+
+;;| Provide access to the parts of interest of the @automaton, namely
+;;| the workspace and the draft. The draft is embedded right in
+;;| the automaton so extracting and setting it is just a bit tricky,
+;;| especially because we want to treat having an empty draft as absence
+;;| of one.
+(part (@automaton @workspace) (automaton (_ workspace_dict) _*))
+(part (@automaton @draft)
+  {¦ automaton: (automaton _ draft_+) -draft: >draft}
+    <> {>draft: ^draft}
+  {¦ automaton: (automaton _ >draft_*) draft_dict}
+    <> {(>draft): ^draft})
+
+;;| Refer to parts of the workspace we're interested in.
+
+;;| The pretty-printed representation of @present or @draft (if @present is missing).
+(part (@workspace @repr) {¦ repr_})
+
+;;| A noninteractive historical circuit under review. It normally comes from
+;;| the @timeline, and "shadows" the draft, which continues to absorb changes
+;;| in the meantime.
+(part (@workspace @present) (%any° {¦ present_} {¦ -present_}))
+
+;;| Indicates that the physics engine's turn is over and we are expected
+;;| to handle the draft now; taking town @turnover eventually.
+(part (@workspace @turnover) (%any° {¦ turnover_} {¦ -turnover_}))
+
+;;| A list of zero or more window projections of @present or @draft (if @present missing).
+;;| Each window projection is expressed in Scenery, as [window _*]
+(part (@workspace @windows) {¦ windows_})
+
+;;| The cell storing the current mode.
+;;| - *Empty*: some other input should handle input. MuSoma core will ignore them.
+;;| - `normal`: Normal mode lets you interact with MuSoma itself.
+;;| - `insert`: Insert mode lets you interact with the editor in the circuit,
+;;|   thereby, modifying and navigating the circuit, live.
+;;| - `grab: Grab mode focuses the automaton: forwards all input to it
+;;|   and so on.
+(cell @mode)
+
+;;| The time budget, metaphorically the *charge* of the automaton.
+;;| - Zero means paused.
+;;| - A number greater than zero means the circuit can be stepped for
+;;|   that number of times or less (underflow waits for more frames).
+;;| - Infinity can be used to give unlimited charge. This is what we
+;;|   mean when we say "Time is running", basically.
+(cell @charge 0)
+
+;;| Whether to reload the seed (`r` in normal mode) automatically on change.
+;;| - Empty cell means do not autoreload.
+;;| - Nonempty cell means autoreload.
+(cell @autoreload)
+
+(window title: "MuSoma"
+        style: "input backdrop-theme-base"
+        width: 1200
+        height: 800
+
+  ;;| Initialize the automaton. The automaton must be here under `window`,
+  ;;| because conceptually they belong to the window and so it must see them.
+  (frag @automaton (automaton ((mxrack µ) {})))
+
+  ;;| This is the only input that's used by MuSoma, for everything. Even when
+  ;;| you enter grab mode, keys still reach this input -- they're just ignored
+  ;;| while you're in grab mode.
+  (frag @input (input focus: always))
+
+  ;;| Determines the layout of the app.
+  ;;| - `pane-l` shows the left pane if set.
+  ;;| - `pane-r` shows the right pane if set.
+  (cell @layout {+ pane-l pane-r})
+
+  ;;| We use `ensemble` to break the nesting up somewhat, of the important panes,
+  ;;| namely the window and circuit panes.
+  (ensemble
+    (group style: "flow-col"
+      ;;| Panes
+      (module {:@layout} style: "fr-1 flow-row"
+        (cell @divider-l 600)
+
+        (guard (@layout {¦ pane-l})
+          (limit max-w: @divider-l
+            (box style: "content-clip"
+              ;;| Left pane (the window pane).
+              (site))))
+
+        ;;| This box encloses the divider's mousearea and the 1px divider rect itself.
+        (guard (@layout {¦ pane-l pane-r}) style: "flow-none"
+          (backsys
+            ;; Handle unpressed mouse entering the divider.
+            {¦ mouse: (mouse _) divider: {¦ -hover_}}
+              <> {hover: true}
+
+            ;; Handle mouse leaving the divider. Mousearea handles drag for us by locking
+            ;; the mouse, so this rule won't apply during dragging.
+            {¦ -mouse divider: {¦ hover_}}
+              <> {(hover): ()}
+
+            ;; Handle dragging.
+            {¦ mouse: {¦ left ±l} divider: {¦ hover} ±divider-l}
+              <> {divider-l: ^(+ divider-l l)})
+
+          ;;| Since it's very hard to hit the divider itself, because it's just 1px wide, we
+          ;;| provide some hoverable space around it.
+          (box style: "min-w-4 -dl-2"
+            (frag (@mouse [mousearea mouse_])
+              (mousearea position: drag)))
+          (frag @divider
+            (rect style: "fill-theme-overlay bg-min-none max-w-1px hover:cursor-resize-x")))
+
+        (guard (@layout {¦ pane-r})
+          (box style: "fr-1 content-clip"
+            ;;| Right pane (the circuit pane).
+            (site))))
+
+      ;;| Bottom Bar
+      (group style: "flow-row gap-1 bg-theme-overlay py-1"
+        ;;| Time control. We reserve some size with min-w to make sure the layout of the bar
+        ;;| stays as stable as possible as elements such as the status message, the draft I-beam
+        ;;| and so on get added and removed.
+        (group style: "flow-row gap-3 min-w-5xs"
+          ;;| When we're showing the draft rather than a historical present, pass `*` to
+          ;;| TimeFrameZip. This way, it knows it should display an I-beam thing instead
+          ;;| of highlighting a frame (which in this case does not even exist).
+          (visual
+            (TimeIndicator ^@charge)
+            (^match @workspace
+              (when {¦ -present}
+                (TimeFrameZip ^(itemsize @past) *))
+              (when _
+                (TimeFrameZip ^(itemsize @past) ^(itemsize @future))))))
+
+        ;;| Use bg-transparent to prevent the thing from collapsing into nothing
+        ;;| when there's no status.
+        (box style: "fr-1 bg-transparent"
+          (visual (StatusMessage ^(edge? status))))
+
+        ;;| NOTE: We use content-justify here to make sure the seed indicator starts
+        ;;| wrapping instead of overflowing the parent (which is the default behavior
+        ;;| with aligns in Scenery).
+        (box style: "fr-1 content-right content-justify"
+          (visual
+            (SeedIndicator
+              seed: ^(edge? seed)
+              seedsrc: ^(edge? seedsrc)
+              autoreload: ^(edge? autoreload))))
+
+        ;;| File info and mode
+        (box style: "pr-2/3"
+          (visual (ModeIndicator ^@mode)))))
+
+    ;; Left-hand side (the window pane)
+    (visual
+      (^match @windows
+        (when (window←[window _*] _*)
+          (WindowView ^window))
+        (when _
+          (p style: "center text-theme-muted"
+            "No window to show"))))
+
+    ;; Right-hand side (the circuit pane)
+    (box
+      (p ^(ml/display @repr) style: "content")))
+
+  ;;| When there's no seed source, we let the user pick one through a simple
+  ;;| file explorer.
+  (frag @menu)
+
+  (backsys
+    {¦ -seed -menu_}
+      <> {menu: ($MuMenu @mode @seed @seedsrc)}
+    {¦ seed menu_}
+      <> {(menu): ()}))
