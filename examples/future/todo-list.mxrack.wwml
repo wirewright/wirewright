@@ -42,8 +42,7 @@
       <> {request: ^change, (change): ()}
 
     ;; Transaction consume base case.
-    {¦ change_: (txn)}
-      <> {(change): ()}
+    {¦ change_: (txn)} <> {(change): ()}
 
     ;; Drain transactions (which the `changes` node will emit for changes made
     ;; within the same tick).
@@ -53,11 +52,6 @@
     ;; Boot sends an SQL CREATE TABLE to the database.
     {¦ request_: boot -query_ -reply}
       <> {request: (pending ^request), query: (exec "create table if not exists todos (id integer primary key, content text not null, done boolean not null)")}
-
-    ;; Wait for boot to complete. When it does, trigger a restart to fetch
-    ;; all todos from the database.
-    {¦ request_: (pending boot) -query reply_: (ok _)}
-      <> {request: reload, (reply): ()}
 
     ;; Send a SELECT to the database to fetch all todos.
     {¦ request_: reload -query_ -reply}
@@ -86,28 +80,23 @@
     {¦ request_: (assoc (index_ content) content_string) todos: (%value index {¦ id_}) -query_ -reply}
        <> {request: (pending ^request), query: (exec "update todos set content = ? where id = ?" ^content ^id)}
 
-    ;; Wait for updates to complete successfully.
-    {¦ request_: (pending (assoc _ _)) -query reply_: [ok _*]}
-      <> {(request): (), (reply): ()}
-
     ;; Handle deletion of a todo from @todos by DELETE-ing the corresponding
     ;; row from the database.
     {¦ request_: (delete (_) {¦ id_}) -query_ -reply}
       <> {request: (pending ^request), query: (exec "delete from todos where id = ?" ^id)}
-
-    ;; Wait for the DELETE to finish successfully.
-    {¦ request_: (pending (delete _ _)) -query reply_: [ok _*]}
-      <> {(request): (), (reply): ()}
 
     ;; Clear the database in a more efficient way than asking each complete
     ;; todo to remove itself -- using DELETE...WHERE.
     {¦ request_: clear -query_ -reply}
       <> {request: (pending ^request), query: (exec "delete from todos where done = true")}
 
-    ;; Wait for the DELETE to complete. When it does, take the easy way and
-    ;; reload the whole thing.
-    {¦ request_: (pending clear) -query reply_: [ok _]}
-      <> {request: reload, (reply): ()}))
+    ;; Wait for boot, clear to complete. Then trigger a full reload.
+    {¦ request_: (pending (%any boot clear)) -query reply_: [ok _]}
+      <> {request: reload, (reply): ()}
+
+    ;; Wait for database updates to complete.
+    {¦ request_: (pending (%any° (assoc _ _) (delete _ _))) -query reply_: [ok _*]}
+      <> {(request): (), (reply): ()}))
 
 ;;| The supervisor will watch @todos and manage devices representing each
 ;;| entry automatically.
@@ -122,11 +111,11 @@
   (frag (@filter (sensor _ filter_))
     (sensor (view filter _)))
 
-  (cell @show false)
+  (cell @visible false)
   (cell @editor)
 
   ;;| The todo's visuals.
-  (group style: "flow-row gap-2 px-3 py-1 item-center-y rounded absent show:present" @:show
+  (group style: "flow-row gap-2 px-3 py-1 item-center-y rounded absent visible:present" @:visible
     (guard (@editor)
       ($Toggle @done ($Checkbox))
       (p @content style: "fr-1 clip text-ui-content leading-6 min-w-1")
@@ -142,17 +131,17 @@
 
   ;;| The todo's little brain.
   (backsys
-    {¦ show_boolean}
-      <> {show: false}
+    {¦ visible_boolean}
+      <> {visible: false}
 
-    {¦ filter: {¦ show: all query_string} content_string show_boolean}
-      <> {show: ^(substring? content query)}
+    {¦ filter: {¦ show: all query_string} content_string visible_boolean}
+      <> {visible: ^(substring? content query)}
 
-    {¦ filter: {¦ show: active query_string} content_string done: false show_boolean}
-      <> {show: ^(substring? content query)}
+    {¦ filter: {¦ show: active query_string} content_string done: false visible_boolean}
+      <> {visible: ^(substring? content query)}
 
-    {¦ filter: {¦ show: completed query_string} content_string done: true show_boolean}
-      <> {show: ^(substring? content query)}
+    {¦ filter: {¦ show: completed query_string} content_string done: true visible_boolean}
+      <> {visible: ^(substring? content query)}
 
     {¦ action_: delete todo_}
       <> {(action): (), (todo): ()}
