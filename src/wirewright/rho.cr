@@ -587,13 +587,13 @@ module Ww
     end
 
     # See `rho.rulesysR`.
-    def rulesysR(ruleset : Ruleset) : Rewriter
+    def rulesysR(ruleset : Ruleset, depth_limit : UInt32) : Rewriter
       finite do |attachments, input|
-        rulesysR(ruleset, attachments, input)
+        rulesysR(ruleset, depth_limit, attachments, input)
       end
     end
 
-    private def rulesysR(ruleset : Ruleset, attachments, input : Term) : Term::Rep
+    private def rulesysR(ruleset : Ruleset, depth_limit : UInt32, attachments, input : Term) : Term::Rep
       proposals = Pf::Kit.stack_array(Term, 8)
 
       ruleset.each_candidate(input) do |op, rule|
@@ -618,7 +618,7 @@ module Ww
 
       programs = Pf::Kit.stack_array(Array(Term::Diff::Action) | Term, 8)
       proposals.each do |proposal|
-        program = Term.diff?(input, proposal) || proposal
+        program = Term.diff?(input, proposal, depth_limit: depth_limit) || proposal
         programs << program
       end
 
@@ -873,6 +873,18 @@ module Ww
         #
         # |@pattern
         # rulesysR
+        # (rulesysR depth-limit: ∞)
+        # (rulesysR depth-limit_: (%number +i32!))
+        #
+        # |@key depth-limit
+        # Specifies the depth limit for the diff algorithm; dictionaries below this depth
+        # are treated atomically (as indivisible units). Unless the dictionaries you rewrite
+        # are typically very shallow, please set this, most often you'll just want `1` or
+        # `2` or rarely `3`. Using the default `∞` with deep dictionaries currently has
+        # really, *really* poor performance, so avoid it at all costs.
+        #
+        # `0` works, and will treat the top-level dictionary atomically, but that has
+        # very little practical point.
         #
         # |@summary
         # Rule system rewriter.
@@ -887,9 +899,16 @@ module Ww
         #
         # This rewriter is strict. All conflicting changes are rejected (i.e. there
         # is no preference for one change or another, no precedence, etc.).
-        matchpi %{rulesysR} do
+
+        matchpi %{rulesysR}, %{(rulesetR ⍊ depth-limit: ∞)} do
           ruleset = Ruleset.select(data)
-          rulesysR(ruleset)
+          limit = UInt32::MAX
+          rulesysR(ruleset, limit)
+        end
+
+        matchpi %{(rulesysR ⍊ depth-limit_: (%number +i32!))}, depth_limit: UInt32 do
+          ruleset = Ruleset.select(data)
+          rulesysR(ruleset, depth_limit)
         end
 
         # |@ rho.exhR
