@@ -656,11 +656,11 @@ module Ww::M1
   # the dict, metaphorically speaking, "smells like" one that could match.
   #
   # The sketch is an impression of the content of the dict, its children, and
-  # so on down to leaves (currently only symbols in entry values are accounted).
+  # so on down to leaves.
   #
   # Sketches are one of the strongest optimizations in M1, which makes the majority
-  # of rejections extraordinarily cheap -- and from a pattern matching engine's
-  # point of view, rejections are by far the most common occurence; matches are
+  # of rejections extraordinarily cheap. From a pattern matching engine's point of
+  # view, in a rewrite system, rejections are by far the most common occurence; matches are
   # so rare in comparison that they can sometimes even be pessimized, especially
   # for heavier operators (however, we do not do this here, in M1, at least
   # not intentionally). Think backtracking, as implemented here in M1: a stupendously
@@ -668,8 +668,8 @@ module Ww::M1
   #
   # Sketches are basically Bloom filters in disguise. Just like they help one
   # search in absolutely terrific amounts of stored data, they can also be used
-  # to help an absolutely terrible search algorithm avoid much of the repercussions
-  # from its incorrect choices downstream.
+  # to help an absolutely terrible search algorithm avoid many of the repercussions
+  # from its incorrect choices.
   #
   # The bounds of a dict are checked. For example, `(_ _ _)` asks size=?3.
   def match(ctx, op : Op::Guard, matchee : Tzip, plan)
@@ -700,7 +700,12 @@ module Ww::M1
     # call. We can't do it above since that'd be too slow: Guard provides millions
     # of rejections really really quickly and we don't want to obstruct them, esp.
     # with memory reads and writes! On the other hand once we're past Guard, it
-    # becomes worth something trying to save a recursive call.
+    # becomes worth something to try save a recursive call.
+    #
+    # NOTE: Despite how dangerous object_id looks here, remember probably_matches?
+    # is allowed to emit false positives! If the same object id we've stored in our
+    # STM is reclaimed by a totally different dict, so be it -- we'll just emit a
+    # false `true`. I would assume this happens rarely enough for us not to worry.
     if op.last_matched.get(:relaxed) == dict.object_id
       return true
     end
@@ -777,8 +782,8 @@ module Ww::M1
 
   # :nodoc:
   def capture(ctx, capture, proposal, plan)
-    ctx, updated = ctx.update?(capture) do |capture|
-      unless sum = Tzip.join?(capture, proposal)
+    ctx, updated = ctx.update?(capture) do |accepted|
+      unless sum = Tzip.join?(accepted, proposal)
         return Fb[] # Constraint not satisfied.
       end
 
