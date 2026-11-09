@@ -83,37 +83,57 @@ module Ww::Rack::Extrinsics
 
   private def propose(state : State, ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
     hg.propose(proposals, :path, :resource) do |node|
-      variant = nil
-
       Term.case(node.term) do
-        matchpi(
-          %{[path (path_string reading)]},
-          %{[path (path_string reading) _ ]},
-          path: NormalPath,
-        ) do
-          variant = PathReading.new(node, path)
+        matchpi %{[path (pathQ_ reading)]}, %{[path (pathQ_ reading) _]} do
+          continue unless path = path?(pathQ)
+
+          step(state, ctx, PathReading.new(node, path))
         end
 
-        matchpi(
-          %{[path (path_string report)]},
-          %{[path (path_string report) _ ]},
-          path: NormalPath,
-        ) do
-          variant = PathReport.new(node, path)
+        matchpi %{[path (. report) _?]} do
+          path = Term::Dict.build do |commit|
+            cwd = Ww.roots.cwd
+            cwd.each_part do |part|
+              commit << (part == "/" ? :/ : part)
+            end
+          end
+
+          D7.patch(node, {1, 0, path})
+        end
+
+        matchpi %{[path (pathQ_ report)]}, %{[path (pathQ_ report) _]} do
+          continue unless path = path?(pathQ)
+
+          step(state, ctx, PathReport.new(node, path))
         end
 
         matchpi %{[resource queryQ_]}, %{[resource queryQ_ _]} do
           continue unless query = ResourceService.query?(queryQ)
 
-          variant = Resource.new(node, query)
+          step(state, ctx, Resource.new(node, query))
         end
 
         otherwise { }
       end
+    end
+  end
 
-      next if variant.nil?
+  private def path?(term : Term) : NormalPath?
+    Term.case(term) do
+      matchpi %{_string} do
+        term.to(NormalPath)
+      end
 
-      step(state, ctx, variant)
+      matchpi %{(/ _string*)} do
+        path = Path["/"]
+        parts = term.items.move(1)
+        parts.each do |part|
+          path /= part.to(String)
+        end
+        NormalPath.new(path)
+      end
+
+      otherwise { }
     end
   end
 
@@ -121,15 +141,20 @@ module Ww::Rack::Extrinsics
     ref = ExtrinsicMap::ReadingRef.new(variant.path)
     ctx.refs << ref
 
-    # If reading is not yet available, keep the old one (if any).
-    return unless reading = state.extrinsics[ref]?
+    prev = variant.node.term[2]?
+
+    # Reading is not yet available.
+    unless reading = state.extrinsics[ref]?
+      return if prev.nil?
+      return D7.patch(variant.node, {2, :stale, true})
+    end
 
     transcription = state.transcriptions.put_if_absent(reading) do
       transcribe(reading)
     end
 
-    if prev = variant.node.term[2]?
-      return if Term.extension?(prev, of: transcription)
+    if prev
+      return unless Term.item_changed?(prev, transcription)
     end
 
     D7.patch(variant.node, {2, transcription})
@@ -139,15 +164,20 @@ module Ww::Rack::Extrinsics
     ref = ExtrinsicMap::ReportRef.new(variant.path)
     ctx.refs << ref
 
-    # If report is not yet available, keep the old one (if any).
-    return unless report = state.extrinsics[ref]?
+    prev = variant.node.term[2]?
+
+    # Report is not yet available.
+    unless report = state.extrinsics[ref]?
+      return if prev.nil?
+      return D7.patch(variant.node, {2, :stale, true})
+    end
 
     transcription = state.transcriptions.put_if_absent(report) do
       transcribe(report)
     end
 
-    if prev = variant.node.term[2]?
-      return if Term.extension?(prev, of: transcription)
+    if prev
+      return unless Term.item_changed?(prev, transcription)
     end
 
     D7.patch(variant.node, {2, transcription})

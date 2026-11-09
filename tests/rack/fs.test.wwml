@@ -282,3 +282,44 @@
     (fs @query @replies))
 
   end)
+
+;; Dict path (reading)
+(rack
+  (frame
+    (fs @query @replies)
+    (queue (@query @queries)
+      ((overwrite file "/tmp/wirewright-path3" "Hello")))
+    (queue (@reply @replies)
+      ())
+
+    (path ((/ "tmp" "wirewright-path3") reading)))
+
+  (frame/tail fast-forward: true
+    (queue (@query @queries)
+      ())
+    (queue (@reply @replies)
+      ((ok (wrote "/tmp/wirewright-path3"))))
+
+    (path ((/ "tmp" "wirewright-path3") reading)
+      (present "Hello"))))
+
+;; Dict path (report)
+(rack
+  (frame
+    (fs @query @replies)
+    (queue (@query @queries)
+      ((create dir if missing "/tmp/wirewright-path4")
+       (create file "/tmp/wirewright-path4/a")
+       (create file "/tmp/wirewright-path4/b")
+       (create dir if missing "/tmp/wirewright-path4/c")))
+    (queue (@reply @replies)
+      ())
+    (path ((/ "tmp" "wirewright-path4") report)))
+
+  (frame pattern: true fast-forward: true
+    (_*
+     (path ((/ "tmp" "wirewright-path4") report)
+       [dir
+         [file "a"]
+         [file "b"]
+         [dir "c"]]))))

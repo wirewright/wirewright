@@ -2929,11 +2929,13 @@ module Ww::Rack
       # |@ rack.path
       #
       # |@pattern
-      # [path (path_string reading)]
-      # [path (path_string reading) reading_]
+      # [path (path_ reading)]
+      # [path (path_ reading) reading_]
       #
       # |@key path
-      # Specifies the path to a file, for example, `/tmp/test.txt`.
+      # Specifies the path to a file, for example, `/tmp/test.txt`. You can also
+      # provide an "unjoined" absolute path -- it will be joined by Wirewright
+      # internally. For example: `(/ "tmp" "test.txt")`
       #
       # |@key reading rack.path.reading
       # The *reading* of the file, if available.
@@ -2994,19 +2996,20 @@ module Ww::Rack
       # if there is a parse error or if the file does not exist. For example,
       # if you write `2+2` to the file, the result cell will contain `4`. If
       # you change the expression, the result will be recalculated automatically.
-      matchpi %{[path (_string reading)]}, %{[path (_string reading) _]} do
+      matchpi %{[path (_ reading)]}, %{[path (_ reading) _]} do
         D7.gnd(node)
       end
 
       # |@ rack.path
       #
       # |@pattern
-      # [path (path_string report)]
-      # [path (path_string report) report_]
+      # [path (path_ report)]
+      # [path (path_ report) report_]
       #
       # |@key path
       # Specifies the path to a file system entry, for example, `/tmp/test.txt`
-      # or `/tmp/dir`.
+      # or `/tmp/dir`. You can also provide an "unjoined" absolute path -- it will
+      # be joined by Wirewright internally. For example, `(/ "tmp" "test.txt")`
       #
       # |@key report rack.path.report
       # The *report* about the file system entry, if available.
@@ -3182,7 +3185,7 @@ module Ww::Rack
       #
       # Finally, there's the journal sensor which tracks appearances joining
       # and leaving the `paths` termspace.
-      matchpi %{[path (_string report)]}, %{[path (_string report) _]} do
+      matchpi %{[path (_ report)]}, %{[path (_ report) _]} do
         D7.gnd(node)
       end
 
