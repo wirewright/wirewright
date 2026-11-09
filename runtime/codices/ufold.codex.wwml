@@ -903,6 +903,15 @@ vantage: ""
     {origin-l: ^(value point l)
      origin-t: ^(value point t)}))
 
+(group
+  (for transform-box
+    (utility (prefix "origin-l-" (number value))
+      {origin-l: ^value}))
+
+  (for transform-box
+    (utility (prefix "origin-t-" (number value))
+      {origin-t: ^value})))
+
 ;; E.g. pivot-center
 (for transform-box
   (utility (prefix "pivot-" (one-of transform-points point))
@@ -1024,6 +1033,12 @@ vantage: ""
   (for content-align-box
     (utility (prefix "content-y-" (number value))
       {y: ^value})))
+
+(for content-align-box
+  (utility "content-justify" {justify: true}))
+
+(for content-align-box
+  (utility "-content-justify" {justify: false}))
 
 (for content-align-box
   (utility "content-center" {x: 0.5 y: 0.5}))
@@ -1313,6 +1328,9 @@ vantage: ""
 
 (for transform-box
   (property µ-dt as: dt))
+
+(for transform-box
+  (property µ-scale as: scale))
 
 (for limit-box
   (property µ-w as: max-w))
@@ -1726,6 +1744,7 @@ vantage: ""
 "resize-bl-tr": resize-bl-tr
 "resize": resize
 "move": resize ;; alias
+"drag": resize ;; alias
 "resize-x": resize-x
 "resize-y": resize-y
 "not-allowed": not-allowed
