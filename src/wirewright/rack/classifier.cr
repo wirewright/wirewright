@@ -4321,8 +4321,7 @@ module Ww::Rack
       # Increments or decrements a number on every cycle, based on the global clock.
       #
       # |@block
-      # The ticker node uses the global clock to increment or decrement
-      # a number.
+      # The ticker node uses the global clock to increment or decrement a number.
       #
       # See `rack.sequencer` for general info on how most of Rack handles time.
       #
@@ -4344,6 +4343,77 @@ module Ww::Rack
       # ```
       matchpi %{[ticker _dict _number]} do
         D7.gnd(node)
+      end
+
+      # |@ rack.timesource
+      #
+      # |@pattern
+      # [timesource (period_ @edge_) value_]
+      #
+      # |@key period duration
+      # The length of one cycle, expressed in the duration language. For example:
+      # `(1 s)` (or `(1 second)`), `(100 ms)` (or `(100 milliseconds)`).
+      #
+      # Setting *period* to a value corresponding to `0` (e.g. `(0 ms)`) makes
+      # the timesource emit on every cycle.
+      #
+      # |@key edge rack.edge
+      # The edge where to emit *value*.
+      #
+      # |@key value
+      # The value to emit. It can be any term.
+      #
+      # |@summary
+      # Emits a value at edge on every cycle, based on the global clock.
+      #
+      # |@block
+      # The timesource node uses the global clock to emit *value* at *edge*.
+      #
+      # See `rack.sequencer` for general info on how most of Rack handles time.
+      #
+      # If *edge* is nonempty, does nothing (ignoring the current tick).
+      #
+      # |@example
+      # The timesource node can be useful as a "heartbeat" of sorts:
+      #
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (timesource ((1 s) @xs) "Kaixo!")
+      # (queue (@x @xs) ())
+      #
+      # ;; Frame 1 (after about 1s)
+      #
+      # (timesource ((1 s) @xs) "Kaixo!")
+      # (queue (@x @xs) ("Kaixo!"))
+      #
+      # ;; Frame 2 (after about 1s)
+      #
+      # (timesource ((1 s) @xs) "Kaixo!")
+      # (queue (@x @xs) ("Kaixo!" "Kaixo!"))
+      #
+      # ;; ...etc
+      # ```
+      #
+      # Or for debounce:
+      #
+      # ```wwml
+      # ;; The backsystem will increment *value* very quickly.
+      # (cell @value 0)
+      # (backsys @value ±n <> {n: ^(+ n 1)})
+      #
+      # (timesource ((1 s) @ready) true)
+      # (cell @ready)
+      # (backsys
+      #   {¦ value_ ready_ -samples_}
+      #     <> {(ready): (), samples: ^value})
+      #
+      # ;; At this point, samples could have gone to the network etc. (see `rack.client`)
+      # ;; Here we just queue them up.
+      # (queue (@sample @samples) ())
+      # ```
+      matchpi %{[timesource (_dict @edge_) _]} do
+        D7.gnd(node, edge)
       end
 
       # |@ rack.lfo

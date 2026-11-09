@@ -5738,6 +5738,20 @@
 
     end))
 
+;; timesource
+(rack
+  (frame
+    (timesource ((1 s) @xs) "Kaixo!")
+    (queue (@x @xs) ()))
+
+  (frame
+    (timesource ((1 s) @xs) "Kaixo!")
+    (queue (@x @xs) ("Kaixo!")))
+
+  (frame
+    (timesource ((1 s) @xs) "Kaixo!")
+    (queue (@x @xs) ("Kaixo!" "Kaixo!"))))
+
 ;; Make sure circuit policy overloads work.
 (rack
   (frame

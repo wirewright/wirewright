@@ -83,7 +83,7 @@ module ::Ww::Rack::Timekeeper
   EPOCH = Random::Secure.rand(UInt64)
 
   private def propose(ctx : StepContext, hg : D7::Hypergraph, proposals) : Nil
-    hg.propose(proposals, :sequencer, :ticker, :lfo, :timer) do |node|
+    hg.propose(proposals, :sequencer, :ticker, :timesource, :lfo, :timer) do |node|
       nodeQ = node.term
 
       Term.case(nodeQ) do
@@ -132,6 +132,19 @@ module ::Ww::Rack::Timekeeper
           next if crossings.zero? # Fast path out
 
           D7.patch(node, {2, state + step*Term[crossings]})
+        end
+
+        matchpiT %{[timesource (periodQ_ @edge_) msg_]} do
+          next unless period = DurationLanguage.decode?(periodQ)
+          next unless target = Rack.cell?(hg, hg.resolve(node.addr, edge))
+          next if target.value? # nonempty, skip this time
+
+          ctx.periods << period
+
+          crossings = crossingcnt(ctx.checkpoint, ctx.now, period)
+          next if crossings.zero?
+
+          D7.patch(target.node, {2, msg})
         end
 
         matchpi %{[lfo (periodQ_ waveform_) _?]} do
