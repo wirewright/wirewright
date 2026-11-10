@@ -1407,36 +1407,6 @@ module Ww
       end
     end
 
-    # :nodoc:
-    def self.extension?(b : Dict, *, of a : Dict) : Bool
-      return false if a.size > b.size
-
-      a.each_entry do |key, value0|
-        unless value1 = b[key]?
-          return false # disagrees
-        end
-
-        unless extension?(value1, of: value0)
-          return false # disagrees
-        end
-      end
-
-      true # agrees
-    end
-
-    # :nodoc:
-    def self.extension?(b : Any, *, of a : Any) : Bool
-      a == b ? true : false
-    end
-
-    # All keys in *a* must exist in *b*, and their values in *b* must be
-    # an extension of the corresponding values in *a* (recursively), for
-    # *b* to extend *a*. For non-dictionary terms, *b* extends *a* only if
-    # *b* is equal to *a*.
-    def self.extension?(b : Term, *, of a : Term) : Bool
-      extension?(Term[b], of: Term[a])
-    end
-
     # Returns a copy of the dict *a* with keys in *keys*. *keys* are converted
     # to `Term` using `Term.of`.
     def self.select(a : Dict, in keys : Enumerable) : Dict
