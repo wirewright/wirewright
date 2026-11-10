@@ -220,7 +220,7 @@ To demonstrate this, consider the following slightly simpelr circuit. There is a
 (feed (@x back) (@z back))
 ```
 
-If you run it, it just exits immediately, unable to move any progress. The reason is that the `feed`s clash over `@x`, and so retract all their patches; and there is nothing else going on besides that. Quiescence.
+If you run it, it just exits immediately, unable to make any progress. The reason is that the `feed`s clash over `@x`, and so retract all their patches; and there is nothing else going on besides that. Quiescence.
 
 Your intuitive expectation might have been that values should be "peeled off" of both sides of `@x` and appended into `@y` and `@z`, correspondingly. But this can't be done with just a pair of `feed` nodes and a simple `cell`. The `feed`s will fight with  each other over who gets to modify the cell. 
 
@@ -393,9 +393,9 @@ $ ./irack --single-trace seed.wwml
 $
 ```
 
-The broadcast `feed` "unpacked" the dictionary at `@z` into the corresponding cells `@x` and `@y`. Just like in the aggregate variant, the order of edges `(@x @y)` matters here, and affects which cells receive which corresponding values.
+The `feed` "unpacked" the dictionary at `@z` into the corresponding cells `@x` and `@y`. Just like in the aggregate variant, the order of edges `(@x @y)` matters here, and affects which cells receive which corresponding values.
 
-Now that we know the aggregate and the broadcast variants of `feed`, we can build an oscillator using both of them! In `seed.wwml`, type:
+Now that we know the aggregate and the distribute variants of `feed`, we can build an oscillator using both of them. In `seed.wwml`, type:
 
 ```wwml
 (cell @x 100)
@@ -505,7 +505,7 @@ As you can see, `100` was moved to both `@y` and `@z` (the destination places of
 
 `feed` allows you to do some extra things, but it is not necessary to know about them to proceed with this guide. If you are interested and want to experiment with `feed` a little bit more, feel free to check out the docs for `feed` in the doctool.
 
-To do so, open the doctool and navigate to `rack`, then to `feed`. What you should see is a page listing the *overloads* of `feed`, and describing each of them in detail. *Overloads* is `doctool` vocabulary; do not confuse them with *variants*, which is the vocabulary of Rack.
+To do so, open the doctool and navigate to `rack`, then to `feed`. What you should see is a page listing the *overloads* of `feed`, and describing each of them in detail. *Overloads* is `doctool` vocabulary; do not confuse overloads with *variants*, which is the vocabulary of Rack.
 
 All variants of `feed` can be *inhibited*: you can attach a list of one or more edges that must *all* be empty (or not have a cell at them) for the `feed` to fire:
 
