@@ -2593,6 +2593,58 @@
       (sensor (view local _number) 2))))
     ;; ...
 
+;; Frag splice
+(group
+  (rack
+    (frame
+      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+        (group))
+
+      (cell @a ((cell @foo 0) (cell @bar) (feed @foo @bar)))
+      (feed @a @xs))
+
+    (frame
+      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+        (group
+          (cell @foo 0)
+          (cell @bar)
+          (feed @foo @bar)))
+
+      (cell @a)
+      (feed @a @xs))
+
+    (frame
+      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+        (group
+          (cell @foo)
+          (cell @bar 0)
+          (feed @foo @bar)))
+
+      (cell @a)
+      (feed @a @xs))
+
+    end)
+
+  (rack
+    (frame
+      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+        (group 1 2 3))
+      (cell @ys)
+      (feed @xs @ys @xs))
+
+    (frame
+      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+        (group))
+      (cell @ys (1 2 3))
+      (feed @xs @ys @xs))
+
+    (frame
+      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+        (group 1 2 3))
+      (cell @ys)
+      (feed @xs @ys @xs))))
+    ;; ...
+
 ;; Elementary 1D movement circuit
 (group
   ;; Basic

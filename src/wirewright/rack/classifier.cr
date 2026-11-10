@@ -93,7 +93,7 @@ module Ww::Rack
   defrecord OneReplacer, update : Term? -> Term, part : Term?, smart: true
   defrecord ManyReplacer, update : Term? -> Term
 
-  private def replacer(pattern : Term, capture : Term, whole : Term) : Replacer
+  private def replacer(pattern : Term, capture : Term, whole : Term, *, splice : Bool = false) : Replacer
     env_trace_lists = M1.matches_and_traces(Term[], M1.operator(pattern), whole)
     if env_trace_lists.empty?
       return ZeroReplacer.new
@@ -109,12 +109,17 @@ module Ww::Rack
       in Nil
         backspec = Term[].with({capture}, Term[]) # {(capture): ()}
       in Term
+        key = capture
+        if splice
+          key = Term.of({capture})
+        end
+
         if part1.type.dict? || part1.type.symbol?
-          backspec = Term[].with(capture, {:"^verbatim", part1})
+          backspec = Term[].with(key, {:"^verbatim", part1})
         else
           # Do not waste time doing ^verbatim stuff on terms that cannot cause
           # us trouble: booleans, numbers, etc.
-          backspec = Term[].with(capture, part1)
+          backspec = Term[].with(key, part1)
         end
       end
 
@@ -1331,9 +1336,11 @@ module Ww::Rack
       #
       # |@pattern
       # [frag (edge←(%'edge capture_) pattern_) child_]
+      # [frag ((edge←(%'edge capture_)) pattern_) child_]
       #
       # |@key edge rack.[edge]
-      # The edge where to expose the captured part of *child*.
+      # The edge where to expose the captured part of *child*. Can be wrapped in
+      # a dict to splice on change (as in backmaps like `... <> {(...): (...)}`).
       #
       # |@key capture
       # The name of the capture of a part of *child* in *pattern*.
@@ -1384,8 +1391,12 @@ module Ww::Rack
       #
       # ;; ... and so on.
       # ```
-      matchpi %{[frag (edge←(%'edge capture_) pattern_) child0_]} do
-        case replacer = replacer(pattern, capture, child0)
+
+      matchpi(
+        %{[frag (spec←edge←(%'edge capture_) pattern_) child0_]},
+        %{[frag (spec←(edge←(%'edge capture_)) pattern_) child0_]},
+      ) do
+        case replacer = replacer(pattern, capture, child0, splice: !spec.same?(edge))
         in ZeroReplacer
           mix0 = child0
         in OneReplacer
