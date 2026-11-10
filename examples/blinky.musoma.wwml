@@ -1,9 +1,9 @@
 (window
-  (node @driver
+  (frag @driver
     (sequencer (1 s)
       (> true)
       false))
-  (node @text
+  (frag @text
     (p style: "p-5 leading-tight on:sel sel-white beam-thick"
        selection-anchor: 0
        selection-span: 0

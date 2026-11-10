@@ -1,9 +1,9 @@
 (section "Animation"
-  (node (@mod (lfo _ ±mod))
+  (frag (@mod (lfo _ ±mod))
     (lfo ((33 ms) (sin (0.1 hz)))))
   (window width: 500 height: 500
     (limit max-w: 50 max-h: 50
-      (node @tf
+      (frag @tf
         (transform dl: 0 dt: 0 origin-l: 0.5 origin-t: 0.5
           (rect
             fill: (oklch 0.4 0.1 0)

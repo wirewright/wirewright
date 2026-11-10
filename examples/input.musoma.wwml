@@ -19,7 +19,7 @@
           (^match (ml/document text)
             (when [ok document_] (code ^\document))
             (when (err ⍊ detail_string) (p ^detail style: "text-theme-attention-fg")))))
-      (node @view))))
+      (frag @view))))
 
 ((I modify: true structural: true multiline: true compose: true) ("" * "") 0)
 

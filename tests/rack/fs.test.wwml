@@ -8,7 +8,7 @@
     (fs @fs-in @fs-out)
 
     ;; Basic test infrastructure.
-    (node (arena @readings) (group))
+    (frag (arena @readings) (group))
     (backsys
       {¦ plan: (action←((%any create delete overwrite) _*) _*) -fs-in_}
         <> {(action): (), fs-in: ^action}

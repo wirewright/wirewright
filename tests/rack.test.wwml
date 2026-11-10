@@ -2214,21 +2214,48 @@
       (discard @bar))
     end))
 
-;; node
-(rack
-  (frame
-    (cell @foo (delay 2 (p "Hi")))
-    (feed @foo @view)
-    (node @view))
-  (frame
-    (cell @foo)
-    (feed @foo @view)
-    (node @view (delay 1 (p "Hi"))))
-  (frame
-    (cell @foo)
-    (feed @foo @view)
-    (node @view (p "Hi")))
-  end)
+;; frag vs. circuit
+(group
+  (rack
+    (frame
+      (cell @foo (delay 2 (p "Hi")))
+      (feed @foo @view)
+      (frag @view))
+
+    (frame
+      (cell @foo)
+      (feed @foo @view)
+      (frag @view (delay 2 (p "Hi"))))
+
+    (frame
+      (cell @foo)
+      (feed @foo @view)
+      (frag @view (delay 1 (p "Hi"))))
+
+    (frame
+      (cell @foo)
+      (feed @foo @view)
+      (frag @view (p "Hi")))
+
+    end)
+
+  (rack
+    (frame
+      (cell @foo ((delay 2 (p "Hi"))))
+      (feed @foo @view)
+      (circuit @view))
+
+    (frame
+      (cell @foo)
+      (feed @foo @view)
+      (circuit @view (delay 1 (p "Hi"))))
+
+    (frame
+      (cell @foo)
+      (feed @foo @view)
+      (circuit @view (p "Hi")))
+
+    end))
 
 ;; Filtered cell
 (group
@@ -4737,12 +4764,12 @@
     (frame
       (parser (@input - name-list - @output)
         (name-list lst←(many "[%w]+" " ")) => ^lst)
-      (node (@input (resource _ (present input_string)))
+      (frag (@input (resource _ (present input_string)))
         (resource (uri "http://127.0.0.1:9812/names.txt")))
       (cell @output))
     ;; Fetches data
     (frame/tail
-      (node (@input (resource _ (present input_string)))
+      (frag (@input (resource _ (present input_string)))
         (resource (uri "http://127.0.0.1:9812/names.txt")
           (present "Samantha Daniel John Barbara")))
       (cell @output))
@@ -4797,12 +4824,12 @@
         (exponent "[eE]" S←sign value←(form "[0-9]+" nat))
           => ^(** 10 (* S value))
         (ws "[ \n\r\t]*"))
-      (node (@input (resource _ (present input_string)))
+      (frag (@input (resource _ (present input_string)))
         (resource (uri "http://127.0.0.1:9812/people.json")))
       (cell @output))
     ;; It downloaded the resource.
     (frame pattern: true
-      ⟨(node (@input _) (resource _ (present _string)))⟩)
+      ⟨(frag (@input _) (resource _ (present _string)))⟩)
     ;; It parsed it.
     (frame/tail
       (cell @output
@@ -5733,7 +5760,7 @@
 ;; relational comparisons.
 (rack
   (frame
-    (node (@state (ticker _ state_))
+    (frag (@state (ticker _ state_))
       (ticker (10 ms step: 0.5) 10))
 
     (log (@state limit: 2)))
@@ -5819,28 +5846,6 @@
       (cell @x)
       (cell @y "lorea")
       (feed @x @y))
-    (cell @a)
-    (cell @b))
-
-  end)
-
-;; Make sure node policy overloads work.
-(rack
-  (frame
-    (feed @a (@xs back))
-    (feed @b (@xs back))
-    (node (arena @xs)
-      (group
-        (cell @x "lorea")))
-    (cell @a (cell @y))
-    (cell @b (feed @x @y)))
-
-  (frame/tail
-    (node (arena @xs)
-      (group
-        (cell @x)
-        (cell @y "lorea")
-        (feed @x @y)))
     (cell @a)
     (cell @b))
 

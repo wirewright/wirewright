@@ -1023,67 +1023,6 @@ module Ww::Rack
         D7.circuit(node.as_d, 1u32...node.uitemsize, D7.inert(node))
       end
 
-      # |@ rack.node
-      #
-      # |@pattern
-      # [node @edge_]
-      # [node @edge_ child_]
-      # [node (policy_symbol @edge_)]
-      # [node (policy_symbol @edge_) child_]
-      matchpi(
-        %{[node @header_ _?]},
-        %{[node header←(_symbol @_) _?]},
-      ) do
-        if child = node[2]?
-          mix0 = Term.of(:cell, header, child)
-        else
-          mix0 = Term.of(:cell, header)
-        end
-
-        leaf = D7.mixture(node, mix0) do |mix1|
-          Term.of_case(mix1) do
-            matchpi %{(cell _ child1_)} { Term.morph(node, {2, child1}) }
-            otherwise { Term.morph(node, {2, nil}) }
-          end
-        end
-
-        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
-      end
-
-      # |@ rack.node
-      #
-      # |@pattern
-      # [node (@edge_ pattern_) child_]
-      matchpi %{[node (edge←(%'edge capture_) pattern_) child0_]} do
-        leaf = pass do
-          replacer = replacer(pattern, capture, child0)
-          if replacer.is_a?(ZeroReplacer)
-            next D7.inert(node)
-          end
-
-          case replacer
-          in OneReplacer
-            mix0 = Term.of(:cell, edge, replacer.part?)
-          in ManyReplacer
-            mix0 = Term.of(:cell, edge)
-          end
-
-          D7.mixture(node, mix0) do |mix1|
-            Term.case(mix1) do
-              matchpi %{(cell @_)} do
-                Term.morph(node, {2, replacer.update.call(nil)})
-              end
-
-              matchpi %{(cell @_ part1_)} do
-                Term.morph(node, {2, replacer.update.call(part1)})
-              end
-            end
-          end
-        end
-
-        D7.circuit(node.as_d, 2u32...node.uitemsize, leaf)
-      end
-
       # |@ rack.circuit
       #
       # |@pattern
@@ -3034,7 +2973,7 @@ module Ww::Rack
       # to observe the node's evolution:
       #
       # ```wwml
-      # (node (@content (path _ (present content_string)))
+      # (frag (@content (path _ (present content_string)))
       #   (path ("/tmp/test.txt" reading)))
       #
       # (parser (@content - top - @result)
@@ -4527,20 +4466,20 @@ module Ww::Rack
       # ```wwml
       # ;; Frame 0 (seed)
       #
-      # (node (@readout (lfo _ ±readout))
+      # (frag (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))))
       # (log (@readout limit: 3))
       #
       # ;; Frame 1
       #
-      # (node (@readout (lfo _ ±readout))
+      # (frag (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈3.5979825e-5))
       # (log (@readout limit: 3))
       #
       # ;; Frame 2
       #
-      # (node (@readout (lfo _ ±readout))
+      # (frag (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈0.99689716))
       # (log (@readout limit: 3)
@@ -4548,7 +4487,7 @@ module Ww::Rack
       #
       # ;; Frame 3
       #
-      # (node (@readout (lfo _ ±readout))
+      # (frag (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈0.59998876))
       # (log (@readout limit: 3)
@@ -4557,7 +4496,7 @@ module Ww::Rack
       #
       # ;; Frame 4
       #
-      # (node (@readout (lfo _ ±readout))
+      # (frag (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈0.003257661))
       # (log (@readout limit: 3)

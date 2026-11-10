@@ -44,7 +44,7 @@
           (top expr_string)
             => (p style: "text-neutral-500 right clip"
                  ^expr))
-        (node @prev-display)
+        (frag @prev-display)
 
         ;;| Use ascR (ascending rewriter) to convert the contents of the workspace
         ;;| to Microfold.
@@ -79,7 +79,7 @@
              => (group style: "clip right p-1"
                   (group style: "font-3xl leading-none content"
                     ^node)))
-        (node @display))))
+        (frag @display))))
 
   (section "Keypad"
     (module {:@actions}
