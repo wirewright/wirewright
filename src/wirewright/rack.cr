@@ -19,7 +19,7 @@
 # you can simulate the evolution of a cellular automaton such as [Conway's
 # Game of Life](https://en.wikipedia.org/wiki/Conway's_Game_of_Life).
 #
-# Rack circuits can contain *subcircuits* (`rack.circuit`, `rack.node`, `rack.device`, etc.)
+# Rack circuits can contain *subcircuits* (`rack.circuit`, `rack.device`, etc.)
 # Evolution (time) always runs *top-down*: host circuits are always *time-stepped*
 # (evolved into the future by one step) **before** subcircuits (guest circuits).
 # The reasoning for this is the same as in simulation. We consider guest circuits to

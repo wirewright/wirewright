@@ -2220,22 +2220,22 @@
     (frame
       (cell @foo (delay 2 (p "Hi")))
       (feed @foo @view)
-      (frag @view))
+      (node @view))
 
     (frame
       (cell @foo)
       (feed @foo @view)
-      (frag @view (delay 2 (p "Hi"))))
+      (node @view (delay 2 (p "Hi"))))
 
     (frame
       (cell @foo)
       (feed @foo @view)
-      (frag @view (delay 1 (p "Hi"))))
+      (node @view (delay 1 (p "Hi"))))
 
     (frame
       (cell @foo)
       (feed @foo @view)
-      (frag @view (p "Hi")))
+      (node @view (p "Hi")))
 
     end)
 
@@ -2304,21 +2304,21 @@
   (rack
     (frame
       (cell @x 0)
-      (frag @bridge-dst)
+      (node @bridge-dst)
       (cell @y)
       (cell @bridge-src (feed @x @y))
       (feed @bridge-src @bridge-dst))
 
     (frame
       (cell @x 0)
-      (frag @bridge-dst (feed @x @y))
+      (node @bridge-dst (feed @x @y))
       (cell @y)
       (cell @bridge-src)
       (feed @bridge-src @bridge-dst))
 
     (frame
       (cell @x)
-      (frag @bridge-dst (feed @x @y))
+      (node @bridge-dst (feed @x @y))
       (cell @y 0)
       (cell @bridge-src)
       (feed @bridge-src @bridge-dst))
@@ -2328,11 +2328,11 @@
   ;; Erase
   (rack
     (frame
-      (frag @x 100)
+      (node @x 100)
       (discard @x))
 
     (frame
-      (frag @x)
+      (node @x)
       (discard @x))
 
     end)
@@ -2341,26 +2341,26 @@
     (frame
       (view (@count ±n @y) ^"Count: ⸢n⸣")
       (backsys @x (cell _ ±n) <> {n: ^(+ n 1)})
-      (frag @x (cell @count 0))
+      (node @x (cell @count 0))
       (cell @y))
 
     (frame/tail
-      (frag @x (cell @count 1))
+      (node @x (cell @count 1))
       (cell @y "Count: 0"))
 
     (frame/tail
-      (frag @x (cell @count 2))
+      (node @x (cell @count 2))
       (cell @y "Count: 1"))
 
     (frame/tail
-      (frag @x (cell @count 3))
+      (node @x (cell @count 3))
       (cell @y "Count: 2")))
     ;; ...
 
   ;; Self-reference
   (rack
     (frame
-      (frag @x
+      (node @x
         (group
           (cell @count 0)
           (backsys @x
@@ -2369,7 +2369,7 @@
       (cell @y))
 
     (frame
-      (frag @x
+      (node @x
         (group
           (cell @count 1)
           (backsys @x
@@ -2378,7 +2378,7 @@
       (cell @y "Count: 0"))
 
     (frame
-      (frag @x
+      (node @x
         (group
           (cell @count 2)
           (backsys @x
@@ -2391,31 +2391,31 @@
   ;; TODO: We need to limit this (depth limit) and test that it terminates at some point.
   (rack
     (frame
-      (frag @current
+      (node @current
         (module {@parent: @current}
           (feed (copy @parent) @current)
-          (frag @current))))
+          (node @current))))
 
     (frame
-      (frag @current
+      (node @current
         (module {@parent: @current}
           (feed (copy @parent) @current)
-          (frag @current
+          (node @current
             (module {@parent: @current}
               (feed (copy @parent) @current)
-              (frag @current))))))
+              (node @current))))))
 
     (frame
-      (frag @current
+      (node @current
         (module {@parent: @current}
           (feed (copy @parent) @current)
-          (frag @current
+          (node @current
             (module {@parent: @current}
               (feed (copy @parent) @current)
-              (frag @current
+              (node @current
                 (module {@parent: @current}
                   (feed (copy @parent) @current)
-                  (frag @current)))))))))
+                  (node @current)))))))))
     ;; ...
 
   ;; Legacy
@@ -2423,42 +2423,42 @@
     (frame
       (cell @x (delay 3 (feed @a @b)))
       (feed @x @y)
-      (frag @y)
+      (node @y)
       (cell @a 100)
       (cell @b))
 
     (frame
       (cell @x)
       (feed @x @y)
-      (frag @y (delay 3 (feed @a @b)))
+      (node @y (delay 3 (feed @a @b)))
       (cell @a 100)
       (cell @b))
 
     (frame
       (cell @x)
       (feed @x @y)
-      (frag @y (delay 2 (feed @a @b)))
+      (node @y (delay 2 (feed @a @b)))
       (cell @a 100)
       (cell @b))
 
     (frame
       (cell @x)
       (feed @x @y)
-      (frag @y (delay 1 (feed @a @b)))
+      (node @y (delay 1 (feed @a @b)))
       (cell @a 100)
       (cell @b))
 
     (frame
       (cell @x)
       (feed @x @y)
-      (frag @y (feed @a @b))
+      (node @y (feed @a @b))
       (cell @a 100)
       (cell @b))
 
     (frame
       (cell @x)
       (feed @x @y)
-      (frag @y (feed @a @b))
+      (node @y (feed @a @b))
       (cell @a)
       (cell @b 100))
 
@@ -2470,25 +2470,25 @@
       (feed (@xs front) @x)
       (feed @y (@ys back))
       (cell @xs (1 2 3))
-      (frag (@y (cell _ y_))
+      (node (@y (cell _ y_))
         (cell @x))
       (cell @ys ()))
 
     (frame/tail
       (cell @xs (2 3))
-      (frag (@y (cell _ y_))
+      (node (@y (cell _ y_))
         (cell @x 1))
       (cell @ys ()))
 
     (frame/tail
       (cell @xs (2 3))
-      (frag (@y (cell _ y_))
+      (node (@y (cell _ y_))
         (cell @x))
       (cell @ys (1)))
 
     (frame/tail fast-forward: true
       (cell @xs ())
-      (frag (@y (cell _ y_))
+      (node (@y (cell _ y_))
         (cell @x))
       (cell @ys (1 2 3)))
 
@@ -2498,7 +2498,7 @@
     (frame
       (feed (@xs front) @x)
       (cell @xs (1 2 3))
-      (frag (@x (group …⟨(cell _ `x)⟩°…))
+      (node (@x (group …⟨(cell _ `x)⟩°…))
         (group
           (cell @a)
           (cell @b)
@@ -2507,7 +2507,7 @@
     (frame/tail
       (feed (@xs front) @x)
       (cell @xs (2 3))
-      (frag (@x (group …⟨(cell _ `x)⟩°…))
+      (node (@x (group …⟨(cell _ `x)⟩°…))
         (group
           (cell @a 1)
           (cell @b 1)
@@ -2520,7 +2520,7 @@
       (feed (@xs front) @x)
       (feed (@a @b @c) (@ys back))
       (cell @xs (1 2 3))
-      (frag (@x (group …⟨(cell _ `x)⟩°…))
+      (node (@x (group …⟨(cell _ `x)⟩°…))
         (group
           (cell @a)
           (cell @b)
@@ -2529,7 +2529,7 @@
 
     (frame/tail
       (cell @xs (2 3))
-      (frag (@x (group …⟨(cell _ `x)⟩°…))
+      (node (@x (group …⟨(cell _ `x)⟩°…))
         (group
           (cell @a 1)
           (cell @b 1)
@@ -2538,7 +2538,7 @@
 
     (frame/tail
       (cell @xs (2 3))
-      (frag (@x (group …⟨(cell _ `x)⟩°…))
+      (node (@x (group …⟨(cell _ `x)⟩°…))
         (group
           (cell @a)
           (cell @b)
@@ -2547,7 +2547,7 @@
 
     (frame/tail fast-forward: true
       (cell @xs ())
-      (frag (@x (group …⟨(cell _ `x)⟩°…))
+      (node (@x (group …⟨(cell _ `x)⟩°…))
         (group
           (cell @a)
           (cell @b)
@@ -2559,17 +2559,17 @@
   ;; Clear
   (rack
     (frame
-      (frag (@snd (queue _ (_ snd_ _*)))
+      (node (@snd (queue _ (_ snd_ _*)))
         (queue (@x @xs) (1 2 3)))
       (discard @snd))
 
     (frame/tail
-      (frag (@snd (queue _ (_ snd_ _*)))
+      (node (@snd (queue _ (_ snd_ _*)))
         (queue (@x @xs) (1 3)))
       (discard @snd))
 
     (frame/tail
-      (frag (@snd (queue _ (_ snd_ _*)))
+      (node (@snd (queue _ (_ snd_ _*)))
         (queue (@x @xs) (1)))
       (discard @snd))
 
@@ -2578,12 +2578,12 @@
   ;; The underlying backspec is injection proof
   (rack
     (frame
-      (frag (@x (x_ y_)) (1 2))
+      (node (@x (x_ y_)) (1 2))
       (cell @a ^y)
       (feed @a (over @x)))
 
     (frame
-      (frag (@x (x_ y_)) (^y 2))
+      (node (@x (x_ y_)) (^y 2))
       (cell @a)
       (feed @a (over @x)))
 
@@ -2592,28 +2592,28 @@
   ;; From docs
   (rack
     (frame
-      (frag (@count (appearance _ count_))
+      (node (@count (appearance _ count_))
         (appearance local 0))
       (backsys @count
         ±n <> {n: ^(+ n 1)})
       (sensor (view local _number)))
 
     (frame
-      (frag (@count (appearance _ count_))
+      (node (@count (appearance _ count_))
         (appearance local 1))
       (backsys @count
         ±n <> {n: ^(+ n 1)})
       (sensor (view local _number) 0))
 
     (frame
-      (frag (@count (appearance _ count_))
+      (node (@count (appearance _ count_))
         (appearance local 2))
       (backsys @count
         ±n <> {n: ^(+ n 1)})
       (sensor (view local _number) 1))
 
     (frame
-      (frag (@count (appearance _ count_))
+      (node (@count (appearance _ count_))
         (appearance local 3))
       (backsys @count
         ±n <> {n: ^(+ n 1)})
@@ -2624,14 +2624,14 @@
 (group
   (rack
     (frame
-      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+      (node ((@xs) (%any° (group `xs) (group xs_+)))
         (group))
 
       (cell @a ((cell @foo 0) (cell @bar) (feed @foo @bar)))
       (feed @a @xs))
 
     (frame
-      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+      (node ((@xs) (%any° (group `xs) (group xs_+)))
         (group
           (cell @foo 0)
           (cell @bar)
@@ -2641,7 +2641,7 @@
       (feed @a @xs))
 
     (frame
-      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+      (node ((@xs) (%any° (group `xs) (group xs_+)))
         (group
           (cell @foo)
           (cell @bar 0)
@@ -2654,19 +2654,19 @@
 
   (rack
     (frame
-      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+      (node ((@xs) (%any° (group `xs) (group xs_+)))
         (group 1 2 3))
       (cell @ys)
       (feed @xs @ys @xs))
 
     (frame
-      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+      (node ((@xs) (%any° (group `xs) (group xs_+)))
         (group))
       (cell @ys (1 2 3))
       (feed @xs @ys @xs))
 
     (frame
-      (frag ((@xs) (%any° (group `xs) (group xs_+)))
+      (node ((@xs) (%any° (group `xs) (group xs_+)))
         (group 1 2 3))
       (cell @ys)
       (feed @xs @ys @xs))))
@@ -4764,12 +4764,12 @@
     (frame
       (parser (@input - name-list - @output)
         (name-list lst←(many "[%w]+" " ")) => ^lst)
-      (frag (@input (resource _ (present input_string)))
+      (node (@input (resource _ (present input_string)))
         (resource (uri "http://127.0.0.1:9812/names.txt")))
       (cell @output))
     ;; Fetches data
     (frame/tail
-      (frag (@input (resource _ (present input_string)))
+      (node (@input (resource _ (present input_string)))
         (resource (uri "http://127.0.0.1:9812/names.txt")
           (present "Samantha Daniel John Barbara")))
       (cell @output))
@@ -4824,12 +4824,12 @@
         (exponent "[eE]" S←sign value←(form "[0-9]+" nat))
           => ^(** 10 (* S value))
         (ws "[ \n\r\t]*"))
-      (frag (@input (resource _ (present input_string)))
+      (node (@input (resource _ (present input_string)))
         (resource (uri "http://127.0.0.1:9812/people.json")))
       (cell @output))
     ;; It downloaded the resource.
     (frame pattern: true
-      ⟨(frag (@input _) (resource _ (present _string)))⟩)
+      ⟨(node (@input _) (resource _ (present _string)))⟩)
     ;; It parsed it.
     (frame/tail
       (cell @output
@@ -5428,10 +5428,10 @@
   ;; The same example but with control so that it terminates
   (rack
     (frame
-      (frag @alice
+      (node @alice
         (guard (@turn alice)
           (queue (@x @xs) (1 2 3))))
-      (frag @bob
+      (node @bob
         (guard (@turn bob)
           (queue (@x @xs) (100 200 300))))
       (backsys {@:driver, @:alice, @:bob}
@@ -5439,21 +5439,21 @@
           <> {(driver): ()})
       (feed @x @ys)
       (cell @turn alice)
-      (frag @driver
+      (node @driver
         (backsys @turn
           t←alice <> {t: bob}
           t←bob <> {t: alice}))
       (queue (@y @ys) ()))
     (frame/tail fast-forward: true ;; this step removes @driver
       (cell @turn alice)
-      (frag @driver
+      (node @driver
         (backsys @turn
           t←alice <> {t: bob}
           t←bob <> {t: alice}))
       (queue (@y @ys) (1 100 2 200 3 300)))
     (frame/tail fast-forward: true
       (cell @turn bob) ;; but it had a chance to run so the turn is bob's forever
-      (frag @driver)
+      (node @driver)
       (queue (@y @ys) (1 100 2 200 3 300)))
     end)
 
@@ -5760,7 +5760,7 @@
 ;; relational comparisons.
 (rack
   (frame
-    (frag (@state (ticker _ state_))
+    (node (@state (ticker _ state_))
       (ticker (10 ms step: 0.5) 10))
 
     (log (@state limit: 2)))
@@ -5856,14 +5856,14 @@
   (frame
     (feed @a (@xs back))
     (feed @b (@xs back))
-    (frag (arena @xs)
+    (node (arena @xs)
       (group
         (cell @x "lorea")))
     (cell @a (cell @y))
     (cell @b (feed @x @y)))
 
   (frame/tail
-    (frag (arena @xs)
+    (node (arena @xs)
       (group
         (cell @x "lorea")
         (cell @y)
@@ -5872,7 +5872,7 @@
     (cell @b))
 
   (frame/tail
-    (frag (arena @xs)
+    (node (arena @xs)
       (group
         (cell @x)
         (cell @y "lorea")
@@ -6803,34 +6803,34 @@
       (backsys @x {¦ ±count} <> {count: ^(+ count 1)})
       (discard @op)
       (cell @x {count: 1})
-      (frag (@op (changes _ op_ _*))
+      (node (@op (changes _ op_ _*))
         (changes (sync @x))))
 
     (frame/tail
       (cell @x {count: 2})
-      (frag (@op (changes _ op_ _*))
+      (node (@op (changes _ op_ _*))
         (changes (sync @x)
           (assoc (count) 2))))
 
     (frame/tail
       (cell @x {count: 2})
-      (frag (@op (changes _ op_ _*))
+      (node (@op (changes _ op_ _*))
         (changes (sync @x))))
 
     (frame/tail
       (cell @x {count: 3})
-      (frag (@op (changes _ op_ _*))
+      (node (@op (changes _ op_ _*))
         (changes (sync @x)
           (assoc (count) 3))))
 
     (frame/tail
       (cell @x {count: 3})
-      (frag (@op (changes _ op_ _*))
+      (node (@op (changes _ op_ _*))
         (changes (sync @x))))
 
     (frame/tail
       (cell @x {count: 4})
-      (frag (@op (changes _ op_ _*))
+      (node (@op (changes _ op_ _*))
         (changes (sync @x)
           (assoc (count) 4))))))
     ;; ...

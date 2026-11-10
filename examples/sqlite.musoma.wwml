@@ -36,7 +36,7 @@
         (cell @age ("" ""))
         ($Input @name label: "Name" placeholder: "John Doe")
         ($Input @age label: "Age" placeholder: "25")
-        (frag @err)
+        (node @err)
         ($Button (@msg insert) "Insert"))
       (rect style: "max-h-1px bg-min-none bg-theme-highlight-med")
       (group style: "fr-1"
@@ -45,7 +45,7 @@
           (suspense
             (p style: "center text-theme-muted"
               "Loading...")
-            (frag @contacts)))
+            (node @contacts)))
         ($Button (@msg refresh) "Refresh")))))
 
 ;;| Here we're using a kind of "centralized", intrinsically backpressured and

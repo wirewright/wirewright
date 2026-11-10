@@ -397,7 +397,7 @@
         {¦ x: {¦ id_ active_} -choice_}
           <> {(active): (), choice: ^id}))
 
-    (frags @pool))
+    (nodes @pool))
 
   (frame pattern: true
     (%quote
@@ -411,7 +411,7 @@
                {¦ x: {¦ id_ active_} -choice_}
                  <> {(active): (), choice: ^id})))
 
-       (frags @pool
+       (nodes @pool
          (%unquote (module {:@choice} _*))
          (%unquote (module {:@choice} _*))
          (%unquote (module {:@choice} _*))))))

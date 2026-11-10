@@ -181,10 +181,10 @@ module Ww::MxRack
         # ```wwml
         # (window
         #   ;; Try changing to position: drag and observe what happens.
-        #   (frag @mouse (mouse * position: always))
+        #   (node @mouse (mouse * position: always))
         #
         #   (limit max-w: 50 max-h: 50
-        #     (frag @circle
+        #     (node @circle
         #       (transform dl: 0 dt: 0 origin-l: 0.5 origin-t: 0.5
         #         (rect style: "fill-green-500 opacity-70% radius-full"))))
         #
@@ -245,10 +245,10 @@ module Ww::MxRack
         # |@example
         # ```wwml
         # (window style: "input"
-        #   (frag @input (input focus: always))
+        #   (node @input (input focus: always))
         #
         #   ;; Track how the input node evolves.
-        #   (frag (@records (log _ records_*))
+        #   (node (@records (log _ records_*))
         #     (log (@input)))
         #
         #   ;; Render that visually.
@@ -293,10 +293,10 @@ module Ww::MxRack
         # |@example
         # ```wwml
         # (window
-        #   (frag @kb (keyboard focus: always))
+        #   (node @kb (keyboard focus: always))
         #
         #   ;; Track how the keyboard node evolves.
-        #   (frag (@records (log _ records_*))
+        #   (node (@records (log _ records_*))
         #     (log (@kb)))
         #
         #   ;; Render that visually.
@@ -359,10 +359,10 @@ module Ww::MxRack
         # (window style: "flow-col p-5"
         #   (p "Try hovering over the box, pressing buttons, etc." style: "text-ui-content")
         #   (box style: "fr-1 content-clip border-sm border-ui-muted rounded"
-        #     (frag @mousearea
+        #     (node @mousearea
         #       ;; Try removing position: always, setting a different position: _
         #       (mousearea position: always))
-        #     (frag (@records (log _ records_*))
+        #     (node (@records (log _ records_*))
         #       (log (@mousearea)))
         #     (group style: "flow-col text-xs/4 font-mono text-ui-content"
         #       (visual

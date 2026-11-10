@@ -35,8 +35,8 @@
        ;;| the input is focused; as for the mouse, the input wants to know
        ;;| about it to detect things like hover, to let you click to focus & move
        ;;| cursor, and so on.
-       (frag @input (input))
-       (frag @mouse (mouse))
+       (node @input (input))
+       (node @mouse (mouse))
 
        ;;| Inputs are also interested in their own visual reflection, just like
        ;;| buttons are.
@@ -349,7 +349,7 @@
 
        ;;| The scrollbar is interested in the mouse because (at the moment) only
        ;;| the mouse can control it.
-       (frag @mouse (mouse))
+       (node @mouse (mouse))
 
        ;;| The rewriter below controls the behavior of the scrollbar. Notice how it
        ;;| is a severely capped exhR. But even with limit: 3 there's a lot of opportunities
@@ -415,8 +415,8 @@
        ;;| Scroll is interested in the mouse (for mouse wheel) and the keyboard. If the axis
        ;;| is X, then we need the keyboard to detect Shift + scroll. If the axis,
        ;;| is Y, then we need it to detect PageUp and PageDn.
-       (frag @mouse (mouse))
-       (frag @input (input))
+       (node @mouse (mouse))
+       (node @input (input))
 
        (cell @ref-offset)
 
@@ -537,7 +537,7 @@
        ;;| The button maintains a continuous watch on the evolution of the mouse,
        ;;| so when the left mouse button is pressed, the button can see and react
        ;;| to that with respect to its current state.
-       (frag @mouse (mouse))
+       (node @mouse (mouse))
 
        ;;| Finally, there's this rewriter. If you expand it, you will see that it is
        ;;| comprised of three stages. You will meet the same three stages in many other
@@ -686,7 +686,7 @@
                       -disabled:active:cue-active @first:cue-first @last:cue-last"
            (template ^view)))
 
-       (frag @mouse (mouse))
+       (node @mouse (mouse))
 
        (rewriter ((stageR (rulesetR exh: true)) - {@:current, @:mirror, @:mouse, @:next, @:option, @:visuals})
          (stage
@@ -759,7 +759,7 @@
 
        ;;| The toggle also wants to track the mouse, to check which mouse buttons
        ;;| are pressed when it needs to.
-       (frag @mouse (mouse))
+       (node @mouse (mouse))
 
        ;;| This rewriter is the tiny "brain" of the toggle. Just like some of the other
        ;;| components, it consists of three stages: observe, reconcile (decide), and act.

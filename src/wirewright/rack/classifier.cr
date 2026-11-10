@@ -913,8 +913,7 @@ module Ww::Rack
       # Devices are *anonymous subcircuits*. They are primarily used to describe
       # a self-contained unit, which does not speak with the outside world except
       # through termspaces (`rack.tspace`, `rack.sensor`, `rack.appearance`), or
-      # observation and manipulation (when placed in a `rack.circuit`,
-      # `rack.frag`, etc.)
+      # observation and manipulation (when placed in a `rack.circuit` etc.)
       #
       # |@example
       # ```wwml
@@ -960,13 +959,13 @@ module Ww::Rack
       # ```wwml
       # ;; Frame 0 (seed)
       #
-      # (frag @alice
+      # (node @alice
       #   (device
       #     (cell @x "Look at me")
       #     (cell @y)
       #     (feed @x @y)))
       #
-      # (frag @bob
+      # (node @bob
       #   (device
       #     (cell @x)
       #     (cell @y)
@@ -979,13 +978,13 @@ module Ww::Rack
       #
       # ;; Frame 1.1 (omitting the backsystem because it does not change)
       #
-      # (frag @alice
+      # (node @alice
       #   (device
       #     (cell @x)
       #     (cell @y "Look at me")
       #     (feed @x @y)))
       #
-      # (frag @bob
+      # (node @bob
       #   (device
       #     (cell @x)
       #     (cell @y)
@@ -993,13 +992,13 @@ module Ww::Rack
       #
       # ;; Frame 2.1
       #
-      # (frag @alice
+      # (node @alice
       #   (device
       #     (cell @x)
       #     (cell @y)
       #     (feed @x @y)))
       #
-      # (frag @bob
+      # (node @bob
       #   (device
       #     (cell @x "Look at me")
       #     (cell @y)
@@ -1007,13 +1006,13 @@ module Ww::Rack
       #
       # ;; Frame 2.2
       #
-      # (frag @alice
+      # (node @alice
       #   (device
       #     (cell @x)
       #     (cell @y)
       #     (feed @x @y)))
       #
-      # (frag @bob
+      # (node @bob
       #   (device
       #     (cell @x)
       #     (cell @y "Look at me")
@@ -1102,18 +1101,18 @@ module Ww::Rack
         D7.gnd(node, edge, merge_policy: policy)
       end
 
-      # |@ rack.frag
+      # |@ rack.node
       #
       # |@summary
       # Designates a place in the circuit where a node can be stored.
 
-      # |@ rack.frag
+      # |@ rack.node
       #
       # |@pattern
-      # [frag @edge_]
-      # [frag @edge_ child_]
-      # [frag (policy_symbol @edge_)]
-      # [frag (policy_symbol @edge_) child_]
+      # [node @edge_]
+      # [node @edge_ child_]
+      # [node (policy_symbol @edge_)]
+      # [node (policy_symbol @edge_) child_]
       #
       # |@key edge rack.[edge]
       # The edge at which to expose a snapshot of *child* at the start of the frame.
@@ -1127,38 +1126,37 @@ module Ww::Rack
       # The child node.
       #
       # |@block
-      # The *fragment node* is a relative of the cell node `rack.cell`. It designates
-      # a place in the circuit, but instead of treating the term stored in it as inert,
-      # it treats it as its *child* node. Therefore, circuit evolution can pass through
-      # fragments. Unlike `rack.node`, `rack.circuit`, and similar, `frag` does not isolate
-      # its *child* from the outside; nor does the simulation metaphor used for `node`,
-      # `circuit`, etc. apply to *child*.
+      # A relative of the cell node `rack.cell`, `node` designates a place in the circuit,
+      # but instead of treating the term stored in it as inert, it treats it as a node.
+      # Therefore, circuit evolution can pass through `node` to evolve *child*. Unlike
+      # `rack.circuit` and similar, `node` does not isolate its *child* from the outside;
+      # nor does the simulation metaphor apply.
       #
       # Note that you can never manipulate or observe, via *edge*, the *evolving* child. You
       # can only manipulate and observe the snapshot of *child* at the start of the frame
       # (before *child* and the surrounding circuit is evolved).
       #
-      # 1. If *edge* is updated to *child'* or erased, the frag node is rewritten so that
+      # 1. If *edge* is updated to *child'* or erased, `node` is rewritten so that
       #    its *child* is *child'* or erased. The version of *child* evolved by one step
       #    is discarded.
-      # 2. If *edge* is unchanged, the frag node is rewritten so that its *child* is evolved
+      # 2. If *edge* is unchanged, `node` is rewritten so that its *child* is evolved
       #    by one step.
       #
       # |@example
-      # Frag is used when you want to refer to a fragment of the circuit without isolating
-      # its contents:
+      # `node` is used when you want to refer to a node in the circuit without isolating
+      # it from the rest of the world:
       #
       # ```wwml
       # ;; Frame 0 (seed)
       #
       # (cell @x 0)
-      # (frag @feed (feed @x @y))
+      # (node @feed (feed @x @y))
       # (cell @y)
       #
       # ;; Frame 1
       #
       # (cell @x)
-      # (frag @feed (feed @x @y))
+      # (node @feed (feed @x @y))
       # (cell @y 0)
       # ```
       #
@@ -1170,7 +1168,7 @@ module Ww::Rack
       # (cell @x 0)
       # (cell @y)
       # (cell @z)
-      # (frag @feed (feed @x @y))
+      # (node @feed (feed @x @y))
       #
       # (backsys
       #   {¦ -x y -z feed: (feed @src_ @dst_)}
@@ -1181,53 +1179,53 @@ module Ww::Rack
       # (cell @x)
       # (cell @y 0)
       # (cell @z)
-      # (frag @feed (feed @x @y))
+      # (node @feed (feed @x @y))
       #
       # ;; Frame 2
       #
       # (cell @x)
       # (cell @y 0)
       # (cell @z)
-      # (frag @feed (feed @y @z)) ;; NOTICE: The backsys rewrote @x -> @y, @y -> @z
+      # (node @feed (feed @y @z)) ;; NOTICE: The backsys rewrote @x -> @y, @y -> @z
       #
       # ;; Frame 3
       #
       # (cell @x)
       # (cell @y)
       # (cell @z 0)
-      # (frag @feed (feed @y @z))
+      # (node @feed (feed @y @z))
       # ```
       #
-      # As a curious curiosity, since the fragment node has access to its own edge,
-      # you can make a crude "replicator":
+      # As a curious curiosity, since `node` has access to its own edge, you can
+      # make a crude "replicator":
       #
       # ```wwml
       # ;; Frame 0 (seed)
       #
-      # (frag @self
+      # (node @self
       #   (module {@parent: @self}
-      #     (frag @self)
+      #     (node @self)
       #     (feed (copy @parent) @self)))
       #
       # ;; Frame 1
       #
-      # (frag @self
+      # (node @self
       #   (module {@parent: @self}
-      #     (frag @self
+      #     (node @self
       #       (module {@parent: @self}
-      #         (frag @self)
+      #         (node @self)
       #         (feed (copy @parent) @self)))
       #     (feed (copy @parent) @self)))
       #
       # ;; Frame 2
       #
-      # (frag @self
+      # (node @self
       #   (module {@parent: @self}
-      #     (frag @self
+      #     (node @self
       #       (module {@parent: @self}
-      #         (frag @self
+      #         (node @self
       #           (module {@parent: @self}
-      #             (frag @self)
+      #             (node @self)
       #             (feed (copy @parent) @self)))
       #         (feed (copy @parent) @self)))
       #     (feed (copy @parent) @self)))
@@ -1235,8 +1233,8 @@ module Ww::Rack
       # ;; And so on until you reach Rack's maximum rewrite depth...
       # ```
       matchpi(
-        %{[frag @header_ child0_]},
-        %{[frag header←(_symbol @_) child0_]},
+        %{[node @header_ child0_]},
+        %{[node header←(_symbol @_) child0_]},
       ) do
         mix0 = Term.of(:group, {:cell, header, child0}, {:group, child0})
 
@@ -1262,7 +1260,7 @@ module Ww::Rack
         end
       end
 
-      matchpi %{[frag @header_]}, %{[frag header←(_symbol @_)]} do
+      matchpi %{[node @header_]}, %{[node header←(_symbol @_)]} do
         D7.mixture(node, Term.of(:cell, header)) do |view|
           Term.of_case(view) do
             matchpi %{(cell _)} { node }
@@ -1271,11 +1269,11 @@ module Ww::Rack
         end
       end
 
-      # |@ rack.frag
+      # |@ rack.node
       #
       # |@pattern
-      # [frag (edge←(%'edge capture_) pattern_) child_]
-      # [frag ((edge←(%'edge capture_)) pattern_) child_]
+      # [node (edge←(%'edge capture_) pattern_) child_]
+      # [node ((edge←(%'edge capture_)) pattern_) child_]
       #
       # |@key edge rack.[edge]
       # The edge where to expose the captured part of *child*. Can be wrapped in
@@ -1292,15 +1290,15 @@ module Ww::Rack
       # The child node itself.
       #
       # |@block
-      # The pattern variant of the frag node allows you to expose a part of a *child*
+      # The pattern variant of `node` allows you to expose a part of a *child*
       # node at the given *edge*, instead of exposing the entire child. This variant works
-      # like similar variants of `rack.node`, `rack.cell`, `rack.circuit`, etc.
+      # like similar variants of `rack.cell`, `rack.circuit`, etc.
       #
       # |@example
       # ```wwml
       # ;; Frame 0 (seed)
       #
-      # (frag (@count (appearance _ count_))
+      # (node (@count (appearance _ count_))
       #   (appearance local 0))
       #
       # (backsys @count
@@ -1310,7 +1308,7 @@ module Ww::Rack
       #
       # ;; Frame 1
       #
-      # (frag (@count (appearance _ count_))
+      # (node (@count (appearance _ count_))
       #   (appearance local 1))
       #
       # (backsys @count
@@ -1320,7 +1318,7 @@ module Ww::Rack
       #
       # ;; Frame 2
       #
-      # (frag (@count (appearance _ count_))
+      # (node (@count (appearance _ count_))
       #   (appearance local 2))
       #
       # (backsys @count
@@ -1332,8 +1330,8 @@ module Ww::Rack
       # ```
 
       matchpi(
-        %{[frag (spec←edge←(%'edge capture_) pattern_) child0_]},
-        %{[frag (spec←(edge←(%'edge capture_)) pattern_) child0_]},
+        %{[node (spec←edge←(%'edge capture_) pattern_) child0_]},
+        %{[node (spec←(edge←(%'edge capture_)) pattern_) child0_]},
       ) do
         case replacer = replacer(pattern, capture, child0, splice: !spec.same?(edge))
         in ZeroReplacer
@@ -1369,11 +1367,11 @@ module Ww::Rack
         end
       end
 
-      # |@ rack.frags
+      # |@ rack.nodes
       #
       # |@pattern
-      # [frags @edge_ children_*]
-      # [frags (policy_symbol @edge_) children_*]
+      # [nodes @edge_ children_*]
+      # [nodes (policy_symbol @edge_) children_*]
       #
       # |@key edge rack.[edge]
       # The edge at which to expose a snapshot of *children* at the start of the frame.
@@ -1386,10 +1384,10 @@ module Ww::Rack
       # |@key children rack
       #
       # |@summary
-      # Similar to `rack.circuit` but with `rack.frag` semantics.
+      # Similar to `rack.circuit` but with `rack.node` semantics.
       matchpi(
-        %{[frags @header_ children0_*]},
-        %{[frags header←(_symbol @_) children0_*]},
+        %{[nodes @header_ children0_*]},
+        %{[nodes header←(_symbol @_) children0_*]},
       ) do
         if children0.empty?
           mix0 = Term.morph(node, {0, :group}, {1, {:cell, header}})
@@ -1452,8 +1450,7 @@ module Ww::Rack
       # (backsys @xs
       #   (_ ±n _) <> {n: ^(+ n 1)})
       #
-      # ;; Bind the value of the middle number to {count: _} in @ys using
-      # ;; the fragment node.
+      # ;; Bind the value of the middle number to {count: _} in @ys using `node`
       # (manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
       #   (cell @ys {}))
       #
@@ -2809,10 +2806,10 @@ module Ww::Rack
       # ;; And so on...
       # ```
       #
-      # You can use `rack.frag` to reference the log or its *history*:
+      # You can use `rack.node` to reference the log or its *history*:
       #
       # ```wwml
-      # (frag (@history (log _ history_*))
+      # (node (@history (log _ history_*))
       #   (log (@x limit: 2)))
       # ```
       matchpi %{[log (@edge_ ⍊ limit_: (%optional 10 (%number +i32))) _*]}, limit: Int32 do
@@ -2973,7 +2970,7 @@ module Ww::Rack
       # to observe the node's evolution:
       #
       # ```wwml
-      # (frag (@content (path _ (present content_string)))
+      # (node (@content (path _ (present content_string)))
       #   (path ("/tmp/test.txt" reading)))
       #
       # (parser (@content - top - @result)
@@ -3170,7 +3167,7 @@ module Ww::Rack
       #
       # (circuit @pool)
       #
-      # (frag @journal
+      # (node @journal
       #   (sensor (journal paths _string)))
       # ```
       #
@@ -4466,20 +4463,20 @@ module Ww::Rack
       # ```wwml
       # ;; Frame 0 (seed)
       #
-      # (frag (@readout (lfo _ ±readout))
+      # (node (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))))
       # (log (@readout limit: 3))
       #
       # ;; Frame 1
       #
-      # (frag (@readout (lfo _ ±readout))
+      # (node (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈3.5979825e-5))
       # (log (@readout limit: 3))
       #
       # ;; Frame 2
       #
-      # (frag (@readout (lfo _ ±readout))
+      # (node (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈0.99689716))
       # (log (@readout limit: 3)
@@ -4487,7 +4484,7 @@ module Ww::Rack
       #
       # ;; Frame 3
       #
-      # (frag (@readout (lfo _ ±readout))
+      # (node (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈0.59998876))
       # (log (@readout limit: 3)
@@ -4496,7 +4493,7 @@ module Ww::Rack
       #
       # ;; Frame 4
       #
-      # (frag (@readout (lfo _ ±readout))
+      # (node (@readout (lfo _ ±readout))
       #   (lfo ((100 ms) (sin (0.5 hz)))
       #     ≈0.003257661))
       # (log (@readout limit: 3)
@@ -4512,7 +4509,7 @@ module Ww::Rack
       # ```wwml
       # (window style: "center backdrop-ui-base"
       #   (box style: "border-xs border-ui-decoration-low pivot-center scale-2"
-      #     (frag @control
+      #     (node @control
       #       (limit max-w: (50 px)
       #         (lfo ((33 ms) (sin (0.1 hz))))
       #         (viewport page-x: (0 px)
@@ -4583,7 +4580,7 @@ module Ww::Rack
       #
       # ```wwml
       # (window style: "bg-ui-base content-center flow-col gap-5"
-      #   (frag @timer (timer (1 s)))
+      #   (node @timer (timer (1 s)))
       #   (part (@timer @seconds) (timer (±seconds s) _?))
       #
       #   (visual

@@ -187,7 +187,7 @@
                   font-medium px-3 py-1 in-disabled:opacity-25% in-active:bg-okl-30% \
                   rounded-full"
          ^"⸢title⸣ (⸢key⸣)")
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (WindowPane @mode_ @windows_)
   => (component {@:mode, @:windows}
@@ -196,7 +196,7 @@
          (cell @next)
 
          (supervisor (@windows @window {¦ key_} - @tabs {:@current, :@next})
-           (frag @slot)
+           (node @slot)
            (backsys
              {¦ window: {¦ title_string key_} -slot_}
                <> {slot: ($SegmentedOption (@current @next ^key) ($WindowTabView ^title ^key))}))
@@ -308,15 +308,15 @@
              (group style: "flow-col"
                (guard (@listing ())
                  (p "Waiting for files" style: "center text-theme-muted fr-1"))
-               (frag ((@listing) (form _ listing_*))
+               (node ((@listing) (form _ listing_*))
                  (form (@listingf)))))
 
-           (frag (@mouse [mousearea mouse_])
+           (node (@mouse [mousearea mouse_])
              (mousearea opacity: transparent))))
 
        (cell @action)
 
-       (frag @fs (template (path (^origin report))))
+       (node @fs (template (path (^origin report))))
        (part (@fs @path) (path (path_ _) _))
        (part (@fs @report) (path _ report_))
 
@@ -330,7 +330,7 @@
            ($Trigger (@action select)
              (box
                (site)
-               (frag @mousearea (mousearea))))
+               (node @mousearea (mousearea))))
            (visual (ListingEntry ^@entry))))
 
        (backsys
@@ -383,7 +383,7 @@
            (icon ^icon)
            (p ^caption style: "fr-1")
            (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))
-         (frag @mousearea (mousearea))))
+         (node @mousearea (mousearea))))
 
 (MuMenuPicker origin_ @path_ @command_)
   => (box style: "p-1 dt-1 floating content max-3xs origin-l-0.1"
@@ -397,7 +397,7 @@
   => (component {@:mode, @:seed, @:seedsrc}
        (cell @path)
        (cell @action)
-       (frag @input (input focus: always))
+       (node @input (input focus: always))
        (cell @command)
 
        (box
@@ -417,7 +417,7 @@
                   caption: "Open seed"
                   shortcut: "o")
 
-               (frag @picker))
+               (node @picker))
 
              (backsys
                ;; When they hit new, initialize seed and mode. To give the bigger picture,
@@ -965,7 +965,7 @@
 ;;| reader, and the @seeddst cell, which is the seed writer.
 (module {:@seed, :@seedsrc, :@seeddst}
   (cell @seed)
-  (frag @seedsrc)
+  (node @seedsrc)
   (cell @seeddst)
 
   (cell @win)
@@ -992,11 +992,11 @@
   ;;| because it may so happen that any number of new @statuses arrive
   ;;| as we are showing one at @status. We must be able to notice that
   ;;| and the easiest way to do that is to have a queue.
-  (frag @queue
+  (node @queue
     (queue (@status @statuses) ()))
 
   ;;| The timer we'll use to wait until clearing the status.
-  (frag @timer (timer (3 s)))
+  (node @timer (timer (3 s)))
 
   (backsys
     ;; Start the timer when a status arrives.
@@ -1081,12 +1081,12 @@
 
   ;;| Initialize the automaton. The automaton must be here under `window`,
   ;;| because conceptually they belong to the window and so it must see them.
-  (frag @automaton (automaton ((mxrack µ) {})))
+  (node @automaton (automaton ((mxrack µ) {})))
 
   ;;| This is the only input that's used by MuSoma, for everything. Even when
   ;;| you enter grab mode, keys still reach this input -- they're just ignored
   ;;| while you're in grab mode.
-  (frag @input (input focus: always))
+  (node @input (input focus: always))
 
   ;;| Determines the layout of the app.
   ;;| - `pane-l` shows the left pane if set.
@@ -1120,19 +1120,19 @@
           {¦ mouse: {¦ left ±l} divider: {¦ hover} ±divider-l}
             <> {divider-l: ^(+ divider-l l)})
 
-        (frag @divider
+        (node @divider
           (rect style: "fill-theme-overlay bg-min-none max-w-1px hover:cursor-resize-x"))
 
         ;;| Since it's very hard to hit the divider itself, because it's just 1px wide, we
         ;;| provide some hoverable space around it.
         (box style: "min-w-4 -dl-2"
-          (frag (@mouse [mousearea mouse_])
+          (node (@mouse [mousearea mouse_])
             (mousearea position: drag))))
 
       ;;| Right pane (the circuit pane).
       (guard (@layout {¦ pane-r})
         (module {:@repr, :@mode} style: "fr-1"
-          (frag @camera
+          (node @camera
             (box style: "content clip clip-aim-off mode/insert:clip-aim \
                          dragging:cursor-drag"
                  ^:@mode
@@ -1141,7 +1141,7 @@
                  µ-scale: 1
               (p ^(ml/display @repr))))
 
-          (frag (@mouse [mousearea mouse_])
+          (node (@mouse [mousearea mouse_])
             (mousearea position: always))
 
           (backsys
@@ -1221,7 +1221,7 @@
 
   ;;| When there's no seed, we let the user pick or set one through a simple menu.
   ;;| When they finally submit the seed we close the menu.
-  (frag @menu)
+  (node @menu)
   (backsys
     {¦ -seed -menu_} <> {menu: ($MuMenu @mode @seed @seedsrc)}
     {¦ seed menu_} <> {(menu): ()}))

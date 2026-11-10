@@ -130,7 +130,7 @@
            {¦ pressed visuals: {¦ ⋮pressed}} <> {pressed: true}
            {¦ -pressed visuals: {¦ pressed_}} <> {(pressed): ()}))
 
-       (frag @visuals
+       (node @visuals
          (box style: "membrane disabled:cue-disabled -disabled:cue-enabled hover:cue-hover \
                       -disabled:active:cue-active pressed:cue-active focus:cue-focused"
            (module {:@mousearea}
@@ -151,7 +151,7 @@
                      in-disabled:opacity-25% in-disabled:in-hover:cursor-disabled"
          ^child)
        ^(embed (ButtonFocusIndicator))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (FilledButtonView caption_)
   => ($FilledButtonBox (p ^caption))
@@ -173,7 +173,7 @@
                      in-disabled:in-hover:cursor-disabled ⸢style⸣"
          (icon ^icon style: "text-lg"))
        ^(embed (ButtonFocusIndicator))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (IconButton spec_ args_* ¦ pairs_)
   => ($Trigger ^spec ($IconButtonView ^*args ^… pairs))
@@ -187,7 +187,7 @@
                      in-active:bg-okl-40% in-disabled:opacity-25% in-disabled:in-hover:cursor-disabled"
          ^child)
        ^(embed (ButtonFocusIndicator))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (TonalButtonView caption_)
   => ($TonalButtonBox (p ^caption))
@@ -211,7 +211,7 @@
                      in-disabled:cursor-disabled"
          ^child)
        ^(embed (ButtonFocusIndicator))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (OutlinedButtonView caption_)
   => ($OutlinedButtonBox (p ^caption))
@@ -234,7 +234,7 @@
                      in-active:bg-ui-overlay in-disabled:opacity-25% in-disabled:cursor-disabled"
          ^child)
        ^(embed (ButtonFocusIndicator))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (TextButtonView caption_)
   => ($TextButtonBox (p ^caption))
@@ -291,7 +291,7 @@
 
        ;;| Since the view would otherwise have no access to @first and @last, because
        ;;| the `box` would block that, we have to pass them down as cues.
-       (frag @visuals
+       (node @visuals
          (box style: "membrane @first:cue-first @last:cue-last -disabled:checked:cue-checked \
                       disabled:cue-disabled -disabled:cue-enabled -disabled:hover:cue-hover \
                       -disabled:active:cue-active"
@@ -307,7 +307,7 @@
                     in-disabled:opacity-25% in-active:bg-okl-30%"
          (icon "check" style: "floating-x -dl-2 absent in-checked:present")
          (p ^title style: "in-checked:dl-2"))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 ;; Presents one or more *options*, of the form `(label_string id_)`, as a segmented
 ;; button, allowing only one choice.
@@ -353,7 +353,7 @@
            {¦ state: (%- _boolean) visuals: {¦ -disabled_}} <> {disabled: true}
            {¦ state: _boolean visuals: {¦ disabled_}} <> {(disabled): ()}))
 
-       (frag @visuals
+       (node @visuals
          (box style: "membrane -disabled:checked:cue-checked disabled:cue-disabled \
                       -disabled:hover:cue-hover -disabled:active:cue-active"
            (module {:@mousearea}
@@ -370,7 +370,7 @@
                       in-checked:bg-ui-decoration-high in-checked:border-ui-checked \
                       in-checked:bg-ui-checked text-ui-checked text-okl-10%"
            (icon "check" style: "transparent in-checked:opaque")))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (Checkbox @state_)
   => ($Toggle ^state ($Checkbox))
@@ -397,7 +397,7 @@
            ;; The circle thing for hovering when checked.
            (box style: "bg-ui-accent bg-okl-30% scale-5/2 pivot-center rounded-full \
                         transparent in-checked:in-hover:opacity-20%")))
-       (frag @mousearea (mousearea)))
+       (node @mousearea (mousearea)))
 
 (Switch @state_)
   => ($Toggle ^state ($Switch))
@@ -436,10 +436,10 @@
        ;;| is where the visuals of the *content* go.
        (box style: "flow-row"
          (box style: "fr-1 flow-col"
-           (frag @view
+           (node @view
              (box style: "fr-1" ?w: _ ?h: _ ?aim-x: _ ?aim-y: _ ?aim-offset-x: _ ?aim-offset-y: _
                (viewport page-x: (0 px) page-y: (0 px) aim-through: true aim-pan: false
-                 (frag @interior
+                 (node @interior
                    ;; NOTE: We maintain a small padding to ensure decorations such as I-beams
                    ;; are always visible, and also to fix some zero size... issues for text?
                    ;; But really, I'm not in the mood for treating the cause so let's fix
@@ -449,9 +449,9 @@
 
            ;; Horizontal scrollbar.
            (box style: "max-h-3 py-2/3 bg-transparent membrane absent has-thumb:present"
-             (frag (@x-track-mouse [mousearea x-track-mouse_])
+             (node (@x-track-mouse [mousearea x-track-mouse_])
                (mousearea position: drag))
-             (frag (space @x-thumb)
+             (node (space @x-thumb)
                (transform dl: 0
                  (limit max-w: 0
                    ($ThumbView)
@@ -459,9 +459,9 @@
 
          ;; Vertical scrollbar.
          (box style: "max-w-3 px-2/3 bg-transparent membrane absent has-thumb:present"
-           (frag (@y-track-mouse [mousearea y-track-mouse_])
+           (node (@y-track-mouse [mousearea y-track-mouse_])
              (mousearea position: drag))
-           (frag (space @y-thumb)
+           (node (space @y-thumb)
              (transform dt: 0
                (limit max-h: 0
                  ($ThumbView)
@@ -609,7 +609,7 @@
        (cell @seen-content)
 
        ;;| The input's visuals go here.
-       (frag @view
+       (node @view
          (box style: "membrane hover:cue-hovered focus:cue-focused disabled:cue-disabled"
            (module {:@content, :@text, :@scroll-signal, :@mouse}
              (template ^view))))
@@ -618,9 +618,9 @@
        (part (@text @anchor) {¦ selection-anchor: ±anchor})
        (part (@text @span) {¦ selection-span: ±span})
 
-       (frag @input (input))
-       (frag @keyboard (keyboard focus: disabled))
-       (frag @mouse-device (mouse *))
+       (node @input (input))
+       (node @keyboard (keyboard focus: disabled))
+       (node @mouse-device (mouse *))
 
        ;;| This rewriter is the "brain" of the input.
        (rewriter (stageR (rulesetR exh: true))
@@ -884,7 +884,7 @@
                (p style: "text-ui-muted present hide:absent in-focused:absent"
                   hide: ^^(> (charcount @content) 0)
                  ^placeholder))
-             (frag @text
+             (node @text
                (p style: "text-ui-content sel sel-clearance-line sel-endl sel-aim \
                           beam-transparent in-focused:beam-thick sel-ui-decoration-med \
                           sel-text-ui-supplementary in-focused:sel-ui-accent \
@@ -897,5 +897,5 @@
          ;;| NOTE: We use drag here to make sure the mousearea is aware of *dragging*,
          ;;| and doesn't lose a dragging mouse once it's outside the mousearea. In our specific
          ;;| case this may occur when you do selection dragging.
-         (frag (@mouse [mousearea mouse_])
+         (node (@mouse [mousearea mouse_])
            (mousearea position: drag))))

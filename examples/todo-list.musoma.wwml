@@ -5,7 +5,7 @@
 
 ;;| The filter appearance shows the current filter to all todos so that they
 ;;| can decide whether to show themselves.
-(frag (@filter [appearance _ filter_])
+(node (@filter [appearance _ filter_])
   (appearance filter {show: all, query: ""}))
 (part (@filter @show) {¦ show_})
 
@@ -27,7 +27,7 @@
   ;;| The `changes` node is used to watch for changes to @todos (e.g., part of
   ;;| a todo updated, a todo removed). We're only interested in the first change.
   ;;| The rest of changes (if any) wait until the first one is handled.
-  (frag (@change (changes _ change_ _*))
+  (node (@change (changes _ change_ _*))
     (changes (sync @todos maxdepth: 2)))
 
   (backsys
@@ -119,7 +119,7 @@
 
   ;;| The todo needs to sense the filter to decide whether to show itself
   ;;| to the user.
-  (frag (@filter (sensor _ filter_))
+  (node (@filter (sensor _ filter_))
     (sensor (view filter _)))
 
   (cell @show false)

@@ -25,10 +25,10 @@
     ;; A basic chat server
     (module {}
       (server (@pool ((text @in) -> (ws local 9813) -> (text @out)))
-        (frag @rx (sensor (queue chat _string)))
-        (frag @tx (appearance chat))
-        (frag @user)
-        (frag @peers (sensor (journal users _string)))
+        (node @rx (sensor (queue chat _string)))
+        (node @tx (appearance chat))
+        (node @user)
+        (node @peers (sensor (journal users _string)))
         (backsys
           {¦ -user_ out: (_* `>msg)}
             <> {user: pending, >msg: "Please enter your nickname."}
@@ -48,7 +48,7 @@
     (module {}
       (cell @state)
       (queue (@msg @msgs) ())
-      (frag @socket
+      (node @socket
         (client ((text @msg) -> (ws local 9813 key: alice) -> (text @replies))))
       (queue (@reply @replies) ())
       (backsys
@@ -86,9 +86,9 @@
 
     ;; An observer we use for testing purposes.
     (module {:@history}
-      (frag @chat
+      (node @chat
         (sensor (many chat _string)))
-      (frag @users
+      (node @users
         (sensor (journal users _string)))
       (backsys
         {¦ history: (_* `entry) chat: (sensor _ msgs_+) users: (sensor _)}
@@ -554,7 +554,7 @@
 
     (cell @log ())
     (queue (@message @messages) (0))
-    (frag @socket
+    (node @socket
       (client ((ml @message) -> (ws local 9813) -> (ml @replies))))
     (queue (@reply @replies) ()))
 
@@ -562,7 +562,7 @@
   (frame/tail fast-forward: true
     (cell @log (1 2 3 4 5))
     (queue (@message @messages) ())
-    (frag @socket
+    (node @socket
       (client ((ml @message) -> (ws local 9813) -> (ml @replies))
         up))
     (queue (@reply @replies) (done)))
@@ -571,7 +571,7 @@
   (frame/tail
     (cell @log (1 2 3 4 5 done))
     (queue (@message @messages) ())
-    (frag @socket)
+    (node @socket)
     (queue (@reply @replies) ()))
 
   ;; Make sure the server responds properly by cleaning up the connection.
@@ -598,7 +598,7 @@
 
     (cell @log (1 2 3 4 5 done))
     (queue (@message @messages) ())
-    (frag @socket)
+    (node @socket)
     (queue (@reply @replies) ())))
 
 ;; From docs: websocket client with format: ml.
@@ -855,7 +855,7 @@
 
     (cell @in "Hi!")
     (cell @out)
-    (frag @client
+    (node @client
       (client ((text @in) -> (ws local 9813) -> (text @out)))))
 
   (frame/tail fast-forward: true
@@ -863,7 +863,7 @@
 
     (cell @in)
     (cell @out "Hi!")
-    (frag @client
+    (node @client
       (client ((text @in) -> (ws local 9813) -> (text @out)) dn))))
 
 ;; Multiple servers and clients in the same world
@@ -1187,48 +1187,48 @@
 
     (cell @in 9813)
     (cell @out)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local) -> (ml @out)))))
 
   (frame/tail fast-forward: true
     (cell @in)
     (cell @out 9814)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local 9813) -> (ml @out))
         up)))
 
   (frame/tail fast-forward: true
     (cell @in 9814)
     (cell @out)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local 9814) -> (ml @out))
         up)))
 
   (frame/tail fast-forward: true
     (cell @in)
     (cell @out 9815)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local 9814) -> (ml @out))
         up)))
 
   (frame/tail fast-forward: true
     (cell @in 9815)
     (cell @out)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local 9815) -> (ml @out))
         up)))
 
   (frame/tail fast-forward: true
     (cell @in)
     (cell @out 9816)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local 9815) -> (ml @out))
         up)))
 
   (frame/tail fast-forward: true
     (cell @in 9816)
     (cell @out)
-    (frag @client
+    (node @client
       (client ((ml @in) -> (tcp local 9816) -> (ml @out))
         up)))
 
@@ -1261,7 +1261,7 @@
 
      (cell @in 9816)
      (cell @out)
-     (frag @client
+     (node @client
        (client ((ml @in) -> (tcp local 9816) -> (ml @out))
          (pending _string))))))
 
@@ -1269,9 +1269,9 @@
 (rack
   (frame
     (module {:@store}
-      (frag @sensor
+      (node @sensor
         (sensor (queue commands command_)))
-      (frag @report)
+      (node @report)
       (part (@sensor @command) (sensor _ command_ _*))
       (backsys
         {¦ command_} <> {(command): ()}
@@ -1291,8 +1291,8 @@
   (server (@pool ((ml @in) -> (ws local 9813) -> (ml @out)))
     ;; Remember that @id, @in, and @out are "shadow-inserted" by `server` for
     ;; each device!
-    (frag @sensor)
-    (frag @appearance)
+    (node @sensor)
+    (node @appearance)
     (backsys
       ;; Initialize the sensor which we'll use to receive reports.
       {¦ id_ -sensor_}
@@ -1376,7 +1376,7 @@
 (rack
   (frame
     (server (@pool ((ml @in) -> (ws local 9813) -> (ml @out)))
-      (frag @sensor
+      (node @sensor
         (sensor (view store (_ _))))
       (circuit @appearances)
       (backsys
@@ -1882,7 +1882,7 @@
 ;; port: auto
 (rack
   (frame
-    (frag @server
+    (node @server
       (server (@pool ((text @in) -> (tcp local auto) -> (text @out)))
         (feed (@in front) (@out back))))
     (circuit @pool)
@@ -1915,7 +1915,7 @@
         (feed (@in front) (@out back)))
       (circuit @pool))
 
-    (frag @client)
+    (node @client)
 
     (cell @queries ("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m" "n" "o" "p"))
     (cell @replies ())
@@ -1944,7 +1944,7 @@
         (feed (@in front) (@out back)))
       (circuit @pool))
 
-    (frag @client)
+    (node @client)
 
     (cell @queries ())
     (cell @replies ("a" "b" "c" "d" "e" "f" "g" "h" "i" "j" "k" "l" "m" "n" "o" "p"))

@@ -435,25 +435,25 @@
 (rack
   (frame
     (module {}
-      (frag (@count (appearance _ ±count))
+      (node (@count (appearance _ ±count))
         (appearance T 0))
       (backsys @count ±n <> {n: ^(+ n 1)}))
     (module {} (sensor (view T _number))))
   (frame
     (module {}
-      (frag (@count (appearance _ ±count))
+      (node (@count (appearance _ ±count))
         (appearance T 1))
       (backsys @count ±n <> {n: ^(+ n 1)}))
     (module {} (sensor (view T _number) 0)))
   (frame
     (module {}
-      (frag (@count (appearance _ ±count))
+      (node (@count (appearance _ ±count))
         (appearance T 2))
       (backsys @count ±n <> {n: ^(+ n 1)}))
     (module {} (sensor (view T _number) 1)))
   (frame
     (module {}
-      (frag (@count (appearance _ ±count))
+      (node (@count (appearance _ ±count))
         (appearance T 3))
       (backsys @count ±n <> {n: ^(+ n 1)}))
     (module {} (sensor (view T _number) 2))))
@@ -464,101 +464,101 @@
   (frame
     (sensor (view T _))
     (delay 1
-      (frag @appearance
+      (node @appearance
         (appearance T 100)))
     (delay 3
       (discard @appearance)))
   (frame
     (sensor (view T _))
-    (frag @appearance
+    (node @appearance
       (appearance T 100))
     (delay 2
       (discard @appearance)))
   (frame
     (sensor (view T _) 100)
-    (frag @appearance
+    (node @appearance
       (appearance T 100))
     (delay 1
       (discard @appearance)))
   (frame
     (sensor (view T _) 100)
-    (frag @appearance
+    (node @appearance
       (appearance T 100))
     (discard @appearance))
   (frame
     (sensor (view T _) 100)
-    (frag @appearance)
+    (node @appearance)
     (discard @appearance))
   (frame
     (sensor (view T _))
-    (frag @appearance)
+    (node @appearance)
     (discard @appearance))
   end)
 
 ;; Legacy: sensor-appearance queue flow
 (rack
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _)))
     (feed @percept @back)
     (queue (@front @back) (1 2 3))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _)))
     (feed @percept @back)
     (queue (@front @back) (2 3))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T 1))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _) 1))
     (feed @percept @back)
     (queue (@front @back) (2 3))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _)))
     (feed @percept @back)
     (queue (@front @back) (3 1))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T 2))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _) 2))
     (feed @percept @back)
     (queue (@front @back) (3 1))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _)))
     (feed @percept @back)
     (queue (@front @back) (1 2))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T 3))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _) 3))
     (feed @percept @back)
     (queue (@front @back) (1 2))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T))
     (feed @front @value))
   (frame
-    (frag (@percept (sensor _ percept_))
+    (node (@percept (sensor _ percept_))
       (sensor (T _)))
     (feed @percept @back)
     (queue (@front @back) (2 3))
-    (frag (@value (appearance _ `value))
+    (node (@value (appearance _ `value))
       (appearance T 1))
     (feed @front @value)))
   ;; ...
@@ -568,29 +568,29 @@
   (frame
     ;; Adder
     (module {}
-      (frag (@l (sensor _ l_))
+      (node (@l (sensor _ l_))
         (sensor (T (l ±n))))
-      (frag (@r (sensor _ r_))
+      (node (@r (sensor _ r_))
         (sensor (T (r ±n))))
-      (frag (@sum (appearance _ `sum))
+      (node (@sum (appearance _ `sum))
         (appearance T))
       (backsys {@:l, @:r, @:sum}
         {¦ ±l ±r -sum_} <> {(l): (), (r): (), sum: (sum ^(+ l r))}))
 
     ;; Double sum
     (module {}
-      (frag (@n (sensor _ n_))
+      (node (@n (sensor _ n_))
         (sensor (T (sum ±n))))
-      (frag (@doubled (appearance _ `doubled))
+      (node (@doubled (appearance _ `doubled))
         (appearance T))
       (backsys {@:n, @:doubled}
         {¦ ±n -doubled_} <> {(n): (), doubled: (double ^(+ n n))}))
 
     ;; Square sum
     (module {}
-      (frag (@n (sensor _ n_))
+      (node (@n (sensor _ n_))
         (sensor (T (sum ±n))))
-      (frag (@squared (appearance _ `squared))
+      (node (@squared (appearance _ `squared))
         (appearance T))
       (backsys {@:n, @:squared}
         {¦ ±n -squared_} <> {(n): (), squared: (square ^(* n n))}))
@@ -615,31 +615,31 @@
 ;; Create sensor in response to sensor
 (rack
   (frame
-    (frag (@s (sensor _ s_))
+    (node (@s (sensor _ s_))
       (sensor (T (sensor _))))
     (feed @s @frag)
-    (frag @frag)
+    (node @frag)
     (appearance T (sensor (T _number)))
     (appearance T 100))
   (frame
-    (frag (@s (sensor _ s_))
+    (node (@s (sensor _ s_))
       (sensor (T (sensor _)) (sensor (T _number))))
     (feed @s @frag)
-    (frag @frag)
+    (node @frag)
     (appearance T)
     (appearance T 100))
   (frame
-    (frag (@s (sensor _ s_))
+    (node (@s (sensor _ s_))
       (sensor (T (sensor _))))
     (feed @s @frag)
-    (frag @frag (sensor (T _number)))
+    (node @frag (sensor (T _number)))
     (appearance T)
     (appearance T 100))
   (frame
-    (frag (@s (sensor _ s_))
+    (node (@s (sensor _ s_))
       (sensor (T (sensor _))))
     (feed @s @frag)
-    (frag @frag (sensor (T _number) 100))
+    (node @frag (sensor (T _number) 100))
     (appearance T)
     (appearance T))
   end)
@@ -648,66 +648,66 @@
 (rack
   (frame
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))))
       (feed @value @frag)
-      (frag @frag))
+      (node @frag))
 
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))))
       (feed @value @frag)
-      (frag @frag))
+      (node @frag))
 
     (sensor (many T _number))
     (appearance T (appearance T 100)))
 
   (frame
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))
           (appearance T 100)))
       (feed @value @frag)
-      (frag @frag))
+      (node @frag))
 
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))
           (appearance T 100)))
       (feed @value @frag)
-      (frag @frag))
+      (node @frag))
 
     (sensor (many T _number))
     (appearance T))
 
   (frame
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))))
       (feed @value @frag)
-      (frag @frag (appearance T 100)))
+      (node @frag (appearance T 100)))
 
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))))
       (feed @value @frag)
-      (frag @frag (appearance T 100)))
+      (node @frag (appearance T 100)))
 
     (sensor (many T _number))
     (appearance T))
 
   (frame
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))))
       (feed @value @frag)
-      (frag @frag (appearance T)))
+      (node @frag (appearance T)))
 
     (module {}
-      (frag (@value (sensor _ value_))
+      (node (@value (sensor _ value_))
         (sensor (T (appearance _ _))))
       (feed @value @frag)
-      (frag @frag (appearance T)))
+      (node @frag (appearance T)))
 
     (sensor (many T _number) 100 100)
     (appearance T))
@@ -761,7 +761,7 @@
     (sensor (view local ±n))
     (sensor (journal local ±n))
     (appearance local 100)
-    (frag @x (appearance local 200))
+    (node @x (appearance local 200))
     (cell @y)
     (feed @x @y @x))
   (frame
@@ -771,7 +771,7 @@
       (appeared 100)
       (appeared 200))
     (appearance local 100)
-    (frag @x)
+    (node @x)
     (cell @y (appearance local 200))
     (feed @x @y @x))
   (frame
@@ -782,7 +782,7 @@
       (appeared 200)
       (disappeared 200))
     (appearance local)
-    (frag @x (appearance local 200))
+    (node @x (appearance local 200))
     (cell @y)
     (feed @x @y @x))
   (frame
@@ -796,7 +796,7 @@
       (appeared 200)
       (disappeared 100))
     (appearance local)
-    (frag @x)
+    (node @x)
     (cell @y (appearance local 200))
     (feed @x @y @x))
   (frame
@@ -810,7 +810,7 @@
       (disappeared 100)
       (disappeared 200))
     (appearance local)
-    (frag @x (appearance local 200))
+    (node @x (appearance local 200))
     (cell @y)
     (feed @x @y @x))
   (frame
@@ -825,7 +825,7 @@
       (disappeared 200)
       (appeared 200))
     (appearance local)
-    (frag @x)
+    (node @x)
     (cell @y (appearance local 200))
     (feed @x @y @x)))
   ;; ...
@@ -976,38 +976,38 @@
     (backsys @c ±n <> {n: ^(+ n 1)})
     (sensor (view local (%pipe (mod 2) 0)))
     (sensor (view local (%pipe (mod 2) 1)))
-    (frag (@a (appearance _ a_))
+    (node (@a (appearance _ a_))
       (appearance local 100))
-    (frag (@b (appearance _ b_))
+    (node (@b (appearance _ b_))
       (appearance local 201))
-    (frag (@c (appearance _ c_))
+    (node (@c (appearance _ c_))
       (appearance local 300)))
   (frame/tail
     (sensor (view local (%pipe (mod 2) 0)) 100 300)
     (sensor (view local (%pipe (mod 2) 1)) 201)
-    (frag (@a (appearance _ a_))
+    (node (@a (appearance _ a_))
       (appearance local 101))
-    (frag (@b (appearance _ b_))
+    (node (@b (appearance _ b_))
       (appearance local 202))
-    (frag (@c (appearance _ c_))
+    (node (@c (appearance _ c_))
       (appearance local 301)))
   (frame/tail
     (sensor (view local (%pipe (mod 2) 0)) 202)
     (sensor (view local (%pipe (mod 2) 1)) 101 301)
-    (frag (@a (appearance _ a_))
+    (node (@a (appearance _ a_))
       (appearance local 102))
-    (frag (@b (appearance _ b_))
+    (node (@b (appearance _ b_))
       (appearance local 203))
-    (frag (@c (appearance _ c_))
+    (node (@c (appearance _ c_))
       (appearance local 302)))
   (frame/tail
     (sensor (view local (%pipe (mod 2) 0)) 102 302)
     (sensor (view local (%pipe (mod 2) 1)) 203)
-    (frag (@a (appearance _ a_))
+    (node (@a (appearance _ a_))
       (appearance local 103))
-    (frag (@b (appearance _ b_))
+    (node (@b (appearance _ b_))
       (appearance local 204))
-    (frag (@c (appearance _ c_))
+    (node (@c (appearance _ c_))
       (appearance local 303))))
   ;; ...
 
@@ -1015,89 +1015,89 @@
 (rack
   (frame
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (a ±in))))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local (a 100)))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (b ±in))))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local (b 200)))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (c ±in))))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local (c 300)))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))})))
   (frame
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (a ±in)) 100))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (b ±in)) 200))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (c ±in)) 300))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))})))
   (frame
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (a ±in))))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local (a 101)))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (b ±in))))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local (b 201)))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (c ±in))))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local (c 301)))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))})))
   (frame
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (a ±in)) 101))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (a ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (b ±in)) 201))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (b ^(+ in 1))}))
     (module {}
-      (frag (@in (sensor _ ±in))
+      (node (@in (sensor _ ±in))
         (sensor (local (c ±in)) 301))
-      (frag (@out (appearance _ `out))
+      (node (@out (appearance _ `out))
         (appearance local))
       (backsys {@:in, @:out}
         {¦ ±in -out_ } <> {(in): (), out: (c ^(+ in 1))}))))

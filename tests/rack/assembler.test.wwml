@@ -88,9 +88,9 @@
       => (component {}
            (cell @foo
              (template ^value))
-           (frag @bar
+           (node @bar
              (group style: "bg-blue-500"
-               (frag @view
+               (node @view
                  (template (p ^\value))))))
     (slot (Counter 100)))
 
@@ -98,9 +98,9 @@
     (slot (Counter 100)
       (module {}
         (cell @foo (template ^value)) ;; impassable
-        (frag @bar
+        (node @bar
           (group style: "bg-blue-500"
-            (frag @view
+            (node @view
               (p "100"))))))) ;; passable
 
   end)
@@ -152,12 +152,12 @@
   (frame
     (cell @a (Foo x_) => (cell @count0 ^x))
     (feed @a @b)
-    (frag @b)
+    (node @b)
 
     (delay 5
       (cell @x (Bar x_) => (cell @count1 ^x)))
     (feed @x @y)
-    (frag @y)
+    (node @y)
 
     (slot (Foo 100))
     (slot (Bar 200))
@@ -168,7 +168,7 @@
 
   (frame pattern: true
     ⟨& (cell @a)
-       (frag @b (%literal (Foo x_) => (cell @count0 ^x)))
+       (node @b (%literal (Foo x_) => (cell @count0 ^x)))
        (delay 4 _)⟩)
 
   (frame pattern: true
@@ -192,11 +192,11 @@
        (slot (Foo 100) (cell @count0 104))⟩)
 
   (frame pattern: true
-    ⟨& (frag @y (Bar x_) => (cell @count1 ^x))
+    ⟨& (node @y (Bar x_) => (cell @count1 ^x))
        (slot (Foo 100) (cell @count0 105))⟩)
 
   (frame pattern: true
-    ⟨& (frag @y (Bar x_) => (cell @count1 ^x))
+    ⟨& (node @y (Bar x_) => (cell @count1 ^x))
        (slot (Foo 100) (cell @count0 105))
        (slot (Bar 200) (cell @count1 200))⟩)
 
@@ -216,7 +216,7 @@
 ;; Rule deletion invalidates associated slots.
 (rack
   (frame
-    (frag @x (Foo) => (delay 100 foo))
+    (node @x (Foo) => (delay 100 foo))
     (delay 5 (discard @x))
 
     (Bar) => (delay 100 bar)
@@ -250,19 +250,19 @@
        (slot (Bar) (delay 96 bar))⟩)
 
   (frame pattern: true
-    ⟨& (frag @x (Foo) => (delay 100 foo))
+    ⟨& (node @x (Foo) => (delay 100 foo))
        (discard @x)
        (slot (Foo) (delay 95 foo))
        (slot (Bar) (delay 95 bar))⟩)
 
   (frame pattern: true
-    ⟨& (frag @x)
+    ⟨& (node @x)
        (discard @x)
        (slot (Foo) (delay 94 foo))
        (slot (Bar) (delay 94 bar))⟩)
 
   (frame pattern: true
-    ⟨& (frag @x)
+    ⟨& (node @x)
        (discard @x)
        (slot (Foo))
        (slot (Bar) (delay 93 bar))⟩))
@@ -271,7 +271,7 @@
 ;; Rule update invalidates associated slots.
 (rack
   (frame
-    (frag @rule (Foo) => (cell @count 0))
+    (node @rule (Foo) => (cell @count 0))
     (Bar) => (delay 100 bar)
     (backsys @rule
       (rule _ (cell @_ ±count))
@@ -281,22 +281,22 @@
     (slot (Bar)))
 
   (frame pattern: true
-    ⟨& (frag @rule (Foo) => (cell @count 0))
+    ⟨& (node @rule (Foo) => (cell @count 0))
        (slot (Foo) (cell @count 0))
        (slot (Bar) (delay 100 bar))⟩)
 
   (frame pattern: true
-    ⟨& (frag @rule (Foo) => (cell @count 1))
+    ⟨& (node @rule (Foo) => (cell @count 1))
        (slot (Foo) (cell @count 0))
        (slot (Bar) (delay 99 bar))⟩)
 
   (frame pattern: true
-    ⟨& (frag @rule (Foo) => (cell @count 2))
+    ⟨& (node @rule (Foo) => (cell @count 2))
        (slot (Foo) (cell @count 1))
        (slot (Bar) (delay 98 bar))⟩)
 
   (frame pattern: true
-    ⟨& (frag @rule (Foo) => (cell @count 3))
+    ⟨& (node @rule (Foo) => (cell @count 3))
        (slot (Foo) (cell @count 2))
        (slot (Bar) (delay 97 bar))⟩))
   ;;; ...
@@ -307,7 +307,7 @@
     (Foo n_) => (cell @x ^n)
     (cell @arg 0)
     (transfer (@arg n_ @node) (slot (Foo ^n)))
-    (frag @node)
+    (node @node)
     (feed @x @y)
     (cell @y))
 
@@ -315,7 +315,7 @@
     (Foo n_) => (cell @x ^n)
     (cell @arg)
     (transfer (@arg n_ @node) (slot (Foo ^n)))
-    (frag @node (slot (Foo 0)))
+    (node @node (slot (Foo 0)))
     (feed @x @y)
     (cell @y))
 
@@ -323,7 +323,7 @@
     (Foo n_) => (cell @x ^n)
     (cell @arg)
     (transfer (@arg n_ @node) (slot (Foo ^n)))
-    (frag @node (slot (Foo 0) (cell @x 0)))
+    (node @node (slot (Foo 0) (cell @x 0)))
     (feed @x @y)
     (cell @y))
 
@@ -331,7 +331,7 @@
     (Foo n_) => (cell @x ^n)
     (cell @arg)
     (transfer (@arg n_ @node) (slot (Foo ^n)))
-    (frag @node (slot (Foo 0) (cell @x)))
+    (node @node (slot (Foo 0) (cell @x)))
     (feed @x @y)
     (cell @y 0))
 
@@ -341,7 +341,7 @@
 (rack
   (frame
     (delay 3
-      (frag @rule (Foo n_) => ^n))
+      (node @rule (Foo n_) => ^n))
     (delay 5
       (discard @rule))
     (Bar name_) => ^"Kaixo ⸢name⸣"
@@ -352,7 +352,7 @@
 
   (frame
     (delay 2
-      (frag @rule (Foo n_) => ^n))
+      (node @rule (Foo n_) => ^n))
     (delay 4
       (discard @rule))
     (Bar name_) => ^"Kaixo ⸢name⸣"
@@ -363,7 +363,7 @@
 
   (frame
     (delay 1
-      (frag @rule (Foo n_) => ^n))
+      (node @rule (Foo n_) => ^n))
     (delay 3
       (discard @rule))
     (Bar name_) => ^"Kaixo ⸢name⸣"
@@ -373,7 +373,7 @@
     (slot (Bar "John") "Kaixo John"))
 
   (frame
-    (frag @rule (Foo n_) => ^n)
+    (node @rule (Foo n_) => ^n)
     (delay 2
       (discard @rule))
     (Bar name_) => ^"Kaixo ⸢name⸣"
@@ -383,7 +383,7 @@
     (slot (Bar "John") "Kaixo John"))
 
   (frame
-    (frag @rule (Foo n_) => ^n)
+    (node @rule (Foo n_) => ^n)
     (delay 1
       (discard @rule))
     (Bar name_) => ^"Kaixo ⸢name⸣"
@@ -393,7 +393,7 @@
     (slot (Bar "John") "Kaixo John"))
 
   (frame
-    (frag @rule (Foo n_) => ^n)
+    (node @rule (Foo n_) => ^n)
     (discard @rule)
     (Bar name_) => ^"Kaixo ⸢name⸣"
     (slot (Foo 0) 0)
@@ -402,7 +402,7 @@
     (slot (Bar "John") "Kaixo John"))
 
   (frame
-    (frag @rule)
+    (node @rule)
     (discard @rule)
     (Bar name_) => ^"Kaixo ⸢name⸣"
     (slot (Foo 0) 0)
@@ -411,7 +411,7 @@
     (slot (Bar "John") "Kaixo John"))
 
   (frame
-    (frag @rule)
+    (node @rule)
     (discard @rule)
     (Bar name_) => ^"Kaixo ⸢name⸣"
     (slot (Foo 0))
@@ -424,7 +424,7 @@
 ;; Many slots from the same rule (update).
 (rack
   (frame
-    (frag @rule (Foo 0) => "Kaixo")
+    (node @rule (Foo 0) => "Kaixo")
     (backsys @rule
       (rule (Foo ±n) _) <> {n: ^(mod (+ n 1) 4)})
     (Bar) => (delay 100 qux)
@@ -442,7 +442,7 @@
     (slot (Bar) (delay 100 qux)))
 
   (frame
-    (frag @rule (Foo 1) => "Kaixo")
+    (node @rule (Foo 1) => "Kaixo")
     (backsys @rule
       (rule (Foo ±n) _) <> {n: ^(mod (+ n 1) 4)})
     (Bar) => (delay 100 qux)

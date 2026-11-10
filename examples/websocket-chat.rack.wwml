@@ -1,8 +1,8 @@
 (server (@pool (ws local 5000))
-  (frag @rx (sensor (many chat _string)))
-  (frag @tx (appearance chat))
-  (frag @user)
-  (frag @peers (sensor (journal users _string)))
+  (node @rx (sensor (many chat _string)))
+  (node @tx (appearance chat))
+  (node @user)
+  (node @peers (sensor (journal users _string)))
   (backsys
     ;; Ask for nick.
     {¦ -user_ out: (_* `>msg)}

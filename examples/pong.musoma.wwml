@@ -1,23 +1,23 @@
-(frag @window
+(node @window
   (window form: floating width: 800 height: 400 style: "backdrop-black"
     (group style: "flow-row"
-      (frag @score-l
+      (node @score-l
         (p 0 style: "fr-1 center-x font-3xl font-light text-white m-1"))
-      (frag @score-r
+      (node @score-r
         (p 0 style: "fr-1 center-x font-3xl font-light text-white m-1")))
-    (frag @keyboard
+    (node @keyboard
       (keyboard focus: always))
-    (frag @paddle-l
+    (node @paddle-l
       (transform dl: 0 dt: 0
         (rect style: "fill-white max-w-10px max-h-50px")))
-    (frag @paddle-r
+    (node @paddle-r
       (transform dl: 790 dt: 0
         (rect style: "fill-white max-w-10px max-h-50px")))
-    (frag @ball
+    (node @ball
       (transform dl: 100 dt: 100 velocity-x: 7 velocity-y: 7
         (rect style: "fill-white radius-full max-10px")))))
 
-(frag @beat
+(node @beat
   (timesource ((33 ms) @frame) true))
 (cell @frame)
 
