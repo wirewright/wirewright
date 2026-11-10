@@ -5295,14 +5295,17 @@ module Ww::Rack
       # *asynchronously*.
       #
       # The words are used in not quite the conventional way: a *synchronous*
-      # `changes` node denies all patches to the cell at *edge* until its *ops*
+      # `changes` node denies all patches to the cell at *edge* until the *ops*
       # compartment is empty; and an *asynchronous* one does not, running
-      # independently from the cell and simply accumulating changes to it.
+      # independently from the cell and simply observing and accumulating changes
+      # made to it.
       #
       # The synchronous `changes` node is useful to make sure the value of the
       # cell at *edge* is not modified "right under your feet" while you are handling
       # changes to it. It is conceptually a kind of "lock" or mutual exclusion mechanism
-      # (of changes vs. the world).
+      # (of changes vs. the world). In other words, the usefulness is that while
+      # the changes node is processing *ops*, no further changes are allowed to
+      # the cell at *edge*.
       #
       # |@key edge rack.[edge]
       # The edge referring to the cell to watch (or a similar node such as `rack.outlet`).
@@ -5338,7 +5341,7 @@ module Ww::Rack
       # The following is a list of operations emitted for changes deeper in the value:
       # - `(assoc keypath←(_* key_) value_)`: a pair at *keypath* was created or updated, or an item was updated.
       # - `(dissoc keypath←(_* key_) old-value_)`: a pair at *keypath* was removed.
-      # - `(insert keypath←(_* index_) seq←(_+))`: one or more items (*seq*) were inserted at *keypath* (before *index*).
+      # - `(insert keypath←(_* index_) seq←(_+))`: one or more items (*seq*) were inserted at *keypath* before *index*.
       # - `(delete keypath←(_* index_) old-item_)`: an item was removed at *keypath*.
       #
       # The changes node is allowed to emit *transactions* which group
