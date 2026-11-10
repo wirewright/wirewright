@@ -462,6 +462,20 @@ module Ww::Microfold
       @utilities_by_name[name]?
     end
 
+    def epoch(&)
+      @feature_cache.epoch do
+        @recognize_cache.epoch do
+          @eval_cache.epoch do
+            @designate_cache.epoch do
+              @instantiate_cache.epoch do
+                yield
+              end
+            end
+          end
+        end
+      end
+    end
+
     defrecord Match, vars : Term::Dict, defn : UtilityDefn | ShorthandDefn
 
     # Lets utilities and shorthands look at *matchee*. Returns the resulting `Match`,

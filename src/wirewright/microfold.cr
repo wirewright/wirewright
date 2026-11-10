@@ -133,23 +133,27 @@ module Ww::Microfold
   # The term is accompanied by diagnostics rooted at *root*. Diagnostics are helpful
   # in that they point to missing utilities and the like.
   def render(codex : SyncCodex, root : Term) : Outcome::Accepted(Term)
+    codex.synchronize do |unsafe_codex|
+      render(unsafe_codex, root)
+    end
+  end
+
+  def render(codex : Codex, root : Term) : Outcome::Accepted(Term)
     unless root_dict = root.as_d?
       return Outcome.ok_despite(root, "root term is not a dict")
     end
 
-    codex.synchronize do |unsafe_codex|
-      designation_tree_out = recognize(unsafe_codex, root_dict)
-        .map { |style_tree| {style_tree, solve(style_tree)} }
-        .map { |style_tree, cues| propagate(style_tree, cues) }
-        .map { |uncued_tree| designate?(unsafe_codex, uncued_tree) }
+    designation_tree_out = recognize(codex, root_dict)
+      .map { |style_tree| {style_tree, solve(style_tree)} }
+      .map { |style_tree, cues| propagate(style_tree, cues) }
+      .map { |uncued_tree| designate?(codex, uncued_tree) }
 
-      designation_tree_out.bind do |designation_tree|
-        if designation_tree.nil?
-          next Outcome.ok(Term.of) # Root absent
-        end
-
-        instantiate(unsafe_codex, root_dict, designation_tree)
+    designation_tree_out.bind do |designation_tree|
+      if designation_tree.nil?
+        next Outcome.ok(Term.of) # Root absent
       end
+
+      instantiate(codex, root_dict, designation_tree)
     end
   end
 end
