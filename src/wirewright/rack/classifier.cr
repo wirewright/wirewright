@@ -1430,6 +1430,53 @@ module Ww::Rack
         end
       end
 
+      # |@ rack.frags
+      #
+      # |@pattern
+      # [frags @edge_ children_*]
+      # [frags (policy_symbol @edge_) children_*]
+      #
+      # |@key edge rack.[edge]
+      # The edge at which to expose a snapshot of *children* at the start of the frame.
+      # Writes to this edge propose new *children*. Writes take precedence over intrinsic
+      # evolution of *children*. Writing an empty dict clears all *children*.
+      #
+      # |@key policy rack.[merge policy]
+      # Optionally, the merge policy to use.
+      #
+      # |@key children rack
+      #
+      # |@summary
+      # Similar to `rack.circuit` but with `rack.frag` semantics.
+      matchpi(
+        %{[frags @header_ children0_*]},
+        %{[frags header←(_symbol @_) children0_*]},
+      ) do
+        if children0.empty?
+          mix0 = Term.morph(node, {0, :group}, {1, {:cell, header}})
+        else
+          mix0 = Term.morph(node, {0, :group}, {1, {:cell, header, children0}})
+        end
+
+        D7.mixture(node, mix0) do |mix1|
+          Term.of_case(mix1) do
+            matchpi %{[group (cell _ children1←(_*)) _*]} do
+              continue if children0 == children1
+
+              node.replace(2...node.itemsize, Term.rep(children1.items))
+            end
+
+            matchpi %{[group _ children1_*]} do
+              node.replace(2...node.itemsize, Term.rep(children1.items))
+            end
+
+            matchpi %{[group (cell _) _*]} do
+              node.replace(2...node.itemsize, Term.rep)
+            end
+          end
+        end
+      end
+
       # |@ rack.manipulator
       #
       # |@pattern
@@ -4135,31 +4182,37 @@ module Ww::Rack
       #
       # |@pattern
       # [supervisor (@tasks_ @task_ pattern_ - @pool_) children_*]
+      # [supervisor (@tasks_ @task_ pattern_ - @pool_ bindings_dict) children_*]
       #
       # |@key tasks rack.[edge]
       # The edge identifying the place with a list of tasks.
       #
       # |@key task rack.[edge]
-      # When a supervisor associates a task with a device, it equips the device with
+      # When a supervisor associates a task with a worker, it equips the worker with
       # a cell storing the task. The cell is at the edge specified by *task*.
       #
       # For example, if the list `(1 2 3)` is the tasks list, at *tasks*, and *task*
-      # is `@x`, the *pool* will contain the following devices:
+      # is `@x`, the *pool* will contain the following workers:
       #
       # ```wwml
       # (device
       #   ...
       #   (cell @x 1)
       #   ...)
+      #
       # (device
       #   ...
       #   (cell @x 2)
       #   ...)
+      #
       # (device
       #   ...
       #   (cell @x 3)
       #   ...)
       # ```
+      #
+      # Here, each worker is a `rack.device`. If you provide *bindings*, workers will
+      # be `rack.module`s instead, with the provided bindings to the outside world.
       #
       # |@key pattern m1.operator
       # The pattern used to extract the *key* of a task from *tasks*. Items of *tasks*
@@ -4168,53 +4221,57 @@ module Ww::Rack
       # the key; the name of the capture is irrelevant.
       #
       # The set of keys determines the population of the pool. For each unique key,
-      # a managed device is created; when the key disappears, the corresponding device
+      # a worker is created; when the key disappears, the corresponding worker
       # is removed. Keys must uniquely identify tasks. Otherwise, the respective tasks(s)
-      # and device(s) are ignored -- the supervisor node is "confused" by them so it
+      # and worker(s) are ignored -- the supervisor node is "confused" by them so it
       # chooses not to interact with them in any way.
       #
       # |@key pool rack.[edge]
-      # The edge of the pool where member devices should be maintained.
+      # The edge of the pool where workers should be maintained.
+      #
+      # |@key bindings
+      # If provided, turns workers into `rack.module`s with this binding instead
+      # of completely sealed `rack.device`s.
       #
       # |@key children rack
-      # Supplies nodes for each member device. Do note that it must not contain cells
+      # Supplies nodes for each worker. Do note that it must not contain cells
       # at the edges *task* and  `@reference` (where `@reference` is a special cell
-      # introduced by `supervisor` to help tracking device and task changes).
+      # introduced by `supervisor` to help tracking worker and task changes).
       #
       # |@summary
-      # Maintains a dynamic population of devices following a list of task terms.
+      # Maintains a dynamic population of workers for a list of task terms.
       #
       # |@block
-      # Maintains a population of *member devices* for each keyed item in list of
+      # Maintains a population of *workers* for each keyed item in list of
       # tasks at *tasks*.
       #
-      # Assigns tasks from *tasks* to a dynamic pool of devices. Creates devices
-      # based on *template* as necessary, and puts them in the *pool*. Each device
-      # contains a cell at *task*, which stores the device's copy of its assigned task.
+      # Assigns tasks from *tasks* to a dynamic pool of workers. Creates workers
+      # from *template* as necessary, and puts them in the *pool*. Each worker
+      # contains a cell at *task*, which stores the worker's view of its assigned task.
       #
-      # The supervisor maintains a bidirectional relation between this copy and the task
-      # in *tasks*: whenever the task in *tasks* changes, the associated device's *task*
+      # The supervisor maintains a bidirectional relation between this view and the task
+      # in *tasks*: whenever the task in *tasks* changes, the associated worker's *task*
       # changes, and vice versa. When *both* change in the same tick, the supervisor
       # merges the changes using the term diff algorithm. If there is a conflict that the diff
       # algorithm cannot resolve (e.g. `100` replaced by `200` -- there is simply nothing we
-      # can do about conflicts like these), the change from *tasks* is preferred, since devices
+      # can do about conflicts like these), the change from *tasks* is preferred, since workers
       # are ultimately thought to be (largely autonomous) projections of *tasks*.
       #
-      # When a task is removed from *tasks*, the corresponding device is removed from the *pool*.
-      # The reverse is not true; if a device is removed from *pool*, it simply respawns
+      # When a task is removed from *tasks*, the corresponding worker is removed from the *pool*.
+      # The reverse is not true; if a worker is removed from *pool*, it simply respawns
       # (with all state lost, of course).
       #
-      # We identify tasks by keys. The key of a task should be a stable part of it. A device's
+      # We identify tasks by keys. The key of a task should be a stable part of it. A worker's
       # state is preserved while the task's key remains the same; the rest of the task can be
-      # changed by both the device itself, and by the outside world through whatever means possible
+      # changed by both the worker itself, and by the outside world through whatever means possible
       # (e.g. by modifying *tasks* in-place).
       #
-      # If keys are unstable, you'll see a lot of "device churn", meaning many devices
-      # will be created and removed per tick. For example, if a device modifies its
-      # task's key, it will be removed and replaced with another device the next tick.
+      # If keys are unstable, you'll see a lot of "worker churn", meaning many workers
+      # will get created and removed on each cycle. For example, if a worker modifies its
+      # task's key, it will be removed and replaced with another worker on the next cycle.
       #
       # If two or more tasks share the same kes, this is called a *collision*.
-      # The supervisor will remove *all* colliding devices, and ignore *all*
+      # The supervisor will remove *all* colliding workers, and ignore *all*
       # colliding tasks, until the collision is resolved.
       #
       # When a key collides across generations, meaning one task's key flows into
@@ -4247,9 +4304,14 @@ module Ww::Rack
       #     (cell @x (c 3))
       #     (p "Hello World")))
       # ```
+
       matchpi %{[supervisor (@tasks_ @_ _ - @pool_) _*]} do
         # NOTE: the other edge, @tasks_ ⏏@task_⏏, is an interior edge; it is
         # not exposed to the outside world.
+        D7.gnd(node, tasks, pool)
+      end
+
+      matchpi %{[supervisor (@tasks_ @_ _ - @pool_ _dict) _*]} do
         D7.gnd(node, tasks, pool)
       end
 

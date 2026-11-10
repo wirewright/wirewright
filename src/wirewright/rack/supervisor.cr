@@ -17,7 +17,9 @@ module Ww::Rack::Supervisor
     yield propose
   end
 
-  defcase StandardVariant,
+  alias Variant = DeviceVariant | ModuleVariant
+
+  defcase DeviceVariant,
     abs_tasks : D7::AbsEdge,
     ref_edge : Term,
     task_edge : Term,
@@ -25,23 +27,44 @@ module Ww::Rack::Supervisor
     abs_pool : D7::AbsEdge,
     template : Term
 
+  defcase ModuleVariant,
+    abs_tasks : D7::AbsEdge,
+    ref_edge : Term,
+    task_edge : Term,
+    pattern : Term,
+    abs_pool : D7::AbsEdge,
+    bindings : Term::Dict,
+    template : Term
+
   private def propose(hg : D7::Hypergraph, proposals)
     hg.propose(proposals, :supervisor) do |node|
-      Term.matchpi?(node.term, %{[supervisor (@tasks_ @task_ pattern_ - @pool_) template_*]}) do
-        abs_tasks = hg.resolve(node.addr, tasks)
-        abs_pool = hg.resolve(node.addr, pool)
-        ref_edge = Term.of(:edge, :reference)
-        variant = stack_alloc StandardVariant.new(abs_tasks, ref_edge, task, pattern, abs_pool, template)
-        step(hg, node, variant)
+      Term.case(node.term) do
+        matchpi %{[supervisor (@tasks_ @task_ pattern_ - @pool_) template_*]} do
+          abs_tasks = hg.resolve(node.addr, tasks)
+          abs_pool = hg.resolve(node.addr, pool)
+          ref_edge = Term.of(:edge, :reference)
+          variant = stack_alloc DeviceVariant.new(abs_tasks, ref_edge, task, pattern, abs_pool, template)
+          step(hg, node, variant)
+        end
+
+        matchpiT %{[supervisor (@tasks_ @task_ pattern_ - @pool_ bindings_dict) template_*]} do
+          abs_tasks = hg.resolve(node.addr, tasks)
+          abs_pool = hg.resolve(node.addr, pool)
+          ref_edge = Term.of(:edge, :reference)
+          variant = stack_alloc ModuleVariant.new(abs_tasks, ref_edge, task, pattern, abs_pool, bindings, template)
+          step(hg, node, variant)
+        end
+
+        otherwise { }
       end
     end
   end
 
-  alias Correction = AddDevice | DeleteDevice | UpdateDevice | UpdateTask | DeleteTask
+  alias Correction = AddWorker | DeleteWorker | UpdateWorker | UpdateTask | DeleteTask
 
-  defrecord AddDevice, key : Term, task : Term
-  defrecord DeleteDevice, index : Int32
-  defrecord UpdateDevice, index : Int32, task : Term
+  defrecord AddWorker, key : Term, task : Term
+  defrecord DeleteWorker, index : Int32
+  defrecord UpdateWorker, index : Int32, task : Term
   defrecord UpdateTask, index : Int32, task : Term
   defrecord DeleteTask, index : Int32
 
@@ -53,7 +76,7 @@ module Ww::Rack::Supervisor
     conflicting_keys : Set(Term),
     steer : Array(Correction) -> D7::Patch
 
-  private def task_list?(hg : D7::Hypergraph, edge : D7::AbsEdge, variant : StandardVariant) : ManagedTaskList?
+  private def task_list?(hg : D7::Hypergraph, edge : D7::AbsEdge, variant : Variant) : ManagedTaskList?
     return unless cell = Rack.cell?(hg, edge)
     return unless list0 = cell.value?.as_d?
 
@@ -97,7 +120,7 @@ module Ww::Rack::Supervisor
     ManagedTaskList.new(cell, map, conflicting_keys, steer)
   end
 
-  defrecord ManagedDevice,
+  defrecord Worker,
     key : Term,
     index : Int32,
     reference : Term,
@@ -105,114 +128,119 @@ module Ww::Rack::Supervisor
     update : Term -> Term,
     smart: true
 
-  defrecord ManagedDevicePool,
+  defrecord WorkerPool,
     pool : Pool,
-    map : Hash(Term, ManagedDevice),
+    map : Hash(Term, Worker),
     conflicting_keys : Set(Term),
     steer : Array(Correction) -> D7::Patch
 
   # TODO: the code here is pretty bad, maybe there's a way to refactor it?
-  private def managed_devices(pool : Pool, variant : StandardVariant, tasks : ManagedTaskList) : ManagedDevicePool
-    map = {} of Term => ManagedDevice
+  private def managed_workers(pool : Pool, variant : Variant, tasks : ManagedTaskList) : WorkerPool
+    map = {} of Term => Worker
     conflicting_keys = tasks.conflicting_keys.dup
 
     pool.contents.items.each_with_index do |item, index|
-      next unless device = device?(variant, item, index)
-      next if device.key.in?(conflicting_keys)
+      next unless worker = worker?(variant, item, index)
+      next if worker.key.in?(conflicting_keys)
 
-      if map.delete(device.key)
-        conflicting_keys << device.key
+      if map.delete(worker.key)
+        conflicting_keys << worker.key
         next
       end
 
-      map[device.key] = device
+      map[worker.key] = worker
     end
 
     steer = ->(corrections : Array(Correction)) do
-      added = [] of AddDevice
+      added = [] of AddWorker
       removed = Set(Int32).new
       updated = {} of Int32 => Term
 
       corrections.each do |correction|
         case correction
-        when AddDevice    then added << correction
-        when DeleteDevice then removed << correction.index
-        when UpdateDevice then updated[correction.index] = correction.task
+        when AddWorker    then added << correction
+        when DeleteWorker then removed << correction.index
+        when UpdateWorker then updated[correction.index] = correction.task
         end
       end
 
-      devices = [] of {Term, Term}
+      workers = [] of {Term, Term}
 
-      # Handle device deletions and updates.
+      # Handle worker deletions and updates.
       pool.contents.items.each_with_index do |item, index|
-        # Skip devices that were removed.
+        # Skip workers that were removed.
         next if index.in?(removed)
 
-        # Skip items that do not look like devices.
-        next unless device = device?(variant, item, index)
-        next if device.key.in?(conflicting_keys)
+        # Skip items that do not look like workers.
+        next unless worker = worker?(variant, item, index)
+        next if worker.key.in?(conflicting_keys)
 
-        # Skip devices that were not updated.
+        # Skip workers that were not updated.
         unless task = updated[index]?
-          devices << {item, device.key}
+          workers << {item, worker.key}
           next
         end
 
         # Perform the replacement and move on.
-        devices << {device.update.call(task), device.key}
+        workers << {worker.update.call(task), worker.key}
       end
 
-      # Handle device adds.
+      # Handle worker adds.
       added.each do |correction|
-        device = Term::Dict.build do |commit|
-          commit << :device
+        worker = Term::Dict.build do |commit|
+          case variant
+          in DeviceVariant
+            commit << :device
+          in ModuleVariant
+            commit << :module << variant.bindings
+          end
           commit << {:cell, variant.ref_edge, correction.task}
           commit << {:cell, variant.task_edge, correction.task}
           commit.concat(variant.template.items)
         end
-        devices << {Term.of(device), correction.key}
+        workers << {Term.of(worker), correction.key}
       end
 
-      # Sort by index in tasks so that the order of devices matches that of tasks.
-      devices.sort_by! do |(device, key)|
+      # Sort by index in tasks so that the order of workers matches that of tasks.
+      workers.sort_by! do |(worker, key)|
         tasks.map[key].index
       end
 
       contents1 = Term::Dict.build do |commit|
-        # Handle device deletions and updates.
+        # Handle worker deletions and updates.
         pool.contents.items.each_with_index do |item, index|
-          # Skip devices that were removed.
+          # Skip workers that were removed.
           next if index.in?(removed)
 
-          # Skip items that do not look like devices.
-          unless device = device?(variant, item, index)
+          # Skip items that do not look like workers.
+          unless worker = worker?(variant, item, index)
             commit << item
             next
           end
 
-          # Delete devices with duplicate keys.
-          next if device.key.in?(conflicting_keys)
+          # Delete workers with duplicate keys.
+          next if worker.key.in?(conflicting_keys)
 
-          replacement, _ = devices.shift
+          replacement, _ = workers.shift
           commit << replacement
         end
 
-        next if devices.empty?
+        next if workers.empty?
 
-        commit.concat(devices) do |(device, _)|
-          device
+        commit.concat(workers) do |(worker, _)|
+          worker
         end
       end
 
       D7.patch(pool.node, {2, contents1})
     end
 
-    ManagedDevicePool.new(pool, map, conflicting_keys, steer)
+    WorkerPool.new(pool, map, conflicting_keys, steer)
   end
 
   # TODO: there's a lot of O(N) stuff here (where N is either @tasks size or @pool size),
   # maybe there are ways to fix that? Through caching, perhaps?
-  private def step(hg : D7::Hypergraph, node : D7::Node, variant : StandardVariant) : D7::Patch?
+  private def step(hg : D7::Hypergraph, node : D7::Node, variant : Variant) : D7::Patch?
     return unless pool = Rack.pool?(hg, variant.abs_pool)
 
     # Empty the pool if the task cell is missing or malformed in any way.
@@ -220,84 +248,84 @@ module Ww::Rack::Supervisor
       return D7.patch(pool.node, {2, Term[]})
     end
 
-    devices = managed_devices(pool, variant, tasks)
+    workers = managed_workers(pool, variant, tasks)
 
     corrections = [] of Correction
 
-    # Emit corrections based on device state.
-    devices.map.each do |key, device|
+    # Emit corrections based on worker state.
+    workers.map.each do |key, worker|
       next if key.in?(tasks.conflicting_keys)
 
       unless task = tasks.map[key]?
-        corrections << DeleteDevice.new(device.index)
+        corrections << DeleteWorker.new(worker.index)
         # Task is already absent so we don't have to remove it.
         next
       end
 
-      # If the device is missing or has an empty task cell (the latter is vastly more likely),
+      # If the worker is missing or has an empty task cell (the latter is vastly more likely),
       # this means it wants to remove itself and the task.
-      unless device_task = device.task?
-        corrections << DeleteDevice.new(device.index)
+      unless worker_task = worker.task?
+        corrections << DeleteWorker.new(worker.index)
         corrections << DeleteTask.new(task.index)
         next
       end
 
-      # If this device's task did not change, but the @tasks' did, update
-      # the device to the @tasks' task.
-      if device.reference == device_task
-        unless device.reference == task.term
-          corrections << UpdateDevice.new(device.index, task.term)
+      # If this worker's task did not change, but the @tasks' did, update
+      # the worker to the @tasks' task.
+      if worker.reference == worker_task
+        unless worker.reference == task.term
+          corrections << UpdateWorker.new(worker.index, task.term)
         end
         next
       end
 
-      # If the task in @tasks did not change, prefer the device's @task if
+      # If the task in @tasks did not change, prefer the worker's @task if
       # @task changed with respect to @reference.
-      if device.reference == task.term
-        unless device.reference == device_task
-          # We still have to update the device's @reference so we have to UpdateDevice.
-          corrections << UpdateDevice.new(device.index, device_task)
-          corrections << UpdateTask.new(task.index, device_task)
+      if worker.reference == task.term
+        unless worker.reference == worker_task
+          # We still have to update the worker's @reference so we have to UpdateWorker.
+          corrections << UpdateWorker.new(worker.index, worker_task)
+          corrections << UpdateTask.new(task.index, worker_task)
         end
         next
       end
 
-      # If *both* the task in @tasks and the device's own @task changed,
+      # If *both* the task in @tasks and the worker's own @task changed,
       # merge their changes with respect to @reference.
 
       patches = {
         D7::Patch.assoc(0u32, task.term),
-        D7::Patch.assoc(0u32, device_task),
+        D7::Patch.assoc(0u32, worker_task),
       }
 
       merged_patch, _ = D7.merge(patches) do |id|
         assert id == 0u32
 
-        {device.reference, D7::MergeDiff.new(UInt32::MAX)}
+        {worker.reference, D7::MergeDiff.new(UInt32::MAX)}
       end
 
       # If there is an irresolvable conflict, prefer the task from @tasks,
-      # since devices are ultimately dependent on @tasks.
+      # since workers are ultimately dependent on @tasks.
       unless successor_task = merged_patch[0]?
-        corrections << UpdateDevice.new(device.index, task.term)
+        corrections << UpdateWorker.new(worker.index, task.term)
         next
       end
 
-      corrections << UpdateDevice.new(device.index, successor_task)
+      corrections << UpdateWorker.new(worker.index, successor_task)
       corrections << UpdateTask.new(task.index, successor_task)
     end
 
     # Emit corrections based on task state.
     tasks.map.each do |key, task|
-      next if devices.map.has_key?(key)
+      next if workers.map.has_key?(key)
 
-      corrections << AddDevice.new(key, task.term)
+      corrections << AddWorker.new(key, task.term)
     end
 
-    # Apply corrections to devices and tasks.
+    # Apply corrections to workers and tasks.
     D7.patches(
       tasks.steer.call(corrections),
-      devices.steer.call(corrections)
+      workers.steer.call(corrections)
     )
   end
 
@@ -316,7 +344,7 @@ module Ww::Rack::Supervisor
     end
   end
 
-  private def device?(variant : StandardVariant, item : Term, index : Int32) : ManagedDevice?
+  private def worker?(variant : DeviceVariant, item : Term, index : Int32) : Worker?
     Term.matchpi?(item, %{[device _*]}) do
       children = item.items.move(1)
       next unless reference_row = children.leftmost_with_index? { |child| cell?(variant.ref_edge, child) }
@@ -325,7 +353,7 @@ module Ww::Rack::Supervisor
       next unless key = key?(variant.pattern, reference)
 
       # The task cell can be missing, most often when it is empty. This is
-      # used by devices to signify removal of their corresponding tasks, and
+      # used by workers to signify removal of their corresponding tasks, and
       # themselves from the pool.
       if task_row = children.leftmost_with_index? { |child| cell?(variant.task_edge, child) }
         task, task_index = task_row
@@ -342,7 +370,37 @@ module Ww::Rack::Supervisor
         Term.morph(item, {reference_key, 2, value1}, {task_key, 2, value1})
       end
 
-      ManagedDevice.new(key, index, reference, task, update)
+      Worker.new(key, index, reference, task, update)
+    end
+  end
+
+  private def worker?(variant : ModuleVariant, item : Term, index : Int32) : Worker?
+    Term.matchpi?(item, %{[module _dict _*]}) do
+      children = item.items.move(2)
+      next unless reference_row = children.leftmost_with_index? { |child| cell?(variant.ref_edge, child) }
+
+      reference, reference_index = reference_row
+      next unless key = key?(variant.pattern, reference)
+
+      # The task cell can be missing, most often when it is empty. This is
+      # used by workers to signify removal of their corresponding tasks, and
+      # themselves from the pool.
+      if task_row = children.leftmost_with_index? { |child| cell?(variant.task_edge, child) }
+        task, task_index = task_row
+      end
+
+      update = ->(value1 : Term) do
+        reference_key = reference_index + 2
+
+        if task_index.nil?
+          return Term.morph(item, {reference_key, 2, value1})
+        end
+
+        task_key = task_index + 2
+        Term.morph(item, {reference_key, 2, value1}, {task_key, 2, value1})
+      end
+
+      Worker.new(key, index, reference, task, update)
     end
   end
 end

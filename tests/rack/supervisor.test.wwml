@@ -386,3 +386,34 @@
          (device …⟨(cell @reference {id: 3})⟩…))))
 
     end))
+
+;; Bindings
+(rack
+  (frame
+    (cell @xs ({id: 1} {id: 2, active: true} {id: 3}))
+    (cell @choice)
+    (supervisor (@xs @x {¦ id_} - @pool {:@choice})
+      (backsys
+        {¦ x: {¦ id_ active_} -choice_}
+          <> {(active): (), choice: ^id}))
+
+    (frags @pool))
+
+  (frame pattern: true
+    (%quote
+      ((cell @xs ({id: 1} {id: 2} {id: 3}))
+       (cell @choice 2)
+       ;; FIXME: BUG in m1: just writing this directly should work but it doesn't.
+       ;; Something is wrong with m1's normalize quote()
+       (%unquote
+         %'(supervisor (@xs @x {¦ id_} - @pool {:@choice})
+             (backsys
+               {¦ x: {¦ id_ active_} -choice_}
+                 <> {(active): (), choice: ^id})))
+
+       (frags @pool
+         (%unquote (module {:@choice} _*))
+         (%unquote (module {:@choice} _*))
+         (%unquote (module {:@choice} _*))))))
+
+  end)
