@@ -450,11 +450,11 @@ Then build the doctool:
 
 I think Wirewright combines a lot of existing ideas into something (hopefully) coherent.
 
-The relevant ideas come mainly from the field of *cybernetics*: see, for instance, Francisco Varela, Humberto Maturana,  Niklas Luhmann, Norbert Wiener.
+The relevant ideas come mainly from the field of *cybernetics*. My thinking appears to have been influenced in particular by Francisco Varela, Humberto Maturana,  Niklas Luhmann.
 
 Another bunch of ideas comes from cellular automata, in particular from Stephen Wolfram's A New Kind of Science book and his Physics Project.
 
-Some inspiration came, and still comes, from the work of Michael Levin, and also Joscha Bach.
+Some inspiration is coming from the work of Michael Levin, and also Joscha Bach.
 
 Complex systems and systems theory and philosophy are also quite relevant. Wirewright's notion of a *world* or a *circuit* is very similar if not the same as the notion of a *system* in the most general sense of the word; although an important difference is, I think, the fact that a system's behavior is determined by its composition more than any imposed *laws* (as in laws of physics); although of course laws act as the thing that "evaluates" or time-steps the system eventually. Put plainly, a *world* in Wirewright's sense is matter under law; whereas a system is more like a set of interacting components.
 
