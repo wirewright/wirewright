@@ -56,27 +56,24 @@ module Ww::D7
     merge_policy : D7::MergePolicy
 
   struct NodeSignature
-    getter term : Term
+    getter head : Term
     getter arity : UInt32
 
     # :nodoc:
-    def initialize(@term, @arity)
+    def initialize(@head, @arity)
     end
 
-    def ==(other : Term) : Bool
-      @term == other
+    def self.of?(node : Term | Term::Dict) : NodeSignature?
+      return unless dict = node.as?(Term::Dict) || node.as_d?
+      return unless head = dict.items.first?
+      return unless head.type.symbol?
+
+      new(head, dict.uitemsize)
     end
 
-    def ==(other : NodeSignature) : Bool
-      {@term, @arity} == {other.term, other.arity}
+    def self.of(node : Term | Term::Dict) : NodeSignature
+      of?(node) || raise ArgumentError.new("could not determine the signature: #{node}")
     end
-
-    # NOTE: Only `term` is considered in the hash so that objects with the same
-    # head term but different arities collide and are stored in the same "bucket".
-    # When the lookup algorithm then calls `==`, we get more precise. This gives
-    # us O(1) dedupe/hashing based on *term*, followed by an O(N) equality pass over
-    # the bucket.
-    def_hash term
   end
 
   # Constructs a grounded node from an enumerable of *edges*.
@@ -86,18 +83,7 @@ module Ww::D7
   # NOTE: If *edges* is a `Set`, it will be reused! Make sure to not mutate it;
   # if you will, create a copy and pass the copy instead.
   def gnd(node : Term, edges : Enumerable(Term), *, defn : Term = node, merge_policy : D7::MergePolicy = D7::MergeDiff.new(0u32)) : Gnd
-    signature = pass do
-      next unless dict = defn.as_d?
-      next unless head = dict.items.first?
-      next unless head.type.symbol?
-
-      NodeSignature.new(head, dict.uitemsize)
-    end
-
-    unless signature
-      raise ArgumentError.new("could not determine the signature of the node")
-    end
-
+    signature = NodeSignature.of(defn)
     Gnd.new(node, defn, signature, edges.as?(Set(Term)) || edges.to_set, merge_policy)
   end
 
@@ -169,6 +155,9 @@ module Ww::D7
   # range of its items.
   #
   # Used by e.g. `group`, `module`.
+  #
+  # NOTE: Signature can be nil for nodes that don't have a head (through this
+  # is only true in practice for the toplevel parent).
   defrecord Parent,
     node : Term::Dict,
     range : Range(UInt32, UInt32),
@@ -186,13 +175,7 @@ module Ww::D7
   def parent(node : Term::Dict, range : Range(UInt32, UInt32)) : Parent
     assert range.exclusive?
 
-    signature = pass do
-      next unless head = node.items.first?
-      next unless head.type.symbol?
-
-      NodeSignature.new(head, node.uitemsize)
-    end
-
+    signature = NodeSignature.of?(node)
     Parent.new(node, range, Passable, signature)
   end
 
@@ -200,13 +183,7 @@ module Ww::D7
   def parent(node : Term::Dict, range : Range(UInt32, UInt32), &passable : PassablePredicate) : Parent
     assert range.exclusive?
 
-    signature = pass do
-      next unless head = node.items.first?
-      next unless head.type.symbol?
-
-      NodeSignature.new(head, node.uitemsize)
-    end
-
+    signature = NodeSignature.of?(node)
     Parent.new(node, range, passable, signature)
   end
 
@@ -250,13 +227,13 @@ module Ww::D7
 
     def summary : TreeSummary
       if levelsptr = @levels.get(:acquire) # not null
-        return TreeSummary.new(Slice(LevelSummary).new(levelsptr, 1, read_only: true))
+        levels = Slice(LevelSummary).new(levelsptr, 1, read_only: true)
+        return TreeSummary.new(levels, :none)
       end
 
-      levels = Slice[LevelSummary.new(1u32, Set{feature.signature}, feature.edges)]
+      levels = Slice[LevelSummary.new(1u32, Slice[feature.signature], feature.edges.to_readonly_slice(&.itself))]
       @levels.set(levels.to_unsafe, :release)
-
-      TreeSummary.new(levels)
+      TreeSummary.new(levels, :none)
     end
   end
 
@@ -277,7 +254,7 @@ module Ww::D7
 
     def self.new(feature : Scope, child : ParseTree)
       summary = D7.summary(child).update_current do |level|
-        edges = Set(Term).new
+        edges = Pf::Kit.stack_array(Term, 8)
 
         case scope = feature.scope
         in ScopeOpenExcept
@@ -297,7 +274,7 @@ module Ww::D7
           end
         end
 
-        LevelSummary.new(level.population, level.signatures, edges)
+        LevelSummary.new(level.population, level.signatures, edges.to_unsafe_readonly_slice!)
       end
 
       new(summary, feature, child)
@@ -331,11 +308,11 @@ module Ww::D7
   class GroupNode
     # Smart constructor for `GroupNode`.
     def self.new(feature : Parent, children : Slice(ParseTree)) : GroupNode
-      summary = TreeSummary.union(children) { |child| D7.summary(child) }
+      summary = D7.summary(children)
       if signature = feature.signature
-        summary.current_level.add!(signature)
+        summary = summary.update_current(&.add(signature))
       end
-      new(summary, feature, children)
+      new(summary.add(feature.passable), feature, children)
     end
   end
 
@@ -352,8 +329,7 @@ module Ww::D7
       # make very little sense because `Circuit#leaf`s never contain subcircuits,
       # and they wouldn't work either way; so I doubt it's worth spending the effort here.
       leaf_level = D7.summary(leaf).current_level
-      summary = TreeSummary.union(children) { |child| D7.summary(child) }.append(leaf_level)
-      new(summary, feature, children, leaf)
+      new(D7.summary(children).append(leaf_level), feature, children, leaf)
     end
 
     @group : Atomic(GroupNode?) = Atomic(GroupNode?).new(nil)
@@ -364,8 +340,7 @@ module Ww::D7
         return group
       end
 
-      # `summary.prior` basically undoes the append() above.
-      group = GroupNode.new(summary.prior, D7.parent(feature.node, feature.range), children)
+      group = GroupNode.new(D7.parent(feature.node, feature.range), children)
       @group.set(group, :release)
     end
   end
@@ -374,54 +349,88 @@ module Ww::D7
     # Returns the number of ground nodes (`GndLeaf`) in this level.
     getter population : UInt32
 
-    # Returns the set of ground node signatures (`Gnd#signature`) in this level.
-    getter signatures : Set(NodeSignature)
+    # Returns the set of node signatures (`Gnd#signature`, `Parent#signature`)
+    # in this level.
+    getter signatures : Slice(NodeSignature)
 
     # Returns the set of ground node edges (`Gnd#edges`) in this level.
-    getter edges : Set(Term)
+    getter edges : Slice(Term)
 
     # :nodoc:
-    def initialize(@population, @signatures : Set(NodeSignature), @edges : Set(Term))
+    def initialize(@population, @signatures, @edges)
     end
 
     # Constructs an empty level summary.
     def self.new : LevelSummary
-      new(population: 0u32, signatures: Set(NodeSignature).new, edges: Set(Term).new)
+      new(population: 0u32, signatures: Slice(NodeSignature).empty, edges: Slice(Term).empty)
     end
 
     # Mutably unions *b* into *a*.
-    def self.union!(a : LevelSummary, b : LevelSummary) : LevelSummary
-      a.signatures.concat(b.signatures)
-      a.edges.concat(b.edges)
-      LevelSummary.new(a.population + b.population, a.signatures, a.edges)
+    def self.union(a : LevelSummary, b : LevelSummary) : LevelSummary
+      signatures = Pf::Kit.stack_array(NodeSignature)
+      signatures.concat(a.signatures)
+      b.signatures.each do |signature|
+        next if signature.in?(a.signatures)
+
+        signatures << signature
+      end
+
+      edges = Pf::Kit.stack_array(Term)
+      edges.concat(a.edges)
+      b.edges.each do |edge|
+        next if edge.in?(edges)
+
+        edges << edge
+      end
+
+      LevelSummary.new(
+        a.population + b.population,
+        signatures.to_unsafe_readonly_slice!,
+        edges.to_unsafe_readonly_slice!,
+      )
     end
 
     # Returns `true` if *term* is a head of one of the ground nodes in this level.
     def has_head?(term : Term) : Bool
-      @signatures.includes?(term)
+      @signatures.any? { |candidate| candidate.head == term }
     end
 
+    # Returns true if this level contains precisely *signature*.
     def has_signature?(signature : NodeSignature) : Bool
-      @signatures.includes?(signature)
+      signature.in?(@signatures)
     end
 
-    def add!(signature : NodeSignature) : Nil
-      @signatures << signature
+    # Adds a non-ground *signature* to this level.
+    def add(signature : NodeSignature) : LevelSummary
+      if signature.in?(@signatures)
+        return self
+      end
+
+      LevelSummary.new(@population, @signatures.append(signature), @edges)
     end
   end
 
   struct TreeSummary
     # :nodoc:
+    @[::Flags]
+    enum Flags
+      HasPassablePredicate
+    end
+
+    # :nodoc:
+    getter flags : Flags
+
+    # :nodoc:
     #
     # NOTE: levels are stored in reverse (current/shallowest is last, deepest is first).
     # I don't remember why.
-    def initialize(@levels : Slice(LevelSummary))
+    def initialize(@levels : Slice(LevelSummary), @flags : Flags)
       assert @levels.present?
     end
 
     # Constructs an empty tree summary.
     def self.new : TreeSummary
-      new(Slice[LevelSummary.new])
+      new(Slice[LevelSummary.new], Flags::None)
     end
 
     def self.union(objects : Indexable(T), & : T -> TreeSummary) : TreeSummary forall T
@@ -438,6 +447,8 @@ module Ww::D7
         return new
       end
 
+      flags = Flags::None
+
       # a b c      a b c       a b c
       # d e    ->    d e   ->  ∪ ∪ ∪
       # f              f       ø d e
@@ -448,12 +459,13 @@ module Ww::D7
       levels = (0...maxlevel).to_readonly_slice do |depth|
         objects.reduce(LevelSummary.new) do |memo, object|
           summary = yield object
+          flags |= summary.flags
           level = summary.level?(maxlevel - depth - 1) || LevelSummary.new
-          LevelSummary.union!(memo, level)
+          LevelSummary.union(memo, level)
         end
       end
 
-      new(levels)
+      new(levels, flags)
     end
 
     # NOTE: `0` refers to the current level, `1` to the child level, and so on.
@@ -490,15 +502,27 @@ module Ww::D7
 
     # Updates the summary of the current level.
     def update_current(& : LevelSummary -> LevelSummary) : TreeSummary
-      TreeSummary.new(@levels.prior.append(yield current_level))
+      TreeSummary.new(@levels.prior.append(yield current_level), @flags)
     end
 
     def prior : TreeSummary
-      TreeSummary.new(@levels.trim(@levels.size - 1))
+      TreeSummary.new(@levels.trim(@levels.size - 1), @flags)
     end
 
     def append(summary : LevelSummary) : TreeSummary
-      TreeSummary.new(@levels.append(summary))
+      TreeSummary.new(@levels.append(summary), @flags)
+    end
+
+    def has_passable_predicate? : Bool
+      @flags.has_passable_predicate?
+    end
+
+    def add(predicate : Passable.class) : TreeSummary
+      self
+    end
+
+    def add(predicate : PassablePredicate) : TreeSummary
+      TreeSummary.new(@levels, @flags | Flags::HasPassablePredicate)
     end
   end
 
@@ -522,10 +546,10 @@ module Ww::D7
     tree.summary
   end
 
-  {% if flag?(:docs) %}
-    def summary(tree : ParseTree) : TreeSummary
-    end
-  {% end %}
+  # :nodoc:
+  def summary(nodes : Slice(ParseTree)) : TreeSummary
+    TreeSummary.union(nodes) { |child| D7.summary(child) }
+  end
 
   # Returns the circuit depth of *tree*. It is at least `1` (toplevel circuit only),
   # but could be larger than one (e.g. `2` means toplevel circuit with subcircuits,

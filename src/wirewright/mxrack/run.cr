@@ -1,7 +1,4 @@
 module Ww::MxRack
-  # ... | AudioGraph | ... (?)
-  alias Projection = Window | Automaton | ThemeMixin
-
   defcase Automaton,
     addr : D7::NodeAddr,
     key : Term,
@@ -11,26 +8,25 @@ module Ww::MxRack
     draft : Term
 
   # :nodoc:
-  def automata(tree : D7::InertLeaf | D7::GndLeaf) : Slice(Automaton)
-    Slice(Automaton).empty
+  def automata(sink, addr : D7::NodeAddr, scope : Slice(Term), tree : D7::InertLeaf | D7::GndLeaf) : Nil
   end
 
   # :nodoc:
-  def automata(tree : D7::MixtureNode | D7::ScopeNode) : Slice(Automaton)
-    automata(tree.child)
+  def automata(sink, addr : D7::NodeAddr, scope : Slice(Term), tree : D7::MixtureNode | D7::ScopeNode) : Nil
+    automata(sink, addr, scope, tree.child)
   end
 
   # :nodoc:
-  def automata(tree : D7::CircuitNode) : Slice(Automaton)
-    automata(tree.to_group)
+  def automata(sink, addr : D7::NodeAddr, scope : Slice(Term), tree : D7::CircuitNode) : Nil
+    automata(sink, addr, scope, tree.to_group)
   end
 
   # :nodoc:
   SYM_AUTOMATON = Term.of(:automaton)
 
   # :nodoc:
-  def automata(tree : D7::GroupNode) : Slice(Automaton)
-    automata = Pf::Kit.stack_array(Automaton, 4)
+  def automata(sink, addr : D7::NodeAddr, scope : Slice(Term), tree : D7::GroupNode) : Nil
+    return unless tree.summary.has_head?(SYM_AUTOMATON)
 
     Term.case(tree.feature.node) do
       matchpiT %{[automaton ((clfQ_ key_) workspace_dict) draft_*]} do
@@ -46,31 +42,38 @@ module Ww::MxRack
           continue
         end
 
+        # Automata are scoped to make sure you can run the same circuit recursively
+        # in an automaton. Otherwise we'd get key collisions which would mess
+        # everything up.
+        subscope = scope.append(key)
+
         group = D7::GroupNode.new(D7.parent(draft.as_d), tree.children)
-        automata << Automaton.new(D7::NodeAddr.empty, key, clf, workspace, group, draft)
+        sink << Automaton.new(addr, Term.of(subscope), clf, workspace, group, draft)
+
+        tree.children.zip(tree.feature.range) do |child, key|
+          automata(sink, addr.append(key), subscope, child)
+        end
       end
 
-      otherwise { }
-    end
-
-    if tree.summary.has_head?(SYM_AUTOMATON)
-      tree.children.zip(tree.feature.range) do |child, key|
-        addr = D7::NodeAddr[key]
-
-        automata(child).each do |automaton|
-          automata << automaton.copy_with(addr: D7::NodeAddr.concat(addr, automaton.addr))
+      otherwise do
+        tree.children.zip(tree.feature.range) do |child, key|
+          automata(sink, addr.append(key), scope, child)
         end
       end
     end
-
-    automata.to_unsafe_readonly_slice!
   end
 
-  {% if flag?(:docs) %}
-    # Returns automata projections of the given circuit *tree*.
-    def automata(tree : D7::ParseTree) : Slice(Automaton)
-    end
-  {% end %}
+  # Returns automata projections of the given circuit *tree*. Automata are ordered
+  # by depth: *deepest ones go first*.
+  def automata(tree : D7::ParseTree) : Slice(Automaton)
+    sink = Pf::Kit.stack_array(Automaton, 8)
+    addr = D7::NodeAddr.empty
+    scope = Slice(Term).empty
+    automata(sink, addr, scope, tree)
+
+    sink.sort_by! { |automaton| -automaton.addr.size }
+    sink.to_unsafe_readonly_slice!
+  end
 
   defrecord ThemeMixin, mixin : Term::Dict
 
@@ -201,89 +204,31 @@ module Ww::MxRack
     end
   end
 
-  # Returns multimedia and interactivity nodes in *circuit*.
-  def projections(microfold : Microfold::SyncCodex, circuit : D7::ParseTree, *, interactive : Bool = true) : Array(Projection)
-    projections = [] of Projection
+  def windows_with_automata(windows : Array(Window), circuit)
+    automata = automata(circuit)
 
-    hg = D7::Hypergraph.new(circuit)
-    Rack::Prepass.call(hg) do |hg| # shadow
-      projections = projections(microfold, circuit, hg, interactive)
-    end
+    au_windows = {} of Automaton => Array(Window)
+    au_windows.compare_by_identity
 
-    projections
-  end
+    windows = windows.select do |projection|
+      automaton = automata.find do |automaton|
+        next unless projection.addr.size > automaton.addr.size
+        next unless projection.addr.starts_with?(automaton.addr)
 
-  private def projections(microfold : Microfold::SyncCodex, circuit : D7::ParseTree, hg : D7::Hypergraph, interactive : Bool) : Array(Projection)
-    components = visual_component_rules(circuit)
-
-    # Walk the circuit and find all [window _*]s. We need to know their parse trees,
-    # addresses, and keys.
-    window_trees_and_keys = {} of D7::NodeAddr => {D7::GroupNode, Term}
-
-    window_nodes = window_nodes(circuit)
-    window_nodes.each do |window_node|
-      window_key = window_node.tree.feature.node[:key]? || Term.of(:main)
-      assert window_trees_and_keys.put?(window_node.addr, {window_node.tree, window_key})
-    end
-
-    # Colliding keys must form a blacklist.
-    window_keys = Set(Term).new
-    window_key_blacklist = Set(Term).new
-
-    window_trees_and_keys.each_value do |(_, window_key)|
-      next if window_key.in?(window_key_blacklist)
-      next if window_keys.add?(window_key)
-
-      window_keys.delete(window_key)
-      window_key_blacklist << window_key
-    end
-
-    projections = [] of Projection
-
-    window_trees_and_keys.each do |window_addr, (window_tree, window_key)|
-      window_node = WindowNode.new(window_addr, window_tree)
-
-      if window_key.in?(window_key_blacklist)
-        # Key collisions, as in:
-        #
-        #   (window key: a)
-        #   (window key: a)
-        #
-        # ... are resolved by using the node address. Although not ideal, it does
-        # cover many "tricky" changes such as creation of deeper windows and so on,
-        # without losing identity. Only if you move the window itself or any of its
-        # parents would the identity change, which is arguably as good as we can get
-        # without assigning windows random unique ids. (TODO: We should probably do that
-        # as an opt-in, though, e.g. `key: random` or something like that which should
-        # rewrite to key: "UUID" or something like that before we even have a chance to
-        # look at the window).
-        window_key = Term.of(window_node.addr)
+        true
       end
 
-      visuals, questions = visualize(microfold, components, hg, window_node, interactive)
+      if automaton.nil?
+        next true # keep, doesn't belong to any automaton
+      end
 
-      # It always returns Outcome::Accepted though so no worries about the unwrap.
-      # By unwrapping we just discard the diagnostics here (for now).
-      scenery = Microfold.render(microfold, visuals).unwrap
+      bucket = au_windows.put_if_absent(automaton) { [] of Window }
+      bucket << projection
 
-      next unless window_spec = window_spec?(scenery)
-
-      window = Window.new(window_key, window_node.addr,
-        scenery,
-        interactive ? inputs(window_node) : Slice(Input).empty,
-        interactive ? mice(window_node) : Slice(Mouse).empty,
-        interactive ? mouseareas(window_node) : Slice(MouseArea).empty,
-        questions,
-        window_spec,
-      )
-
-      projections << window
+      false # reject
     end
 
-    projections.concat(automata(circuit))
-    projections.concat(theme_mixins(circuit))
-
-    projections
+    {windows, automata, au_windows}
   end
 
   def repr(tree : D7::ParseTree) : Term
@@ -379,16 +324,14 @@ module Ww::MxRack
     end
   end
 
-  private def focus_exchange(projections : Array(Projection)) : {Array(Projection), Slice(Adjustment)}
+  private def focus_exchange(windows : Array(Window)) : {Array(Window), Slice(Adjustment)}
     adjustments = Pf::Kit.stack_array(Adjustment)
     assignments = Pf::Kit.stack_array({Int32, Int32, InputFocus}, 4)
 
-    projections.each_with_index do |projection, projection_index|
-      next unless projection.is_a?(Window)
-
+    windows.each_with_index do |window, window_index|
       wanted = false
       seized = false
-      projection.inputs.each do |input|
+      window.inputs.each do |input|
         if input.focus.seized?
           seized = true
           break
@@ -399,47 +342,43 @@ module Ww::MxRack
       end
 
       if seized
-        projection.inputs.each_with_index do |input, input_index|
+        window.inputs.each_with_index do |input, input_index|
           next unless input.focus.active?
 
           adjustments << AdjustInputBlur.new(input.addr)
-          assignments << {projection_index, input_index, InputFocus::Inactive}
+          assignments << {window_index, input_index, InputFocus::Inactive}
         end
       end
 
       next unless wanted
 
-      projection.inputs.each_with_index do |input, input_index|
+      window.inputs.each_with_index do |input, input_index|
         if input.focus.active?
           adjustments << AdjustInputBlur.new(input.addr)
-          assignments << {projection_index, input_index, InputFocus::Inactive}
+          assignments << {window_index, input_index, InputFocus::Inactive}
           next
         end
 
         if input.focus.wanted?
           adjustments << AdjustInputFocus.new(input.addr)
-          assignments << {projection_index, input_index, InputFocus::Active}
+          assignments << {window_index, input_index, InputFocus::Active}
           next
         end
       end
     end
 
     if assignments.empty?
-      return projections, adjustments.to_unsafe_readonly_slice! # Unchanged
+      return windows, adjustments.to_unsafe_readonly_slice! # Unchanged
     end
 
-    projections = projections.map_with_index do |projection, projection_index|
-      unless projection.is_a?(Window)
-        next projection
+    windows = windows.map_with_index do |window, window_index|
+      unless assignments.any? { |(candidate_window_index, _, _)| candidate_window_index == window_index }
+        next window
       end
 
-      unless assignments.any? { |(candidate_projection_index, _, _)| candidate_projection_index == projection_index }
-        next projection
-      end
-
-      inputs = projection.inputs.map_with_index do |input, input_index|
-        assignments.each do |(candidate_projection_index, candidate_input_index, focus)|
-          next unless candidate_projection_index == projection_index
+      inputs = window.inputs.map_with_index do |input, input_index|
+        assignments.each do |(candidate_window_index, candidate_input_index, focus)|
+          next unless candidate_window_index == window_index
           next unless candidate_input_index == input_index
 
           input = input.copy_with(focus: focus)
@@ -448,36 +387,56 @@ module Ww::MxRack
         input
       end
 
-      projection.copy_with(inputs: inputs)
+      window.copy_with(inputs: inputs)
     end
 
-    {projections, adjustments.to_unsafe_readonly_slice!}
+    {windows, adjustments.to_unsafe_readonly_slice!}
   end
 
-  private def hitarea_leaf?(hit_node : Scenery::HitNode) : Scenery::HitAreaLeaf?
+  defrecord HitMouseArea, mousearea : MouseArea, point : Scenery::Point
+
+  enum HitOpacity
+    Transparent
+    Opaque
+  end
+
+  private def hit_mouseareas(mouseareas : Slice(MouseArea), hit_node : Scenery::HitNode) : {Slice(HitMouseArea), HitOpacity}
     case hit_node
     in Scenery::HitEmpty
-    in Scenery::HitTextLeaf
+      {Slice(HitMouseArea).empty, HitOpacity::Transparent}
+    in Scenery::HitTextLeaf, Scenery::HitLeaf
+      {Slice(HitMouseArea).empty, HitOpacity::Opaque}
     in Scenery::HitAreaLeaf
-      hit_node
-    in Scenery::HitLeaf
-    in Scenery::HitGroup
-      # Front to back.
-      hit_node.children.reverse_each do |child|
-        return hitarea_leaf?(child) || next
+      unless addrQ = hit_node.payload.as_d?
+        return Slice(HitMouseArea).empty, HitOpacity::Transparent
       end
+
+      unless addr = D7::NodeAddr.new?(addrQ)
+        return Slice(HitMouseArea).empty, HitOpacity::Transparent
+      end
+
+      unless mousearea = mouseareas.find { |candidate| candidate.addr == addr }
+        return Slice(HitMouseArea).empty, HitOpacity::Transparent
+      end
+
+      opacity = mousearea.flags.opaque? ? HitOpacity::Opaque : HitOpacity::Transparent
+      {Slice[HitMouseArea.new(mousearea, hit_node.part.tl)], opacity}
+    in Scenery::HitGroup
+      staging = Pf::Kit.stack_array(HitMouseArea)
+
+      hit_node.children.reverse_each do |child|
+        hits, opacity = hit_mouseareas(mouseareas, child)
+        staging.concat(hits)
+
+        case opacity
+        in .transparent?
+        in .opaque?
+          return staging.to_unsafe_readonly_slice!, HitOpacity::Opaque
+        end
+      end
+
+      {staging.to_unsafe_readonly_slice!, HitOpacity::Transparent}
     end
-  end
-
-  # Returns the MouseArea of *mouseareas* hit in *hit tree*, if any. Returns
-  # `nil` otherwise.
-  private def hit_mousearea?(mouseareas : Slice(MouseArea), hit_tree : Scenery::HitNode) : {MouseArea, Scenery::Point}?
-    return unless leaf = hitarea_leaf?(hit_tree)
-    return unless addrQ = leaf.payload.as_d?
-    return unless addr = D7::NodeAddr.new?(addrQ)
-    return unless mousearea = mouseareas.find { |candidate| candidate.addr == addr }
-
-    {mousearea, leaf.part.tl}
   end
 
   private def hit(window : Window, session : WindowSession) : Slice(Adjustment)
@@ -490,6 +449,9 @@ module Ww::MxRack
     end
 
     session.each_mouse_position do |mouse_id, mouse_point|
+      # NOTE: We use the single-click query to get all nodes that were hit. Using
+      # point query here would only get the topmost one. But we want to handle
+      # occlusion ourselves to support `opacity: _` in mouseareas!
       hit_query = Scenery::HitQuery.new(mouse_point, mouse_point, :single)
       hit_tree = Scenery.hit(scene, hit_query)
 
@@ -500,7 +462,7 @@ module Ww::MxRack
         adjustments << AdjustQuestion.new(text_aim.addr, Term.of(:"?aim"), text_aim.description)
       end
 
-      hit_row = hit_mousearea?(window.mouseareas, hit_tree)
+      hit_mouseareas, _ = hit_mouseareas(window.mouseareas, hit_tree)
 
       mouse_captured = false
 
@@ -509,14 +471,16 @@ module Ww::MxRack
           next unless mousearea.flags.wants_position_always? || (mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
           next unless mouse = mousearea.mice.find { |candidate| candidate.id == mouse_id }
 
-          if hit_row && hit_row[0].addr == mousearea.addr
-            hit_point = hit_row[1]
+          # Back-to-front.
+          hit_row = hit_mouseareas.last?
+          if hit_row && hit_row.mousearea.addr == mousearea.addr
+            hit_point = hit_row.point
           end
 
           hit_abs = Scenery::Point[0, 0]
           if row = Scenery.hitarea?(scene.root.node, scene.box.translate(Scenery::Point[0, 0]), Term.of(mousearea.addr))
-            _, hitbox = row
-            hit_abs = mouse_point - hitbox.bounds.tl
+            _, hit_box = row
+            hit_abs = mouse_point - hit_box.bounds.tl
           end
 
           adjustments << AdjustMouseareaPosition.new(mousearea.addr, mouse.key, hit_abs, hit_point)
@@ -527,28 +491,24 @@ module Ww::MxRack
 
       next if mouse_captured
 
-      # The mouse must join the mousearea it hit.
-      pass do
-        next if hit_row.nil?
-
-        hit_mousearea, hit_point = hit_row
-
-        mouse = hit_mousearea.mice.find { |candidate| candidate.id == mouse_id }
+      # The mouse must join mouseareas it hit.
+      hit_mouseareas.each do |hit|
+        mouse = hit.mousearea.mice.find { |candidate| candidate.id == mouse_id }
         if mouse.nil?
           # A new mouse entered the mousearea.
           mouse = session.mouse_model(mouse_id)
-          adjustments << AdjustMouseareaShowMouse.new(hit_mousearea.addr, mouse)
+          adjustments << AdjustMouseareaShowMouse.new(hit.mousearea.addr, mouse)
           next
         end
 
-        next unless hit_mousearea.flags.wants_position_always? || (hit_mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
+        next unless hit.mousearea.flags.wants_position_always? || (hit.mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
 
-        adjustments << AdjustMouseareaDelta.new(hit_mousearea.addr, mouse.key, hit_point)
+        adjustments << AdjustMouseareaDelta.new(hit.mousearea.addr, mouse.key, hit.point)
       end
 
-      # The mouse must leave all mouse areas it did not hit.
+      # The mouse must leave all mouseareas it did not hit.
       window.mouseareas.each do |mousearea|
-        next if hit_row && mousearea.addr == hit_row[0].addr
+        next if hit_mouseareas.any? { |hit| mousearea.addr == hit.mousearea.addr }
         next unless mouse = mousearea.mice.find { |candidate| candidate.id == mouse_id }
 
         adjustments << AdjustMouseareaHideMouse.new(mousearea.addr, mouse.key)
@@ -785,14 +745,15 @@ module Ww::MxRack
     adjustments.to_unsafe_readonly_slice!
   end
 
-  def transcribe(projection : Window) : Term
-    Term.morph(projection.scenery,
-      {:title, projection.spec.title},
-      {:width, projection.spec.width},
-      {:height, projection.spec.height},
-      {:cursor, transcribe(projection.spec.cursor)},
-      {:backdrop, projection.spec.backdrop},
-      {:form, transcribe(projection.spec.form)},
+  def transcribe(window : Window) : Term
+    Term.morph(window.scenery,
+      {:key, window.key},
+      {:title, window.spec.title},
+      {:width, window.spec.width},
+      {:height, window.spec.height},
+      {:cursor, transcribe(window.spec.cursor)},
+      {:backdrop, window.spec.backdrop},
+      {:form, transcribe(window.spec.form)},
     )
   end
 
@@ -811,8 +772,6 @@ module Ww::MxRack
     term, _ = CURSOR_MAP.find! { |_, candidate| candidate == cursor }
     term
   end
-
-  ROOT_AUTOMATON_KEY = Term.of(:root)
 
   private def run(alert : BlockingSignal, eventq : EventQueue) : Nil
     filename = ARGV[0]
@@ -853,18 +812,21 @@ module Ww::MxRack
     # Proceed to the mainloop.
     circuit = Circuit.new(clf, alert)
     circuit.draft = seed
-    projections = [] of Projection
 
     prev_displayed = Term.of
 
+    windowing_setup = nil
+    windowing_cache = ViRecognized::RecognizeCache.new
+
     epoch = 0u64
-    loop do
+    UInt64::MAX.times do |frameno|
+      t0 = Time.instant
       version0 = circuit.version
 
       # Maintain the Microfold codex up-to-date as a composition of various "ingredients":
       # some of them coming from the base theme in codices/, some from the MxRack codex,
       # and others yet, live, from the circuit itself.
-      microfold_circuit_theme = theme_mix(projections.each.select(ThemeMixin).map(&.mixin))
+      microfold_circuit_theme = theme_mix(theme_mixins(circuit.parser.parse(circuit.draft)).map(&.mixin))
 
       microfold_mixed_theme_candidate = {
         microfold_base_theme,
@@ -874,7 +836,14 @@ module Ww::MxRack
       if microfold.nil? || microfold_mixed_theme != microfold_mixed_theme_candidate
         microfold = Microfold.codex(theme_mix(microfold_mixed_theme_candidate)).unwrap
         microfold_mixed_theme = microfold_mixed_theme_candidate
+        if windowing_setup
+          windowing_setup = WindowingSetup.new(windowing_cache, microfold.@codex, windowing_setup.epoch + 1)
+        end
       end
+
+      windowing_setup ||= WindowingSetup.new(windowing_cache, microfold.@codex, 0u64)
+
+      windows = windows(windowing_setup, circuit.parser.parse(circuit.draft))
 
       # Handle events.
       case event = eventq.shift?
@@ -884,15 +853,7 @@ module Ww::MxRack
       in WindowReceived
         pass do
           next unless key = wm.key?(event.session_id)
-
-          window = projections.leftmost? do |projection|
-            next unless projection.is_a?(Window)
-            next unless projection.key == key
-
-            projection
-          end
-
-          next if window.nil?
+          next unless window = windows.find { |window| window.key == key }
           next unless window_session = wm.join?(key)
 
           window_session.accept(event.message)
@@ -908,16 +869,15 @@ module Ww::MxRack
       pass do
         adjustments = Slice(Adjustment).empty
 
-        projections.each do |projection|
-          next unless projection.is_a?(Window)
-          next unless session = wm.join?(projection.key)
+        windows.each do |window|
+          next unless session = wm.join?(window.key)
           next unless scene = session.scene?
 
           # Update questions ?xyz: _.
-          if projection.questions.present?
+          if window.questions.present?
             answers = answer_map(scene)
 
-            projection.questions.each do |question|
+            window.questions.each do |question|
               answer = answers[{question.addr, question.key}]?
               adjustments = adjustments.append(AdjustQuestion.new(question.addr, question.key, answer))
             end
@@ -928,7 +888,7 @@ module Ww::MxRack
           # NOTE: This must go after answer_map() because answer_map() will reset ?aim,
           # which we later update in hit() for all hit texts. This way, all *un*hit
           # texts are reset, and all hit texts are updated!
-          adjustments += hit(projection, session)
+          adjustments += hit(window, session)
         end
 
         if adjustments.present?
@@ -936,45 +896,14 @@ module Ww::MxRack
         end
       end
 
-      # Step the circuit and sub-automata.
-      # frame, projections = step(D7::NodeAddr.empty, circuit, library, microfold, parsers, circuits, alert, paused: false)
-
       # Step the circuit.
       frame = pass do
         # Run physics (in our case of course symbolic physics!)
         step_out = circuit.step(Rack::Prepass, library)
 
         # Get all projections of the circuit.
-        projections = projections(microfold, step_out)
-
-        # Make sure deepest automata go last (I mean, the order doesn't matter, but
-        # the fact everything's sorted does).
-        automata = projections.select(Automaton).sort_by!(&.addr.size)
-
-        au_projections = {} of Automaton => Array(Projection)
-        au_projections.compare_by_identity
-
-        projections.select! do |projection|
-          unless projection.is_a?(Window)
-            next true # keep
-          end
-
-          automaton = automata.reverse_each.find do |automaton|
-            next unless projection.addr.size > automaton.addr.size
-            next unless projection.addr.starts_with?(automaton.addr)
-
-            true
-          end
-
-          if automaton.nil?
-            next true # keep
-          end
-
-          bucket = au_projections.put_if_absent(automaton) { [] of Projection }
-          bucket << projection
-
-          false # reject
-        end
+        # windows, automata, au_windows = windows_with_automata(alloy_cache, microfold, step_out)
+        windows, automata, au_windows = windows_with_automata(windows(windowing_setup, step_out), step_out)
 
         adjustments = Pf::Kit.stack_array(Adjustment, 8)
 
@@ -997,18 +926,12 @@ module Ww::MxRack
 
           if present = automaton.workspace[:present]?
             present_tree = guest.parser.parse(present)
-
-            # FIXME: it should be preview() or something like that, no hitareas and such
-            window_transcripts = projections(microfold, present_tree, interactive: false)
-              .select(Window)
-              .map { |window| transcribe(window) }
+            window_transcripts = windows(windowing_setup, present_tree, interactive: false).map { |window| transcribe(window) }
 
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(present_tree))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           else
-            window_transcripts = (au_projections[automaton]? || [] of Projection).each
-              .select(Window)
-              .map { |window| transcribe(window) }
+            window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
 
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(automaton.tree))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
@@ -1019,9 +942,14 @@ module Ww::MxRack
           circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
         end
 
+        # Stepping automata can alter projections, so we have to recalculate them afterward.
+        # windows, _, _ = windows_with_automata(alloy_cache, microfold, circuit.parser.parse(circuit.draft))
+        draft_tree = circuit.parser.parse(circuit.draft)
+        windows, _, _ = windows_with_automata(windows(windowing_setup, draft_tree), draft_tree)
+
         # Perform focus exchange if possible -- so that `focus: wanted` becomes `focus: true`,
         # and previous foci are released.
-        projections, adjustments = focus_exchange(projections)
+        windows, adjustments = focus_exchange(windows)
 
         # Apply adjustments, if any.
         if adjustments.present?
@@ -1034,12 +962,10 @@ module Ww::MxRack
       # Adjustments below must not change node addresses or rewrite nodes in any way.
       # They may only annotate or update existing nodes.
 
-      # Present window projections.
-      projections.each do |projection|
-        next unless projection.is_a?(Window)
-
-        session = wm.connect(projection.key)
-        session.submit(projection.spec, projection.scenery)
+      # Present windows.
+      windows.each do |window|
+        session = wm.connect(window.key)
+        session.submit(window.spec, window.scenery)
       end
 
       # DEBUG
@@ -1055,6 +981,10 @@ module Ww::MxRack
 
       # This is a spot for garbage collection and similar kinds of cleanup.
       wm.gc
+      windowing_cache.sweep
+
+      t1 = Time.instant
+      puts "Frame #{frameno}  #{(t1 - t0).total_milliseconds}ms"
 
       # Then there is this final section of the loop, which decides how and whether
       # to wait, just as in a classical game loop.
@@ -1065,11 +995,11 @@ module Ww::MxRack
       next unless eventq.empty?
       # No pending events. NOTE: This doesn't appear to be racey. Is it?
 
-      break if wm.empty? && !circuit.pending?
+      break if wm.empty? && !pending?(circuit, circuits)
       # Some windows or pending work.
 
       # Wait.
-      if deadline = circuit.deadline?
+      if deadline = deadline?(circuit, circuits)
         epoch = alert.wait_until(epoch, timeout: deadline - Time.instant)
       else
         epoch = alert.wait(epoch)
@@ -1077,6 +1007,20 @@ module Ww::MxRack
     end
 
     # TODO: deinit
+  end
+
+  private def pending?(circuit : Circuit, automata : Hash(Term, Circuit)) : Bool
+    circuit.pending? || automata.any? { |_, automaton| automaton.pending? }
+  end
+
+  # FIXME: ... if automaton not paused (turnover must be absent in workspace) ...
+  private def deadline?(circuit : Circuit, automata : Hash(Term, Circuit)) : Time::Instant?
+    left = circuit.deadline?
+    automata.each do |_, automaton|
+      right = automaton.deadline?
+      left = left && right ? Math.min(left, right) : left || right
+    end
+    left
   end
 
   def run : Nil

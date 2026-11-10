@@ -13,83 +13,81 @@ module Ww::MxRack
     copying: true,
     smart: true
 
+  @[::Flags]
+  enum MouseareaFlags
+    WantsPositionAlways
+    WantsPositionDrag
+    Opaque
+  end
+
   defrecord MouseArea,
     addr : D7::NodeAddr,
     mice : Slice(MouseAreaMouse),
-    flags : MouseFlags,
+    flags : MouseareaFlags,
     copying: true
 
   defrecord MouseAreaMouse, key : UInt32, id : UInt64
 
-  private def mouseareas(tree : D7::InertLeaf) : Slice(MouseArea)
-    Slice(MouseArea).empty
+  private def mouseareas(sink, addr : D7::NodeAddr, tree : D7::InertLeaf) : Nil
   end
 
-  private def mouseareas(tree : D7::GndLeaf) : Slice(MouseArea)
+  private def mouseareas(sink, addr : D7::NodeAddr, tree : D7::GndLeaf) : Nil
     node = tree.feature.node
 
-    Term.case(node) do
-      matchpi %{(mousearea _* ⍊ position_⋮ false)} do
-        subterms = node.items.move(1)
-        mice = subterms.to_compact_readonly_slice do |subterm, index|
-          Term.matchpi?(subterm, %{[mouse id←(%number u64)]}) do
-            # +1 for `mousearea`.
-            MouseAreaMouse.new(1u32 + index, id.to(UInt64))
-          end
+    Term.matchpi?(node, <<-'WWML') do
+    (mousearea _*
+      ⍊ position_: (%optional never (%any never always drag))
+        opacity_: (%optional opaque (%any transparent opaque)))
+    WWML
+      miceQ = node.items.move(1)
+      mice = miceQ.to_compact_readonly_slice do |mouseQ, index|
+        Term.matchpi?(mouseQ, %{[mouse id←(%number u64)]}) do
+          # +1 for `mousearea`.
+          MouseAreaMouse.new(1u32 + index, id.to(UInt64))
         end
-
-        flags = MouseFlags::None
-        case position
-        when Term.of(:always)
-          flags |= MouseFlags::WantsPositionAlways
-        when Term.of(:drag)
-          flags |= MouseFlags::WantsPositionDrag
-        end
-
-        mousearea = MouseArea.new(D7::NodeAddr.empty, mice, flags)
-        Slice(MouseArea).of(mousearea)
       end
 
-      otherwise do
-        Slice(MouseArea).empty
+      flags = MouseareaFlags::None
+      case position
+      when Term.of(:always)
+        flags |= MouseareaFlags::WantsPositionAlways
+      when Term.of(:drag)
+        flags |= MouseareaFlags::WantsPositionDrag
       end
+      case opacity
+      when Term.of(:opaque)
+        flags |= MouseareaFlags::Opaque
+      end
+
+      sink << MouseArea.new(addr, mice, flags)
     end
   end
 
-  private def mouseareas(tree : D7::ScopeNode | D7::MixtureNode) : Slice(MouseArea)
-    mouseareas(tree.child)
+  private def mouseareas(sink, addr : D7::NodeAddr, tree : D7::ScopeNode | D7::MixtureNode) : Nil
+    mouseareas(sink, addr, tree.child)
   end
 
-  private def mouseareas(tree : D7::CircuitNode) : Slice(MouseArea)
-    mouseareas(tree.to_group)
+  private def mouseareas(sink, addr : D7::NodeAddr, tree : D7::CircuitNode) : Nil
+    mouseareas(sink, addr, tree.to_group)
   end
 
   # :nodoc:
   SYM_MOUSEAREA = Term.of(:mousearea)
 
-  private def mouseareas(tree : D7::GroupNode) : Slice(MouseArea)
-    unless tree.summary.has_head?(SYM_MOUSEAREA)
-      return Slice(MouseArea).empty
-    end
-
-    mouseareas = Pf::Kit.stack_array(MouseArea, 4)
+  private def mouseareas(sink, addr : D7::NodeAddr, tree : D7::GroupNode) : Nil
+    return unless tree.summary.has_head?(SYM_MOUSEAREA)
 
     tree.children.zip(tree.feature.range) do |child, key|
-      addr = D7::NodeAddr[key]
-      mouseareas(child).each do |mousearea|
-        mouseareas << mousearea.copy_with(addr: D7::NodeAddr.concat(addr, mousearea.addr))
-      end
+      mouseareas(sink, addr.append(key), child)
     end
-
-    mouseareas.to_unsafe_readonly_slice!
   end
 
-  # Returns a read-only slice of mouse areas (`mxrack.mousearea` nodes) that
-  # belong to the given window node, *window*.
+  # Returns a read-only slice of mouseareas (`mxrack.mousearea` nodes) that
+  # belong to the given window node *window*.
   def mouseareas(window : WindowNode) : Slice(MouseArea)
-    mouseareas(window.tree).to_readonly_slice do |mousearea|
-      mousearea.copy_with(addr: D7::NodeAddr.concat(window.addr, mousearea.addr))
-    end
+    sink = Pf::Kit.stack_array(MouseArea, 64)
+    mouseareas(sink, window.addr, window.tree)
+    sink.to_unsafe_readonly_slice!
   end
 
   private def mice(tree : D7::InertLeaf) : Slice(Mouse)

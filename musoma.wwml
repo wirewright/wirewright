@@ -1,23 +1,22 @@
-;; FIXME: ensemble...site and toggle pane do not interact well
-;; TODO: circuit pane pan, zoom
-;; TODO: allow to load seed from arguments `argv` (?)
-;; TODO: reject mouseareas except the last (frontmost) one except those
-;;       that have active: always (vs. active: hover)
+;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale keys occasionally/on unfocus (?)
+;;
+;; TODO(medium, rack, irack, mxrack): allow to load seed from arguments `argv` (?)
+;;
+;; TODO (medium): musoma clf (ignore edited nodes)
 ;;
 ;; TODO: basic circuit pretty printing
-;;  - figure
-;;
-;; TODO: very basic insert mode
-;;   - musoma clf (ignore edited nodes)
-;;   - implement essential structural functionality based on editR
-;;
-;; TODO: D7 node-based diff for live editing in mxrack
-;;    * A node that did not change in reference vs. running circuit can be replaced
-;;      with the corresponding node from the modified seed.
+;;  - (hard) interactive figures
 ;;
 ;; TODO: Make sure MuSoma-dependent examples run:
 ;;   - figure.musoma.wwml
 ;;   - parser.musoma.wwml
+;;
+;; TODO: D7 node-based diff for live editing in mxrack
+;;    - Live-reload MxRack codex
+;;    - Live-reload Microfold codex
+;;    - Live-reload circuit
+;;      * A node that did not change in reference vs. running circuit can be replaced
+;;        with the corresponding node from the modified seed.
 
 ;;
 ;; Theme
@@ -102,16 +101,19 @@
   => (p style: "font-mono font-semibold text-xs leading-none px-3/2 py-1/3 upcase"
        ^caption)
 
-(ModeIndicator grab)
-  => (box style: "content-center-y bg-theme-grab-bg text-theme-grab-fg rounded-xs"
+(ModeIndicator none)
+  => (box style: "content-center bg-theme-decor-med rounded-xs")
+
+(ModeIndicator (some grab))
+  => (box style: "content-center bg-theme-grab-bg text-theme-grab-fg rounded-xs"
        (ModeIndicatorText "Grab"))
 
-(ModeIndicator normal)
-  => (box style: "content-center-y bg-theme-normal-bg text-theme-normal-fg rounded-xs"
+(ModeIndicator (some normal))
+  => (box style: "content-center bg-theme-normal-bg text-theme-normal-fg rounded-xs"
        (ModeIndicatorText "Normal"))
 
-(ModeIndicator insert)
-  => (box style: "content-center-y bg-theme-insert-bg text-theme-insert-fg rounded-xs"
+(ModeIndicator (some insert))
+  => (box style: "content-center bg-theme-insert-bg text-theme-insert-fg rounded-xs"
        (ModeIndicatorText "Insert"))
 
 ;; Here we employ some "positioning"/"sizing" hacking and eyeballed deltas (the text-sm/5
@@ -154,11 +156,13 @@
 (StatusMessage (some (err status_string)))
   => (TextIndicator icon: "warning" caption: ^status variant: err)
 
-(WindowView (window content_* ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false))
-  => (box style: "content p-2 border-xs border-transparent rounded-lg in-focused:border-theme-grab-bg"
+(WindowView (window content_* ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false) ¦ () grabbed⋮ false)
+  => (box style: "membrane content border-xs border-transparent rounded-lg p-3 -dl-3 \
+                  grabbed:cue-grabbed grabbed:border-theme-grab-bg"
+          ^:grabbed
        (group style: "flow-col border border-2px border-theme-overlay rounded-sm"
          (group style: "floating-x rounded-t-sm px-1 py-1/2 flow-row gap-1 bg-theme-overlay \
-                        text-theme-muted in-focused:text-theme-text item-center-y"
+                        text-theme-muted in-grabbed:text-theme-text item-center-y"
            (group style: "fr-1 content clip flow-row gap-1 item-center-y"
              (icon "view_quilt" style: "font-base")
              (p ^title style: "fr-1 font-medium text-sm leading-5"))
@@ -166,7 +170,7 @@
              (icon "minimize")
              (icon "open_in_full")
              (icon "close")))
-         (box style: "fr-1 content-clip in-focused:input -input-enabled:-input"
+         (box style: "fr-1 content-clip in-grabbed:input -input-enabled:-input"
               input-enabled: ^input
            (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
              ;; Nodes in `content` are Scenery already, so let's save Microfold
@@ -175,6 +179,43 @@
                   µ-bg: ^backdrop
                   µ-cursor: (^unless (= cursor arrow) ^cursor)
                ^*content)))))
+
+(WindowTabView title_string key_)
+  => (box
+       (p style: "text-theme-subtle in-hover:bg-theme-surface in-hover:cursor-pointer \
+                  in-checked:text-theme-text in-checked:bg-theme-overlay text-sm/5 \
+                  font-medium px-3 py-1 in-disabled:opacity-25% in-active:bg-okl-30% \
+                  rounded-full"
+         ^"⸢title⸣ (⸢key⸣)")
+       (frag @mousearea (mousearea)))
+
+(WindowPane @mode_ @windows_)
+  => (component {@:mode, @:windows}
+       (group style: "flow-col p-5 gap-3"
+         (cell @current)
+         (cell @next)
+
+         (supervisor (@windows @window {¦ key_} - @tabs {:@current, :@next})
+           (frag @slot)
+           (backsys
+             {¦ window: {¦ title_string key_} -slot_}
+               <> {slot: ($SegmentedOption (@current @next ^key) ($WindowTabView ^title ^key))}))
+
+         (box style: "flow-row gap-2 item-fr-1"
+           (frags @tabs))
+
+         (backsys
+           {¦ -current_ windows: ((window _* ⍊ key_) _*)}
+             <> {current: ^key})
+
+         (box style: "fr-1"
+           (visual
+             (^match (@mode @windows (edge? current))
+               ;; Show the active window.
+               (when (mode_ ⟨window←(window _* ⍊ key_)⟩ (some key_))
+                 (WindowView ^window grabbed: ^(= mode grab)))
+               (when _
+                 (p "No windows to show" style: "center text-theme-muted")))))))
 
 (TimeIconName 0) => "pause"
 (TimeIconName _number) => "not_started"
@@ -262,15 +303,16 @@
 
          ;; Listing view.
          (box style: "fr-1"
-           (frag (@mouse [mousearea mouse_])
-             (mousearea))
            (cell @scroll-signal)
            (ensemble ($Scroll @scroll-signal)
              (group style: "flow-col"
                (guard (@listing ())
                  (p "Waiting for files" style: "center text-theme-muted fr-1"))
                (frag ((@listing) (form _ listing_*))
-                 (form (@listingf)))))))
+                 (form (@listingf)))))
+
+           (frag (@mouse [mousearea mouse_])
+             (mousearea opacity: transparent))))
 
        (cell @action)
 
@@ -287,8 +329,8 @@
          (ensemble
            ($Trigger (@action select)
              (box
-               (frag @mousearea (mousearea))
-               (site)))
+               (site)
+               (frag @mousearea (mousearea))))
            (visual (ListingEntry ^@entry))))
 
        (backsys
@@ -297,36 +339,51 @@
 
          {¦ command: (%any up dn) report: (%all (%items () {¦ current} min: 0) ⟨{¦ -current_}⟩)}
            <> {current: true}
+
          {¦ command: up report: ⟨{¦ -current: l} {¦ current: r_}⟩}
            <> {l: true, (r): ()}
+
          {¦ command: dn report: ⟨{¦ current: l_} {¦ -current: r}⟩}
            <> {(l): (), r: true}
+
          {¦ command: ascend -action_}
            <> {action: ascend}
+
          {¦ command: select report: ⟨{¦ current -action_}⟩}
            <> {action: select}
 
+         {¦ command: pgup -scroll-signal_}
+           <> {(n): (), scroll-signal: (scroll 0 -10)}
+
+         {¦ command: pgdn -scroll-signal_}
+           <> {(n): (), scroll-signal: (scroll 0 +10)}
+
          {¦ action_}
            <> {(action): ()}
+
          {¦ action: ascend path: (_* name_)}
            <> {(name): ()}
+
          {¦ mouse: {¦ wheel-up: ±n} -scroll-signal_}
            <> {(n): (), scroll-signal: (scroll 0 ^(* n -2))}
+
          {¦ mouse: {¦ wheel-dn: ±n} -scroll-signal_}
            <> {(n): (), scroll-signal: (scroll 0 ^(* n +2))}
+
          {¦ listingf_: ([dir name_string]) path: (/ _* `>name)}
            <> {(listingf): (), >name: ^name}
+
          {¦ listingf_: ([file name_string]) path_: (/ _*) -paths_}
            <> {(listingf): (), path: (/) paths: (^*path ^name)}))
 
 (MuMenuButton spec_ ¦ () icon_string caption_string shortcut_string)
   => ($Trigger ^spec
        (box
-         (frag @mousearea (mousearea))
          (group style: "flow-row gap-2 item-center-y text-theme-text in-hover:bg-theme-overlay in-hover:cursor-pointer in-active:bg-theme-decor-med text-base/6 px-3 py-2 rounded border border-xs border-theme-decor-med"
            (icon ^icon)
            (p ^caption style: "fr-1")
-           (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))))
+           (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))
+         (frag @mousearea (mousearea))))
 
 (MuMenuPicker origin_ @path_ @command_)
   => (box style: "p-1 dt-1 floating content max-3xs origin-l-0.1"
@@ -390,6 +447,14 @@
                {¦ input: ⟨K←(key (%any enter "l"))⟩ action_: open picker_ -command_}
                  <> {(K): (), command: select}
 
+               ;; Page up
+               {¦ input: ⟨K←(key pgup)⟩ action_: open picker_ -command_}
+                 <> {(K): (), command: pgup}
+
+               ;; Page down
+               {¦ input: ⟨K←(key pgdn)⟩ action_: open picker_ -command_}
+                 <> {(K): (), command: pgdn}
+
                ;; Oops, they want to cancel the picker.
                {¦ input: ⟨K←(key escape)⟩ action_: open picker_}
                  <> {(K): (), (action): (), (picker): ()}
@@ -404,7 +469,7 @@
 
 (rewriter (chainR - {@:mode, @:input, @:workspace, @:charge, @:present, @:draft, @:future, @:past, @:seed, @:statuses, @:turnover, @:autoreload, @:seeddst, @:layout})
   ;; Action handling step / high-level control.
-  (step rulesysR
+  (step (rulesysR depth-limit: 2)
     ;; \normal `,`
     ;; Go backward in history.
     {¦ mode: normal input: ⟨K←(key ",")⟩ -action_}
@@ -483,8 +548,10 @@
 
     ;; \normal `g`
     ;; Go to Grab mode.
-    {¦ mode_: normal input: ⟨K←(key "g")⟩ workspace: {¦ ⋮focus}}
+    {¦ mode_: normal input: ⟨K←(key "g")⟩ workspace: {¦ windows: (_+) ⋮focus}}
       <> {(K): (), mode: grab, focus: true}
+    {¦ mode: normal input: ⟨K←(key "g")⟩ workspace: {¦ windows: ()} -statuses_}
+      <> {(K): (), statuses: (err "No window to grab")}
 
     ;; \insert `Esc`
     ;; Go to Normal mode.
@@ -497,7 +564,7 @@
       <> {(K): (), mode: normal, (focus): ()})
 
   ;; Execute actions or evolve (we make them mutually exclusive to avoid conflicts).
-  (step rulesysR
+  (step (rulesysR depth-limit: 2)
     ;; Begin with the seed.
     {¦ seed: {¦ document_ ⋮sync} -draft_ -turnover_}
       <> {draft: ^document, sync: true, turnover: true}
@@ -925,7 +992,8 @@
   ;;| because it may so happen that any number of new @statuses arrive
   ;;| as we are showing one at @status. We must be able to notice that
   ;;| and the easiest way to do that is to have a queue.
-  (queue (@status @statuses) ())
+  (frag @queue
+    (queue (@status @statuses) ()))
 
   ;;| The timer we'll use to wait until clearing the status.
   (frag @timer (timer (3 s)))
@@ -939,9 +1007,12 @@
     {¦ status_ timer: (timer _ command←ready)}
       <> {(status): (), (command): ()}
 
-    ;; Clear when a new status arrives.
-    {¦ status_ statuses: (_ _*) timer: (timer _ command←ready)}
-      <> {(status): (), (command): ()}))
+    ;; When a new status is enqueued, erase all prior statuses (including `status`
+    ;; itself, which is too part of the queue, namely the front), and reset
+    ;; the timer. This then changes `status` to the last status seen, and restarts
+    ;; the timer.
+    {¦ queue: (queue _ (prior_+ _)) timer: (timer _ command_)}
+      <> {(prior): (), (command): ()}))
 
 ;;| The timeline stores the past and the future. Ideally we'd store the present
 ;;| here too, but in practice `automaton` needs to know it, so present is stored
@@ -1006,6 +1077,7 @@
         style: "input backdrop-theme-base"
         width: 1200
         height: 800
+        key: musoma
 
   ;;| Initialize the automaton. The automaton must be here under `window`,
   ;;| because conceptually they belong to the window and so it must see them.
@@ -1021,104 +1093,135 @@
   ;;| - `pane-r` shows the right pane if set.
   (cell @layout {+ pane-l pane-r})
 
-  ;;| We use `ensemble` to break the nesting up somewhat, of the important panes,
-  ;;| namely the window and circuit panes.
-  (ensemble
-    (group style: "flow-col"
-      ;;| Panes
-      (module {:@layout} style: "fr-1 flow-row"
+  (group style: "flow-col"
+    ;;| Panes
+    (module {:@mode, :@layout, :@windows, :@repr} style: "fr-1 flow-row"
+      ;;| Left pane (the window pane).
+      (guard (@layout {¦ pane-l}) style: "-layout.pane-r:fr-1" @:layout
+        (limit max-w: @divider-l
+          (box style: "content-clip"
+            ($WindowPane @mode @windows))))
+
+      ;;| This box encloses the divider's mousearea and the 1px divider rect itself.
+      (guard (@layout {¦ pane-l pane-r}) style: "flow-none"
         (cell @divider-l 600)
 
-        (guard (@layout {¦ pane-l})
-          (limit max-w: @divider-l
-            (box style: "content-clip"
-              ;;| Left pane (the window pane).
-              (site))))
+        (backsys
+          ;; Handle unpressed mouse entering the divider.
+          {¦ mouse: (mouse _) divider: {¦ -hover_}}
+            <> {hover: true}
 
-        ;;| This box encloses the divider's mousearea and the 1px divider rect itself.
-        (guard (@layout {¦ pane-l pane-r}) style: "flow-none"
+          ;; Handle mouse leaving the divider. Mousearea handles drag for us by locking
+          ;; the mouse, so this rule won't apply during dragging.
+          {¦ -mouse divider: {¦ hover_}}
+            <> {(hover): ()}
+
+          ;; Handle dragging.
+          {¦ mouse: {¦ left ±l} divider: {¦ hover} ±divider-l}
+            <> {divider-l: ^(+ divider-l l)})
+
+        (frag @divider
+          (rect style: "fill-theme-overlay bg-min-none max-w-1px hover:cursor-resize-x"))
+
+        ;;| Since it's very hard to hit the divider itself, because it's just 1px wide, we
+        ;;| provide some hoverable space around it.
+        (box style: "min-w-4 -dl-2"
+          (frag (@mouse [mousearea mouse_])
+            (mousearea position: drag))))
+
+      ;;| Right pane (the circuit pane).
+      (guard (@layout {¦ pane-r})
+        (module {:@repr, :@mode} style: "fr-1"
+          (frag @camera
+            (box style: "content clip clip-aim-off mode/insert:clip-aim \
+                         dragging:cursor-drag"
+                 ^:@mode
+                 µ-page-x: (0 px)
+                 µ-page-y: (0 px)
+                 µ-scale: 1
+              (p ^(ml/display @repr))))
+
+          (frag (@mouse [mousearea mouse_])
+            (mousearea position: always))
+
           (backsys
-            ;; Handle unpressed mouse entering the divider.
-            {¦ mouse: (mouse _) divider: {¦ -hover_}}
-              <> {hover: true}
+            ;; Keep track of the previous drag left and top.
+            {¦ mouse: {¦ left ±l ±t ⋮prev-l ⋮prev-t}}
+              <> {prev-l: ^l, prev-t: ^t}
 
-            ;; Handle mouse leaving the divider. Mousearea handles drag for us by locking
-            ;; the mouse, so this rule won't apply during dragging.
-            {¦ -mouse divider: {¦ hover_}}
-              <> {(hover): ()}
+            ;; Erase previous left and top when they are no longer relevant.
+            {¦ mouse: {¦ -l prev-l_}} <> {(prev-l): ()}
+            {¦ mouse: {¦ -t prev-t_}} <> {(prev-t): ()}
 
-            ;; Handle dragging.
-            {¦ mouse: {¦ left ±l} divider: {¦ hover} ±divider-l}
-              <> {divider-l: ^(+ divider-l l)})
+            ;; Drag to pan around.
+            {¦ mouse: {¦ left ±l ±t ±prev-l ±prev-t}
+               camera: {¦ µ-page-x: (±page-x px) µ-page-y: (±page-y px)}}
+              <> {page-x: ^(+ page-x (- prev-l l)),
+                  page-y: ^(+ page-y (- prev-t t))}
 
-          ;;| Since it's very hard to hit the divider itself, because it's just 1px wide, we
-          ;;| provide some hoverable space around it.
-          (box style: "min-w-4 -dl-2"
-            (frag (@mouse [mousearea mouse_])
-              (mousearea position: drag)))
-          (frag @divider
-            (rect style: "fill-theme-overlay bg-min-none max-w-1px hover:cursor-resize-x")))
+            ;; Maintain `dragging: _` on the camera box so it can style itself
+            ;; appropriately when it's being dragged.
+            {¦ mouse: {¦ left} camera: {¦ -dragging_}} <> {dragging: true}
+            {¦ mouse: {¦ -left} camera: {¦ dragging_}} <> {(dragging): ()}
 
-        (guard (@layout {¦ pane-r})
-          (box style: "fr-1 content-clip"
-            ;;| Right pane (the circuit pane).
-            (site))))
+            ;; Request zoom in. Max zoom is 7x.
+            {¦ mouse: {¦ wheel-up: ±n} camera: {¦ µ-scale: ±scale -zoom_}}
+              <> {(n): (), zoom: ^(min (+ scale (* n 0.1)) 7)}
 
-      ;;| Bottom Bar
-      (group style: "flow-row gap-1 bg-theme-overlay py-1"
-        ;;| Time control. We reserve some size with min-w to make sure the layout of the bar
-        ;;| stays as stable as possible as elements such as the status message, the draft I-beam
-        ;;| and so on get added and removed.
-        (group style: "flow-row gap-3 min-w-5xs"
-          ;;| When we're showing the draft rather than a historical present, pass `*` to
-          ;;| TimeFrameZip. This way, it knows it should display an I-beam thing instead
-          ;;| of highlighting a frame (which in this case does not even exist).
-          (visual
-            (TimeIndicator ^@charge)
-            (^match @workspace
-              (when {¦ -present}
-                (TimeFrameZip ^(itemsize @past) *))
-              (when _
-                (TimeFrameZip ^(itemsize @past) ^(itemsize @future))))))
+            ;; Request zoom out. Min zoom is 0.1x.
+            {¦ mouse: {¦ wheel-dn: ±n} camera: {¦ µ-scale: ±scale -zoom_}}
+              <> {(n): (), zoom: ^(max (- scale (* n 0.1)) 0.1)}
 
-        ;;| Use bg-transparent to prevent the thing from collapsing into nothing
-        ;;| when there's no status.
-        (box style: "fr-1 bg-transparent"
-          (visual (StatusMessage ^(edge? status))))
+            ;; Request zoom reset.
+            {¦ mouse: {¦ middle_} camera: {¦ -zoom_}}
+              <> {(n): (), zoom: 1}
 
-        ;;| NOTE: We use content-justify here to make sure the seed indicator starts
-        ;;| wrapping instead of overflowing the parent (which is the default behavior
-        ;;| with aligns in Scenery).
-        (box style: "fr-1 content-right content-justify"
-          (visual
-            (SeedIndicator
-              seed: ^(edge? seed)
-              seedsrc: ^(edge? seedsrc)
-              autoreload: ^(edge? autoreload))))
+            ;; Evaluate zoom.
+            {¦ mouse: {¦ ±dl ±dt} camera: {¦ µ-scale: ±scale ±zoom µ-page-x: (±page-x px) µ-page-y: (±page-y px)}}
+              <> {(zoom): (),
+                  page-x: ^(round (- (* (/ (+ dl page-x) scale) zoom) dl)),
+                  page-y: ^(round (- (* (/ (+ dt page-y) scale) zoom) dt)),
+                  scale: ^zoom}))))
 
-        ;;| File info and mode
-        (box style: "pr-2/3"
-          (visual (ModeIndicator ^@mode)))))
+    ;;| Bottom Bar
+    (group style: "flow-row gap-1 bg-theme-overlay py-1"
+      ;;| Time control. We reserve some size with min-w to make sure the layout of the bar
+      ;;| stays as stable as possible as elements such as the status message, the draft I-beam
+      ;;| and so on get added and removed.
+      (group style: "flow-row gap-3 min-w-5xs"
+        ;;| When we're showing the draft rather than a historical present, pass `*` to
+        ;;| TimeFrameZip. This way, it knows it should display an I-beam thing instead
+        ;;| of highlighting a frame (which in this case does not even exist).
+        (visual
+          (TimeIndicator ^@charge)
+          (^match @workspace
+            (when {¦ -present}
+              (TimeFrameZip ^(itemsize @past) *))
+            (when _
+              (TimeFrameZip ^(itemsize @past) ^(itemsize @future))))))
 
-    ;; Left-hand side (the window pane)
-    (visual
-      (^match @windows
-        (when (window←[window _*] _*)
-          (WindowView ^window))
-        (when _
-          (p style: "center text-theme-muted"
-            "No window to show"))))
+      ;;| Use bg-transparent to prevent the thing from collapsing into nothing
+      ;;| when there's no status.
+      (box style: "fr-1 bg-transparent"
+        (visual (StatusMessage ^(edge? status))))
 
-    ;; Right-hand side (the circuit pane)
-    (box
-      (p ^(ml/display @repr) style: "content")))
+      ;;| NOTE: We use content-justify here to make sure the seed indicator starts
+      ;;| wrapping instead of overflowing the parent (which is the default behavior
+      ;;| with aligns in Scenery).
+      (box style: "fr-1 content-right content-justify"
+        (visual
+          (SeedIndicator
+            seed: ^(edge? seed)
+            seedsrc: ^(edge? seedsrc)
+            autoreload: ^(edge? autoreload))))
 
-  ;;| When there's no seed source, we let the user pick one through a simple
-  ;;| file explorer.
+      ;;| File info and mode
+      (box style: "pr-1 min-w-16"
+        (visual (ModeIndicator ^(edge? mode))))))
+
+  ;;| When there's no seed, we let the user pick or set one through a simple menu.
+  ;;| When they finally submit the seed we close the menu.
   (frag @menu)
-
   (backsys
-    {¦ -seed -menu_}
-      <> {menu: ($MuMenu @mode @seed @seedsrc)}
-    {¦ seed menu_}
-      <> {(menu): ()}))
+    {¦ -seed -menu_} <> {menu: ($MuMenu @mode @seed @seedsrc)}
+    {¦ seed menu_} <> {(menu): ()}))

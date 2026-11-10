@@ -208,7 +208,7 @@ module Ww::D7
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node, edges : Set(Term)) do
         # == order matters, we want an overload
-        if heads.any? { |head| node.signature == head }
+        if heads.any? { |head| node.signature.head == head }
           fn.call(node)
         end
 
@@ -261,7 +261,7 @@ module Ww::D7
 
       # Guide can give false positives! We need to catch them here.
       sink = ->(node : Node) do
-        return unless heads.any? { |head| node.signature == head }
+        return unless heads.any? { |head| node.signature.head == head }
 
         fn.call(node)
       end

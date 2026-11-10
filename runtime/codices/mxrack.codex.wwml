@@ -166,17 +166,17 @@
   => ($Trigger ^spec ($FilledButtonView ^*args))
 
 
-(IconButtonView icon_)
+(IconButtonView icon_ ⍊ style⋮ "")
   => (box
-       (box style: "rounded-full p-2 content text-ui-content in-hover:cursor-pointer \
-                    in-hover:bg-ui-surface in-active:bg-ui-overlay in-disabled:opacity-25% \
-                    in-disabled:in-hover:cursor-disabled"
+       (box style: ^"rounded-full p-2 content text-ui-content in-hover:cursor-pointer \
+                     in-hover:bg-ui-surface in-active:bg-ui-overlay in-disabled:opacity-25% \
+                     in-disabled:in-hover:cursor-disabled ⸢style⸣"
          (icon ^icon style: "text-lg"))
        ^(embed (ButtonFocusIndicator))
        (frag @mousearea (mousearea)))
 
-(IconButton spec_ args_*)
-  => ($Trigger ^spec ($IconButtonView ^*args))
+(IconButton spec_ args_* ¦ pairs_)
+  => ($Trigger ^spec ($IconButtonView ^*args ^… pairs))
 
 
 ;; Reference: https://m3.material.io/components/buttons/specs, "Tonal button"
@@ -304,7 +304,7 @@
                     in-first:rounded-l-full in-last:rounded-r-full border-ui-subtle \
                     text-ui-content in-hover:bg-ui-surface in-hover:cursor-pointer \
                     in-checked:bg-ui-overlay text-sm/5 font-medium px-8 py-2 \
-                    in-disabled:opacity-25% active:bg-okl-30%"
+                    in-disabled:opacity-25% in-active:bg-okl-30%"
          (icon "check" style: "floating-x -dl-2 absent in-checked:present")
          (p ^title style: "in-checked:dl-2"))
        (frag @mousearea (mousearea)))
@@ -430,7 +430,7 @@
   => ($Toggle ^state ($Setting ^spec))
 
 
-(Scroll @signal_)
+(%any° (Scroll) (Scroll @signal_))
   => (component {@:signal}
        ;;| These are the visuals of the viewport. Deep in here we see `site`, which
        ;;| is where the visuals of the *content* go.
@@ -454,8 +454,8 @@
              (frag (space @x-thumb)
                (transform dl: 0
                  (limit max-w: 0
-                   (mousearea position: drag)
-                   ($ThumbView))))))
+                   ($ThumbView)
+                   (mousearea position: drag))))))
 
          ;; Vertical scrollbar.
          (box style: "max-w-3 px-2/3 bg-transparent membrane absent has-thumb:present"
@@ -464,8 +464,8 @@
            (frag (space @y-thumb)
              (transform dt: 0
                (limit max-h: 0
-                 (mousearea position: drag)
-                 ($ThumbView))))))
+                 ($ThumbView)
+                 (mousearea position: drag))))))
 
        ;;| Maintain bindings to useful parts of both thumbs.
        (part (@x-thumb @thumb-dl) ⟪(transform _* ⍊ dl: ±thumb-dl)⟫)
@@ -490,11 +490,11 @@
        (rewriter (stageR (rulesetR exh: true))
          (stage
           ∥;; Define shorthands for view width and height.
-           {¦ view: {¦ ?w: ±w ?h: ±h} -view-w_ -view-h_}
+           {¦ view: {¦ ?w: w←(%number _ > 0) ?h: h←(%number _ > 0)} -view-w_ -view-h_}
              <> {view-w: ^(round w), view-h: ^(round h)}
 
            ;; Define shorthands for content width and height.
-           {¦ interior: {¦ ?visual-w: ±w ?visual-h: ±h} -interior-w_ -interior-h_}
+           {¦ interior: {¦ ?visual-w: w←(%number _ > 0) ?visual-h: h←(%number _ > 0)} -interior-w_ -interior-h_}
              <> {interior-w: ^(round w), interior-h: ^(round h)}
 
            ;; Here we make the very reckless yet highly practical assumption of
@@ -882,11 +882,6 @@
        (^unless (= label "")
          (p ^label style: "upcase font-condensed font-medium text-ui-supplementary text-xs/4"))
        (box style: "fr-1"
-         ;;| NOTE: We use drag here to make sure the mousearea is aware of *dragging*,
-         ;;| and doesn't lose a dragging mouse once it's outside the mousearea. In our specific
-         ;;| case this may occur when you do selection dragging.
-         (frag (@mouse [mousearea mouse_])
-           (mousearea position: drag))
          (ensemble
            ($Scroll @scroll-signal)
            (box style: ^"-wrap:content-x content-y font-sans font-text text-base/6 ⸢content-style⸣"
@@ -904,4 +899,9 @@
                   selection-span: 0
                   ?nav: _
                   ?aim: _
-                 @content))))))
+                 @content))))
+         ;;| NOTE: We use drag here to make sure the mousearea is aware of *dragging*,
+         ;;| and doesn't lose a dragging mouse once it's outside the mousearea. In our specific
+         ;;| case this may occur when you do selection dragging.
+         (frag (@mouse [mousearea mouse_])
+           (mousearea position: drag))))

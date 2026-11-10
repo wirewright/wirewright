@@ -278,7 +278,10 @@ module Ww
 
   # Frequently used symbols.
 
-  SYM_EDGE = Term[:edge]
+  SYM_EDGE  = Term[:edge]
+  SYM_EDGEP = Term[:edge?]
+
+  SYM_CARET = Term[:^]
 
   SYM_BLANK_ANY     = Term[:_]
   SYM_BLANK_DICT    = Term[:_dict]

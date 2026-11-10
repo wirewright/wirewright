@@ -229,6 +229,8 @@ module Ww::MxRack
     raise ArgumentError.new
   end
 
+  # FIXME: Sequences of replace() adjustments that aren't ordered properly (back to front)
+  # can raise here. We don't seem to hit that yet but we might.
   private def adjust(tree : D7::GndLeaf, router : D7::NodeAddrRouter) : Term
     assert adjustments = router.value?
     adjustments.reduce(tree.feature.node) do |node, adjustment|

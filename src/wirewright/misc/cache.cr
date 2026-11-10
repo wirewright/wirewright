@@ -489,6 +489,7 @@ module Ww
     def initialize
       @active = {} of K => V
       @surviving = {} of K => V
+      @epoch = false
     end
 
     def get?(key : K) : V?
@@ -517,11 +518,80 @@ module Ww
       @surviving.clear
     end
 
+    # :nodoc:
+    def sweep
+      @active.clear
+      @active, @surviving = @surviving, @active
+    end
+
+    def epoch(&)
+      epoch0 = @epoch
+      @epoch = true
+
+      begin
+        yield
+      ensure
+        @epoch = epoch0
+        unless @epoch # Top-level epoch() call
+          sweep
+        end
+      end
+    end
+  end
+
+  # EXPERIMENTAL: Not for general-purpose use.
+  class DependentCache(K, V)
+    def initialize
+      @cache = Hash(K, V).new(initial_capacity: 1024)
+      @stack = Array(K).new(initial_capacity: 64)
+      @parents = Hash(K, Set(K)).new(initial_capacity: 512)
+      @roots = Set(K).new(initial_capacity: 64)
+    end
+
+    def put_if_absent(key : K, & : -> V) : V
+      if parent = @stack.last?
+        bucket = @parents.put_if_absent(key) { Set(K).new }
+        bucket << parent
+      else
+        @roots << key
+      end
+
+      @stack << key
+      begin
+        @cache.put_if_absent(key) { yield }
+      ensure
+        @stack.pop
+      end
+    end
+
+    def sweep : Nil
+      @cache.select! do |key, _|
+        unless parents = @parents[key]?
+          next key.in?(@roots) # Keep hit roots
+        end
+
+        if parents.any? { |parent| @cache.has_key?(parent) }
+          next true # Hit root or live child
+        end
+
+        # Unhit root or dead child. With root, this is how sweeping begins.
+        # We first dismantle the root here, then its children, and so on. Part
+        # of the work is done during this sweep(), another part during next
+        # sweep()s, and so on, for children whose parent was removed during
+        # the previous sweep().
+
+        @parents.delete(key)
+
+        false # Dead
+      end
+
+      @roots.clear
+    end
+
     def epoch(&)
       yield
     ensure
-      @active.clear
-      @active, @surviving = @surviving, @active
+      sweep
     end
   end
 end

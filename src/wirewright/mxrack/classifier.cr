@@ -313,18 +313,20 @@ module Ww::MxRack
         # |@ mxrack.mousearea
         #
         # |@pattern
-        # (mousearea mice_* ⍊ position_⋮ false)
+        # (mousearea mice_*
+        #   ⍊ position_: (%optional never (%any never always drag))
+        #     opacity_: (%optional opaque (%any opaque transparent)))
         #
         # |@key mice
         # Zero or more mice being tracked by the mousearea. Each mouse looks (and works)
-        # similar to `mxrack.mouse`: `[mouse id←(%number u64)]`. The *id* is system defined
+        # like `mxrack.mouse`: `[mouse id←(%number u64)]`. The *id* is system-defined
         # and differentiates mice. See `mxrack.mouse` for info on mouse presses and
         # handling multiple (double-, triple-, etc.) clicks.
         #
         # |@key position
         # Determines whether, and how, the mousearea should track positions of the mice
         # it administers. The possible values are:
-        # - `false`: mouse positions should not be tracked. The mousearea will also *not*
+        # - `never`: mouse positions should not be tracked. The mousearea will also *not*
         #   capture dragged mice. (That is, if you press a button while the mouse is inside
         #   the mousearea, then move it out, the mouse will just leave the mousearea.)
         # - `always`: position should be tracked at all times.
@@ -339,6 +341,10 @@ module Ww::MxRack
         # position and this drag capturing behavior. If that doesn't work for you, you
         # can use `mxrack.mouse` together with `?l`, `?t`, `?w`, `?h` visual questions
         # `mxrack.[visual question]`.
+        #
+        # |@key opacity
+        # Whether this mousearea should pass mice "through" itself to mouseareas
+        # below (`transparent`).
         #
         # |@summary
         # A node that "harbors" mice while they are hovering over its layout-imposed bounds.
