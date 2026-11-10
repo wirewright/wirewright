@@ -1760,6 +1760,10 @@ module Ww::Nitrene
         Term.of(ML.display(arg, endl: false))
       end
 
+      matchpi %{(ml/display-document arg_)} do
+        Term.of(ML.display(arg, endl: false, style: ML::Style::Document))
+      end
+
       matchpi %{(ml/term ml_string)} do
         Term.of(:ok, ML.term(ml.to(String)))
       rescue e : ML::SyntaxError
@@ -2373,7 +2377,7 @@ module Ww::Nitrene
             capacity &+= item.to(String).bytesize
           end
 
-          if capacity.zero? # Necessarily an empty string.
+          if capacity.zero? # An empty string.
             return Term.of("")
           end
         end
@@ -2383,6 +2387,20 @@ module Ww::Nitrene
             next unless item = item.as_s?
 
             io << item.to(String)
+          end
+        end
+
+        Term.of(whole)
+      end
+
+      matchpiT %{(join arg_dict sep_string)} do
+        whole = String.build do |io|
+          arg.items.join(io, sep.to(String)) do |item|
+            if str = item.as_s?
+              io << str.to(String)
+            else
+              ML.compact(io, item)
+            end
           end
         end
 
