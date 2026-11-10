@@ -18,17 +18,13 @@
         (rect style: "fill-white radius-full max-10px")))))
 
 (frag @beat
-  (sequencer (33 ms) (> true) false))
+  (timesource ((33 ms) @frame) true))
 (cell @frame)
 
 (backsys
   ∥;; Automatically clear frame for all rules below.
    {¦ frame_}
      <> {(frame): ()}
-
-   ;; Transiently set frame on each new frame.
-   {¦ beat: ⟨a←(> true) b←false⟩ -frame_}
-     <> {a: true, b: (> false), frame: true}
 
    ;; Move left paddle up.
    {¦ frame keyboard: ⟨(key "w")⟩ paddle-l: {¦ ±dt}}
