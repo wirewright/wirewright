@@ -842,23 +842,17 @@
          ;;| the current state before you get to hit Ctrl-Z so you have to skip through
          ;;| said state first . . .
          (guard (@input (input _* ⍊ focus: (%not false wanted)))
-           (frag @beat
-             (sequencer (1 s)
-               (> true) false)))
+           (timesource ((1 s) @turn) true))
+         (cell @turn)
 
          (rewriter (rulesetR exh: true)
-           ;; When the beat is true, immediately snap it back to false and announce
-           ;; a turn.
-           {¦ beat: (sequencer _ a←(> true) b_) -turn_}
-             <> {a: true, b: (> false), turn: true}
-
            ;; Keep at most 64 entries in *past*.
-           {¦ turn past: (oldest_ (%plural min: 63))}
+           {¦ past: (oldest_ (%plural min: 63))}
              <> {(oldest): ()}
 
-           ;; Prepare a submission.
-           {¦ turn content_string ±anchor ±span -submission_ future: ()}
-             <> {submission: (^content ^anchor ^span), backup: true}
+           ;; Prepare a submission when it's due.
+           {¦ turn_ content_string ±anchor ±span -submission_ future: ()}
+             <> {(turn): (), submission: (^content ^anchor ^span), backup: true}
 
            ;; If the submission is a duplicate, decline it.
            {¦ submission_: record_ past: (_* record_)}
