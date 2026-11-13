@@ -2483,6 +2483,18 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
+      matchpi %{[rewriter ((@input_ @version_) - spec_ - @output_) _*]} do
+        edges = Pf::Kit.stack_array(Term, 4)
+        edges << input << version << output
+
+        # (rewriter ((@input @version) - @spec - @output) ...)
+        if Term.edge?(spec)
+          edges << spec
+        end
+
+        D7.gnd(node, edges)
+      end
+
       # |@ rack.rewriter
       #
       # |@pattern

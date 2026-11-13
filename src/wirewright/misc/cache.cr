@@ -542,50 +542,90 @@ module Ww
   # EXPERIMENTAL: Not for general-purpose use.
   class DependentCache(K, V)
     def initialize
-      @cache = Hash(K, V).new(initial_capacity: 1024)
-      @stack = Array(K).new(initial_capacity: 64)
-      @parents = Hash(K, Set(K)).new(initial_capacity: 512)
-      @roots = Set(K).new(initial_capacity: 64)
+      @seq = 0u32
+      @free_vertices = [] of UInt32
+
+      @encode = {} of K => UInt32
+      @decode = {} of UInt32 => K
+
+      @cache = {} of UInt32 => V
+      @graph = {} of UInt32 => Pf::USet32
+      @stack = [] of UInt32
+      @roots = Pf::USet32.new
+      @vertices = Pf::USet32.new
+
+      @misses = 0u64
+      @reads = 0u64
     end
 
     def put_if_absent(key : K, & : -> V) : V
-      if parent = @stack.last?
-        bucket = @parents.put_if_absent(key) { Set(K).new }
-        bucket << parent
-      else
-        @roots << key
+      vertex = @encode.put_if_absent(key) do
+        unless id = @free_vertices.shift?
+          @seq, id = @seq + 1, @seq
+        end
+        @decode[id] = key
+        id
       end
 
-      @stack << key
+      @vertices = @vertices.add(vertex)
+
+      if parent = @stack.last?
+        @graph[parent] = (@graph[parent]? || Pf::USet32.new).add(vertex)
+      else
+        @roots = @roots.add(vertex)
+      end
+
+      @stack << vertex
       begin
-        @cache.put_if_absent(key) { yield }
+        @reads += 1
+        @cache.put_if_absent(vertex) do
+          @misses += 1
+          # FIXME: If this raises *everything* is messed up!
+          yield
+        end
       ensure
         @stack.pop
       end
     end
 
+    private def mark(aliveptr : Pf::USet32*, vertex : UInt32) : Nil
+      return unless @cache.has_key?(vertex)
+      return if vertex.in?(aliveptr.value)
+
+      aliveptr.value = aliveptr.value.add(vertex)
+      return unless fanout = @graph[vertex]?
+
+      fanout.each do |successor|
+        mark(aliveptr, successor)
+      end
+    end
+
     def sweep : Nil
-      @cache.select! do |key, _|
-        unless parents = @parents[key]?
-          next key.in?(@roots) # Keep hit roots
-        end
+      assert @stack.empty?
 
-        if parents.any? { |parent| @cache.has_key?(parent) }
-          next true # Hit root or live child
-        end
-
-        # Unhit root or dead child. With root, this is how sweeping begins.
-        # We first dismantle the root here, then its children, and so on. Part
-        # of the work is done during this sweep(), another part during next
-        # sweep()s, and so on, for children whose parent was removed during
-        # the previous sweep().
-
-        @parents.delete(key)
-
-        false # Dead
+      alive = Pf::USet32.new
+      @roots.each do |root|
+        mark(pointerof(alive), root)
       end
 
-      @roots.clear
+      dead = @vertices - alive
+      dead.each do |vertex|
+        assert key = @decode.delete(vertex)
+        @cache.delete(vertex)
+        @graph.delete(vertex)
+        @encode.delete(key)
+        @free_vertices << vertex
+      end
+
+      @roots = Pf::USet32.new
+      @vertices = alive
+    end
+
+    def stat
+      {cache:    @cache.size,
+       graph:    @graph.size,
+       graphcnt: @graph.sum { |_, fanout| fanout.size },
+       hitrate:  (@reads - @misses)/@reads}
     end
 
     def epoch(&)

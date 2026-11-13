@@ -1,4 +1,133 @@
 module Ww::MxRack
+  def editor?(term : Term, token : Term::Num) : Bool
+    Term.case(term) do
+      matchpi %{(I ±candidate)} { candidate == token }
+      otherwise { false }
+    end
+  end
+
+  private def incomplete?(clf, feature : D7::Inert, token : Term::Num, strict : Bool) : Bool
+    if editor?(feature.node, token)
+      return false # If it is the editor itself, then it's complete.
+    end
+
+    # If the editor is deeper, then it is incomplete.
+    editing?(feature.node, token)
+  end
+
+  # :nodoc:
+  SYM_IBEAM = Term[:I]
+
+  # :nodoc:
+  SYM_EDITOR_SUMMARY = Term::Dict::Summary.of(Term.of(SYM_IBEAM))
+
+  # Returns `true` if there is at least one editor in *world*. This function inspects
+  # *world* itself, its entries if it is a dict and so on, recursively.
+  def editing?(world : Term, token : Term::Num, limit : UInt32 = UInt32::MAX) : Bool
+    if limit.zero?
+      return false # not editing
+    end
+
+    unless dict = world.as_d?
+      return false # not editing
+    end
+
+    unless dict.probably_includes?(SYM_IBEAM)
+      return false # not editing
+    end
+
+    if editor?(world, token)
+      return true # editing
+    end
+
+    # Use guided descent to speed up search.
+    dict.each_entry(SYM_EDITOR_SUMMARY) do |_, value|
+      if editing?(value, token, limit - 1)
+        return true # editing
+      end
+    end
+
+    false # not editing
+  end
+
+  private def incomplete?(clf, feature : D7::Gnd, token : Term::Num, strict : Bool) : Bool
+    Term.case(feature.node) do
+      # A circuit cell is passable. Prevent MuSoma from disabling its *leaf* while it
+      # is edited, so that the rest of the circuit, at that level, sees the circuit with
+      # the editor inside.
+      matchpi %{[cell (circuit @_) _*]} do
+        false
+      end
+
+      otherwise do
+        editing?(feature.node, token)
+      end
+    end
+  end
+
+  private def incomplete?(clf, feature : D7::Parent, token : Term::Num, strict : Bool) : Bool
+    # An automaton is passable unless the key is edited.
+    if (signature = feature.signature) && signature.head == SYM_AUTOMATON
+      Term.matchpi?(feature.node, %{[automaton (key_ _) _*]}) do
+        return editing?(key, token)
+      end
+    end
+
+    impassable_ranges = {0...feature.range.begin, feature.range.end...feature.node.itemsize}
+    impassable_ranges.each do |impassable_range|
+      impassable_range.each do |index|
+        item = feature.node[index]
+        if editing?(item, token)
+          return true # incomplete
+        end
+      end
+    end
+
+    unless strict
+      return false # complete
+    end
+
+    # If strict, check passable spots.
+    feature.range.each do |index|
+      item = feature.node[index]
+      next unless item_dict = item.as_d?
+      next unless item_dict.probably_includes?(SYM_IBEAM)
+
+      subfeature = clf.call(item)
+      if incomplete?(clf, subfeature, token, strict)
+        return true # incomplete
+      end
+    end
+
+    false # complete
+  end
+
+  private def incomplete?(clf, feature : D7::Circuit, token : Term::Num, strict : Bool) : Bool
+    incomplete?(clf, D7.parent(feature.node, feature.range), token, strict)
+  end
+
+  private def incomplete?(clf, feature : D7::Scope, token : Term::Num, strict : Bool) : Bool
+    incomplete?(clf, feature.cont, token, strict)
+  end
+
+  private def incomplete?(clf, feature : D7::Mixture, token : Term::Num, strict : Bool) : Bool
+    incomplete?(clf, clf.call(feature.defn), token, strict: true)
+  end
+
+  # Returns `true` if *feature* contains an active editor (i.e., editing is
+  # in progress for *feature* or one of its subterms; meaning it must not
+  # yet be allowed to exist as a node).
+  #
+  # `incomplete?` is designed for deciding which nodes to disable and when.
+  # If you need to check whether a node is being edited in general (for instance,
+  # to suppress a widget of some sort), you must use `editing?`.
+  def incomplete?(clf : D7::Classifier, feature : D7::Feature, token : Term::Num) : Bool
+    return false unless dict = feature.node.as_d?
+    return false unless dict.probably_includes?(SYM_IBEAM)
+
+    incomplete?(clf, feature, token, strict: false)
+  end
+
   # Returns the standard MxRack classifier.
   def clf : D7::Classifier
     ->(node : Term) do
@@ -391,7 +520,7 @@ module Ww::MxRack
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
-        matchpi %{[automaton ((_ _) _dict) _*]} do
+        matchpi %{[automaton (_ _dict) _*]} do
           D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node), autonomous: true)
         end
 
@@ -409,6 +538,20 @@ module Ww::MxRack
           Rack.classify!(node)
         end
       end
+    end
+  end
+
+  def auclf(token : Term::Num) : D7::Classifier
+    successor = clf
+
+    ->(node : Term) do
+      feature = successor.call(node)
+
+      if incomplete?(clf, feature, token)
+        return D7.inert(node, annotations: {:incomplete})
+      end
+
+      feature
     end
   end
 end

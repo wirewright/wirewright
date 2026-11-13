@@ -44,7 +44,7 @@ module Ww::MxRack
 
   defrecord AdjustQuestion, addr : D7::NodeAddr, key : Term, answer : Term?
 
-  defrecord AdjustAutomatonUpdate, addr : D7::NodeAddr, key : Term, value : Term
+  defrecord AdjustAutomatonUpdate, addr : D7::NodeAddr, key : Term, value : Term?
   defrecord AdjustAutomatonUpdateDraft, addr : D7::NodeAddr, draft : Term
 
   # E.g. (window _* ⏏width: 500⏏ ⏏height: 400⏏) -> (window _* ⏏width: 800⏏ ⏏height: 600⏏)

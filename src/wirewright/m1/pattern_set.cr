@@ -251,14 +251,21 @@ module Ww::M1
       end
     end
 
-    # Yields operators and indices (see `.select`) of patterns that *definitely*
-    # match *matchee*. *env* can be used to provide the initial env.
+    # Yields match envs and indices (see `.select`) of patterns that *definitely*
+    # match *matchee*.
     def query(matchee : Term, & : Indexable(Term::Dict), UInt32 ->) : Nil
       each_candidate(matchee) do |op, index|
         envs = M1.matches(Term[], op, matchee)
         next if envs.empty?
 
         yield envs, index
+      end
+    end
+
+    def match?(matchee : Term) : {M1::Op::Any, Term::Dict}?
+      each_candidate(matchee) do |op, index|
+        next unless env = M1.match?(Term[], op, matchee)
+        return op, env
       end
     end
 

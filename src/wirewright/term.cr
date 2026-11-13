@@ -1925,11 +1925,57 @@ module Ww
       rep(sink.to_unsafe_readonly_slice!)
     end
 
+    def self.changed?(older : Dict, newer : Dict) : Bool
+      if older.same?(newer)
+        return false # unchanged
+      end
+
+      unless older.itemsize == newer.itemsize
+        return true # changed (new items were added)
+      end
+
+      if newer.pairsize > older.pairsize
+        return true # changed (new pairs were added)
+      end
+
+      # FIXME: 64-bit is too vulnerable to collisions, use 128-bit hash.
+      if Term.hashcode(older) == Term.hashcode(newer)
+        return false # unchanged
+      end
+
+      older.each_entry(in: Term::Dict.pairspart) do |key, value|
+        unless newer[key]? == value
+          return true # changed, one of pairs was updated
+        end
+      end
+
+      older.items.zip(newer.items) do |older_item, newer_item|
+        if changed?(older_item, newer_item)
+          return true # changed
+        end
+      end
+
+      false # unchanged
+    end
+
+    def self.changed?(older : Term, newer : Term) : Bool
+      unless older.type == newer.type
+        return true # changed
+      end
+
+      if dict0 = older.as_d?
+        dict1 = newer.as_d
+        return changed?(dict0, dict1)
+      end
+
+      older != newer
+    end
+
     # Compares itemsparts of *dict0* and *dict1* recursively (i.e., item dict
     # itemsparts and so on). If any itemspart changed, returns `true`.
     def self.item_changed?(dict0 : Dict, dict1 : Dict) : Bool
       if dict0.same?(dict1)
-        return false # not changed
+        return false # unchanged
       end
 
       unless dict0.itemsize == dict1.itemsize
@@ -1937,13 +1983,13 @@ module Ww
       end
 
       # I doubt we can be smarter than the following at this point... Let's
-      # just hope stuff is path-copied and at least accidentally "hash-consed".
+      # just hope stuff is path-copied and most stuff is unchanged.
 
       dict0.items.zip(dict1.items) do |item0, item1|
         return true if item_changed?(item0, item1)
       end
 
-      false # not changed
+      false # unchanged
     end
 
     # Compares itemsparts of *term0* and *term1* recursively (i.e., item dict

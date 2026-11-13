@@ -15,16 +15,22 @@ module Ww::Rack::Rewriter
   alias Result = Term
 
   def state(epoch : Automaton::Epoch) : State
+    # It can't quite be generational (mainly due to the latter being highly
+    # synchronous in nature); nor is it dependent.
+    #
+    # FIXME: this will thrash will it not?
+    cache = SyncLRU({Rho::RewriterId, Term}, Term::Rep).new(1024)
+
     variantsQ = GenerationalCache(Term, VariantQ).new
     rewriters = GenerationalCache({Term, Term}, Rho::Rewriter).new
     tasks = D7::TaskBoard(Automaton::Epoch, Task, Result).new(epoch) do |task, ping|
-      execute(task, ping)
+      execute(task, cache, ping)
     end
     State.new(variantsQ, rewriters, tasks)
   end
 
-  private def execute(task : Task, ping) : Result
-    Rho.rewrite(task.rewriter, task.input, ping: ping)
+  private def execute(task : Task, cache : Rho::IRewriteCache, ping) : Result
+    Rho.rewrite(task.rewriter, task.input, cache: cache, ping: ping)
   end
 
   def pending?(state : State) : Bool
@@ -58,7 +64,7 @@ module Ww::Rack::Rewriter
   # *Q* is for quote, as in quote/unquote. Quoted variants can be cached
   # (and are cached!), because they do not depend on the larger hypergraph
   # context (e.g. NodeAddr).
-  alias VariantQ = TransferQ | RelationQ | RegimeSingleQ | RegimeMultiQ
+  alias VariantQ = TransferQ | RelationQ | VersionedRelationQ | RegimeSingleQ | RegimeMultiQ
 
   # :nodoc:
   defrecord TransferQ,
@@ -71,6 +77,13 @@ module Ww::Rack::Rewriter
     input_edge : Term,
     spec : Rho::Rewriter | SpecQ,
     output_edge : Term
+
+  # :nodoc:
+  defrecord VersionedRelationQ,
+    input_edge : Term,
+    spec : Rho::Rewriter | SpecQ,
+    output_edge : Term,
+    version_edge : Term
 
   # :nodoc:
   defrecord RegimeSingleQ,
@@ -110,6 +123,11 @@ module Ww::Rack::Rewriter
         RelationQ.new(input, spec, output)
       end
 
+      matchpi %{[rewriter ((@input_ @version_) - specQ_ - @output_) data_*]} do
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        VersionedRelationQ.new(input, spec, output, version)
+      end
+
       matchpi %{[rewriter (specQ_ - @target_) data_*]} do
         spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
         RegimeSingleQ.new(spec, target)
@@ -138,6 +156,14 @@ module Ww::Rack::Rewriter
     Relation.new(input, spec, output)
   end
 
+  private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : VersionedRelationQ) : VersionedRelation
+    input = hg.resolve(node.addr, quote.input_edge)
+    output = hg.resolve(node.addr, quote.output_edge)
+    version = hg.resolve(node.addr, quote.version_edge)
+    spec = unquote(hg, node, quote.spec)
+    VersionedRelation.new(input, spec, output, version)
+  end
+
   private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : RegimeSingleQ) : RegimeSingle
     target = hg.resolve(node.addr, quote.target_edge)
     spec = unquote(hg, node, quote.spec)
@@ -159,7 +185,7 @@ module Ww::Rack::Rewriter
   end
 
   # :nodoc:
-  alias Variant = Transfer | Relation | RegimeSingle | RegimeMulti
+  alias Variant = Transfer | Relation | VersionedRelation | RegimeSingle | RegimeMulti
 
   # :nodoc:
   defrecord Transfer,
@@ -172,6 +198,13 @@ module Ww::Rack::Rewriter
     input : D7::AbsEdge,
     spec : Rho::Rewriter | Spec,
     output : D7::AbsEdge
+
+  # :nodoc:
+  defrecord VersionedRelation,
+    input : D7::AbsEdge,
+    spec : Rho::Rewriter | Spec,
+    output : D7::AbsEdge,
+    version : D7::AbsEdge
 
   # :nodoc:
   defrecord RegimeSingle,
@@ -225,7 +258,7 @@ module Ww::Rack::Rewriter
   end
 
   private def step(state, tasks, hg, node : D7::Node, variant : Relation) : D7::Patch?
-    # Find a single empty output cell.
+    # Find a single output cell.
     return unless output_cell = Rack.cell?(hg, variant.output)
 
     # Find a single nonempty input cell.
@@ -258,11 +291,55 @@ module Ww::Rack::Rewriter
     # This is basically like the `input == output` check below but more relaxed.
     pass do
       next unless current_output = output_cell.value?
-      next if Term.item_changed?(current_output, output)
+      next if Term.changed?(current_output, output)
       return
     end
 
     D7.patch(output_cell.node, {2, output})
+  end
+
+  private def step(state, tasks, hg, node : D7::Node, variant : VersionedRelation) : D7::Patch?
+    # Find a single version cell.
+    return unless version_cell = Rack.cell?(hg, variant.version)
+
+    # Find a single output cell.
+    unless output_cell = Rack.cell?(hg, variant.output)
+      return D7.patch(version_cell.node, {2, nil}) # clear version (missing output cell)
+    end
+
+    # Find a single nonempty input cell.
+    input_cell = Rack.cell?(hg, variant.input)
+    input = input_cell.try(&.value?)
+    if input_cell.nil? || input.nil?
+      # Clear output and version (missing input cell or input).
+      return D7.patches(
+        D7.patch(version_cell.node, {2, nil}),
+        D7.patch(output_cell.node, {2, nil}),
+      )
+    end
+
+    input_version = Term.of(Term.hashcode(input).to_s(base: 16))
+
+    if version_cell.value? == input_version
+      return # No change
+    end
+
+    unless rewriter = rewriter?(state.rewriters, hg, variant.spec)
+      # Clear output and version (missing spec cell or spec).
+      return D7.patches(
+        D7.patch(version_cell.node, {2, nil}),
+        D7.patch(output_cell.node, {2, nil}),
+      )
+    end
+
+    unless output = output?(tasks, rewriter, input)
+      return # Output not yet available, no change
+    end
+
+    D7.patches(
+      D7.patch(version_cell.node, {2, input_version}),
+      D7.patch(output_cell.node, {2, output}),
+    )
   end
 
   private def step(state, tasks, hg, node : D7::Node, variant : RegimeSingle) : D7::Patch?

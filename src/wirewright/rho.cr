@@ -523,22 +523,32 @@ module Ww
       impassable: [impassable pattern_])
     WWML
 
-    defrecord Part, dict : Term::Dict::Part::Any, axis : Term?
+    defrecord Part, dict : Term::Dict::Part::Any, axis : Term?, key : Term?
 
     private def flatten(dict : Term::Dict, part : Part, guide : Term::Dict::Summary, & : Term -> Term::Rep) : Term::Dict
       if axis = part.axis
         return dict unless target0 = dict[axis]?.as_d?
 
-        target1 = Term.flatten(target0, guide, part: part.dict) do |_, value0|
+        if key = part.key
+          return dict unless value0 = target0[key]?
+
           input = Term.of(dict.with(axis, value0))
           output = Term.collapse(yield input)
-          next Term.rep unless output = output.as_d?
+          return dict unless output = output.as_d?
 
-          dict = output
-          Term.rep_of(dict[axis]? || Slice(Term).empty)
+          target1 = Term.morph(target0, {key, output[axis]?})
+          return output.with(axis, target1)
+        else
+          target1 = Term.flatten(target0, guide, part: part.dict) do |_, value0|
+            input = Term.of(dict.with(axis, value0))
+            output = Term.collapse(yield input)
+            next Term.rep unless output = output.as_d?
+
+            dict = output
+            Term.rep_of(dict[axis]? || Slice(Term).empty)
+          end
+          return dict.with(axis, target1)
         end
-
-        return dict.with(axis, target1)
       end
 
       Term.flatten(dict, guide, part: part.dict) do |_, value|
@@ -557,16 +567,17 @@ module Ww
         end
 
         axis = spec[:axis]?
+        key = spec[:key]?
 
         case spec[:part]?
         when Term.of(:items)
-          part = Part.new(Term::Dict.itemspart, axis)
+          part = Part.new(Term::Dict.itemspart, axis, key)
         when Term.of(:pairs)
-          part = Part.new(Term::Dict.pairspart, axis)
+          part = Part.new(Term::Dict.pairspart, axis, key)
         when Term.of(:entries)
-          part = Part.new(Term::Dict.entries, axis)
+          part = Part.new(Term::Dict.entries, axis, key)
         else
-          part = Part.new(Term::Dict.itemspart, axis) # default
+          part = Part.new(Term::Dict.itemspart, axis, key) # default
         end
 
         guide = Term::Dict::Summary.zero

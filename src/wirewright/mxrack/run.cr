@@ -2,9 +2,7 @@ module Ww::MxRack
   defcase Automaton,
     addr : D7::NodeAddr,
     key : Term,
-    clf : D7::Classifier,
     workspace : Term::Dict,
-    tree : D7::GroupNode,
     draft : Term
 
   # :nodoc:
@@ -29,26 +27,13 @@ module Ww::MxRack
     return unless tree.summary.has_head?(SYM_AUTOMATON)
 
     Term.case(tree.feature.node) do
-      matchpiT %{[automaton ((clfQ_ key_) workspace_dict) draft_*]} do
-        case clfQ
-        when Term.of(:rack)
-          clf = Rack.clf
-        when Term.of(:mxrack)
-          clf = MxRack.clf
-        when Term.of(:musoma)
-          # clf = MuSoma.clf
-          raise ""
-        else
-          continue
-        end
-
+      matchpiT %{[automaton (key_ workspace_dict) draft_*]} do
         # Automata are scoped to make sure you can run the same circuit recursively
         # in an automaton. Otherwise we'd get key collisions which would mess
         # everything up.
         subscope = scope.append(key)
 
-        group = D7::GroupNode.new(D7.parent(draft.as_d), tree.children)
-        sink << Automaton.new(addr, Term.of(subscope), clf, workspace, group, draft)
+        sink << Automaton.new(addr, Term.of(subscope), workspace, draft)
 
         tree.children.zip(tree.feature.range) do |child, key|
           automata(sink, addr.append(key), subscope, child)
@@ -231,21 +216,28 @@ module Ww::MxRack
     {windows, automata, au_windows}
   end
 
-  def repr(tree : D7::ParseTree) : Term
+  def repr(tree : D7::ParseTree, addr : D7::NodeAddr, token : Term::Num) : Term
     case tree
     in D7::InertLeaf
       Term.of(:inert, tree.feature.node)
     in D7::GndLeaf
-      Term.of(:gnd, Term[], tree.feature.node)
+      Term.of(:gnd, tree.feature.node, addr: addr)
     in D7::MixtureNode
       Term.of(:inert, tree.feature.node)
     in D7::ScopeNode
-      repr(tree.child)
+      repr(tree.child, addr, token)
     in D7::ParentNode
       parent = tree.feature
 
-      repr = parent.node.pairspart.transaction do |commit|
-        commit << :parent << Term[]
+      repr = Term::Dict.build do |commit|
+        commit << :parent
+        commit.with(:addr, addr)
+        commit.with(:reference, parent.node)
+
+        # Mark parents that contain the editor with editing: true.
+        if editing?(Term.of(parent.node), token)
+          commit.with(:editing, true)
+        end
 
         parent.node.items.each_with_index do |item, key|
           key = key.to_u32
@@ -257,23 +249,16 @@ module Ww::MxRack
 
           index = key - parent.range.begin
           child = tree.children[index]
-          child_repr = repr(child)
-
-          # Prepend key to child addrs on unwind.
-          Term.case(child_repr) do
-            matchpi %{[gnd addr←(_*) _]}, %{[parent addr←(_*) _*]} do
-              commit << Term.morph(child_repr, {1, addr.prepend(key)})
-            end
-
-            matchpi %{[inert _]} do
-              commit << child_repr
-            end
-          end
+          commit << repr(child, addr.append(key), token)
         end
       end
 
       Term.of(repr)
     end
+  end
+
+  def repr(tree : D7::ParseTree, token : Term::Num) : Term
+    repr(tree, D7::NodeAddr.empty, token)
   end
 
   class Circuit
@@ -773,9 +758,28 @@ module Ww::MxRack
     term
   end
 
+  def manipulate(matchee : Term, addr : D7::NodeAddr, index : UInt32, backsys : Slice({Term, Term})) : Term
+    if index == addr.size
+      return M1.backmap(backsys, matchee)
+    end
+
+    unless dict = matchee.as_d?
+      return matchee
+    end
+
+    key = addr[index]
+    unless value0 = dict[key]?
+      return matchee
+    end
+
+    value1 = manipulate(value0, addr, index + 1, backsys)
+    Term.of(dict.with(key, value1))
+  end
+
   private def run(alert : BlockingSignal, eventq : EventQueue) : Nil
     filename = ARGV[0]
     quiet = "--quiet".in?(ARGV)
+    stat = "--stat".in?(ARGV)
 
     wg = WaitGroup.new(3) # SDL and two adapters
 
@@ -806,7 +810,6 @@ module Ww::MxRack
     microfold = nil
     microfold_mixed_theme = Term.of
 
-    parsers = {} of D7::Classifier => D7::Parser
     circuits = {} of Term => Circuit
 
     # Proceed to the mainloop.
@@ -886,7 +889,7 @@ module Ww::MxRack
           # Perform hit testing.
           #
           # NOTE: This must go after answer_map() because answer_map() will reset ?aim,
-          # which we later update in hit() for all hit texts. This way, all *un*hit
+          # which we later update (set) in hit() for each hit text. This way, all *un*hit
           # texts are reset, and all hit texts are updated!
           adjustments += hit(window, session)
         end
@@ -902,18 +905,26 @@ module Ww::MxRack
         step_out = circuit.step(Rack::Prepass, library)
 
         # Get all projections of the circuit.
-        # windows, automata, au_windows = windows_with_automata(alloy_cache, microfold, step_out)
         windows, automata, au_windows = windows_with_automata(windows(windowing_setup, step_out), step_out)
 
         adjustments = Pf::Kit.stack_array(Adjustment, 8)
 
         automata.reverse_each do |automaton|
-          guest = circuits.put_if_absent(automaton.key) { Circuit.new(automaton.clf, alert) }
+          # FIXME: gc unused circuits
+          guest = circuits.put_if_absent(automaton.key) { Circuit.new(auclf(Term[Term.hashcode(automaton.key)]), alert) }
+          guest.draft = automaton.draft
+
+          token = Term[Term.hashcode(automaton.key)]
+
+          # Maintain automaton token up-to-date.
+          unless automaton.workspace[:token]? == token
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:token), Term.of(token))
+          end
 
           pass do
-            next if automaton.workspace.includes?(:turnover) # The circuit didn't handle turnover yet, don't overwhelm it
-
-            guest.draft = automaton.draft
+            # The circuit didn't handle turnover yet, or wants to manipulate the current
+            # draft or present; don't disturb it with a physics pass
+            next if automaton.workspace.includes?(:turnover) || automaton.workspace.includes?(:program)
 
             # TODO: We want to submit subframes, not frames.
             _ = guest.step(Rack::Prepass, library)
@@ -924,16 +935,41 @@ module Ww::MxRack
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:turnover), Term.of(true))
           end
 
+          if program = automaton.workspace[:program]?
+            Term.matchpiT?(program, %{(addrQ_dict backsysQ_*)}) do
+              next unless addr = D7::NodeAddr.new?(addrQ)
+
+              backsys = backsysQ.items.to_compact_readonly_slice do |item|
+                Term.matchpi?(item, %{[backmap pattern_ backspec_]}) do
+                  {pattern, backspec}
+                end
+              end
+
+              input = automaton.workspace[:present]? || automaton.draft
+              output = manipulate(input, addr, 0u32, backsys)
+
+              adjustments << AdjustAutomatonUpdateDraft.new(automaton.addr, output)
+              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:program), nil)
+            end
+
+            next
+          end
+
           if present = automaton.workspace[:present]?
             present_tree = guest.parser.parse(present)
             window_transcripts = windows(windowing_setup, present_tree, interactive: false).map { |window| transcribe(window) }
 
-            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(present_tree))
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(present_tree, token))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           else
             window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
 
-            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(automaton.tree))
+            # FIXME: this is wrong in all sorts of ways. Why do we have to reparse stuff?
+            # Why do we use the MxRack classifier to parse everything and then have to reparse
+            # draft and so on with automaton's classifier auclf()?
+            draft_tree = guest.parser.parse(guest.draft)
+
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(draft_tree, token))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           end
         end
@@ -959,9 +995,6 @@ module Ww::MxRack
         circuit.draft
       end
 
-      # Adjustments below must not change node addresses or rewrite nodes in any way.
-      # They may only annotate or update existing nodes.
-
       # Present windows.
       windows.each do |window|
         session = wm.connect(window.key)
@@ -979,12 +1012,19 @@ module Ww::MxRack
         prev_displayed = to_display
       end
 
+      t1 = Time.instant
+      if stat
+        puts "Frame #{frameno}  #{(t1 - t0).total_milliseconds}ms | #{windowing_cache.stat}"
+      end
+
       # This is a spot for garbage collection and similar kinds of cleanup.
       wm.gc
+      t0 = Time.instant
       windowing_cache.sweep
-
       t1 = Time.instant
-      puts "Frame #{frameno}  #{(t1 - t0).total_milliseconds}ms"
+      if stat
+        puts "  Windowing cache swept in #{(t1 - t0).total_milliseconds}ms"
+      end
 
       # Then there is this final section of the loop, which decides how and whether
       # to wait, just as in a classical game loop.
