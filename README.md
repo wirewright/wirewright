@@ -20,6 +20,7 @@ The guides are more practically oriented and are my attempt to carefully introdu
 - [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
 - [Wirewright: The Guide (Part 1)](<guides/Guide (Part 1).md>)
 - [Wirewright: The Guide (Part 2)](<guides/Guide (Part 2).md>)
+- [Wirewright: The Guide (Part 3)](<guides/Guide (Part 3).md>)
 - ... TODO ...
 
 The guides and the associated assets are stored in the `guides/` directory. They are also shipped with each Wirewright release.
