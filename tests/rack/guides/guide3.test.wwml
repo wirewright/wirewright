@@ -1,0 +1,317 @@
+(rack
+  (frame
+    (cell @in 0)
+    (transfer (@in n_ @out) ^n)
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in n_ @out) ^n)
+    (cell @out 0))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 0)
+    (transfer (@in n_ @out) (+ 1 2))
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in n_ @out) (+ 1 2))
+    (cell @out (+ 1 2)))
+
+  end)
+
+(rack
+  (frame
+    ;; Frame 0 (seed)
+    (cell @in 0)
+    (transfer (@in n_ @out) (double ^n))
+    (cell @out))
+
+  (frame/tail
+    (cell @in)
+    (transfer (@in n_ @out) (double ^n))
+    (cell @out (double 0)))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 4)
+    (transfer (@in n_number @out) ^(* n n))
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in n_number @out) ^(* n n))
+    (cell @out 16))
+
+  end)
+
+(rack
+  (frame
+    (cell @in (person "Jane" 26))
+    (transfer (@in (person name_string age_number) @out)
+      ^(~ "Hi, " name ". You are " age " years old"))
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in (person name_string age_number) @out)
+      ^(~ "Hi, " name ". You are " age " years old"))
+    (cell @out "Hi, Jane. You are 26 years old"))
+
+  end)
+
+(rack
+  (frame
+    (cell @in (person "Jane" 26))
+    (transfer (@in (person name_string age_number) @out)
+      ^"Hi, ⸢name⸣. You are ⸢age⸣ years old")
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in (person name_string age_number) @out)
+      ^"Hi, ⸢name⸣. You are ⸢age⸣ years old")
+    (cell @out "Hi, Jane. You are 26 years old"))
+
+  end)
+
+(rack
+  (frame
+    (cell @in not-a-person)
+    (transfer (@in (person name_string age_number) @out)
+      ^"Hi, ⸢name⸣. You are ⸢age⸣ years old")
+    (cell @out))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 4)
+    (transfer (@in x_number @out) ^(+ x 1))
+    (transfer (@in x_string @out) ^"Hello, ⸢x⸣")
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in x_number @out) ^(+ x 1))
+    (transfer (@in x_string @out) ^"Hello, ⸢x⸣")
+    (cell @out 5))
+
+  end)
+
+(rack
+  (frame
+    (cell @in "John")
+    (transfer (@in x_number @out) ^(+ x 1))
+    (transfer (@in x_string @out) ^"Hello, ⸢x⸣")
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in x_number @out) ^(+ x 1))
+    (transfer (@in x_string @out) ^"Hello, ⸢x⸣")
+    (cell @out "Hello, John"))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 4)
+    (transfer (@in x_number @out-number) ^(+ x 1))
+    (transfer (@in x_string @out-string) ^"Hello, ⸢x⸣")
+    (cell @out-number)
+    (cell @out-string))
+
+  (frame
+    (cell @in)
+    (transfer (@in x_number @out-number) ^(+ x 1))
+    (transfer (@in x_string @out-string) ^"Hello, ⸢x⸣")
+    (cell @out-number 5)
+    (cell @out-string))
+
+  end)
+
+(rack
+  (frame
+    (cell @in "John")
+    (transfer (@in x_number @out-number) ^(+ x 1))
+    (transfer (@in x_string @out-string) ^"Hello, ⸢x⸣")
+    (cell @out-number)
+    (cell @out-string))
+
+  (frame
+    (cell @in)
+    (transfer (@in x_number @out-number) ^(+ x 1))
+    (transfer (@in x_string @out-string) ^"Hello, ⸢x⸣")
+    (cell @out-number)
+    (cell @out-string "Hello, John"))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 2)
+    (transfer (@in x_number @out) ^(* x 2))
+    (transfer (@in x_number @out) ^(* x x))
+    (cell @out))
+
+  (frame
+    (cell @in)
+    (transfer (@in x_number @out) ^(* x 2))
+    (transfer (@in x_number @out) ^(* x x))
+    (cell @out 4))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 4)
+    (transfer (@in x_number @out) ^(* x 2))
+    (transfer (@in x_number @out) ^(* x x))
+    (cell @out))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 4)
+    (transfer (@in x_number @out) ^(* x 2))
+    (transfer (@in x_number @out) ^(* x x))
+    (cell (seq @out)))
+
+  (frame
+    (cell @in)
+    (transfer (@in x_number @out) ^(* x 2))
+    (transfer (@in x_number @out) ^(* x x))
+    (cell (seq @out) 8))
+
+  end)
+
+(rack
+  (frame
+    (cell @a 2)
+    (cell @b 3)
+    (transfer ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  (frame
+    (cell @a)
+    (cell @b)
+    (transfer ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum 5))
+
+  end)
+
+(rack
+  (frame
+    (cell @busy true)
+    (cell @a 2)
+    (cell @b 3)
+    (transfer ((not @busy) (@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  end)
+
+(rack
+  (frame
+    (cell @busy)
+    (cell @a 2)
+    (cell @b 3)
+    (transfer ((not @busy) (@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  (frame
+    (cell @busy)
+    (cell @a)
+    (cell @b)
+    (transfer ((not @busy) (@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum 5))
+
+  end)
+
+(rack
+  (frame
+    (cell @busy true)
+    (discard @busy)
+    (cell @a 2)
+    (cell @b 3)
+    (transfer ((not @busy) (@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  (frame
+    (cell @busy)
+    (discard @busy)
+    (cell @a 2)
+    (cell @b 3)
+    (transfer ((not @busy) (@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  (frame
+    (cell @busy)
+    (discard @busy)
+    (cell @a)
+    (cell @b)
+    (transfer ((not @busy) (@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum 5))
+
+  end)
+
+(rack
+  (frame
+    (cell @record (person "Jane" 26))
+    (transfer (@record (person name_string _number) @name) ^name)
+    (transfer (@record (person _string ±age) @age) ^age)
+
+    (cell @name)
+    (cell @age)
+    (cell @next-age)
+    (transfer (@age ±age @next-age) ^(+ age 1))
+
+    (transfer ((@name @next-age) (name_string ±age) @record)
+      (person ^name ^age)))
+
+  (frame
+    (cell @record)
+    (transfer (@record (person name_string _number) @name) ^name)
+    (transfer (@record (person _string ±age) @age) ^age)
+
+    (cell @name "Jane")
+    (cell @age 26)
+    (cell @next-age)
+    (transfer (@age ±age @next-age) ^(+ age 1))
+
+    (transfer ((@name @next-age) (name_string ±age) @record)
+      (person ^name ^age)))
+
+  (frame
+    (cell @record)
+    (transfer (@record (person name_string _number) @name) ^name)
+    (transfer (@record (person _string ±age) @age) ^age)
+
+    (cell @name "Jane")
+    (cell @age)
+    (cell @next-age 27)
+    (transfer (@age ±age @next-age) ^(+ age 1))
+
+    (transfer ((@name @next-age) (name_string ±age) @record)
+      (person ^name ^age)))
+
+  (frame
+    (cell @record (person "Jane" 27))
+    (transfer (@record (person name_string _number) @name) ^name)
+    (transfer (@record (person _string ±age) @age) ^age)
+
+    (cell @name)
+    (cell @age)
+    (cell @next-age)
+    (transfer (@age ±age @next-age) ^(+ age 1))
+
+    (transfer ((@name @next-age) (name_string ±age) @record)
+      (person ^name ^age))))
+  ;; ...

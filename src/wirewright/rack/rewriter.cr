@@ -291,7 +291,7 @@ module Ww::Rack::Rewriter
     # This is basically like the `input == output` check below but more relaxed.
     pass do
       next unless current_output = output_cell.value?
-      next if Term.changed?(current_output, output)
+      next if Term.item_changed?(current_output, output)
       return
     end
 

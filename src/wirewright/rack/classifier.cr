@@ -40,7 +40,11 @@ module Ww::Rack
       # seq
       #
       # |@block
-      # Accepts the lexicographical minimum patch among competing patches.
+      # Accepts the patch that contains the *minimum* candidate term among
+      # competing patches. Minimum is not necessarily lexicographical minimum;
+      # the kind of minimum we use varies with term type. For numbers, it'd be
+      # the arithmetic minimum. For strings, it'd be the lexicographical minimum.
+      # And so on. See `ww.[term order]` to learn more.
       D7::MergeSeq.new
     when SYM_EXCLUSIVE
       # |@ rack.[merge policy]

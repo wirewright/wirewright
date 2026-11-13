@@ -198,17 +198,59 @@ module Ww::D7
   defrecord MergeNode,
     reference : Term,
     policy : MergePolicy,
-    successors : Array(MergeNodeSuccessor)
+    successors : Array(MergeNodeSuccessor),
+    copying: true
 
   # :nodoc:
   defrecord MergeNodeSuccessor,
     term : Term,
-    proposal_index : UInt32
+    proposal_indices : Pf::USet32,
+    copying: true
 
   alias MergePolicy = MergeDiff | MergeSeq
 
   defrecord MergeDiff, depth_limit : UInt32
   defrecord MergeSeq
+
+  private def nodetab_prune!(nodetab, proposals_rejected) : Nil
+    nodetab.each do |_, merge_node|
+      (0...merge_node.successors.size).reverse_each do |successor_index|
+        successor = merge_node.successors[successor_index]
+
+        # Leave only indices that were not rejected.
+        proposal_indices = successor.proposal_indices - proposals_rejected
+
+        # Fast path if all member proposal indices were accepted.
+        next if successor.proposal_indices.size == proposal_indices.size
+
+        # We've rejected the entire successor.
+        if proposal_indices.empty?
+          merge_node.successors.delete_at(successor_index)
+          next
+        end
+
+        merge_node.successors[successor_index] = successor.copy_with(proposal_indices: proposal_indices)
+      end
+    end
+  end
+
+  private def difftab_prune!(difftab, proposals_rejected) : Nil
+    difftab.each do |_, diffs|
+      # Go in reverse so that we can remove while we're iterating.
+      (0...diffs.size).reverse_each do |diff_index|
+        actions, proposal_indices0 = diffs[diff_index]
+        proposal_indices1 = proposals_rejected - proposal_indices0
+        next if proposal_indices0.size == proposal_indices1.size # Unchanged
+
+        if proposal_indices1.empty?
+          diffs.delete_at(diff_index)
+          next
+        end
+
+        diffs[diff_index] = {actions, proposal_indices1}
+      end
+    end
+  end
 
   # :nodoc:
   #
@@ -241,7 +283,7 @@ module Ww::D7
 
     nodetab = {} of NodeId => MergeNode
 
-    proposals.each_with_index do |proposal, proposal_index|
+    proposals.zip(0u32...proposals.size.to_u32) do |proposal, proposal_index|
       proposal.each do |node_id, rep|
         node = nodetab.put_if_absent(node_id) do
           node_reference, node_policy = yield node_id
@@ -251,10 +293,10 @@ module Ww::D7
 
         # Filter out proposals that are exactly the same as the original node. Sloppy
         # callers can give us those, and much of this code [logically] relies on
-        # the fact the proposals are actually different.
+        # the fact the proposals are actually different from the original node.
         next if node.reference == rep
 
-        node.successors << MergeNodeSuccessor.new(rep, proposal_index.to_u32)
+        node.successors << MergeNodeSuccessor.new(rep, Pf::USet32[proposal_index])
       end
     end
 
@@ -270,48 +312,64 @@ module Ww::D7
       merge_node.successors.each do |successor|
         next if successor == winner
 
-        proposals_rejected = proposals_rejected.add(successor.proposal_index)
+        proposals_rejected += successor.proposal_indices
       end
     end
 
-    # Do a round of cleaning rejected proposals.
+    # Collapse same-rep successors. This way, proposals that are exactly the same
+    # do not conflict with each other -- which is more or less what we expect,
+    # even with MergeDiff(0).
+    nodetab.transform_values! do |merge_node|
+      # Fast path
+      if merge_node.successors.size == 1
+        next merge_node
+      end
+
+      groups = merge_node.successors.group_by(&.term)
+      successors1 = groups.map do |(term, group)|
+        MergeNodeSuccessor.new(term, group.sum(&.proposal_indices))
+      end
+
+      merge_node.copy_with(successors: successors1)
+    end
+
+    # Do a round of cleanup on rejected proposals.
     if proposals_rejected.present?
-      nodetab.each do |_, merge_node|
-        merge_node.successors.reject!(&.proposal_index.in?(proposals_rejected))
-      end
+      nodetab_prune!(nodetab, proposals_rejected)
     end
 
-    difftab = {} of NodeId => Array({Array(Term::Diff::Action), UInt32})
+    difftab = {} of NodeId => Array({Array(Term::Diff::Action), Pf::USet32})
 
     nodetab.each do |node_id, merge_node|
       next unless policy = merge_node.policy.as?(MergeDiff)
       next unless merge_node.successors.size >= 2
 
-      diffs = [] of {Array(Term::Diff::Action), UInt32}
+      diffs = [] of {Array(Term::Diff::Action), Pf::USet32}
 
       merge_node.successors.each do |successor|
-        next if successor.proposal_index.in?(proposals_rejected) # Rejected by ourselves on past iterations.
+        next if successor.proposal_indices.subset_of?(proposals_rejected) # All rejected on past iterations.
 
         unless actions = Term.diff?(merge_node.reference, successor.term, depth_limit: policy.depth_limit)
-          proposals_rejected = proposals_rejected.add(successor.proposal_index)
+          proposals_rejected += successor.proposal_indices
           next
         end
 
         compatible = true
 
-        diffs.each do |(accepted_actions, accepted_proposal_index)|
+        diffs.each do |(accepted_actions, accepted_proposal_indices)|
           next if Term::Diff.compatible?(accepted_actions, actions)
 
           # Reject both of them if they conflict. Go on to reject more if we
           # conflict with more. No two conflicting proposals must make it into
           # the difftab.
-          proposals_rejected = proposals_rejected.add(accepted_proposal_index).add(successor.proposal_index)
+          proposals_rejected += accepted_proposal_indices
+          proposals_rejected += successor.proposal_indices
           compatible = false
         end
 
         next unless compatible
 
-        diffs << {actions, successor.proposal_index}
+        diffs << {actions, successor.proposal_indices}
       end
 
       difftab[node_id] = diffs
@@ -319,15 +377,8 @@ module Ww::D7
 
     # Do a round of cleanup to get rid of rejected proposals in nodetab and difftab.
     if proposals_rejected.present?
-      nodetab.each do |_, merge_node|
-        merge_node.successors.reject!(&.proposal_index.in?(proposals_rejected))
-      end
-
-      difftab.each do |_, diffs|
-        diffs.reject! do |_, proposal_index|
-          proposal_index.in?(proposals_rejected)
-        end
-      end
+      nodetab_prune!(nodetab, proposals_rejected)
+      difftab_prune!(difftab, proposals_rejected)
     end
 
     patch = Patch.new
@@ -349,14 +400,15 @@ module Ww::D7
       diffs = difftab[node_id]
 
       # Sort by proposal rank for deterministic insertion.
-      diffs.sort_by! do |_, proposal_index|
+      diffs.sort_by! do |_, proposal_indices|
+        proposal_index = proposal_indices.first # works like proposal_indices.min
         proposal_rank_cache.put_if_absent(proposal_index) do
           proposal_rank(proposals[proposal_index])
         end
       end
 
       mutation = nil
-      diffs.each do |actions, proposal_index|
+      diffs.each do |actions, _|
         # Actions are flattened in the same way the diff algorithm tells us to
         # execute them. The greater order is that of *proposal ranks*, though.
         actions.each do |action|
