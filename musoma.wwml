@@ -11,9 +11,6 @@
 ;;   ###############
 
 
-;; - FIXME: There's an issue with hovering over expanders, the hitbox seems somehow
-;;   shifted (is it due to transforms? perhaps or hit testing code is broken?)
-;;
 ;; TODO: pretty printing
 ;; - FIXME: why nested slots don't work / fold?
 ;;    We need to use a different classifier. Things like `node` (previously frag)
@@ -1681,7 +1678,7 @@
   ;(cell @seed)
   (cell @seed
     {document:
-      (;(window title: "Counter" style: "backdrop-ui-base center"
+      ((window title: "Counter" style: "backdrop-ui-base center"
          ;;| This is an example of a comment.
          (group style: "flow-col bg-ui-surface p-5 rounded-3xl gap-5"
            (node @count
@@ -1701,14 +1698,6 @@
                <> {(msg): (), count: ^(- count n)}
              {¦ msg_: (set ±n) count: [p ±count]}
                <> {(msg): (), count: ^n})))
-
-        (slot (OutlinedButton (@msg (sub 1)) "Decrement")
-          (rewriter x
-            x <> {active: true}
-            {¦ a: (%- _boolean) b: {¦ -disabled_}} <> {disabled: true}
-            {¦ a: _boolean b: {¦ disabled_}} <> {(disabled): ()}))
-
-        ;($OutlinedButton (@msg (sub 1)) "Decrement")
 
        ;(section "Section title"
          (cell "hello")

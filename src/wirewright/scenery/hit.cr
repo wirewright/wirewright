@@ -211,7 +211,7 @@ module Ww::Scenery
   private def hit(node : ShapedText, box : Box, vbox : VBox, tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    unless vbox.bounds.intersects?(itf.map(query.rect)) || box.bounds.intersects?(query.rect)
+    unless vbox.bounds.intersects?(itf.map(query.rect)) || box.bounds.intersects?(itf.map(query.rect))
       return HitEmpty.new
     end
 
@@ -244,7 +244,7 @@ module Ww::Scenery
   private def box_hit(node : AimedNode, box : Box, vbox : VBox, tf : Tf, child_tf : Tf, query : HitQuery) : HitNode
     itf = tf.inverse
 
-    unless vbox.bounds.intersects?(itf.map(query.rect)) || box.bounds.intersects?(query.rect)
+    unless vbox.bounds.intersects?(itf.map(query.rect)) || box.bounds.intersects?(itf.map(query.rect))
       return HitEmpty.new
     end
 
