@@ -1,0 +1,29 @@
+(rack
+  (frame
+    (cell @x 0)
+    (cell @y)
+    (feed @x @y))
+
+  (frame
+    (cell @x)
+    (cell @y 0)
+    (feed @x @y))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 0)
+    (cell @y)
+    (feed @x @y @x))
+
+  (frame
+    (cell @x)
+    (cell @y 0)
+    (feed @x @y @x))
+
+  (frame
+    (cell @x 0)
+    (cell @y)
+    (feed @x @y @x)))
+  ;; ...

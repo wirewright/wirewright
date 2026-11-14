@@ -87,6 +87,18 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-io rack-db))
 
+(test "rack/guides/guide0.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-guides))
+
+(test "rack/guides/guide1.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-guides))
+
+(test "rack/guides/guide2.test.wwml"
+  color: (oklch 0.7 0.1 violet)
+  tags: (d7 delta7 rack rack-guides))
+
 (test "rack/guides/guide3.test.wwml"
   color: (oklch 0.7 0.1 violet)
   tags: (d7 delta7 rack rack-guides))

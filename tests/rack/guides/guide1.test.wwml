@@ -1,0 +1,431 @@
+(rack
+  (frame
+    (cell @x (1 2 3))
+    (cell @y ())
+    (feed (@x front) (@y back)))
+
+  (frame
+    (cell @x (2 3))
+    (cell @y (1))
+    (feed (@x front) (@y back)))
+
+  (frame
+    (cell @x (3))
+    (cell @y (1 2))
+    (feed (@x front) (@y back)))
+
+  (frame
+    (cell @x ())
+    (cell @y (1 2 3))
+    (feed (@x front) (@y back)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x (1 2 3))
+    (cell @y ())
+    (cell @z ())
+    (feed (@x front) (@y back))
+    (feed (@y front) (@z back)))
+
+  (frame
+    (cell @x (2 3))
+    (cell @y (1))
+    (cell @z ())
+    (feed (@x front) (@y back))
+    (feed (@y front) (@z back)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x (1 2 3))
+    (cell @y ())
+    (cell @z ())
+    (feed (@x front) (@y back))
+    (feed (@x back) (@z back)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x (1 2 3 4))
+    (cell @y ())
+    (cell @z ())
+    (backsys
+      {¦ x: (a_ _*) y: (_* `>a)} <> {(a): (), >a: ^a}
+      {¦ x: (_* a_) z: (_* `>a)} <> {(a): (), >a: ^a}))
+
+  (frame
+    (cell @x (2 3))
+    (cell @y (1))
+    (cell @z (4))
+    (backsys
+      {¦ x: (a_ _*) y: (_* `>a)} <> {(a): (), >a: ^a}
+      {¦ x: (_* a_) z: (_* `>a)} <> {(a): (), >a: ^a}))
+
+  (frame
+    (cell @x ())
+    (cell @y (1 2))
+    (cell @z (4 3))
+    (backsys
+      {¦ x: (a_ _*) y: (_* `>a)} <> {(a): (), >a: ^a}
+      {¦ x: (_* a_) z: (_* `>a)} <> {(a): (), >a: ^a}))
+
+  end)
+
+(rack
+  (frame
+    (cell @x (1 2 3))
+    (cell @y ())
+    (cell @z ())
+    (backsys
+      {¦ x: (a_ _*) y: (_* `>a)} <> {(a): (), >a: ^a}
+      {¦ x: (_* a_) z: (_* `>a)} <> {(a): (), >a: ^a}))
+
+  (frame
+    (cell @x (2))
+    (cell @y (1))
+    (cell @z (3))
+    (backsys
+      {¦ x: (a_ _*) y: (_* `>a)} <> {(a): (), >a: ^a}
+      {¦ x: (_* a_) z: (_* `>a)} <> {(a): (), >a: ^a}))
+
+  (frame
+    (cell @x ())
+    (cell @y (1 2))
+    (cell @z (3 2))
+    (backsys
+      {¦ x: (a_ _*) y: (_* `>a)} <> {(a): (), >a: ^a}
+      {¦ x: (_* a_) z: (_* `>a)} <> {(a): (), >a: ^a}))
+
+  end)
+
+(rack
+  (frame
+    (cell (arena @x) (1 2 3 4))
+    (cell @y ())
+    (cell @z ())
+    (feed (@x front) (@y back))
+    (feed (@x back) (@z back)))
+
+  (frame
+    (cell (arena @x) (2 3))
+    (cell @y (1))
+    (cell @z (4))
+    (feed (@x front) (@y back))
+    (feed (@x back) (@z back)))
+
+  (frame
+    (cell (arena @x) ())
+    (cell @y (1 2))
+    (cell @z (4 3))
+    (feed (@x front) (@y back))
+    (feed (@x back) (@z back)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (cell @z)
+    (feed (@x @y) @z))
+
+  (frame
+    (cell @x)
+    (cell @y)
+    (cell @z (100 200))
+    (feed (@x @y) @z))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (cell @z)
+    (feed (@y @x) @z))
+
+  (frame
+    (cell @x)
+    (cell @y)
+    (cell @z (200 100))
+    (feed (@y @x) @z))
+
+  end)
+
+(rack
+  (frame
+    (cell @x)
+    (cell @y)
+    (cell @z (100 200))
+    (feed (@z items) (@x @y)))
+
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (cell @z)
+    (feed (@z items) (@x @y)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (cell @z)
+    (feed (@x @y) @z)
+    (feed (@z items) (@x @y)))
+
+  (frame
+    (cell @x)
+    (cell @y)
+    (cell @z (100 200))
+    (feed (@x @y) @z)
+    (feed (@z items) (@x @y)))
+
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (cell @z)
+    (feed (@x @y) @z)
+    (feed (@z items) (@x @y))))
+  ;; ...
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (cell @a)
+    (cell @b)
+    (feed (@x @y) (@a @b)))
+
+  (frame
+    (cell @x)
+    (cell @y)
+    (cell @a 100)
+    (cell @b 200)
+    (feed (@x @y) (@a @b)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (cell @z)
+    (feed @x (@y @z)))
+
+  (frame
+    (cell @x)
+    (cell @y 100)
+    (cell @z 100)
+    (feed @x (@y @z)))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (feed (not @inhibitor) @x @y)
+    (cell @inhibitor))
+
+  (frame
+    (cell @x)
+    (cell @y 100)
+    (feed (not @inhibitor) @x @y)
+    (cell @inhibitor))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (feed (not @inhibitor) @x @y)
+    (cell @inhibitor "A value"))
+
+  end)
+
+(rack
+  (frame
+    (cell @xs (1 2 3))
+    (cell @ys (100 200 300))
+    (cell @z)
+    (feed ((@xs front) (@ys back)) @z))
+
+  (frame
+    (cell @xs (2 3))
+    (cell @ys (100 200))
+    (cell @z (1 300))
+    (feed ((@xs front) (@ys back)) @z))
+
+  end)
+
+(rack
+  (frame
+    (cell @xs (1 2 3 4 5))
+    (cell @y)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z)
+    (feed @z (@zs back))
+    (cell @zs ()))
+
+  (frame
+    (cell @xs (2 3 4 5))
+    (cell @y 1)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z)
+    (feed @z (@zs back))
+    (cell @zs ()))
+
+  (frame
+    (cell @xs (2 3 4 5))
+    (cell @y)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z 1)
+    (feed @z (@zs back))
+    (cell @zs ()))
+
+  (frame
+    (cell @xs (2 3 4 5))
+    (cell @y)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z)
+    (feed @z (@zs back))
+    (cell @zs (1)))
+
+  (frame
+    (cell @xs (3 4 5))
+    (cell @y 2)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z)
+    (feed @z (@zs back))
+    (cell @zs (1)))
+
+  (frame
+    (cell @xs (3 4 5))
+    (cell @y)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z 2)
+    (feed @z (@zs back))
+    (cell @zs (1)))
+
+  (frame
+    (cell @xs (3 4 5))
+    (cell @y)
+    (feed (not @z) (@xs front) @y)
+    (feed @y @z)
+    (cell @z)
+    (feed @z (@zs back))
+    (cell @zs (1 2))))
+  ;; And so on for the remaining numbers
+
+(rack
+  (frame
+    (cell @x (1 2 3 4 5))
+    (cell @y ())
+    (feed (not @b) (@x front) (@y back))
+
+    (cell @a .)
+    (cell @b)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (2 3 4 5))
+    (cell @y (1))
+    (feed (not @b) (@x front) (@y back))
+
+    (cell @a)
+    (cell @b .)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (2 3 4 5))
+    (cell @y (1))
+    (feed (not @b) (@x front) (@y back))
+
+    (cell @a .)
+    (cell @b)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (3 4 5))
+    (cell @y (1 2))
+    (feed (not @b) (@x front) (@y back))
+
+    (cell @a)
+    (cell @b .)
+    (feed @a @b @a)))
+  ;; And so on for the remaining numbers
+
+(rack
+  (frame
+    (cell @x (0 1 2 3 4))
+    (cell @y (5 6 7 8 9))
+    (cell @z ())
+
+    (feed (not @b) (@x front) (@z back))
+    (feed (not @a) (@y front) (@z back))
+
+    (cell @a .)
+    (cell @b)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (1 2 3 4))
+    (cell @y (5 6 7 8 9))
+    (cell @z (0))
+
+    (feed (not @b) (@x front) (@z back))
+    (feed (not @a) (@y front) (@z back))
+
+    (cell @a)
+    (cell @b .)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (1 2 3 4))
+    (cell @y (6 7 8 9))
+    (cell @z (0 5))
+
+    (feed (not @b) (@x front) (@z back))
+    (feed (not @a) (@y front) (@z back))
+
+    (cell @a .)
+    (cell @b)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (2 3 4))
+    (cell @y (6 7 8 9))
+    (cell @z (0 5 1))
+
+    (feed (not @b) (@x front) (@z back))
+    (feed (not @a) (@y front) (@z back))
+
+    (cell @a)
+    (cell @b .)
+    (feed @a @b @a))
+
+  (frame
+    (cell @x (2 3 4))
+    (cell @y (7 8 9))
+    (cell @z (0 5 1 6))
+
+    (feed (not @b) (@x front) (@z back))
+    (feed (not @a) (@y front) (@z back))
+
+    (cell @a .)
+    (cell @b)
+    (feed @a @b @a)))
+  ;; And so on for the remaining numbers

@@ -1,0 +1,313 @@
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (delay 3 (feed @x @y)))
+
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (delay 2 (feed @x @y)))
+
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (delay 1 (feed @x @y)))
+
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (feed @x @y))
+
+  (frame
+    (cell @x)
+    (cell @y 100)
+    (feed @x @y))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (discard @x))
+
+  (frame
+    (cell @x)
+    (discard @x))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @x 200)
+    (cell @x 300)
+    (discard @x))
+
+  (frame
+    (cell @x)
+    (cell @x)
+    (cell @x)
+    (discard @x))
+
+  end)
+
+(rack
+  (frame
+    (cell @xs (1 2 3 4 5))
+    (cell @a)
+    (cell @b)
+    (cell @c)
+    (cell @y)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (delay 10 (discard @y)))
+
+  (frame/tail fast-forward: true
+    (cell @xs (5))
+    (cell @a 4)
+    (cell @b 3)
+    (cell @c 2)
+    (cell @y 1)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs (5))
+    (cell @a 4)
+    (cell @b 3)
+    (cell @c 2)
+    (cell @y)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs (5))
+    (cell @a 4)
+    (cell @b 3)
+    (cell @c)
+    (cell @y 2)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs (5))
+    (cell @a 4)
+    (cell @b)
+    (cell @c 3)
+    (cell @y)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs (5))
+    (cell @a)
+    (cell @b 4)
+    (cell @c)
+    (cell @y 3)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs ())
+    (cell @a 5)
+    (cell @b)
+    (cell @c 4)
+    (cell @y)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs ())
+    (cell @a)
+    (cell @b 5)
+    (cell @c)
+    (cell @y 4)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs ())
+    (cell @a)
+    (cell @b)
+    (cell @c 5)
+    (cell @y)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs ())
+    (cell @a)
+    (cell @b)
+    (cell @c)
+    (cell @y 5)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  (frame
+    (cell @xs ())
+    (cell @a)
+    (cell @b)
+    (cell @c)
+    (cell @y)
+    (feed (@xs front) @a)
+    (feed @a @b @c @y)
+    (discard @y))
+
+  end)
+
+(rack
+  (frame
+    (queue (@front @back) (1 2 3 4 5))
+    (feed @front @back))
+
+  (frame
+    (queue (@front @back) (2 3 4 5 1))
+    (feed @front @back))
+
+  (frame
+    (queue (@front @back) (3 4 5 1 2))
+    (feed @front @back))
+
+  (frame
+    (queue (@front @back) (4 5 1 2 3))
+    (feed @front @back)))
+  ;; ...
+
+(rack
+  (frame
+    (cell @xs (1 2 3 4 5))
+    (feed (@xs front) (@xs back)))
+
+  end)
+
+(rack
+  (frame
+    (cell (arena @xs) (1 2 3 4 5))
+    (feed (@xs front) (@xs back)))
+
+  (frame
+    (cell (arena @xs) (2 3 4 5 1))
+    (feed (@xs front) (@xs back)))
+
+  (frame
+    (cell (arena @xs) (3 4 5 1 2))
+    (feed (@xs front) (@xs back)))
+
+  (frame
+    (cell (arena @xs) (4 5 1 2 3))
+    (feed (@xs front) (@xs back))))
+  ;; ...
+
+(rack
+  (frame
+    (queue (@front @back) (1 2 3 x: 100 y: 200))
+    (discard @front))
+
+  (frame
+    (queue (@front @back) (2 3 x: 100 y: 200))
+    (discard @front))
+
+  (frame
+    (queue (@front @back) (3 x: 100 y: 200))
+    (discard @front))
+
+  (frame
+    (queue (@front @back) (x: 100 y: 200))
+    (discard @front))
+
+  end)
+
+(rack
+  (frame
+    (queue (@number @numbers) (1 2 3))
+    (discard @number))
+
+  (frame
+    (queue (@number @numbers) (2 3))
+    (discard @number))
+
+  (frame
+    (queue (@number @numbers) (3))
+    (discard @number))
+
+  (frame
+    (queue (@number @numbers) ())
+    (discard @number))
+
+  end)
+
+(rack
+  (frame
+    (queue (@x @xs) (1 2 3 4 5))
+    (queue (@y @ys max: 2) ())
+    (cell @z)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) (2 3 4 5))
+    (queue (@y @ys max: 2) (1))
+    (cell @z)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) (3 4 5))
+    (queue (@y @ys max: 2) (2))
+    (cell @z 1)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) (4 5))
+    (queue (@y @ys max: 2) (2 3))
+    (cell @z)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) (4 5))
+    (queue (@y @ys max: 2) (3))
+    (cell @z 2)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) (5))
+    (queue (@y @ys max: 2) (3 4))
+    (cell @z)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) (5))
+    (queue (@y @ys max: 2) (4))
+    (cell @z 3)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame
+    (queue (@x @xs) ())
+    (queue (@y @ys max: 2) (4 5))
+    (cell @z)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  (frame/tail fast-forward: true
+    (queue (@x @xs) ())
+    (queue (@y @ys max: 2) ())
+    (cell @z)
+    (feed @x @ys @y @z)
+    (discard @z))
+
+  end)
