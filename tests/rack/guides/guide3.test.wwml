@@ -315,3 +315,146 @@
     (transfer ((@name @next-age) (name_string ±age) @record)
       (person ^name ^age))))
   ;; ...
+
+(rack
+  (frame
+    (cell @in 100)
+    (view (@in ±n @out) ^(+ n 1))
+    (cell @out))
+
+  (frame
+    (cell @in 100)
+    (view (@in ±n @out) ^(+ n 1))
+    (cell @out 101))
+
+  end)
+
+(rack
+  (frame
+    (cell @in 100)
+    (view (@in ±n @out) ^(+ n 1))
+    (cell @out "Hello World"))
+
+  (frame
+    (cell @in 100)
+    (view (@in ±n @out) ^(+ n 1))
+    (cell @out 101))
+
+  end)
+
+(rack
+  (frame
+    (cell @count 0)
+    (view (@count ±n @count) ^(+ n 1)))
+
+  (frame
+    (cell @count 1)
+    (view (@count ±n @count) ^(+ n 1)))
+
+  (frame
+    (cell @count 2)
+    (view (@count ±n @count) ^(+ n 1))))
+  ;; ...
+
+(rack
+  (frame
+    (cell @count 0)
+    (view (@count ±n @count) ^(+ n 1))
+    (view (@count ±n @view) ^"Count is: ⸢n⸣")
+    (cell @view))
+
+  (frame
+    (cell @count 1)
+    (view (@count ±n @count) ^(+ n 1))
+    (view (@count ±n @view) ^"Count is: ⸢n⸣")
+    (cell @view "Count is: 0"))
+
+  (frame
+    (cell @count 2)
+    (view (@count ±n @count) ^(+ n 1))
+    (view (@count ±n @view) ^"Count is: ⸢n⸣")
+    (cell @view "Count is: 1"))
+
+  (frame
+    (cell @count 3)
+    (view (@count ±n @count) ^(+ n 1))
+    (view (@count ±n @view) ^"Count is: ⸢n⸣")
+    (cell @view "Count is: 2")))
+  ;; ...
+
+(rack
+  (frame
+    (cell @a 2)
+    (cell @b 3)
+    (view ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  (frame
+    (cell @a 2)
+    (cell @b 3)
+    (view ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum 5))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (feed (copy @x) @y)
+    (cell @y))
+
+  (frame
+    (cell @x 100)
+    (feed (copy @x) @y)
+    (cell @y 100))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (feed (copy @x) @y)
+    (cell @y "Hello World"))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (feed @x (over @y))
+    (cell @y))
+
+
+  (frame
+    (cell @x)
+    (feed @x (over @y))
+    (cell @y 100))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (feed @x (over @y))
+    (cell @y "Hello World"))
+
+
+  (frame
+    (cell @x)
+    (feed @x (over @y))
+    (cell @y 100))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (feed (copy @x) (over @y))
+    (cell @y "Hello World"))
+
+  (frame
+    (cell @x 100)
+    (feed (copy @x) (over @y))
+    (cell @y 100))
+
+  end)
