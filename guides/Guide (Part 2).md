@@ -278,7 +278,7 @@ A queue with a set `max` is another opportunity to demonstrate backpressure:
 (queue (@x @xs) (1 2 3 4 5))
 (queue (@y @ys max: 2) ())
 (cell @z)
-(feed x @ys @y @z)
+(feed @x @ys @y @z)
 (discard @z)
 ```
 
