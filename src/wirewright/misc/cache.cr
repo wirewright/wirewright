@@ -556,6 +556,8 @@ module Ww
 
       @misses = 0u64
       @reads = 0u64
+
+      @in_epoch = false
     end
 
     def put_if_absent(key : K, & : -> V) : V
@@ -629,9 +631,16 @@ module Ww
     end
 
     def epoch(&)
-      yield
-    ensure
-      sweep
+      was_in_epoch = @in_epoch
+      @in_epoch = true
+      begin
+        yield
+      ensure
+        @in_epoch = was_in_epoch
+        unless was_in_epoch
+          sweep
+        end
+      end
     end
   end
 end

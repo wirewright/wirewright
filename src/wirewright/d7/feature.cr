@@ -590,13 +590,11 @@ module Ww::D7
     # Returns the classifier used by this parser.
     getter clf : Classifier
 
-    # Constructs a parser which uses the given classifier *clf* and a custom *cache*
-    # (not necessarily a generational cache).
-    def initialize(@clf : Classifier, @cache : ICache(Term, ParseTree))
+    def initialize(@clf : Classifier, @cache : DependentCache(Term, ParseTree))
     end
 
     def self.new(clf : Classifier) : Parser
-      new(clf, cache: GenerationalCache(Term, ParseTree).new)
+      new(clf, cache: DependentCache(Term, ParseTree).new)
     end
 
     # Returns the parse tree for *circuit*.
@@ -605,19 +603,6 @@ module Ww::D7
     def parse(circuit : Term) : ParseTree
       @cache.epoch do
         D7.parse(@clf, circuit, cache: @cache)
-      end
-    end
-
-    # Returns the parse trees for circuits obtained using the block from *objects*.
-    # The same cache is reused for all circuits, which is why this method is useful.
-    #
-    # See `D7.parse` for more info.
-    def parse(objects : Enumerable(T), & : T -> Term) : Array(ParseTree) forall T
-      @cache.epoch do
-        objects.map do |object|
-          circuit = yield object
-          D7.parse(@clf, circuit, cache: @cache)
-        end
       end
     end
   end

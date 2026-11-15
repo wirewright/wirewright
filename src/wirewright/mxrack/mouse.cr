@@ -17,12 +17,18 @@ module Ww::MxRack
   enum MouseareaFlags
     WantsPositionAlways
     WantsPositionDrag
+  end
+
+  enum MouseareaOpacity
+    Transparent
+    Fallthrough
     Opaque
   end
 
   defrecord MouseArea,
     addr : D7::NodeAddr,
     mice : Slice(MouseAreaMouse),
+    opacity : MouseareaOpacity,
     flags : MouseareaFlags,
     copying: true
 
@@ -37,7 +43,7 @@ module Ww::MxRack
     Term.matchpi?(node, <<-'WWML') do
     (mousearea _*
       ⍊ position_: (%optional never (%any never always drag))
-        opacity_: (%optional opaque (%any transparent opaque)))
+        opacity_: (%optional opaque (%any transparent fallthrough opaque)))
     WWML
       miceQ = node.items.move(1)
       mice = miceQ.to_compact_readonly_slice do |mouseQ, index|
@@ -54,12 +60,19 @@ module Ww::MxRack
       when Term.of(:drag)
         flags |= MouseareaFlags::WantsPositionDrag
       end
+
       case opacity
+      when Term.of(:transparent)
+        opacity = MouseareaOpacity::Transparent
+      when Term.of(:fallthrough)
+        opacity = MouseareaOpacity::Fallthrough
       when Term.of(:opaque)
-        flags |= MouseareaFlags::Opaque
+        opacity = MouseareaOpacity::Opaque
+      else
+        unreachable
       end
 
-      sink << MouseArea.new(addr, mice, flags)
+      sink << MouseArea.new(addr, mice, opacity, flags)
     end
   end
 

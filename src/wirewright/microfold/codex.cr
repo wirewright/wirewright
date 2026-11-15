@@ -52,7 +52,7 @@ module Ww::Microfold
   # the WwML codex (which lives at `runtime/codices/ufold.codex.wwml`).
   #
   # The codex also holds caches, so it is **not thread-safe**. Since the caches
-  # used here are `GenerationalCache`s, just like in Scenery, it's advised that
+  # used here are `DependentCache`s, just like in Scenery, it's advised that
   # you have a codex for each "frame source", as in, an entity producing a sequence
   # of frames.
   #
@@ -87,11 +87,13 @@ module Ww::Microfold
       @order : Slice(Term),
       @cascade : Slice(Term),
     )
-      @feature_cache = GenerationalCache({StyleOrigin, String}, Outcome::Accepted(FeatureSeq)).new
-      @recognize_cache = GenerationalCache(Term::Dict, Outcome::Accepted(StyleThunk)).new
-      @eval_cache = GenerationalCache({EvalContext, FeatureSeq}, FeatureEvaluation).new
-      @designate_cache = GenerationalCache(UncuedStyleNode, DirectedDesignationNode?).new
-      @instantiate_cache = GenerationalCache({Term::Dict, DirectedDesignationNode, Slice(DownboundDesignation)}, {Outcome::Accepted(Term), Slice(UpboundDesignation)}).new
+      # This is a flat cache, we use an LRU
+      @feature_cache = LRU({StyleOrigin, String}, Outcome::Accepted(FeatureSeq)).new(capacity: 512)
+      @eval_cache = LRU({EvalContext, FeatureSeq}, FeatureEvaluation).new(capacity: 512)
+      # These are all tree caches so we use DependentCache
+      @recognize_cache = DependentCache(Term::Dict, Outcome::Accepted(StyleThunk)).new
+      @designate_cache = DependentCache(UncuedStyleNode, DirectedDesignationNode?).new
+      @instantiate_cache = DependentCache({Term::Dict, DirectedDesignationNode, Slice(DownboundDesignation)}, {Outcome::Accepted(Term), Slice(UpboundDesignation)}).new
     end
 
     # *Forks* this codex.
@@ -463,14 +465,10 @@ module Ww::Microfold
     end
 
     def epoch(&)
-      @feature_cache.epoch do
-        @recognize_cache.epoch do
-          @eval_cache.epoch do
-            @designate_cache.epoch do
-              @instantiate_cache.epoch do
-                yield
-              end
-            end
+      @recognize_cache.epoch do
+        @designate_cache.epoch do
+          @instantiate_cache.epoch do
+            yield
           end
         end
       end

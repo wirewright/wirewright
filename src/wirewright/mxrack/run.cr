@@ -159,36 +159,6 @@ module Ww::MxRack
     end
   {% end %}
 
-  private def visual_component_rules(tree : D7::ParseTree) : Slice({Term, Term})
-    case tree
-    in D7::InertLeaf
-      Slice({Term, Term}).empty
-    in D7::GndLeaf
-      Term.case(tree.feature.node) do
-        matchpi %{[rule pattern_ body_]} do
-          Slice[{pattern, body}]
-        end
-
-        otherwise do
-          Slice({Term, Term}).empty
-        end
-      end
-    in D7::MixtureNode, D7::ScopeNode
-      visual_component_rules(tree.child)
-    in D7::ParentNode
-      unless tree.summary.has_signature?(D7::NodeSignature.new(Term.of(:rule), 3))
-        return Slice({Term, Term}).empty
-      end
-
-      rules = Pf::Kit.stack_array({Term, Term}, 8)
-      tree.children.each do |child|
-        rules.concat(visual_component_rules(child))
-      end
-
-      rules.to_unsafe_readonly_slice!
-    end
-  end
-
   def windows_with_automata(windows : Array(Window), circuit)
     automata = automata(circuit)
 
@@ -261,16 +231,115 @@ module Ww::MxRack
     repr(tree, D7::NodeAddr.empty, token)
   end
 
+  # :nodoc:
+  def reprclf(token : Term::Num) : D7::Classifier
+    successor = auclf(token)
+
+    ->(node : Term) do
+      feature = successor.call(node)
+
+      Term.case(node) do
+        matchpi %{(slot _ _? ⍊ -open)} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        matchpi %{[slot _ _?]} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.parent(node.as_d, 2u32...node.uitemsize)
+        end
+
+        matchpi %{[node @_ _]} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.parent(node.as_d, 2u32...node.uitemsize)
+        end
+
+        matchpi %{(section _string _* ⍊ open)} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.parent(node.as_d, 2u32...node.uitemsize)
+        end
+
+        matchpi %{(section _string _* ⍊ -open)} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        matchpi %{(rule _ _ ⍊ open)} do
+          D7.parent(node.as_d, 2u32...3u32)
+        end
+
+        matchpi %{(rule _ _ ⍊ -open)} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        matchpi %{[rewriter _*]} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        matchpi %{(device _* ⍊ -open)} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        matchpi %{[figure _*]} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        # It's unconditionally a parent node for MuSoma. For Rack, on the other
+        # hand, it's a ground node.
+        matchpi %{[server [@_ _ _?] _*]} do
+          D7.parent(node.as_d, 2u32...node.uitemsize)
+        end
+
+        matchpi %{(supervisor (@_ @_ _ - @_) _* ⍊ -open)} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.gnd(node)
+        end
+
+        matchpi %{[supervisor (@_ @_ _ - @_) _*]} do
+          continue if feature.is_a?(D7::Inert)
+
+          D7.parent(node.as_d, 2u32...node.uitemsize)
+        end
+
+        otherwise do
+          feature
+        end
+      end
+    end
+  end
+
+  def nopclf : D7::Classifier
+    ->(node : Term) do
+      D7.inert(node).as(D7::Feature)
+    end
+  end
+
   class Circuit
     # Contains the circuit to evolve in `step` to produce snapshots.
     getter draft : Term
     getter version : UInt64
     getter parser
+    getter repr_parser
 
-    def initialize(@clf : D7::Classifier, @alert : BlockingSignal)
+    def initialize(@clf : D7::Classifier, @reprclf : D7::Classifier, @alert : BlockingSignal)
       @draft = Term.of
       @version = 0u64
       @parser = D7::Parser.new(@clf)
+      @repr_parser = D7::Parser.new(@reprclf)
       @automaton = Rack::Automaton.new(@parser, alert: @alert, display_mask: :subframe)
     end
 
@@ -385,43 +454,69 @@ module Ww::MxRack
     Opaque
   end
 
-  private def hit_mouseareas(mouseareas : Slice(MouseArea), hit_node : Scenery::HitNode) : {Slice(HitMouseArea), HitOpacity}
+  private def hit_mouseareas(mouseareas : Slice(MouseArea), hit_node : Scenery::HitNode) : {Slice(HitMouseArea), Slice(HitMouseArea), HitOpacity}
     case hit_node
     in Scenery::HitEmpty
-      {Slice(HitMouseArea).empty, HitOpacity::Transparent}
+      {Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent}
     in Scenery::HitTextLeaf, Scenery::HitLeaf
-      {Slice(HitMouseArea).empty, HitOpacity::Opaque}
+      {Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Opaque}
     in Scenery::HitAreaLeaf
       unless addrQ = hit_node.payload.as_d?
-        return Slice(HitMouseArea).empty, HitOpacity::Transparent
+        return Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent
       end
 
       unless addr = D7::NodeAddr.new?(addrQ)
-        return Slice(HitMouseArea).empty, HitOpacity::Transparent
+        return Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent
       end
 
       unless mousearea = mouseareas.find { |candidate| candidate.addr == addr }
-        return Slice(HitMouseArea).empty, HitOpacity::Transparent
+        return Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent
       end
 
-      opacity = mousearea.flags.opaque? ? HitOpacity::Opaque : HitOpacity::Transparent
-      {Slice[HitMouseArea.new(mousearea, hit_node.part.tl)], opacity}
-    in Scenery::HitGroup
-      staging = Pf::Kit.stack_array(HitMouseArea)
+      hit = HitMouseArea.new(mousearea, hit_node.part.tl)
 
+      case mousearea.opacity
+      in .transparent?
+        opacity = HitOpacity::Transparent
+        {Slice[hit], Slice(HitMouseArea).empty, opacity}
+      in .fallthrough?
+        opacity = HitOpacity::Transparent
+        {Slice(HitMouseArea).empty, Slice[hit], opacity}
+      in .opaque?
+        opacity = HitOpacity::Opaque
+        {Slice[hit], Slice(HitMouseArea).empty, opacity}
+      end
+    in Scenery::HitGroup
+      ordinary_hits = Pf::Kit.stack_array(HitMouseArea)
+      fallthrough_hits = Pf::Kit.stack_array(HitMouseArea)
+
+      # Front-to-back
       hit_node.children.reverse_each do |child|
-        hits, opacity = hit_mouseareas(mouseareas, child)
-        staging.concat(hits)
+        ordinary_child_hits, fallthrough_child_hits, opacity = hit_mouseareas(mouseareas, child)
+        ordinary_hits.concat(ordinary_child_hits)
+        fallthrough_hits.concat(fallthrough_child_hits)
 
         case opacity
         in .transparent?
         in .opaque?
-          return staging.to_unsafe_readonly_slice!, HitOpacity::Opaque
+          return ordinary_hits.to_unsafe_readonly_slice!, fallthrough_hits.to_unsafe_readonly_slice!, HitOpacity::Opaque
         end
       end
 
-      {staging.to_unsafe_readonly_slice!, HitOpacity::Transparent}
+      {ordinary_hits.to_unsafe_readonly_slice!, fallthrough_hits.to_unsafe_readonly_slice!, HitOpacity::Transparent}
     end
+  end
+
+  private def hit_mouseareas_root(mouseareas : Slice(MouseArea), hit_node : Scenery::HitNode) : Slice(HitMouseArea)
+    ordinary_hits, fallthrough_hits, _ = hit_mouseareas(mouseareas, hit_node)
+
+    # If there's no ordinary (opaque) mousearea hit, then return transparent
+    # and fallthrough ones (if any).
+    if ordinary_hits.all?(&.mousearea.opacity.transparent?)
+      return ordinary_hits + fallthrough_hits
+    end
+
+    ordinary_hits
   end
 
   private def hit(window : Window, session : WindowSession) : Slice(Adjustment)
@@ -447,7 +542,7 @@ module Ww::MxRack
         adjustments << AdjustQuestion.new(text_aim.addr, Term.of(:"?aim"), text_aim.description)
       end
 
-      hit_mouseareas, _ = hit_mouseareas(window.mouseareas, hit_tree)
+      hit_mouseareas = hit_mouseareas_root(window.mouseareas, hit_tree)
 
       mouse_captured = false
 
@@ -813,7 +908,7 @@ module Ww::MxRack
     circuits = {} of Term => Circuit
 
     # Proceed to the mainloop.
-    circuit = Circuit.new(clf, alert)
+    circuit = Circuit.new(clf, nopclf, alert)
     circuit.draft = seed
 
     prev_displayed = Term.of
@@ -909,9 +1004,10 @@ module Ww::MxRack
 
         adjustments = Pf::Kit.stack_array(Adjustment, 8)
 
+        # FIXME: gc unused circuits
         automata.reverse_each do |automaton|
-          # FIXME: gc unused circuits
-          guest = circuits.put_if_absent(automaton.key) { Circuit.new(auclf(Term[Term.hashcode(automaton.key)]), alert) }
+          au_token = Term[Term.hashcode(automaton.key)]
+          guest = circuits.put_if_absent(automaton.key) { Circuit.new(auclf(au_token), reprclf(au_token), alert) }
           guest.draft = automaton.draft
 
           token = Term[Term.hashcode(automaton.key)]
@@ -945,31 +1041,37 @@ module Ww::MxRack
                 end
               end
 
-              input = automaton.workspace[:present]? || automaton.draft
-              output = manipulate(input, addr, 0u32, backsys)
+              if input = automaton.workspace[:present]?
+                output = manipulate(input, addr, 0u32, backsys)
+                adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:present), output)
+              else
+                output = manipulate(automaton.draft, addr, 0u32, backsys)
+                adjustments << AdjustAutomatonUpdateDraft.new(automaton.addr, output)
+              end
 
-              adjustments << AdjustAutomatonUpdateDraft.new(automaton.addr, output)
               adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:program), nil)
             end
 
             next
           end
 
+          window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
+
           if present = automaton.workspace[:present]?
             present_tree = guest.parser.parse(present)
-            window_transcripts = windows(windowing_setup, present_tree, interactive: false).map { |window| transcribe(window) }
+            repr_tree = guest.repr_parser.parse(present)
+            # window_transcripts = windows(windowing_setup, present_tree, interactive: false).map { |window| transcribe(window) }
 
-            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(present_tree, token))
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(repr_tree, token))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           else
-            window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
-
             # FIXME: this is wrong in all sorts of ways. Why do we have to reparse stuff?
             # Why do we use the MxRack classifier to parse everything and then have to reparse
             # draft and so on with automaton's classifier auclf()?
             draft_tree = guest.parser.parse(guest.draft)
+            repr_tree = guest.repr_parser.parse(guest.draft)
 
-            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(draft_tree, token))
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(repr_tree, token))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           end
         end

@@ -12,25 +12,24 @@
 
 
 ;; TODO: pretty printing
-;; - FIXME: why nested slots don't work / fold?
-;;    We need to use a different classifier. Things like `node` (previously frag)
-;;    are impassable for pretty-printing (`inert`), so slots inside them can't
-;;    be detected and so on.
-;;  - pretty printing must be synchronous wrt. physics: we must process physics
-;;    then pretty print, then process physics again. otherwise the pretty repr
-;;    doesn't accurately represent the state. pretty printing shouldn't occur if
-;;    the right pane is hidden (id shouldn't involve repr and everything downstream!)
-;;  - port remaining toggleable elements (open/closed)
-;;  - experiment with interactive `figure`s
+;;   - FIXME: addr mismatch when getting window transcripts for `present`: wrong window key in the past
+;;   - port remaining toggleable elements (open/closed)
+;;
+;;   - pretty printing must be synchronous wrt. physics: we must process physics
+;;     then pretty print, then process physics again. otherwise the pretty repr
+;;     doesn't accurately represent the state. pretty printing shouldn't occur if
+;;     the right pane is hidden (id shouldn't involve repr and everything downstream!)
+;;
+;;   - experiment with interactive `figure`s
+;;
+;; TODO: Make sure MuSoma-dependent examples run:
+;;   - figure.musoma.wwml
+;;   - parser.musoma.wwml
 ;;
 ;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale
 ;; keys occasionally/on unfocus (?)
 ;;
 ;; TODO(medium, rack, irack, mxrack): allow to load seed from arguments `argv` (?)
-;;
-;; TODO: Make sure MuSoma-dependent examples run:
-;;   - figure.musoma.wwml
-;;   - parser.musoma.wwml
 ;;
 ;; TODO: D7 node-based diff for live editing in mxrack
 ;;    - Live-reload MxRack codex
@@ -1004,9 +1003,10 @@
       <> {(head): ()}))
 
 (rewriter ((@repr @repr-version) - chainR - @pretty)
-  (step (exhR (descR rulesetR impassable: [impassable pattern_]))
-    (impassable [atom _])
-    (impassable [shape _])
+  (step (exhR (descR rulesetR passable: [passable pattern_]))
+    (passable [parent _*])
+    (passable [group _*])
+    (passable [inline _])
 
     ;; Recognize terms.
     (term term_symbol) => (atom ^\term detail: symbol)
@@ -1238,7 +1238,7 @@
              (pair ^key ^value)))
 
     ;; Section widget (closed).
-    (parent _* ⍊ addr_ reference_: (section title_string _* ¦ -open) -editing)
+    (gnd (section title_string _* ¦ -open) ⍊ addr_ -editing)
       => (group detail: row
            (atom "" detail: (expander (section ^addr) icon: "chevron_right" center: true))
            (atom ^title detail: section))
@@ -1252,13 +1252,13 @@
            ^*children)
 
     ;; Slot widget (closed).
-    (parent _ _* ⍊ addr_ reference_: (slot call_ _ ¦ -open) -editing)
+    (gnd (slot call_ _ ¦ -open) ⍊ addr_ -editing)
       => (group detail: row
            (atom "" detail: (expander (slot ^addr) icon: "chevron_right" center: true))
            (inline (term ^call)))
 
     ;; Slot widget (open).
-    (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ (%keypool open)))
+    (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ (%keytest open)))
       => (group detail: col form: multiline
            (group detail: row
              (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
@@ -1647,8 +1647,8 @@
                  <> {(hover): ()}
 
                ;; When they click, send a program to toggle the corresponding node open.
-               {¦ mouse: {¦ right_} icon: {¦ hover} addr_ -program_}
-                 <> {(right): (),
+               {¦ mouse: {¦ left_} icon: {¦ hover} addr_ -program_}
+                 <> {(left): (),
                      program:
                        (^addr
                         (^head _* ⍊ -open_) <> {open: true}
@@ -1675,8 +1675,8 @@
 ;;| This module manages the @seed cell, the @seedsrc cell, which is the seed
 ;;| reader, and the @seeddst cell, which is the seed writer.
 (module {:@seed, :@seedsrc, :@seeddst}
-  ;(cell @seed)
-  (cell @seed
+  (cell @seed)
+  ;(cell @seed
     {document:
       ((window title: "Counter" style: "backdrop-ui-base center"
          ;;| This is an example of a comment.
@@ -1885,16 +1885,16 @@
             (box style: "membrane content clip clip-aim-off mode/insert:clip-aim \
                          mode/insert:cue-focused dragging:cursor-drag"
                  mode: @mode
-                 µ-page-x: (-98 px)
-                 µ-page-y: (-173 px)
-                 µ-scale: 2.6
+                 µ-page-x: (0 px)
+                 µ-page-y: (0 px)
+                 µ-scale: 1
               ;(p ^(ml/display @pretty) style: "content dl-40")
               ;(p ^(ml/display @program) style: "dl-40")
               (box style: "font-notation text-sm/5"
                 (node @pretty))))
 
           (node (@mouse [mousearea mouse_])
-            (mousearea position: always opacity: transparent))
+            (mousearea position: always opacity: fallthrough))
 
           (backsys
             ;; Keep track of the previous drag left and top.
