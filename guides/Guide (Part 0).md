@@ -1,6 +1,6 @@
 # Wirewright: The Guide (Part 0)
 
-Thank you for being interested in Wirewright. It'll be a wild ride, I promise :) We'll start from the very basics, and slowly build our way up to more practical programs.
+Thank you for being interested in Wirewright. We'll start from the very basics, and slowly build our way up to more practical / interactive programs.
 
 > [!NOTE]
 > Wirewright is heavily experimental and is not even versioned properly yet. Some parts of the system are being built while they are documented. Even though *these* guides are expected to cover some of the most stable parts of the system, do not expect Wirewright to be stabile in general (yet). I am working on it.
@@ -11,44 +11,10 @@ To get started, download the [latest release](https://github.com/wirewright/wire
 $ wget -qO- https://github.com/wirewright/wirewright/releases/latest/download/ww-dist.tar.gz | gunzip | tar xvf -
 $ cd ww-dist
 $ ls
-doctool  examples  irack  musoma-x86_64.AppImage  README  runtime
+doctool  examples  guides  irack  musoma-x86_64.AppImage  mxrack-x86_64.AppImage  README  runtime
 ```
 
-We will use **MuSoma**, an interactive graphical environment for Rack, in later guides. You can still check it out by running the examples:
-
-```bash session
-$ chmod +x musoma-x86_64.AppImage # If necessary
-
-$ ./musoma-x86_64.AppImage examples/calculator.musoma.wwml
-
-    ############
-   ##############
-   ##############
-   #####     ####
-   #####     ####    Wirewright µsoma
-    #############    https://github.com/wirewright/wirewright [iota]
-     ###########
-   #   ######   #
-   ###        ###
-   ###############
-    ###############
-
- LOG  2026-09-06 01:48:06  Initializing refs
- LOG  2026-09-06 01:48:06  Initializing workspace
- LOG  2026-09-06 01:48:06  Initializing and booting agents
- LOG  2026-09-06 01:48:06  Running
- LOG  2026-09-06 01:48:06  Reload MuSoma codex
- LOG  2026-09-06 01:48:06  Reload editR
- LOG  2026-09-06 01:48:06  Reload library
- LOG  2026-09-06 01:48:06  Reload seed
-<Ctrl-C>
- 
-$
-```
-
-Use Ctrl-C to close MuSoma. Hitting "X" is not enough yet.
-
-`irack` will be enough to learn the basics. Verify that it works by running it without arguments. It should output a fairly long help message:
+`irack` will be enough for us to learn the basics. Verify that it works by running it without arguments. It should output a fairly long help message:
 
 ```bash session
 $ ./irack
