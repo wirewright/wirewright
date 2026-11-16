@@ -399,6 +399,107 @@
 
 (rack
   (frame
+    (cell @a 2)
+    (cell @b 3)
+    (discard @b)
+    (view ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  (frame
+    (cell @a 2)
+    (cell @b)
+    (discard @b)
+    (view ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum 5))
+
+  (frame
+    (cell @a 2)
+    (cell @b)
+    (discard @b)
+    (view ((@a @b) (±a ±b) @sum) ^(+ a b))
+    (cell @sum))
+
+  end)
+
+(rack
+  (frame
+    (cell @count 0)
+    (cell @action inc)
+    (view ((@action @count) (inc ±n) @count) ^(+ n 1))
+    (view ((@action @count) (dec ±n) @count) ^(- n 1)))
+
+  end)
+
+(rack
+  (frame
+    (cell @count 0)
+    (cell @action inc)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  (frame
+    (cell @count 1)
+    (cell @action inc)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  (frame
+    (cell @count 2)
+    (cell @action inc)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1))))
+  ;; ...
+
+(rack
+  (frame
+    (cell @count 0)
+    (cell @action inc)
+    (discard @action)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  (frame
+    (cell @count 1)
+    (cell @action)
+    (discard @action)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  end)
+
+(rack
+  (frame
+    (cell @count 0)
+    (queue (@action @actions) (inc inc dec))
+    (discard @action)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  (frame
+    (cell @count 1)
+    (queue (@action @actions) (inc dec))
+    (discard @action)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  (frame
+    (cell @count 2)
+    (queue (@action @actions) (dec))
+    (discard @action)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  (frame
+    (cell @count 1)
+    (queue (@action @actions) ())
+    (discard @action)
+    (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+    (view ((@action @count) (dec ±n) (over @count)) ^(- n 1)))
+
+  end)
+
+(rack
+  (frame
     (cell @x 100)
     (feed (copy @x) @y)
     (cell @y))

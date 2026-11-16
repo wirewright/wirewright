@@ -195,6 +195,51 @@ module Ww::Rack::Misc
           D7.patch(dst_cell.node, {2, output})
         end
 
+        matchpi %{[view (@src_ pattern_ (over @dst_)) template_]} do
+          next unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, dst))
+
+          src_cell = Rack.cell?(hg, hg.resolve(node.addr, src))
+
+          next if src_cell.nil? || (matchee = src_cell.value?).nil?
+          next unless env = M1.match?(pattern, matchee)
+
+          expansion = Alloy.render_rep(template, locals: env)
+          unless expansion.empty?
+            output = Term.collapse(expansion)
+          end
+
+          D7.patch(dst_cell.node, {2, output})
+        end
+
+        matchpi %{[view (srcs←((%past @_ min: 1)) pattern_ (over @dst_)) template_]} do
+          next unless dst_cell = Rack.cell?(hg, hg.resolve(node.addr, dst))
+
+          valid = true
+
+          row = Term::Dict.build do |commit|
+            srcs.items.each do |src|
+              src_cell = Rack.cell?(hg, hg.resolve(node.addr, src))
+
+              if src_cell.nil? || (matchee = src_cell.value?).nil?
+                valid = false
+                break
+              end
+
+              commit << matchee
+            end
+          end
+
+          next unless valid
+          next unless env = M1.match?(pattern, Term.of(row))
+
+          expansion = Alloy.render_rep(template, locals: env)
+          unless expansion.empty?
+            output = Term.collapse(expansion)
+          end
+
+          D7.patch(dst_cell.node, {2, output})
+        end
+
         otherwise { }
       end
     end

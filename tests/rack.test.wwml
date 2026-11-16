@@ -6867,3 +6867,36 @@
     (cell @y "Y is nonempty now")))
   ;; ...
 
+;; view...over
+(rack
+  (frame
+    (cell @x 100)
+    (discard @x)
+    (cell @y)
+    (view (@x ±n (over @y)) ^n))
+
+  (frame
+    (cell @x)
+    (discard @x)
+    (cell @y 100)
+    (view (@x ±n (over @y)) ^n))
+
+  end)
+
+(rack
+  (frame
+    (cell @x 100)
+    (cell @y 200)
+    (discard @y)
+    (cell @z)
+    (view ((@x @y) (±a ±b) (over @z)) ^(+ a b)))
+
+  (frame
+    (cell @x 100)
+    (cell @y)
+    (discard @y)
+    (cell @z 300)
+    (view ((@x @y) (±a ±b) (over @z)) ^(+ a b)))
+
+  end)
+

@@ -1985,7 +1985,26 @@ module Ww::Rack
       # |@pattern
       # [view (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]
       matchpi %{[view (srcs←((%past @_ min: 1)) _ @dst_) _]} do
-        edges = [] of Term
+        edges = Set(Term).new
+        edges.concat(srcs.items)
+        edges << dst
+        D7.gnd(node, edges)
+      end
+
+      # |@ rack.view
+      #
+      # |@pattern
+      # [view (@src_ pattern_ (over @dst_)) template_]
+      matchpi %{[view (@src_ _ (over @dst_)) _]} do
+        D7.gnd(node, src, dst)
+      end
+
+      # |@ rack.view
+      #
+      # |@pattern
+      # [view (srcs←((%past @_ min: 1)) pattern_ (over @dst_)) template_]
+      matchpi %{[view (srcs←((%past @_ min: 1)) _ (over @dst_)) _]} do
+        edges = Set(Term).new
         edges.concat(srcs.items)
         edges << dst
         D7.gnd(node, edges)
