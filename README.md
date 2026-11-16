@@ -6,7 +6,7 @@ Wirewright treats programs as evolving worlds. You describe the initial state, s
 Here are some interesting aspects of Wirewright:
 
 - Interactive components have insides, the same way a button in the real world is a box with a mechanism inside it. A Wirewright button is a tiny machine containing models of its own appearance, mice, inputs, and so on.
-- Programs can look around and move!
+- Programs can look around and move.
 - Editors inhabit the same world they edit.
 - Sorting is understood as a law that reduces disorder.
 - Some of the core distinctions of modern programming do not apply. The same _term_ can act as data, state, code, and UI.
@@ -25,18 +25,18 @@ The guides are more practically oriented and are my attempt to carefully introdu
 
 The guides and the associated assets are stored in the `guides/` directory. They are also shipped with each Wirewright release.
 
-There's the [Gallery](#Gallery) section where I maintain a selection of screenshots and videos of Wirewright. Some of them can be outdated, but they should give you a rough idea of how Wirewright looks like regardless.
+There's the [Gallery](#gallery) section where I maintain a selection of screenshots and videos of Wirewright. Some of them can be outdated, but they should give you a rough idea of how Wirewright looks like regardless.
 
 Then there are the more philosophical sections of this README:
-- [Introduction to Wirewright](<#Introduction to Wirewright>) — What Wirewright is trying to do.
-- [An overview of Wirewright](<#An overview of Wirewright>) —  What Wirewright is in practice.
-- [A more detailed overview of Wirewright](<#A more detailed overview of Wirewright>) — Just like the title says.
-- [References](#References) — How Wirewright relates to other things and work of other people.
+- [Introduction to Wirewright](#introduction-to-wirewright) — What Wirewright is trying to do.
+- [An overview of Wirewright](#an-overview-of-wirewright) —  What Wirewright is in practice.
+- [A more detailed overview of Wirewright](#a-more-detailed-overview-of-wirewright) — Just like the title says.
+- [References](#references) — How Wirewright relates to other things and work of other people.
 
 Now to more technical sections:
-- [Running Wirewright](<#Running Wirewright>) — Describes how to download and run Wirewright.
-- [Docs](#Docs) — Describes where to find the documentation for the project.
-- [Building Wirewright](<#Building Wirewright>) — Describes how to build Wirewright from source.
+- [Running Wirewright](#running-wirewright) — Describes how to download and run Wirewright.
+- [Docs](#docs) — Describes where to find the documentation for the project.
+- [Building Wirewright](#building-wirewright) — Describes how to build Wirewright from source.
 
 I spend a lot of time in my dev cave isolated from the rest of the world, so I can be unavailable at times. But I do publish occasional videos on the YouTube channel of Wirewright: [Wirewright — YouTube](https://www.youtube.com/@wirewright). I'm also happy to discuss the project via GitHub Discussions, Discord, or if you want to talk to me directly, at homonoidian on Telegram — pick whichever one you like most, although if you were to ask me, Telegram is by far the most reliable choice.
 
@@ -152,7 +152,7 @@ That's the second thing you CPU does when it's running a circuit. Given two succ
 
 Then there's the third thing that's sort of intertwined with the second in practice. The CPU is busy making *projections* — various bidirectional views — of the circuit. The same circuit can be *looked at* as a collection of windows containing graphical and interactive elements of all sorts. It can be *looked at* as a collection of socket servers and clients, too. Another way to *look at* the same circuit can be as an audio graph. These projections are constantly being derived and inspected by the CPU, and the *intertwined* part above refers to how the projections themselves are viewed as frames, to be diffed, and the resulting actions analyzed.
 
-The fourth thing Wirewright does when it's running a circuit is it listens for real world events (user interactions, file changes, network packets, and so on) and *manipulates* the circuit symbolically to incorporate those changes.
+The fourth thing Wirewright does when it's running a circuit is it listens for real world events (user interactions, file changes, network packets, and so on) and *manipulates* the circuit symbolically to incorporate those events.
 
 Now let's look at how day-to-day programming looks like in Wirewright. Instead of telling an existing general-purpose machine how to do things step-by-step through *algorithms* (which must specify the behavior of the machine exhaustively and preemptively), you arrange specialized *machines* and other kinds of *symbolic objects* to do tasks. The result is analogically closer to a factory or a bureaucracy, with queues, workers, managers, homeostatic and other cybernetic loops, devices, chains, producers, consumers, black boxes, and so forth.
 
