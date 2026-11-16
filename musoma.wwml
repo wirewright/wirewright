@@ -12,15 +12,12 @@
 
 
 ;; TODO: pretty printing
-;;   - FIXME: addr mismatch when getting window transcripts for `present`: wrong window key in the past
-;;   - port remaining toggleable elements (open/closed)
-;;
 ;;   - pretty printing must be synchronous wrt. physics: we must process physics
 ;;     then pretty print, then process physics again. otherwise the pretty repr
 ;;     doesn't accurately represent the state. pretty printing shouldn't occur if
 ;;     the right pane is hidden (id shouldn't involve repr and everything downstream!)
-;;
-;;   - experiment with interactive `figure`s
+;;   - how to keep `expander` state (and similar) across pretty-print frames (e.g. keyed by node addr)?
+;;   - implement `figure`
 ;;
 ;; TODO: Make sure MuSoma-dependent examples run:
 ;;   - figure.musoma.wwml
@@ -222,14 +219,17 @@
            (node @slot)
            (backsys
              {¦ window: {¦ title_string key_} -slot_}
-               <> {slot: ($SegmentedOption (@current @next ^key) ($WindowTabView ^title ^key))}))
+               <> {slot: ($Trigger (@next ^key) ($WindowTabView ^title ^key))}))
 
          (box style: "flow-row gap-2 item-fr-1"
            (nodes @tabs))
 
          (backsys
            {¦ -current_ windows: ((window _* ⍊ key_) _*)}
-             <> {current: ^key})
+             <> {current: ^key}
+
+           {¦ current_ next_}
+             <> {current: ^next, (next): ()})
 
          (box style: "fr-1"
            (visual
@@ -402,7 +402,9 @@
 (MuMenuButton spec_ ¦ () icon_string caption_string shortcut_string)
   => ($Trigger ^spec
        (box
-         (group style: "flow-row gap-2 item-center-y text-theme-text in-hover:bg-theme-overlay in-hover:cursor-pointer in-active:bg-theme-decor-med text-base/6 px-3 py-2 rounded border border-xs border-theme-decor-med"
+         (group style: "flow-row gap-2 item-center-y text-theme-text in-hover:bg-theme-overlay \
+                        in-hover:cursor-pointer in-active:bg-theme-decor-med text-base/6 px-3 \
+                        py-2 rounded border border-xs border-theme-decor-med"
            (icon ^icon)
            (p ^caption style: "fr-1")
            (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))
@@ -922,6 +924,22 @@
     {¦ motions: (M←(key delete ctrl: true) _*) locus: ⟨["" (I _number) ""] R_⟩}
       <> {(M): (), (R): ()}
 
+    ;; Edit previous item.
+    {¦ motions: (M←(key (%any left backspace)) _*) locus: ⟨term←(%any° (%atom) @_) [l←"" (I _number) ""]⟩}
+      <> {(M): (), (term): (), l: ^(ml/display term)}
+
+    ;; Edit next item.
+    {¦ motions: (M←(key (%any right delete)) _*) locus: ⟨["" (I _number) r←""] term←(%any° (%atom) @_)⟩}
+      <> {(M): (), (term): (), r: ^(ml/display term)}
+
+    ;; Force edit previous item.
+    {¦ motions: (M←(key left ctrl: true) _*) locus: ⟨term_ [l←"" (I _number) ""]⟩}
+      <> {(M): (), (term): (), l: ^(ml/display term)}
+
+    ;; Force edit next item.
+    {¦ motions: (M←(key right ctrl: true) _*) locus: ⟨["" (I _number) r←""] term_⟩}
+      <> {(M): (), (term): (), r: ^(ml/display term)}
+
     ;; Escape dict left.
     {¦ motions: (M←(key left) _*) locus: ⟨P←[E←["" (I _number) ""] _*]⟩}
       <> {(M): (), (P): (^E ^(up P)), (E): ()}
@@ -1238,13 +1256,13 @@
              (pair ^key ^value)))
 
     ;; Section widget (closed).
-    (gnd (section title_string _* ¦ -open) ⍊ addr_ -editing)
+    (gnd (section title_string _*) ⍊ addr_ -editing)
       => (group detail: row
            (atom "" detail: (expander (section ^addr) icon: "chevron_right" center: true))
            (atom ^title detail: section))
 
     ;; Section widget (open).
-    (parent _ _ children_* ⍊ addr_ reference_: (section title_string _* ¦ (%keypool open)))
+    (parent _ _ children_* ⍊ addr_ reference_: (section title_string _* ¦ () open))
       => (group detail: col form: multiline
            (group detail: row
              (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
@@ -1252,19 +1270,101 @@
            ^*children)
 
     ;; Slot widget (closed).
-    (gnd (slot call_ _ ¦ -open) ⍊ addr_ -editing)
+    (gnd (slot call_ _) ⍊ addr_ -editing)
       => (group detail: row
            (atom "" detail: (expander (slot ^addr) icon: "chevron_right" center: true))
            (inline (term ^call)))
 
     ;; Slot widget (open).
-    (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ (%keytest open)))
+    (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ () open))
       => (group detail: col form: multiline
            (group detail: row
              (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
              (inline (term ^call)))
            (group detail: interior
              ^child))
+
+    ;; Backsys or rewriter widget (open).
+    (gnd node←(⸨backsys,rewriter⸩ _* ¦ () open) ⍊ addr_ -editing)
+      => (group detail: row
+           (atom "" detail: (expander (backsys ^addr) icon: "expand_more"))
+           (term ^(itemspart node)))
+
+    ;; Backsys or rewriter widget with explicit edges (closed).
+    (gnd reference←(⸨backsys,rewriter⸩ header_dict _*) ⍊ addr_ -editing)
+      => (group detail: row
+           (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+           (inline
+             (group detail: dict
+               generic
+               (term ⸨backsys,rewriter⸩)
+               (term ^header)
+               (atom "…" detail: punct))))
+
+    ;; Backsys or rewriter with inferred edges widget (closed).
+    (gnd reference←(⸨backsys,rewriter⸩ [(%any rule backmap) _ _] _*) ⍊ addr_ -editing)
+      => (group detail: row
+           (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+           (inline
+             (group detail: dict
+               generic
+               (term ⸨backsys,rewriter⸩)
+               (atom "…" detail: punct))))
+
+    ;; Supervisor widget (open).
+    (parent children_* ⍊ addr_ reference: (supervisor _* ¦ () open) -editing)
+      => (group detail: row
+           (atom "" detail: (expander (supervisor ^addr) icon: "expand_more"))
+           (group detail: dict form: multiline
+             block
+             ^*children))
+
+    ;; Supervisor widget (closed).
+    (gnd (supervisor spec_ _*) ⍊ addr_ -editing)
+      => (group detail: row
+           (atom "" detail: (expander (supervisor ^addr) icon: "chevron_right"))
+           (inline
+             (group detail: dict
+               generic
+               (term supervisor)
+               (term ^spec)
+               (atom "…" detail: punct))))
+
+    ;; Device widget (open).
+    (parent children_* ⍊ addr_ reference: (device _* ¦ () open) -editing)
+      => (group detail: row
+           (atom "" detail: (expander (device ^addr) icon: "expand_more"))
+           (group detail: dict form: multiline
+             call
+             ^*children))
+
+    ;; Device widget (closed).
+    (gnd (device _*) ⍊ addr_ -editing)
+      => (group detail: row
+           (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
+           (inline
+             (group detail: dict
+               generic
+               (term device)
+               (atom "…" detail: punct))))
+
+    ;; Rule widget (open)
+    (parent _ pattern_ body_ ⍊ addr_ reference: (rule _ _ ⍊ doc_: (%optional () (_string*))) -editing)
+      => (group detail: row
+           (atom "" detail: (expander (device ^addr) icon: "expand_more"))
+           (group detail: (rule ^:doc)
+              ^pattern
+              (atom "=>" detail: punct size: 32)
+              ^body))
+
+    ;; Rule widget (closed)
+    (gnd (rule pattern_ _ ⍊ doc_: (%optional () (_string*))) ⍊ addr_ -editing)
+      => (group detail: row
+           (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
+           (group detail: (rule ^:doc)
+             (term ^pattern)
+             (atom "=>" detail: punct size: 32)
+             (atom "…" detail: punct)))
 
     ;; Dictionary shape recognition rules.
 
@@ -1278,6 +1378,10 @@
     ;;   2
     ;;   3)
     (shape (_symbol _*)) => call
+
+    ;; Exceptions to the rule above.
+    (shape ((%any ^match ^case ^when)  _*))
+      => block
 
     ;; (head (1 2 3)
     ;;   a
@@ -1625,7 +1729,7 @@
            ^caption)
 
     ;; Format expander.
-    (atom _ ⍊ detail: (expander (head_ addr_) ⍊ icon_string center_boolean))
+    (atom _ ⍊ detail: (expander (head_ addr_) ⍊ icon_string center⋮ false))
       => (module {:@program}
            (cell @addr ^addr)
 

@@ -256,36 +256,53 @@
 
        (rewriter ((stageR (rulesetR exh: true)) - {@:current, @:mousearea, @:next, @:option, @:visuals})
          (stage
-           {¦ mousearea: [mousearea mouse_] -mouse: >mouse} <> {>mouse: ^mouse}
-           {¦ -hover_ mouse: (mouse _)} <> {hover: true}
-           {¦ -hover_ mouse visuals: {¦ hover}} <> {hover: true}
-           {¦ -active_ hover mouse: {¦ left}} <> {active: true}
+           {¦ mousearea: [mousearea mouse_] -mouse: >mouse}
+             <> {>mouse: ^mouse}
+
+           {¦ -hover_ mouse: (mouse _)}
+             <> {hover: true}
+
+           {¦ -hover_ mouse visuals: {¦ hover}}
+             <> {hover: true}
+
+           {¦ -active_ hover mouse: {¦ left}}
+             <> {active: true}
+
            {¦ -clicked_ hover mouse: {¦ -left} visuals: {¦ active}}
              <> {clicked: true})
+
          (stage
            ;; If we're the "reigning" option and someone asks for a turnover, we submit
            ;; and do the turnover.
            {¦ option_ current_: option_ next_}
              <> {current: ^next, (next): ()}
+
            ;; If the user clicks on us and we're already active, just consume their
            ;; click and move on.
            {¦ clicked_ option_ current: option_}
              <> {(clicked): ()}
+
            ;; If the user clicks on us and we're NOT already active, we have to
            ;; ask the "reigning" option for a turnover.
            {¦ clicked_ option_ -next_}
              <> {(clicked): (), next: ^option})
+
          (stage
            {¦ option_ current_ visuals: {¦ ⋮checked ⋮disabled}}
              <> {checked: ^(= option current), disabled: false}
+
            {¦ -current visuals: {¦ ⋮checked ⋮disabled}}
              <> {checked: false, disabled: true}
+
            {¦ current hover visuals: {¦ ⋮hover}}
              <> {hover: true}
+
            {¦ current -hover visuals: {¦ hover_}}
              <> {(hover): ()}
+
            {¦ current active visuals: {¦ ⋮active}}
              <> {active: true}
+
            {¦ current -active visuals: {¦ active_}}
              <> {(active): ()}))
 
@@ -330,25 +347,38 @@
        ;;| and act.
        (rewriter ((stageR (rulesetR exh: true)) - {@:mousearea, @:visuals, @:state})
          (stage
-           {¦ mousearea: [mousearea mouse_] -mouse: >mouse} <> {>mouse: ^mouse}
-           {¦ -hover_ mouse: (mouse _)} <> {hover: true}
-           {¦ -hover_ mouse visuals: {¦ hover}} <> {hover: true}
-           {¦ -active_ hover mouse: {¦ left}} <> {active: true}
+           {¦ mousearea: [mousearea mouse_] -mouse: >mouse}
+             <> {>mouse: ^mouse}
+
+           {¦ -hover_ mouse: (mouse _)}
+             <> {hover: true}
+
+           {¦ -hover_ mouse visuals: {¦ hover}}
+             <> {hover: true}
+
+           {¦ -active_ hover mouse: {¦ left}}
+             <> {active: true}
+
            {¦ -clicked_ hover mouse: {¦ -left} visuals: {¦ active}}
              <> {clicked: true})
+
          (stage
            ;; "Decide" to toggle state when clicked.
            {¦ clicked state_boolean} <> {state: ^(not state)})
+
          (stage
            ;; Maintain `checked` on *visuals* in sync.
            {¦ state_boolean visuals: {¦ ⋮checked}} <> {checked: ^state}
+
            ;; Maintain `hover` on *visuals* in sync.
            {¦ hover visuals: {¦ ⋮hover}} <> {hover: true}
            {¦ -hover visuals: {¦ hover_}} <> {(hover): ()}
+
            ;; Maintain `active` on *visuals* in sync. Us doing so serves a double duty,
            ;; since we also use `active` from *visuals* as a memory of our previous state.
            {¦ active visuals: {¦ ⋮active}} <> {active: true}
            {¦ -active visuals: {¦ active_}} <> {(active): ()}
+
            ;; Maintain `disabled` on *visuals* in sync.
            {¦ state: (%- _boolean) visuals: {¦ -disabled_}} <> {disabled: true}
            {¦ state: _boolean visuals: {¦ disabled_}} <> {(disabled): ()}))

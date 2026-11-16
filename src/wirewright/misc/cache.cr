@@ -623,6 +623,10 @@ module Ww
       @vertices = alive
     end
 
+    def size
+      @cache.size
+    end
+
     def stat
       {cache:    @cache.size,
        graph:    @graph.size,

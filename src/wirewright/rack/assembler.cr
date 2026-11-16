@@ -157,7 +157,7 @@ module Ww::Rack::Assembler
   defrecord RuleBodyChanged, rule : Rule, index : Int32, defn : RuleDefn
   defrecord RuleScopeChanged, rule : Rule, index : Int32, defn : RuleDefn
 
-  # Tells what changed based on the last known list of *rules*, and a new
+  # Determines what changed based on the last known list of *rules*, and a new
   # list of rule definitions *defns*.
   def diff(rules : Indexable(Rule), defns : Indexable(RuleDefn)) : Slice(RuleEvent)
     events = Pf::Kit.stack_array(RuleEvent, 8)

@@ -627,6 +627,10 @@ module Ww
         return Term.rep(input)
       end
 
+      if proposal = proposals.single?
+        return Term.rep(proposal)
+      end
+
       programs = Pf::Kit.stack_array(Array(Term::Diff::Action) | Term, 8)
       proposals.each do |proposal|
         program = Term.diff?(input, proposal, depth_limit: depth_limit) || proposal

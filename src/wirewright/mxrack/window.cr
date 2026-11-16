@@ -1052,7 +1052,8 @@ module Ww::MxRack
       in ViRecognized::Ensemble
         summary |= HasEnsemble
         summary |= ViSummary.of(node.children)
-      in ViAddrSeq(ViRecognized::Node)
+      in ViAddrSeq(ViRecognized::Node),
+         ViScopeStep(ViRecognized::Node)
         summary |= ViSummary.of(node.successor)
       end
 
@@ -1075,7 +1076,8 @@ module Ww::MxRack
         summary |= ViSummary.of(node.children)
       in ViInstantiated::Thunk
         summary |= ViSummary.of(node.successor)
-      in ViAddrSeq(ViInstantiated::Node)
+      in ViAddrSeq(ViInstantiated::Node),
+         ViScopeStep(ViInstantiated::Node)
         summary |= ViSummary.of(node.successor)
       end
 
@@ -1093,7 +1095,8 @@ module Ww::MxRack
         summary |= node.summary
       in ViSituated::Thunk
         summary |= ViSummary.of(node.successor)
-      in ViAddrSeq(ViSituated::Node)
+      in ViAddrSeq(ViSituated::Node),
+         ViScopeStep(ViSituated::Node)
         summary |= ViSummary.of(node.successor)
       end
 
@@ -1139,10 +1142,13 @@ module Ww::MxRack
     end
   end
 
+  defcase ViScopeStep(Node), key : Term, successor : Node
+
   module ViRecognized
     extend self
 
-    alias Node = Leaf | Gnd | Site | Hitarea | Visual | Guard | Group | Ensemble | ViAddrSeq(Node)
+    alias Node = Leaf | Gnd | Site | Hitarea | Visual | Guard | Group | Ensemble |
+                 ViScopeStep(Node) | ViAddrSeq(Node)
 
     defrecord Leaf, node : Term, questions : Slice(QuestionId)
     defrecord Gnd, node : Term::Dict, questions : Slice(QuestionId), pairs : Slice(Pair)
@@ -1318,16 +1324,27 @@ module Ww::MxRack
 
       head = tree.feature.signature.try(&.head)
       if head.nil? || !(visual || MxRack.visual?(setup.microfold, node))
+        Term.matchpi?(node, %{[automaton (key_ _) _*]}) do
+          children.map! { |child| ViScopeStep(Node).new(key, child) }
+        end
+
         case predicate
         in D7::Passable.class
         in D7::PassablePredicate
           children.map! { |child| Guard.new(predicate, child) }
         end
+
         return children.to_unsafe_readonly_slice!
       end
 
       questions, pairs = questions_and_pairs(node)
+
       group = Group.new(head, children.to_unsafe_readonly_slice!, questions, pairs, node.pairspart)
+
+      Term.matchpi?(node, %{[automaton (key_ _) _*]}) do
+        group = ViScopeStep(Node).new(key, group)
+      end
+
       case predicate
       in D7::Passable.class
         Slice(Node).of(group)
@@ -1396,7 +1413,7 @@ module Ww::MxRack
 
     alias Prev = ViRecognized
 
-    alias Node = Leaf | Site | Hitarea | Group | Ensemble | Thunk | ViAddrSeq(Node)
+    alias Node = Leaf | Site | Hitarea | Group | Ensemble | Thunk | ViScopeStep(Node) | ViAddrSeq(Node)
 
     alias Leaf = Prev::Leaf
     alias Site = Prev::Site
@@ -1572,6 +1589,13 @@ module Ww::MxRack
       end
     end
 
+    # :nodoc:
+    def instantiate(hg : D7::Hypergraph, addr : D7::NodeAddr, input : ViScopeStep(Prev::Node)) : Slice(Node)
+      instantiate(hg, addr, input.successor).to_readonly_slice do |successor|
+        ViScopeStep(Node).new(input.key, successor).as(Node)
+      end
+    end
+
     # *Instantiates* zero or more *roots*.
     #
     # Instantiation turns recognized nodes `Prev::Node` into instantiated nodes
@@ -1616,12 +1640,16 @@ module Ww::MxRack
       ViAddrSeq(Node).new(node.addr, unwrap(node.successor))
     end
 
+    # :nodoc:
+    def unwrap(node : ViScopeStep(Prev::Node)) : Node
+      ViScopeStep(Node).new(node.key, unwrap(node.successor))
+    end
+
     def unwrap(cast : Thunk) : Node
       unwrap(cast.successor)
     end
   end
 
-  # situate?
   module ViSituated
     extend self
 
@@ -1634,6 +1662,7 @@ module Ww::MxRack
 
     defrecord Group,
       addr : D7::NodeAddr,
+      scope : Slice(Term),
       head : Term,
       children : Slice(Node),
       questions : Slice(Question),
@@ -1641,74 +1670,79 @@ module Ww::MxRack
       summary : ViSummary
 
     struct Group
-      def self.new(addr : D7::NodeAddr, head : Term, children : Slice(Node), questions : Slice(Question), pairspart : Term::Dict)
+      def self.new(addr : D7::NodeAddr, scope : Slice(Term), head : Term, children : Slice(Node), questions : Slice(Question), pairspart : Term::Dict)
         summary = ViSummary.of(head, children, questions)
-        new(addr, head, children, questions, pairspart, summary)
+        new(addr, scope, head, children, questions, pairspart, summary)
       end
     end
 
     # Instead of eagerly converting a potentially large instance tree to a ViSituated
     # node we create thunks.
-    defrecord Thunk, addr : D7::NodeAddr, successor : Prev::Node
+    defrecord Thunk, addr : D7::NodeAddr, scope : Slice(Term), successor : Prev::Node
 
     # :nodoc:
-    def situate(input : Prev::Leaf, addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
+    def situate(input : Prev::Leaf, addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
       questions = input.questions.to_readonly_slice { |question| Question.new(addr, Term.of(question.name)) }
       Slice(Node).of(Leaf.new(addr, input.node, questions))
     end
 
     # :nodoc:
-    def situate(input : Prev::Hitarea, addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
+    def situate(input : Prev::Hitarea, addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
       Slice(Node).of(Hitarea.new(addr))
     end
 
     # :nodoc:
-    def situate(input : Prev::Site, addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
+    def situate(input : Prev::Site, addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
       arg = argq.shift?
       arg ? Slice(Node).of(arg) : Slice(Node).empty
     end
 
     # :nodoc:
-    def situate(input : Prev::Group, addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
+    def situate(input : Prev::Group, addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
       unless input.summary.has_ensemble? || (argq.present? && input.summary.has_site?)
-        return Slice(Node).of(Thunk.new(addr, input))
+        return Slice(Node).of(Thunk.new(addr, scope, input))
       end
 
       children = Pf::Kit.stack_array(Node, 8)
       input.children.each do |child|
-        children.concat(situate(child, addr, argq))
+        children.concat(situate(child, addr, scope, argq))
       end
 
       questions = input.questions.to_readonly_slice { |question| Question.new(addr, Term.of(question.name)) }
-      group = Group.new(addr, input.head, children.to_unsafe_readonly_slice!, questions, input.pairspart)
+      group = Group.new(addr, scope, input.head, children.to_unsafe_readonly_slice!, questions, input.pairspart)
       Slice(Node).of(group)
     end
 
     # :nodoc:
-    def situate(input : Prev::Ensemble, addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
+    def situate(input : Prev::Ensemble, addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
       unless body = input.children.first?
         return Slice(Node).empty
       end
 
       subargq = Deque(Node).new
       args = input.children.rest
-      args.each { |arg| subargq.concat(situate(arg, addr, argq)) }
-      situate(body, addr, subargq)
+      args.each { |arg| subargq.concat(situate(arg, addr, scope, argq)) }
+      situate(body, addr, scope, subargq)
     end
 
     # :nodoc:
-    def situate(input : Prev::Thunk, addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
+    def situate(input : Prev::Thunk, addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
       summary = ViSummary.of(input.successor)
       unless summary.has_ensemble? || summary.has_site?
-        return Slice(Node).of(Thunk.new(addr, Prev.unwrap(input)))
+        return Slice(Node).of(Thunk.new(addr, scope, Prev.unwrap(input)))
       end
 
-      situate(Prev.unwrap(input), addr, argq)
+      situate(Prev.unwrap(input), addr, scope, argq)
     end
 
     # :nodoc:
-    def situate(input : ViAddrSeq(Prev::Node), addr : D7::NodeAddr, argq : Deque(Node)) : Slice(Node)
-      situate(input.successor, D7::NodeAddr.concat(addr, input.addr), argq)
+    def situate(input : ViAddrSeq(Prev::Node), addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
+      situate(input.successor, D7::NodeAddr.concat(addr, input.addr), scope, argq)
+    end
+
+    # :nodoc:
+    def situate(input : ViScopeStep(Prev::Node), addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
+      situate(input.successor, addr, scope.append(input.key), argq)
     end
 
     # The situate pass subtracts Ensembles and Sites.
@@ -1716,7 +1750,7 @@ module Ww::MxRack
       results = Pf::Kit.stack_array(Node, 4)
       roots.each do |root|
         argq = Deque(Node).new
-        results.concat(situate(root, D7::NodeAddr.empty, argq))
+        results.concat(situate(root, D7::NodeAddr.empty, Slice(Term).empty, argq))
       end
       results.to_unsafe_readonly_slice!
     end
@@ -1862,40 +1896,45 @@ module Ww::MxRack
     end
 
     # :nodoc:
-    def unwrap(addr : D7::NodeAddr, node : Prev::Leaf) : Node
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : Prev::Leaf) : Node
       questions = node.questions.to_readonly_slice { |question| Question.new(addr, Term.of(question.name)) }
       Leaf.new(addr, node.node, questions)
     end
 
     # :nodoc:
-    def unwrap(addr : D7::NodeAddr, node : Prev::Hitarea) : Node
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : Prev::Hitarea) : Node
       Hitarea.new(addr)
     end
 
     # :nodoc:
-    def unwrap(addr : D7::NodeAddr, node : Prev::Ensemble | Prev::Site) : Node
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : Prev::Ensemble | Prev::Site) : Node
       raise TypeCastError.new
     end
 
     # :nodoc:
-    def unwrap(addr : D7::NodeAddr, node : Prev::Thunk) : Node
-      unwrap(addr, Prev.unwrap(node))
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : Prev::Thunk) : Node
+      unwrap(addr, scope, Prev.unwrap(node))
     end
 
     # :nodoc:
-    def unwrap(addr : D7::NodeAddr, node : Prev::Group) : Node
-      children = node.children.to_readonly_slice { |child| Thunk.new(addr, child).as(Node) }
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : Prev::Group) : Node
+      children = node.children.to_readonly_slice { |child| Thunk.new(addr, scope, child).as(Node) }
       questions = node.questions.to_readonly_slice { |question| Question.new(addr, Term.of(question.name)) }
-      Group.new(addr, node.head, children, questions, node.pairspart)
+      Group.new(addr, scope, node.head, children, questions, node.pairspart)
     end
 
     # :nodoc:
-    def unwrap(addr : D7::NodeAddr, node : ViAddrSeq(Prev::Node)) : Node
-      unwrap(D7::NodeAddr.concat(addr, node.addr), node.successor)
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : ViAddrSeq(Prev::Node)) : Node
+      unwrap(D7::NodeAddr.concat(addr, node.addr), scope, node.successor)
+    end
+
+    # :nodoc:
+    def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : ViScopeStep(Prev::Node)) : Node
+      unwrap(addr, scope.append(node.key), node.successor)
     end
 
     def unwrap(node : Thunk) : Node
-      unwrap(node.addr, node.successor)
+      unwrap(node.addr, node.scope, node.successor)
     end
   end
 
@@ -1913,7 +1952,7 @@ module Ww::MxRack
     microfold : Microfold::Codex,
     epoch : UInt64
 
-  def windows(setup : WindowingSetup, circuit : D7::ParseTree, hg : D7::Hypergraph, interactive : Bool) : Array(Window)
+  def windows(setup : WindowingSetup, scope : Slice(Term), circuit : D7::ParseTree, hg : D7::Hypergraph, interactive : Bool) : Array(Window)
     components = ViRecognized.components(circuit)
     recognized = ViRecognized.recognize(setup, components, circuit)
     instance = ViInstantiated.instantiate(hg, recognized)
@@ -1926,6 +1965,7 @@ module Ww::MxRack
         scenery = Microfold.render(setup.microfold, visuals).unwrap
         next unless window_spec = window_spec?(scenery)
 
+        window_spec = window_spec.copy_with(key: Term.of(scope + window_group.scope, window_spec.key))
         staging << StagingWindow.new(window_group.addr, window_spec, scenery, questions)
       end
     end
@@ -1972,12 +2012,12 @@ module Ww::MxRack
     end
   end
 
-  def windows(setup : WindowingSetup, circuit : D7::ParseTree, *, interactive : Bool = true) : Array(Window)
+  def windows(setup : WindowingSetup, scope : Slice(Term), circuit : D7::ParseTree, interactive : Bool) : Array(Window)
     windows = [] of Window
 
     hg = D7::Hypergraph.new(circuit)
     Rack::Prepass.call(hg) do |hg| # shadow
-      windows = windows(setup, circuit, hg, interactive)
+      windows = windows(setup, scope, circuit, hg, interactive)
     end
 
     windows

@@ -1,6 +1,7 @@
 module Ww::MxRack
   defcase Automaton,
     addr : D7::NodeAddr,
+    scope : Slice(Term),
     key : Term,
     workspace : Term::Dict,
     draft : Term
@@ -33,7 +34,7 @@ module Ww::MxRack
         # everything up.
         subscope = scope.append(key)
 
-        sink << Automaton.new(addr, Term.of(subscope), workspace, draft)
+        sink << Automaton.new(addr, subscope, Term.of(subscope), workspace, draft)
 
         tree.children.zip(tree.feature.range) do |child, key|
           automata(sink, addr.append(key), subscope, child)
@@ -271,6 +272,10 @@ module Ww::MxRack
 
         matchpi %{(rule _ _ ⍊ open)} do
           D7.parent(node.as_d, 2u32...3u32)
+        end
+
+        matchpi %{(component _dict _*)} do
+          D7.parent(node.as_d, 2u32...node.uitemsize)
         end
 
         matchpi %{(rule _ _ ⍊ -open)} do
@@ -941,7 +946,7 @@ module Ww::MxRack
 
       windowing_setup ||= WindowingSetup.new(windowing_cache, microfold.@codex, 0u64)
 
-      windows = windows(windowing_setup, circuit.parser.parse(circuit.draft))
+      windows = windows(windowing_setup, Slice(Term).empty, circuit.parser.parse(circuit.draft), interactive: true)
 
       # Handle events.
       case event = eventq.shift?
@@ -1000,7 +1005,7 @@ module Ww::MxRack
         step_out = circuit.step(Rack::Prepass, library)
 
         # Get all projections of the circuit.
-        windows, automata, au_windows = windows_with_automata(windows(windowing_setup, step_out), step_out)
+        windows, automata, au_windows = windows_with_automata(windows(windowing_setup, Slice(Term).empty, step_out, interactive: true), step_out)
 
         adjustments = Pf::Kit.stack_array(Adjustment, 8)
 
@@ -1055,16 +1060,15 @@ module Ww::MxRack
             next
           end
 
-          window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
-
           if present = automaton.workspace[:present]?
             present_tree = guest.parser.parse(present)
             repr_tree = guest.repr_parser.parse(present)
-            # window_transcripts = windows(windowing_setup, present_tree, interactive: false).map { |window| transcribe(window) }
+            window_transcripts = windows(windowing_setup, automaton.scope, present_tree, interactive: false).map { |window| transcribe(window) }
 
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(repr_tree, token))
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
           else
+            window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
             # FIXME: this is wrong in all sorts of ways. Why do we have to reparse stuff?
             # Why do we use the MxRack classifier to parse everything and then have to reparse
             # draft and so on with automaton's classifier auclf()?
@@ -1081,9 +1085,8 @@ module Ww::MxRack
         end
 
         # Stepping automata can alter projections, so we have to recalculate them afterward.
-        # windows, _, _ = windows_with_automata(alloy_cache, microfold, circuit.parser.parse(circuit.draft))
         draft_tree = circuit.parser.parse(circuit.draft)
-        windows, _, _ = windows_with_automata(windows(windowing_setup, draft_tree), draft_tree)
+        windows, _, _ = windows_with_automata(windows(windowing_setup, Slice(Term).empty, draft_tree, interactive: true), draft_tree)
 
         # Perform focus exchange if possible -- so that `focus: wanted` becomes `focus: true`,
         # and previous foci are released.
@@ -1121,10 +1124,15 @@ module Ww::MxRack
 
       # This is a spot for garbage collection and similar kinds of cleanup.
       wm.gc
-      t0 = Time.instant
-      windowing_cache.sweep
-      t1 = Time.instant
-      if stat
+
+      pass do
+        next unless windowing_cache.size > 1024
+
+        t0 = Time.instant
+        windowing_cache.sweep
+        t1 = Time.instant
+        next unless stat
+
         puts "  Windowing cache swept in #{(t1 - t0).total_milliseconds}ms"
       end
 
