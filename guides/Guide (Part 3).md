@@ -327,7 +327,7 @@ With a different merge policy, let's say, `seq`, which picks the minimum among c
 (cell @in 4)
 (transfer (@in x_number @out) ^(* x 2))
 (transfer (@in x_number @out) ^(* x x))
-(cell (@out seq))
+(cell (seq @out))
 ```
 
 We get this:
@@ -338,14 +338,14 @@ $ ./irack --single-step seed.wwml
 (cell @in 4)
 (transfer (@in x_number @out) ^(* x 2)) ;; this proposes 8
 (transfer (@in x_number @out) ^(* x x)) ;; this proposes 16
-(cell (@out seq))
+(cell (seq @out))
 <Press Enter>
 
 # Frame 1
 (cell @in)
 (transfer (@in x_number @out) ^(* x 2))
 (transfer (@in x_number @out) ^(* x x))
-(cell (@out seq) 8)
+(cell (seq @out) 8)
 <Press Enter>
 
 $
@@ -612,7 +612,7 @@ $ ./irack --single-step seed.wwml
 $
 ```
 
-Note the curious thing: `view` lags by one frame. Conceptually, it "costs" one frame to calculate the view. So if the thing you're making a view of — the source cell's content — changes *as fast*, that is, once per frame, then there's basically no way for `view` to catch up. That's just what is happening in the circuit above: the counter always outruns the view by one frame, and the view is perpetually lagging behind by one frame. If the counter changed less frequently, say, every couple of frames, then the view would show an in-sync value most of the time.
+Notice one curiosity: `view` lags by one frame. Conceptually, it "costs" one frame to compute the view. So if the thing you're making a view of — the source cell's content — changes *as fast*, that is, once per frame, then there's basically no way for `view` to catch up. That's just what is happening in the circuit above: the counter always outruns the view by one frame, and the view is perpetually lagging behind by one frame. If the counter changed less frequently, say, every couple of frames, then the view would show an in-sync value most of the time.
 
 Just like `transfer`, `view` can take two or more source edges:
 
@@ -644,6 +644,145 @@ $ ./irack --single-step seed.wwml
 $
 ```
 
+A `view` node controls its destination cell: if source cell(s) are empty, or they do not match the `view`'s pattern, then it will clear the destination cell, as its content is now "invalid".
+
+```wwml
+(cell @a 2)
+(cell @b 3)
+(discard @b)
+(view ((@a @b) (±a ±b) @sum) ^(+ a b))
+(cell @sum)
+```
+
+Here's what happens:
+
+```bash session
+$ ./irack --single-step seed.wwml
+# Frame 0 (seed)
+(cell @a 2)
+(cell @b 3)
+(discard @b)
+(view ((@a @b) (±a ±b) @sum) ^(+ a b))
+(cell @sum)
+<Press Enter>
+
+# Frame 1
+(cell @a 2)
+(cell @b)
+(discard @b)
+(view ((@a @b) (±a ±b) @sum) ^(+ a b))
+(cell @sum 5)
+<Press Enter>
+
+# Frame 2
+(cell @a 2)
+(cell @b)
+(discard @b)
+(view ((@a @b) (±a ±b) @sum) ^(+ a b))
+(cell @sum)
+<Press Enter>
+
+$
+```
+
+In Frame 0, both `@a` and `@b` are available, so `view` is able to compute the sum that we observe in Frame 1. Simultaneously, `discard` succeeds in clearing `@b` — something we also observe in Frame 1. In Frame 1, `view` notices that `@b` is now empty, and concludes that the destination edge `@sum` is now invalid. It thus clears `@sum`, which we see reflected in Frame 2.
+
+This "invalidation" behavior means that two or more views with the same destination cell will conflict. Two or more mutually exclusive views will inevitably conflict:
+
+```wwml
+(cell @count 0)
+(cell @action inc)
+(view ((@action @count) (inc ±n) @count) ^(+ n 1))
+(view ((@action @count) (dec ±n) @count) ^(- n 1))
+```
+
+This circuit is immediately quiescent:
+
+```bash session
+$ ./irack --single-step seed.wwml
+# Frame 0 (seed)
+(cell @count 0)
+(cell @action inc)
+(view ((@action @count) (inc ±n) @count) ^(+ n 1))
+(view ((@action @count) (dec ±n) @count) ^(- n 1))
+<Press Enter>
+
+$
+```
+
+There's a variant of `view` that has "relaxed" control over the destination cell. Instead of clearing the destination cell, the `over` variant simply ignores it — "shuts itself down" — until the time its inputs match again.
+
+```wwml
+(cell @count 0)
+(cell @action inc)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+```
+
+The circuit evolves as follows:
+
+```bash session
+$ ./irack --single-step seed.wwml
+# Frame 0 (seed)
+(cell @count 0)
+(cell @action inc)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+<Press Enter>
+
+# Frame 1
+(cell @count 1)
+(cell @action inc)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+<Press Enter>
+
+# Frame 2
+(cell @count 2)
+(cell @action inc)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+<Ctrl-C>
+
+$
+```
+
+There's obviously a "bug" in our circuit (though the notion of *bug*  is slightly less catastrophic in Wirewright than in traditional programming): the action is never consumed, so we keep incrementing forever. `view` nodes are of no help here. (Nor is `transfer`, for that matter, because we want to keep `@count` but consume `@action`; and also we want to modify `@count` which is not possible with `transfer`, for the latter doesn't support using the same cell as both a source and a destination.)
+
+We can use the `discard` node on `@action`, relying on Rack's / Wirewright's synchronous evolution:
+
+```wwml
+(cell @count 0)
+(cell @action inc)
+(discard @action)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+```
+
+This evolves like so:
+
+```bash session
+$ ./irack --single-step seed.wwml
+# Frame 0 (seed)
+(cell @count 0)
+(cell @action inc)
+(discard @action)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+<Press Enter>
+
+# Frame 1
+(cell @count 1)
+(cell @action)
+(discard @action)
+(view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
+(view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
+<Press Enter>
+
+$
+```
+
+As an exercise, replace `inc` with `dec`, and see what happens. Then try placing an invalid action — say, `foo` — and see what happens.
 ## More variants of `feed`
 
 There's a couple more variants of feed that are useful to know. The first one is the `copy` variant of feed. It *copies* the value in the source cell instead of *moving* it to the destination.
