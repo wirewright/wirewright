@@ -15,8 +15,11 @@
 ;;   - pretty printing must be synchronous wrt. physics: we must process physics
 ;;     then pretty print, then process physics again. otherwise the pretty repr
 ;;     doesn't accurately represent the state. pretty printing shouldn't occur if
-;;     the right pane is hidden (id shouldn't involve repr and everything downstream!)
-;;   - how to keep `expander` state (and similar) across pretty-print frames (e.g. keyed by node addr)?
+;;     the right pane is hidden (it shouldn't involve repr and everything downstream!)
+;;
+;;   - how to keep `expander` state (and similar) across pretty-print frames
+;;     (e.g. keyed by node addr)?
+;;
 ;;   - implement `figure`
 ;;
 ;; TODO: Make sure MuSoma-dependent examples run:
@@ -27,13 +30,6 @@
 ;; keys occasionally/on unfocus (?)
 ;;
 ;; TODO(medium, rack, irack, mxrack): allow to load seed from arguments `argv` (?)
-;;
-;; TODO: D7 node-based diff for live editing in mxrack
-;;    - Live-reload MxRack codex
-;;    - Live-reload Microfold codex
-;;    - Live-reload circuit
-;;      * A node that did not change in reference vs. running circuit can be replaced
-;;        with the corresponding node from the modified seed.
 ;;
 ;; TODO: WE ARE TERRIBLY, TERRIBLY SLOW. MY GOSH! It's not going to be possible
 ;; to ditch the old MuSoma until we can be on par with it in terms of performance,
@@ -960,6 +956,14 @@
     {¦ motions: (M←(rune "(") _*) locus_: ["" (I _number) ""]}
       <> {(M): (), locus: (^locus)}
 
+    ;; Remove surrounding dict.
+    {¦ motions: (M←(key backspace) _*) locus: ⟨P←(E←["" (I _number) ""])⟩}
+      <> {(M): (), P: ^E}
+
+    ;; Flatten surrounding dict.
+    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨P←(E←["" (I _number) ""] rest_*)⟩}
+      <> {(M): (), (P): (^E ^*rest)}
+
     ;; Escape dict from back.
     {¦ motions: (M←(rune ")") _*) locus: ⟨P←[_* E←["" (I _number) ""]]⟩}
       <> {(M): (), (P): (^(up P) ^E), (E): ()}
@@ -1377,10 +1381,10 @@
     ;;   1
     ;;   2
     ;;   3)
-    (shape (_symbol _*)) => call
+    (shape (_symbol _+)) => call
 
     ;; Exceptions to the rule above.
-    (shape ((%any ^match ^case ^when)  _*))
+    (shape ((%any ^match ^case ^when) _ _+))
       => block
 
     ;; (head (1 2 3)
@@ -1393,7 +1397,7 @@
     ;; Exceptions to the rule above.
     (shape [(%any backsys rewriter) [(%any rule backmap) _ _] _*])
       => node
-    (shape [(%any group box window section stage device %all) _*])
+    (shape [(%any group box window section stage device %all) _+])
       => node
 
     ;; (head x: 100
@@ -1407,8 +1411,7 @@
     ;; {x: 100,
     ;;  y: 200}
     (shape (¦ (%not ())))
-      => pairsonly
-  )
+      => pairsonly)
 
   ;; Assign `form` locally based on shapes.
   (step (waveR rulesetR cues: (dict))
@@ -1772,9 +1775,7 @@
 
     (interior member_)
       => (box style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm"
-           ^member)
-  )
-)
+           ^member)))
 
 ;;| This module manages the @seed cell, the @seedsrc cell, which is the seed
 ;;| reader, and the @seeddst cell, which is the seed writer.
