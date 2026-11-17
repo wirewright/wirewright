@@ -877,9 +877,37 @@ module Ww::MxRack
   end
 
   private def run(alert : BlockingSignal, eventq : EventQueue) : Nil
-    filename = ARGV[0]
+    if ARGV.empty?
+      abort <<-'HELP'
+      USAGE
+        mxrack [OPTIONS] path/to/seed.wwml
+
+      SYNOPSIS
+        Media Extensions for Rack. MxRack lets you build interactive applications
+        with Wirewright.
+
+      OPTIONS
+        --quiet
+          Suppress circuit printout before each frame.
+        --stat
+          Print statistics for each frame.
+        --live
+          Watch for changes to the seed source and attempt to merge them. Failed merges
+          prompt full reload.
+
+      EXAMPLE
+        $ echo '(window (p "Kaixo mundua!"))' > /tmp/seed.wwml
+        $ mxrack /tmp/seed.wwml
+
+      HELP
+    end
+
+    Console.display(STDOUT, Console::MxBanner.new)
+
+    seed_path = NormalPath[ARGV[0]]
     quiet = "--quiet".in?(ARGV)
     stat = "--stat".in?(ARGV)
+    live = "--live".in?(ARGV)
 
     wg = WaitGroup.new(3) # SDL and two adapters
 
@@ -898,14 +926,43 @@ module Ww::MxRack
 
     wm = WindowManager.new(sdl)
 
-    # Load codex and associated things.
-    mxrack = ML.document(ResourceService.read_string(ResourceService.codex("mxrack")))
-    library = Rack::Assembler.library(mxrack[:library])
+    Console.display(STDOUT, Console::InfoLog.new("Initialized adapters & SDL"))
 
-    microfold_base_theme = ML.document(ResourceService.read_string(ResourceService.codex("ufold"))).as_d
-    microfold_mxrack_theme = theme_mixin(mxrack[:theme]).mixin
+    # Watch codices.
+    pass do
+      PathMonitorService.add(NormalPath[Path["runtime"] / "codices"])
+      Console.display(STDOUT, Console::InfoLog.new("Watching runtime/codices for changes"))
+    end
 
-    seed = ML.document(File.read(filename))
+    # Watch seed.
+    pass do
+      next unless live
+
+      PathMonitorService.add(seed_path.parent)
+      Console.display(STDOUT, Console::InfoLog.new("Watching #{seed_path.parent} for changes to #{seed_path.basename}"))
+    end
+
+    # Load MxRack codex.
+    mxrack_blob = ResourceService.read_blob(ResourceService.codex("mxrack"))
+    mxrack_blob_digest = mxrack_blob.digest
+    mxrack = ML.document(mxrack_blob.to_string)
+    mxrack_theme = theme_mixin(mxrack[:theme]).mixin
+    mxrack_library = Rack::Assembler.library(mxrack[:library])
+    Console.display(STDOUT, Console::InfoLog.new("Loaded MxRack codex"))
+
+    # Load Microfold codex.
+    microfold_base_blob = ResourceService.read_blob(ResourceService.codex("ufold"))
+    microfold_base_digest = microfold_base_blob.digest
+    microfold_base_theme = ML.document(microfold_base_blob.to_string).as_d
+    Console.display(STDOUT, Console::InfoLog.new("Loaded Microfold codex"))
+
+    # Load seed.
+    seed_blob = PathService.read(seed_path).wait.unwrap.as(PathService::ContentReading).blob
+    seed_digest = seed_blob.digest
+    seed = ML.document(seed_blob.to_string)
+    prev_seed = seed
+
+    Console.display(STDOUT, Console::InfoLog.new("Loaded seed"))
 
     microfold = nil
     microfold_mixed_theme = Term.of
@@ -921,30 +978,106 @@ module Ww::MxRack
     windowing_setup = nil
     windowing_cache = ViRecognized::RecognizeCache.new
 
+    Console.display(STDOUT, Console::InfoLog.new("Ready"))
+
     epoch = 0u64
     UInt64::MAX.times do |frameno|
       t0 = Time.instant
       version0 = circuit.version
 
-      # Maintain the Microfold codex up-to-date as a composition of various "ingredients":
-      # some of them coming from the base theme in codices/, some from the MxRack codex,
-      # and others yet, live, from the circuit itself.
-      microfold_circuit_theme = theme_mix(theme_mixins(circuit.parser.parse(circuit.draft)).map(&.mixin))
+      # Live reload MxRack codex.
+      pass do
+        mxrack_blob = ResourceService.read_blob(ResourceService.codex("mxrack"))
+        next if mxrack_blob_digest == mxrack_blob.digest
+        mxrack_blob_digest = mxrack_blob.digest
 
-      microfold_mixed_theme_candidate = {
-        microfold_base_theme,
-        microfold_mxrack_theme,
-        microfold_circuit_theme,
-      }
-      if microfold.nil? || microfold_mixed_theme != microfold_mixed_theme_candidate
-        microfold = Microfold.codex(theme_mix(microfold_mixed_theme_candidate)).unwrap
-        microfold_mixed_theme = microfold_mixed_theme_candidate
-        if windowing_setup
-          windowing_setup = WindowingSetup.new(windowing_cache, microfold.@codex, windowing_setup.epoch + 1)
+        begin
+          mxrack = ML.document(mxrack_blob.to_string)
+          mxrack_theme = theme_mixin(mxrack[:theme]).mixin
+          mxrack_library = Rack::Assembler.library(mxrack[:library])
+          Console.display(STDOUT, Console::NoteLog.new("Reloaded MxRack codex"))
+        rescue e : ML::SyntaxError
+          Console.display(STDOUT, Console::ErrLog.new("Syntax error in MxRack codex: #{e.message}"))
         end
       end
 
+      # Live reload base Microfold codex.
+      pass do
+        microfold_base_blob = ResourceService.read_blob(ResourceService.codex("ufold"))
+        next if microfold_base_digest == microfold_base_blob.digest
+        microfold_base_digest = microfold_base_blob.digest
+
+        begin
+          microfold_base_theme = ML.document(microfold_base_blob.to_string).as_d
+          Console.display(STDOUT, Console::NoteLog.new("Reloaded Microfold codex"))
+        rescue e : ML::SyntaxError
+          Console.display(STDOUT, Console::ErrLog.new("Syntax error in Microfold codex: #{e.message}"))
+        end
+      end
+
+      # Maintain the Microfold codex up-to-date as a composition of various "ingredients":
+      # some of them coming from the base theme in codices/, some from the MxRack codex,
+      # and others yet, live, from the circuit itself.
+      microfold = pass do
+        microfold_circuit_theme = theme_mix(theme_mixins(circuit.parser.parse(circuit.draft)).map(&.mixin))
+
+        microfold_mixed_theme_candidate = {
+          microfold_base_theme,
+          mxrack_theme,
+          microfold_circuit_theme,
+        }
+        if microfold.nil? || microfold_mixed_theme != microfold_mixed_theme_candidate
+          microfold = Microfold.codex(theme_mix(microfold_mixed_theme_candidate)).unwrap
+          microfold_mixed_theme = microfold_mixed_theme_candidate
+          if windowing_setup
+            windowing_setup = WindowingSetup.new(windowing_cache, microfold.@codex, windowing_setup.epoch + 1)
+          end
+        end
+
+        microfold
+      end
+
       windowing_setup ||= WindowingSetup.new(windowing_cache, microfold.@codex, 0u64)
+
+      # Live reload seed.
+      pass do
+        next unless live
+        next unless seed_blob = PathService.read(seed_path).wait.unwrap?
+        next unless seed_blob = seed_blob.as?(PathService::ContentReading).try(&.blob)
+        next if seed_blob.digest == seed_digest
+
+        seed = ML.document(seed_blob.to_string)
+        seed_digest = seed_blob.digest
+
+        reference = prev_seed
+
+        unless program0 = Term.diff?(reference, circuit.draft)
+          Console.display(STDOUT, Console::ErrLog.new("Could not reload seed"))
+          next
+        end
+
+        unless program1 = Term.diff?(reference, seed)
+          Console.display(STDOUT, Console::ErrLog.new("Could not reload seed"))
+          next
+        end
+
+        if Term::Diff.compatible?(program0, program1)
+          mutation = Term::Diff::Mutation.new
+          program0.each { |action| mutation << action }
+          program1.each { |action| mutation << action }
+
+          circuit.draft = Term.of(mutation.apply(reference.as_d))
+          Console.display(STDOUT, Console::NoteLog.new("Reloaded seed"))
+        else
+          Console.display(STDOUT, Console::NoteLog.new("Cannot merge changes automatically, do you wish to do a full reload? [y/]"))
+          next unless gets == "y"
+
+          Console.display(STDOUT, Console::NoteLog.new("Fully reloaded seed"))
+          circuit.draft = seed
+        end
+      ensure
+        prev_seed = seed
+      end
 
       windows = windows(windowing_setup, Slice(Term).empty, circuit.parser.parse(circuit.draft), interactive: true)
 
@@ -1002,7 +1135,7 @@ module Ww::MxRack
       # Step the circuit.
       frame = pass do
         # Run physics (in our case of course symbolic physics!)
-        step_out = circuit.step(Rack::Prepass, library)
+        step_out = circuit.step(Rack::Prepass, mxrack_library)
 
         # Get all projections of the circuit.
         windows, automata, au_windows = windows_with_automata(windows(windowing_setup, Slice(Term).empty, step_out, interactive: true), step_out)
@@ -1028,7 +1161,7 @@ module Ww::MxRack
             next if automaton.workspace.includes?(:turnover) || automaton.workspace.includes?(:program)
 
             # TODO: We want to submit subframes, not frames.
-            _ = guest.step(Rack::Prepass, library)
+            _ = guest.step(Rack::Prepass, mxrack_library)
 
             next if automaton.draft == guest.draft
 
@@ -1118,8 +1251,11 @@ module Ww::MxRack
       end
 
       t1 = Time.instant
-      if stat
-        puts "Frame #{frameno}  #{(t1 - t0).total_milliseconds}ms | #{windowing_cache.stat}"
+      pass do
+        next unless stat
+
+        reading = "(Frame #{frameno}) #{(t1 - t0).total_milliseconds}ms | #{windowing_cache.stat}"
+        Console.display(STDOUT, Console::InfoLog.new(reading))
       end
 
       # This is a spot for garbage collection and similar kinds of cleanup.
@@ -1133,7 +1269,8 @@ module Ww::MxRack
         t1 = Time.instant
         next unless stat
 
-        puts "  Windowing cache swept in #{(t1 - t0).total_milliseconds}ms"
+        reading = "Windowing cache swept in #{(t1 - t0).total_milliseconds}ms"
+        Console.display(STDOUT, Console::InfoLog.new(reading))
       end
 
       # Then there is this final section of the loop, which decides how and whether
@@ -1155,6 +1292,8 @@ module Ww::MxRack
         epoch = alert.wait(epoch)
       end
     end
+
+    Console.display(STDOUT, Console::InfoLog.new("Reached quiescence"))
 
     # TODO: deinit
   end

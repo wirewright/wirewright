@@ -1,10 +1,11 @@
 module Ww::Console
   extend self
 
-  alias Widget = MuBanner | WwBanner | InfoLog | NoteLog | ErrLog | CriticalLog
+  alias Widget = MuBanner | WwBanner | MxBanner | InfoLog | NoteLog | ErrLog | CriticalLog
 
   defrecord WwBanner
   defrecord MuBanner
+  defrecord MxBanner
   defrecord NoteLog, message : String
   defrecord InfoLog, message : String
   defrecord ErrLog, message : String
@@ -39,6 +40,19 @@ module Ww::Console
      #####    #####
       ############
         ########
+
+
+    BANNER
+  end
+
+  def display(io : IO, widget : MxBanner)
+    io << <<-'BANNER'
+      __  __
+     |  \/  |
+     | \  / | __  __    Wirewright MxRack
+     | |\/| | \ \/ /    https://github.com/wirewright/wirewright [iota]
+     | |  | |  >  <
+     |_|  |_| /_/\_\
 
 
     BANNER
