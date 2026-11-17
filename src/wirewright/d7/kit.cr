@@ -212,8 +212,8 @@ module Ww::D7
   defrecord MergeDiff, depth_limit : UInt32
   defrecord MergeSeq
 
-  private def nodetab_prune!(nodetab, proposals_rejected) : Nil
-    nodetab.each do |_, merge_node|
+  private def merge_graph_prune!(merge_graph, proposals_rejected) : Nil
+    merge_graph.each do |_, merge_node|
       (0...merge_node.successors.size).reverse_each do |successor_index|
         successor = merge_node.successors[successor_index]
 
@@ -281,11 +281,11 @@ module Ww::D7
       return patch, false # nothing rejected
     end
 
-    nodetab = {} of NodeId => MergeNode
+    merge_graph = {} of NodeId => MergeNode
 
     proposals.zip(0u32...proposals.size.to_u32) do |proposal, proposal_index|
       proposal.each do |node_id, rep|
-        node = nodetab.put_if_absent(node_id) do
+        node = merge_graph.put_if_absent(node_id) do
           node_reference, node_policy = yield node_id
           node_successors = [] of MergeNodeSuccessor
           MergeNode.new(node_reference, node_policy, node_successors)
@@ -302,11 +302,12 @@ module Ww::D7
 
     proposals_rejected = Pf::USet32.new
 
-    nodetab.each do |node_id, merge_node|
+    merge_graph.each do |node_id, merge_node|
       next unless merge_node.policy.is_a?(MergeSeq)
       next unless merge_node.successors.size >= 2
 
-      winner = merge_node.successors.min_by(&.term) # lexicographical minimum
+      # Semantic minimum (min for numbers, lexical min for strings, etc.)
+      winner = merge_node.successors.min_by(&.term)
 
       # Reject all proposals but the winning one.
       merge_node.successors.each do |successor|
@@ -319,7 +320,7 @@ module Ww::D7
     # Collapse same-rep successors. This way, proposals that are exactly the same
     # do not conflict with each other -- which is more or less what we expect,
     # even with MergeDiff(0).
-    nodetab.transform_values! do |merge_node|
+    merge_graph.transform_values! do |merge_node|
       # Fast path
       if merge_node.successors.size == 1
         next merge_node
@@ -335,12 +336,12 @@ module Ww::D7
 
     # Do a round of cleanup on rejected proposals.
     if proposals_rejected.present?
-      nodetab_prune!(nodetab, proposals_rejected)
+      merge_graph_prune!(merge_graph, proposals_rejected)
     end
 
     difftab = {} of NodeId => Array({Array(Term::Diff::Action), Pf::USet32})
 
-    nodetab.each do |node_id, merge_node|
+    merge_graph.each do |node_id, merge_node|
       next unless policy = merge_node.policy.as?(MergeDiff)
       next unless merge_node.successors.size >= 2
 
@@ -375,9 +376,9 @@ module Ww::D7
       difftab[node_id] = diffs
     end
 
-    # Do a round of cleanup to get rid of rejected proposals in nodetab and difftab.
+    # Do a round of cleanup to get rid of rejected proposals in merge_graph and difftab.
     if proposals_rejected.present?
-      nodetab_prune!(nodetab, proposals_rejected)
+      merge_graph_prune!(merge_graph, proposals_rejected)
       difftab_prune!(difftab, proposals_rejected)
     end
 
@@ -386,7 +387,7 @@ module Ww::D7
     # Computing the rank of a proposal is rather expensive, so we cache it.
     proposal_rank_cache = {} of UInt32 => Slice(Term)
 
-    nodetab.each do |node_id, merge_node|
+    merge_graph.each do |node_id, merge_node|
       # Changes to this node were all eliminated.
       next if merge_node.successors.empty?
 
