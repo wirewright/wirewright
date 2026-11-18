@@ -12,15 +12,9 @@
 
 
 ;; TODO: pretty printing
-;;   - pretty printing must be synchronous wrt. physics: we must process physics
-;;     then pretty print, then process physics again. otherwise the pretty repr
-;;     doesn't accurately represent the state. pretty printing shouldn't occur if
-;;     the right pane is hidden (it shouldn't involve repr and everything downstream!)
-;;
-;;   - how to keep `expander` state (and similar) across pretty-print frames
+;;   - (medium) implement `figure`
+;;   - (hard) how to keep `expander` state (and similar) across pretty-print frames
 ;;     (e.g. keyed by node addr)?
-;;
-;;   - implement `figure`
 ;;
 ;; TODO: Make sure MuSoma-dependent examples run:
 ;;   - figure.musoma.wwml
@@ -143,25 +137,25 @@
        (icon ^icon)
        (p ^caption style: "fr-1 text-sm/5"))
 
-(SeedIndicator ⍊ seed: none seedsrc: none)
+(SeedIndicator ⍊ seed: none seed-src: none)
   => (TextIndicator icon: "hide_source" caption: "Seed file unset")
 
-(SeedIndicator ⍊ seedsrc: (some [path (_ reading) [absent _]]))
+(SeedIndicator ⍊ seed-src: (some [path (_ reading) [absent _]]))
   => (TextIndicator icon: "error_outline" caption: "Lost track of seed file" variant: warn)
 
-(SeedIndicator ⍊ seed: none seedsrc: (some [path (_ reading) [present _]]))
+(SeedIndicator ⍊ seed: none seed-src: (some [path (_ reading) [present _]]))
   => (TextIndicator icon: "error_outline" caption: "Syntax error in seed file" variant: err)
 
-(SeedIndicator ⍊ seed: (some _) seedsrc: (some [path ((/ path_*) reading) [present _]]))
+(SeedIndicator ⍊ seed: (some _) seed-src: (some [path ((/ path_*) reading) [present _]]))
   => (TextIndicator icon: "sync_problem" caption: ^(~ "/" (join path "/")) variant: warn)
 
-(SeedIndicator ⍊ seed: (some {¦ sync}) seedsrc: (some [path ((/ path_*) reading) [present _]]) autoreload: none)
+(SeedIndicator ⍊ seed: (some {¦ sync}) seed-src: (some [path ((/ path_*) reading) [present _]]) autoreload: none)
   => (TextIndicator icon: "sync_disabled" caption: ^(~ "/" (join path "/")))
 
-(SeedIndicator ⍊ seed: (some {¦ sync}) seedsrc: (some [path ((/ path_*) reading) [present _]]) autoreload: (some _))
+(SeedIndicator ⍊ seed: (some {¦ sync}) seed-src: (some [path ((/ path_*) reading) [present _]]) autoreload: (some _))
   => (TextIndicator icon: "sync" caption: ^(~ "/" (join path "/")) variant: ok)
 
-(SeedIndicator ⍊ seed: (some _) seedsrc: none)
+(SeedIndicator ⍊ seed: (some _) seed-src: none)
   => (TextIndicator icon: "memory" caption: "In-memory seed")
 
 ;; Display info status.
@@ -414,8 +408,8 @@
                  pivot-center rotate-45")
        ($FilePicker ^origin ^path ^command))
 
-(MuMenu @workspace_ @mode_ @seed_ @seedsrc_)
-  => (component {@:workspace, @:mode, @:seed, @:seedsrc}
+(MuMenu @workspace_ @mode_ @seed_ @seed-src_)
+  => (component {@:workspace, @:mode, @:seed, @:seed-src}
        (cell @path)
        (cell @action)
        (node @input (input focus: always))
@@ -456,7 +450,7 @@
 
          ;; When they hit open, populate the picker fragment with the file picker.
          ;; FIXME: current working directory `.` instead of this hard-coded path.
-         {¦ action: open -picker_ -seedsrc}
+         {¦ action: open -picker_ -seed-src}
            <> {picker: ($MuMenuPicker (/ "mnt" "Data" "Dev" "wirewright" "kappa" "examples" "future") @path @command)}
 
          ;; Go to previous file.
@@ -488,16 +482,16 @@
            <> {(K): (), (action): (), (picker): ()}
 
          ;; When they have chosen the file, clear the picker and set the seed source.
-         {¦ path_ picker_ -mode_ -seedsrc_}
-           <> {(path): (), (picker): (), mode: normal, seedsrc: (path (^path reading))}))
+         {¦ path_ picker_ -mode_ -seed-src_}
+           <> {(path): (), (picker): (), mode: normal, seed-src: (path (^path reading))}))
 
 ;;
 ;; The circuit
 ;;
 
 (rewriter (chainR - {@:mode, @:input, @:workspace, @:charge, @:present, @:draft,
-                     @:future, @:past, @:seed, @:statuses, @:turnover, @:autoreload,
-                     @:seeddst, @:layout})
+                     @:future, @:past, @:seed, @:statuses, @:turn, @:autoreload,
+                     @:seed-dst, @:layout, @:repr})
   ;; Action handling step / high-level control.
   (step (rulesysR depth-limit: 2)
     ;; \normal `,`
@@ -601,19 +595,29 @@
   ;; Execute actions or evolve (we make them mutually exclusive to avoid conflicts).
   (step (rulesysR depth-limit: 2)
     ;; Begin with the seed.
-    {¦ seed: {¦ document_ ⋮sync} -draft_ -turnover_}
-      <> {draft: ^document, sync: true, turnover: true}
+    {¦ seed: {¦ document_ ⋮sync} -draft_}
+      <> {draft: ^document, sync: true}
+
+    ;; When it's our turn (we're the circuit), first pretty-print. So move repr
+    ;; to pretty printer's input cell, @repr, and begin waiting for it to finish.
+    {¦ turn_: inspect -repr: >repr workspace: {¦ repr_}}
+      <> {turn: printer, >repr: ^repr}
+
+    ;; If repr has been consumed, this means the printer is done updating @pretty,
+    ;; so we can do an engine turn.
+    {¦ turn_: printer -repr}
+      <> {turn: automaton}
 
     ;; Push frames if they are not inspecting the past.
-    {¦ -action charge_: (%not 0) -present draft_ turnover_}
-      <> {charge: ^(- charge 1), (turnover): ()}
+    {¦ turn_: automaton -present charge_: (%not 0) draft_}
+      <> {(turn): (), charge: ^(- charge 1)}
 
     ;; Keep evolving the draft while they are (possibly) inspecting the history.
     ;; This saturates the draft with new facts and so on without flooding `past`
     ;; or `future`. When they get back to the draft, they'll just see it evolved
     ;; slightly more into the future than they might've expected.
-    {¦ -action charge_: (%not 0) present turnover_}
-      <> {charge: ^(- charge 1), (turnover): ()}
+    {¦ turn_: automaton -action charge_: (%not 0) present}
+      <> {(turn): (), charge: ^(- charge 1)}
 
     ;; Help action rules by clearing the action cell for them.
     {¦ action_} <> {(action): ()}
@@ -665,10 +669,10 @@
       <> {draft: ^document, sync: true, statuses: (info "Reloaded from disk")}
 
     ;; Write present or draft to disk.
-    {¦ action: write present_ -seeddst_ -statuses_}
-      <> {seeddst: ^present, statuses: (info "Writing present frame to disk...")}
-    {¦ action: write -present draft_ -seeddst_ -statuses_}
-      <> {seeddst: ^draft, statuses: (info "Writing draft frame to disk...")})
+    {¦ action: write present_ -seed-dst_ -statuses_}
+      <> {seed-dst: ^present, statuses: (info "Writing present frame to disk...")}
+    {¦ action: write -present draft_ -seed-dst_ -statuses_}
+      <> {seed-dst: ^draft, statuses: (info "Writing draft frame to disk...")})
 
   (step (guardR {¦ mode: insert} (rulesetR exh: true))
     ;; Prepare the locus.
@@ -1024,7 +1028,7 @@
     {¦ past: (head_ (%plural min: 127))}
       <> {(head): ()}))
 
-(rewriter ((@repr @repr-version) - chainR - @pretty)
+(rewriter ((@repr @repr-version) -> chainR - @pretty)
   (step (exhR (descR rulesetR passable: [passable pattern_]))
     (passable [parent _*])
     (passable [group _*])
@@ -1777,9 +1781,9 @@
       => (box style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm"
            ^member)))
 
-;;| This module manages the @seed cell, the @seedsrc cell, which is the seed
-;;| reader, and the @seeddst cell, which is the seed writer.
-(module {:@seed, :@seedsrc, :@seeddst}
+;;| This module manages the @seed cell, the @seed-src cell, which is the seed
+;;| reader, and the @seed-dst cell, which is the seed writer.
+(module {:@seed, :@seed-src, :@seed-dst}
   (cell @seed)
   ;(cell @seed
     {document:
@@ -1813,8 +1817,8 @@
          (p "Hello World!" style: "text-green-500" current: ^current)))})
   ;(cell @seed {document: ( (window (p "Hello" style: "foobar") ("" (I 952222506600661151) "")) )})
   ;(cell @seed {document: ((cell @x (%let x 100) foo: 100) (cell @y 200) (feed @x @y) (foobar) ("" (I 952222506600661151) ""))})
-  (node @seedsrc)
-  (cell @seeddst)
+  (node @seed-src)
+  (cell @seed-dst)
 
   (cell @win)
   (cell @wout)
@@ -1822,15 +1826,15 @@
   (discard @wout)
 
   (backsys
-    ;; Initialize the seed from @seedsrc. Keep the seed up-to-date (updates
+    ;; Initialize the seed from @seed-src. Keep the seed up-to-date (updates
     ;; remove our `parsed` flag and trigger a reparse).
     ;;
     ;; Parse errors either do not initialize `seed`, or clear it.
-    {¦ seedsrc: [path _ (present content_string ⍊ -parsed_)] ⋮seed}
+    {¦ seed-src: [path _ (present content_string ⍊ -parsed_)] ⋮seed}
       <> {seed: (^when ((ml/document content) (ok document_)) {^:document}), parsed: true}
 
     ;; Process writes.
-    {¦ seedsrc: [path ((/ path_* name_string) reading) _] seeddst: document_ -win_ -wout}
+    {¦ seed-src: [path ((/ path_* name_string) reading) _] seed-dst: document_ -win_ -wout}
       <> {(document): (), win: (overwrite file ^"/⸢(join path "/")⸣/⸢name⸣.snapshot" ^(ml/display-document document))}))
 
 ;;| Manages the yellow status text in the bottom bar (current status
@@ -1884,8 +1888,7 @@
 ;;| Refer to parts of the workspace we're interested in.
 
 ;;| The pretty-printed representation of @present or @draft (if @present is missing).
-(part (@workspace @repr) {¦ repr_})
-
+(cell @repr)
 (cell @repr-version)
 
 ;;| A noninteractive historical circuit under review. It normally comes from
@@ -1894,8 +1897,8 @@
 (part (@workspace @present) (%any° {¦ present_} {¦ -present_}))
 
 ;;| Indicates that the physics engine's turn is over and we are expected
-;;| to handle the draft now; taking town @turnover eventually.
-(part (@workspace @turnover) (%any° {¦ turnover_} {¦ -turnover_}))
+;;| to handle the draft now; taking town @turn eventually.
+(part (@workspace @turn) (%any° {¦ turn_} {¦ -turn_}))
 
 ;;| A list of zero or more window projections of @present or @draft (if @present missing).
 ;;| Each window projection is expressed in Scenery, as [window _*]
@@ -1993,8 +1996,9 @@
                  µ-page-x: (0 px)
                  µ-page-y: (0 px)
                  µ-scale: 1
-              ;(p ^(ml/display @pretty) style: "content dl-40")
-              ;(p ^(ml/display @program) style: "dl-40")
+              (group style: "flow-col content dl-40"
+                ;(p ^(ml/display @pretty))
+                ;(p ^(ml/display @program)))
               (box style: "font-notation text-sm/5"
                 (node @pretty))))
 
@@ -2069,7 +2073,7 @@
         (visual
           (SeedIndicator
             seed: ^(edge? seed)
-            seedsrc: ^(edge? seedsrc)
+            seed-src: ^(edge? seed-src)
             autoreload: ^(edge? autoreload))))
 
       ;;| File info and mode
@@ -2080,5 +2084,5 @@
   ;;| When they finally submit the seed we close the menu.
   (node @menu)
   (backsys
-    {¦ -seed -menu_} <> {menu: ($MuMenu @workspace @mode @seed @seedsrc)}
+    {¦ -seed -menu_} <> {menu: ($MuMenu @workspace @mode @seed @seed-src)}
     {¦ seed menu_} <> {(menu): ()}))

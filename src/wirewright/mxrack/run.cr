@@ -1267,9 +1267,9 @@ module Ww::MxRack
           end
 
           pass do
-            # The circuit didn't handle turnover yet, or wants to manipulate the current
+            # The circuit didn't handle turns yet, or wants to manipulate the current
             # draft or present; don't disturb it with a physics pass
-            next if automaton.workspace.includes?(:turnover) || automaton.workspace.includes?(:program)
+            next if automaton.workspace.includes?(:turn) || automaton.workspace.includes?(:program)
 
             # TODO: We want to submit subframes, not frames.
             _ = guest.step(Rack::Prepass, mxrack_library)
@@ -1277,7 +1277,18 @@ module Ww::MxRack
             next if automaton.draft == guest.draft
 
             adjustments << AdjustAutomatonUpdateDraft.new(automaton.addr, guest.draft)
-            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:turnover), Term.of(true))
+          end
+
+          # Turn management
+          pass do
+            next unless automaton.workspace[:turn]?.in?(nil, Term.of(:automaton))
+
+            current = automaton.workspace[:present]? || guest.draft
+            current_version = Term.of(Term.hashcode(current).to_s(base: 16))
+            next if automaton.workspace[:showing]? == current_version
+
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:turn), Term.of(:inspect))
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:showing), current_version)
           end
 
           if program = automaton.workspace[:program]?
