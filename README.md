@@ -1,4 +1,4 @@
-# Wirewright [![Discord](https://badgen.net/badge/icon/discord?icon=discord&label=Wirewright)](https://discord.com/invite/bkgmGU7FFQ)
+# Wirewright
 
 <img width="300" alt="Wirewright MuSoma Logo" src="https://github.com/user-attachments/assets/0bb06a8f-8ddf-4e49-99fe-0c0b1f44b760" align="right" />
 Wirewright treats programs as evolving worlds. You describe the initial state, symbolically, and Wirewright evolves it step-by-step. Changes between steps become your program's effects: from UI updates to file writes.
@@ -39,7 +39,7 @@ Now to more technical sections:
 - [Docs](#docs) — Describes where to find the documentation for the project.
 - [Building Wirewright](#building-wirewright) — Describes how to build Wirewright from source.
 
-I spend a lot of time in my dev cave isolated from the rest of the world, so I can be unavailable at times. But I do publish occasional videos on the YouTube channel of Wirewright: [Wirewright — YouTube](https://www.youtube.com/@wirewright). I'm also happy to discuss the project via GitHub Discussions, Discord, or if you want to talk to me directly, at homonoidian on Telegram — pick whichever one you like most, although if you were to ask me, Telegram is by far the most reliable choice.
+I spend a lot of time in my dev cave isolated from the rest of the world, so I can be unavailable at times. But I do publish occasional videos on the YouTube channel of Wirewright: [Wirewright — YouTube](https://www.youtube.com/@wirewright). I'm also happy to discuss the project via GitHub Discussions, or if you want to talk to me directly, at homonoidian on Telegram — pick whichever one you like most, although if you were to ask me, Telegram is by far the most reliable choice.
 
 Most documentation is still in progress, but the guides above will get you started, and the doctool has much of the rest.
 
