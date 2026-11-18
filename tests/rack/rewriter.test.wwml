@@ -698,3 +698,67 @@
       (cell @out (+ 1 2 x: 100 y: 200)))
 
     end))
+
+;; Versioned rewriter
+(rack
+  (frame
+    (cell @version)
+    (backsys @in ±n <> {n: ^(+ n 1)})
+    (cell @in 100)
+    (cell @out)
+    (rewriter ((@in @version) - rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (cell @in 101)
+    (cell @out 200)
+    (rewriter ((@in @version) - rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (cell @in 102)
+    (cell @out 202)
+    (rewriter ((@in @version) - rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (cell @in 103)
+    (cell @out 204)
+    (rewriter ((@in @version) - rulesetR - @out)
+      ±n => ^(* n 2))))
+  ;; ...
+
+;; Asymmetric versioned rewriter
+(rack
+  (frame
+    (cell @version)
+    (queue (@in @ins) (100 200 100 100))
+    (cell @out)
+    (rewriter ((@in @version) -> rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (queue (@in @ins) (200 100 100))
+    (cell @out 200)
+    (rewriter ((@in @version) -> rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (queue (@in @ins) (100 100))
+    (cell @out 400)
+    (rewriter ((@in @version) -> rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (queue (@in @ins) (100))
+    (cell @out 200)
+    (rewriter ((@in @version) -> rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  (frame/tail
+    (queue (@in @ins) ())
+    (cell @out 200)
+    (rewriter ((@in @version) -> rulesetR - @out)
+      ±n => ^(* n 2)))
+
+  end)

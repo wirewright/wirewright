@@ -64,7 +64,8 @@ module Ww::Rack::Rewriter
   # *Q* is for quote, as in quote/unquote. Quoted variants can be cached
   # (and are cached!), because they do not depend on the larger hypergraph
   # context (e.g. NodeAddr).
-  alias VariantQ = TransferQ | RelationQ | VersionedRelationQ | RegimeSingleQ | RegimeMultiQ
+  alias VariantQ = TransferQ | RelationQ | VersionedRelationQ | VersionedAsymmetricRelationQ |
+                   RegimeSingleQ | RegimeMultiQ
 
   # :nodoc:
   defrecord TransferQ,
@@ -80,6 +81,13 @@ module Ww::Rack::Rewriter
 
   # :nodoc:
   defrecord VersionedRelationQ,
+    input_edge : Term,
+    spec : Rho::Rewriter | SpecQ,
+    output_edge : Term,
+    version_edge : Term
+
+  # :nodoc:
+  defrecord VersionedAsymmetricRelationQ,
     input_edge : Term,
     spec : Rho::Rewriter | SpecQ,
     output_edge : Term,
@@ -128,6 +136,11 @@ module Ww::Rack::Rewriter
         VersionedRelationQ.new(input, spec, output, version)
       end
 
+      matchpi %{[rewriter ((@input_ @version_) -> specQ_ - @output_) data_*]} do
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        VersionedAsymmetricRelationQ.new(input, spec, output, version)
+      end
+
       matchpi %{[rewriter (specQ_ - @target_) data_*]} do
         spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
         RegimeSingleQ.new(spec, target)
@@ -164,6 +177,14 @@ module Ww::Rack::Rewriter
     VersionedRelation.new(input, spec, output, version)
   end
 
+  private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : VersionedAsymmetricRelationQ) : VersionedAsymmetricRelation
+    input = hg.resolve(node.addr, quote.input_edge)
+    output = hg.resolve(node.addr, quote.output_edge)
+    version = hg.resolve(node.addr, quote.version_edge)
+    spec = unquote(hg, node, quote.spec)
+    VersionedAsymmetricRelation.new(input, spec, output, version)
+  end
+
   private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : RegimeSingleQ) : RegimeSingle
     target = hg.resolve(node.addr, quote.target_edge)
     spec = unquote(hg, node, quote.spec)
@@ -185,7 +206,8 @@ module Ww::Rack::Rewriter
   end
 
   # :nodoc:
-  alias Variant = Transfer | Relation | VersionedRelation | RegimeSingle | RegimeMulti
+  alias Variant = Transfer | Relation | VersionedRelation | VersionedAsymmetricRelation |
+                  RegimeSingle | RegimeMulti
 
   # :nodoc:
   defrecord Transfer,
@@ -201,6 +223,13 @@ module Ww::Rack::Rewriter
 
   # :nodoc:
   defrecord VersionedRelation,
+    input : D7::AbsEdge,
+    spec : Rho::Rewriter | Spec,
+    output : D7::AbsEdge,
+    version : D7::AbsEdge
+
+  # :nodoc:
+  defrecord VersionedAsymmetricRelation,
     input : D7::AbsEdge,
     spec : Rho::Rewriter | Spec,
     output : D7::AbsEdge,
@@ -337,6 +366,48 @@ module Ww::Rack::Rewriter
     end
 
     D7.patches(
+      D7.patch(version_cell.node, {2, input_version}),
+      D7.patch(output_cell.node, {2, output}),
+    )
+  end
+
+  private def step(state, tasks, hg, node : D7::Node, variant : VersionedAsymmetricRelation) : D7::Patch?
+    # Find a single version cell.
+    return unless version_cell = Rack.cell?(hg, variant.version)
+
+    # Find a single output cell.
+    unless output_cell = Rack.cell?(hg, variant.output)
+      return D7.patch(version_cell.node, {2, nil}) # clear version (missing output cell)
+    end
+
+    # Find a single nonempty input cell.
+    input_cell = Rack.cell?(hg, variant.input)
+    input = input_cell.try(&.value?)
+    if input_cell.nil? || input.nil?
+      return # No change
+    end
+
+    input_version = Term.of(Term.hashcode(input).to_s(base: 16))
+
+    if version_cell.value? == input_version
+      # Input is the same as the one we've already seen, simply consume it.
+      return D7.patch(input_cell.node, {2, nil})
+    end
+
+    unless rewriter = rewriter?(state.rewriters, hg, variant.spec)
+      # Clear output and version (missing spec cell or spec).
+      return D7.patches(
+        D7.patch(version_cell.node, {2, nil}),
+        D7.patch(output_cell.node, {2, nil}),
+      )
+    end
+
+    unless output = output?(tasks, rewriter, input)
+      return # Output not yet available, no change
+    end
+
+    D7.patches(
+      D7.patch(input_cell.node, {2, nil}),
       D7.patch(version_cell.node, {2, input_version}),
       D7.patch(output_cell.node, {2, output}),
     )

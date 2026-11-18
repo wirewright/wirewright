@@ -2506,11 +2506,106 @@ module Ww::Rack
         D7.gnd(node, edges)
       end
 
-      matchpi %{[rewriter ((@input_ @version_) - spec_ - @output_) _*]} do
+      # |@ rack.rewriter
+      #
+      # |@pattern
+      # [rewriter ((@input_ @version_) - spec_ - @output_) _*]
+      #
+      # |@key input rack.[edge]
+      # The input edge. Points to a cell (or something similar) that contains
+      # the input term.
+      #
+      # |@key version rack.[edge]
+      # The version edge. Should point to a cell (or similar). It will be manged
+      # entirely by the rewriter.
+      #
+      # |@key spec
+      # Either an edge (`rack.[edge]`) or an inline Rho rewriter spec `rho`.
+      #
+      # |@key output
+      # The output cell. It's written over if nonempty.
+      #
+      # |@block
+      # *Versioned relation* variant of the rewriter node. It's basically a cached
+      # version of the standard relation rewriter node.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in 100)
+      # (cell @out)
+      # (cell @version)
+      # (rewriter ((@in @version) - rulesetR - @out)
+      #   ±n => ^(+ n 1))
+      #
+      # ;; Frame 1 (seed)
+      #
+      # (cell @in 100)
+      # (cell @out 101)
+      # ;; (cell @version "<hash digest>")
+      # (rewriter ((@in @version) - rulesetR - @out)
+      #   ±n => ^(+ n 1))
+      # ```
+      #
+      # Manipulating `@in` will invalidate `@version`, which in turn causes
+      # the rewriter to run again on the updated input.
+
+      # |@ rack.rewriter
+      #
+      # |@pattern
+      # [rewriter ((@input_ @version_) -> spec_ - @output_) _*]
+      #
+      # |@key input rack.[edge]
+      # The input edge. Points to a cell (or something similar) that contains
+      # the input term. The cell is cleared after the rewriter finishes its job.
+      #
+      # |@key version rack.[edge]
+      # The version edge. Should point to a cell (or similar). It will be manged
+      # entirely by the rewriter.
+      #
+      # |@key spec
+      # Either an edge (`rack.[edge]`) or an inline Rho rewriter spec `rho`.
+      #
+      # |@key output
+      # The output cell. It's written over if nonempty.
+      #
+      # |@block
+      # *Asymmetric versioned relation* variant of the rewriter node. It will
+      # consume the term at *input*, but will write over the content of *output*.
+      # Importantly, an *input* term is guaranteed to be consumed *simultaneously*
+      # with its corresponding output being written to *output*. Until that point
+      # *input* is kept intact. Replacing the input in-place will cancel the pending
+      # rewrite and initiate a new one.
+      #
+      # |@example
+      # ```wwml
+      # ;; Frame 0 (seed)
+      #
+      # (cell @in 100)
+      # (cell @out)
+      # (cell @version)
+      # (rewriter ((@in @version) -> rulesetR - @out)
+      #   ±n => ^(+ n 1))
+      #
+      # ;; Frame 1 (seed)
+      #
+      # (cell @in)
+      # (cell @out 101)
+      # ;; (cell @version "<hash digest>")
+      # (rewriter ((@in @version) -> rulesetR - @out)
+      #   ±n => ^(+ n 1))
+      # ```
+
+      matchpi(
+        %{[rewriter ((@input_ @version_) - spec_ - @output_) _*]},
+        %{[rewriter ((@input_ @version_) -> spec_ - @output_) _*]},
+      ) do
         edges = Pf::Kit.stack_array(Term, 4)
         edges << input << version << output
 
         # (rewriter ((@input @version) - @spec - @output) ...)
+        # (rewriter ((@input @version) -> @spec - @output) ...)
         if Term.edge?(spec)
           edges << spec
         end
