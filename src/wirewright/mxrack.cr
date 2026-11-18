@@ -32,6 +32,132 @@ module Ww::MxRack
 
   alias MediaProgramQueue = BlockingQueue(MediaProgram)
   alias MediaProgram = WindowProgram
+
+  # An implementation of a very simple three-way merge with MxRack-specific heuristics.
+  #
+  # EXPERIMENTAL: This is by no means a general three-way merge or diff, nor is it
+  # expected to handle all edge cases properly. Use with care. The algorithm can be
+  # considered "fuzzy" in the sense that its heuristic may misinterpret things.
+  def merge3?(reference : Term, local : Term, remote : Term) : Term?
+    # Fast paths.
+    return remote if local == reference
+    return local if remote == reference
+    return local if local == remote
+
+    # Heuristic: If both are dicts and their heads are different symbols,
+    # prefer remote. E.g.:
+    #
+    #   L: (slot (X) 100)
+    #   R: (group (slot (X)) (slot (X)))
+    #
+    # Merging conventionally makes very little sense here, and would produce:
+    #
+    #   M: (group (slot (X)) 100 (slot (X)))
+    #
+    # Instead, we prefer remote:
+    #
+    #   M: (group (slot (X)) (slot (X)))
+    #
+    # We still prefer a conventional merge if both local and remote agree on
+    # the itemsize with the reference.
+    #
+    # For changes that look like slot changes, we prefer *remote*.
+    pass do
+      next unless {reference, local, remote}.all?(&.type.dict?)
+      next unless head0 = local.items.first?
+      next unless head1 = remote.items.first?
+      next unless head0.type.symbol? && head1.type.symbol?
+
+      if head0 == head1
+        return remote if head0 == Term.of(:slot)
+        next
+      end
+
+      next if reference.itemsize == local.itemsize && reference.itemsize == remote.itemsize
+      return remote
+    end
+
+    # Produce diffs.
+    local_diff = Term.diff?(reference, local, depth_limit: 1u32)
+    remote_diff = Term.diff?(reference, remote, depth_limit: 1u32)
+    return unless local_diff && remote_diff
+
+    table = {} of Term => Term | {Term, Term}
+
+    local_diff = local_diff.compact_map do |action|
+      assert action.prefix.empty?
+
+      case action
+      when Term::Diff::WithItem
+        key = Term.of(action.index)
+        value = action.item
+      when Term::Diff::WithPair
+        key = action.key
+        value = action.value
+      else
+        next action
+      end
+
+      case current = table[key]?
+      in Nil
+        table[key] = value
+      in Term
+        table[key] = {current, value}
+      in Tuple(Term, Term)
+        raise KeyError.new
+      end
+
+      nil # omit
+    end
+
+    remote_diff = remote_diff.compact_map do |action|
+      assert action.prefix.empty?
+
+      case action
+      when Term::Diff::WithItem
+        key = Term.of(action.index)
+        value = action.item
+      when Term::Diff::WithPair
+        key = action.key
+        value = action.value
+      else
+        next action
+      end
+
+      case current = table[key]?
+      in Nil
+        table[key] = value
+      in Term
+        table[key] = {current, value}
+      in Tuple(Term, Term)
+        raise KeyError.new
+      end
+
+      nil # omit
+    end
+
+    reference1 = reference
+
+    table.each do |key, value|
+      if value.is_a?(Term)
+        reference1 = reference1.with(key, value)
+        next
+      end
+
+      # Merge recursively.
+      l, r = value
+      return unless merged = merge3?(reference[key], l, r)
+
+      reference1 = reference1.with(key, merged)
+    end
+
+    # Apply the rest of mutations.
+    mutation = Term::Diff::Mutation.new
+    local_diff.each { |action| mutation << action }
+    remote_diff.each { |action| mutation << action }
+
+    Term.of(mutation.apply(reference1.as_d))
+  end
 end
 
 require "./mxrack/adjust"
@@ -42,4 +168,6 @@ require "./mxrack/window"
 require "./mxrack/sdl_loop"
 require "./mxrack/textoscope"
 require "./mxrack/event"
+require "./mxrack/theme"
+require "./mxrack/automaton"
 require "./mxrack/run"

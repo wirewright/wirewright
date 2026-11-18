@@ -261,7 +261,7 @@ module MuSoma
         end
 
         matchpi %{[figure _*]} do
-          _, tree = base_hg.follow(addr)
+          _, tree = D7.follow(base_hg.tree, addr)
           rep, _ = MuSoma.distill(µ, base_hg, addr, tree, sites: Slice(Term).empty, site_zero: 0u32)
           Term.of(:figure, rep)
         end
@@ -384,6 +384,7 @@ module MuSoma
       @seen_circuit = circuit
 
       repr = PrettyAgent.repr(mu_codex, base_parser.parse(circuit), @parser.parse(circuit))
+      @parser.sweep
 
       # Fast path if the representation did not change. This accounts for
       # things like folds (e.g. `section`, `slot`). If something is inside
@@ -1122,7 +1123,7 @@ module MuSoma
 
         InputExchange.sync(exchange0, @exchange, input_sync, keyboard_sync) do |action|
           perturbation = ->(hg : D7::Hypergraph) do
-            unless row = hg.follow?(hg.to_local(action.addr))
+            unless row = D7.follow?(hg.tree, hg.to_local(action.addr))
               return [D7.patch]
             end
 

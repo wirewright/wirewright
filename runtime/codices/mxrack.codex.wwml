@@ -13,40 +13,39 @@
 
 --- theme ;; Extensions to Microfold (ufold.codex.wwml)
 
-(var base): "#191724"
-(var surface): "#1f1d2e"
-(var overlay): "#26233a"
-(var muted): "#6e6a86"
-(var subtle): "#908caa"
-(var text): "#e0def4"
-(var love): "#eb6f92"
-(var gold): "#f6c177"
-(var rose): "#ebbcba"
-(var pine): "#31748f"
-(var foam): "#9ccfd8"
-(var iris): "#c4a7e7"
-(var highlight-low): "#21202e"
-(var highlight-med): "#403d52"
-(var highlight-high): "#524f67"
+base: "#191724"
+surface: "#1f1d2e"
+overlay: "#26233a"
+muted: "#6e6a86"
+subtle: "#908caa"
+text: "#e0def4"
+love: "#eb6f92"
+gold: "#f6c177"
+rose: "#ebbcba"
+pine: "#31748f"
+foam: "#9ccfd8"
+iris: "#c4a7e7"
+highlight-low: "#21202e"
+highlight-med: "#403d52"
+highlight-high: "#524f67"
 
-(table colors):
-  {"ui-base": ^base,
-   "ui-surface": ^surface,
-   "ui-overlay": ^overlay,
+((table colors) "ui-base"): base
+((table colors) "ui-surface"): surface
+((table colors) "ui-overlay"): overlay
 
-   "ui-muted": ^muted,
-   "ui-subtle": ^subtle,
+((table colors) "ui-muted"): muted
+((table colors) "ui-subtle"): subtle
 
-   "ui-content": ^text,
-   "ui-supplementary": ^subtle,
+((table colors) "ui-content"): text
+((table colors) "ui-supplementary"): subtle
 
-   "ui-decoration-low": ^highlight-low,
-   "ui-decoration-med": ^highlight-med,
-   "ui-decoration-high": ^highlight-high,
+((table colors) "ui-decoration-low"): highlight-low
+((table colors) "ui-decoration-med"): highlight-med
+((table colors) "ui-decoration-high"): highlight-high
 
-   "ui-checked": ^foam
-   "ui-accent": ^iris
-   "ui-warn": ^gold}
+((table colors) "ui-checked"): foam
+((table colors) "ui-accent"): iris
+((table colors) "ui-warn"): gold
 
 
 --- library ;; Components

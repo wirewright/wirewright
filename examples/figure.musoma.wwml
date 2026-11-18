@@ -1,7 +1,7 @@
 ;;| Try incrementing / decrementing the counter.
 
 (figure
-  ;;| Here you are, inside the counter. ssuming It contains some state:
+  ;;| Here you are, inside the counter. It contains some state:
   (cell @count 15)
   (cell @msg)
   ;;| ... a backsystem responsible for its behavior:

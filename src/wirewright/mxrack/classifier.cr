@@ -520,6 +520,16 @@ module Ww::MxRack
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
+        # |@ mxrack.figure
+        #
+        # |@pattern
+        # [figure children_*]
+        #
+        # |@key children mxrack
+        matchpi %{[figure _*]} do
+          D7.parent(node.as_d, 1u32...node.uitemsize)
+        end
+
         matchpi %{[automaton (_ _dict) _*]} do
           D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node), autonomous: true)
         end

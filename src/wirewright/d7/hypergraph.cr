@@ -37,6 +37,18 @@ module Ww::D7
       b.reduce(a) { |memo, key| memo.append(key) }
     end
 
+    def self.concat(a : NodeAddr, offset : UInt32, b : NodeAddr) : NodeAddr
+      if offset.zero?
+        return concat(a, b)
+      end
+
+      b.each_with_index do |key, index|
+        a = a.append(index.zero? ? offset + key : key)
+      end
+
+      a
+    end
+
     # Lexicographical comparison of two node addresses.
     def <=>(other : NodeAddr)
       compare(other) { |key0, key1| key0 <=> key1 }
@@ -111,7 +123,7 @@ module Ww::D7
   #
   # NOTE: You cannot share the same hypergraph between multiple threads due to `annotate`;
   # but you *can* share the wrapped `ParseTree`. So you should create a separate hypergraph
-  # for each thread and pass that instead.
+  # for each thread and pass it instead.
   #
   # Hypergraph traversal methods such as `each_node` and `each_node_with_head` emit nodes
   # in depth-first order unless specified otherwise.
@@ -241,7 +253,7 @@ module Ww::D7
 
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = follow?(edge.module)
+      return unless row = D7.follow?(@tree, edge.module)
 
       addr = edge.module
       id_zero, origin = row
@@ -295,7 +307,7 @@ module Ww::D7
     def each_member(edge : AbsEdge, *, heads : Indexable(Term) = Slice(Term).empty, &fn : Node ->) : Nil
       # The first step is to descend down to the module which the caller claims to
       # be the origin of the edge.
-      return unless row = follow?(edge.module)
+      return unless row = D7.follow?(@tree, edge.module)
 
       # Then we conduct a search in the subtree reached this way.
       addr = edge.module
@@ -435,6 +447,9 @@ module Ww::D7
 
             index = key - node.feature.range.begin
             unless 0 <= index < node.children.size
+              pp! addr
+              pp! edge
+              pp! @tree
               raise KeyError.new
             end
 
@@ -483,49 +498,6 @@ module Ww::D7
       end
 
       AbsEdge.new(NodeAddr.empty, edge)
-    end
-
-    def follow?(addr : NodeAddr) : {NodeId, ParseTree}?
-      tree = @tree
-      prefix = NodeAddr.empty
-      id_zero = NodeId.new(0)
-
-      addr.each do |index|
-        loop do
-          case tree
-          in InertLeaf, GndLeaf
-            return
-          in ScopeNode, MixtureNode
-            tree = tree.child
-            next
-          in GroupNode, CircuitNode
-            if tree.is_a?(CircuitNode)
-              id_zero += D7.population(tree.leaf) # Leave an id range reserved for the leaf
-            end
-
-            offset = tree.feature.range.begin
-            assert index >= offset
-
-            # Do not forget to shift the id of the child by all prior ids.
-            prior = tree.children.trim(index - offset)
-            prior.each do |child|
-              id_zero += D7.population(child)
-            end
-
-            tree = tree.children[index - offset]
-          end
-
-          break
-        end
-
-        prefix = prefix.append(index)
-      end
-
-      {id_zero, tree}
-    end
-
-    def follow(addr : NodeAddr) : {NodeId, ParseTree}
-      follow?(addr) || raise KeyError.new
     end
 
     def gnd_map(router : NodeAddrRouter(Gnd)) : Hypergraph
@@ -623,14 +595,19 @@ module Ww::D7
     end
 
     private def self.walk(ctx, addr, tree : GroupNode, target) : WalkFlow
+      population = D7.population(tree)
+      if population.zero? # No ground nodes below
+        return WalkFlow::Continue
+      end
+
       unless ctx.guide.call(tree.summary)
-        ctx.id_zero += D7.population(tree)
+        ctx.id_zero += population
         return WalkFlow::Continue
       end
 
       predicate = tree.feature.passable
       unless ctx.pass_guards || predicate.call(ctx.hg, addr)
-        ctx.id_zero += D7.population(tree)
+        ctx.id_zero += population
         return WalkFlow::Continue
       end
 

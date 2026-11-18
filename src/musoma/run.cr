@@ -302,6 +302,8 @@ module MuSoma
       step(ws, agents)
       present(ws, agents)
 
+      ws.parser.sweep
+
       # WAIT
       next if Var.pending?(ws.state, ws.codex, ws.mu_codex, ws.library)
       next if ws.msgq.present?

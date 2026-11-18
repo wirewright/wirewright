@@ -1008,17 +1008,19 @@ module Ww::MxRack
 
   class ViAddrSeq(Node)
     getter addr : D7::NodeAddr
+    getter offset : UInt32
     getter successor : Node
 
-    def initialize(@addr : D7::NodeAddr, @successor : Node)
+    def initialize(@addr, @offset, @successor)
       while node = @successor.as?(ViAddrSeq(Node))
-        @addr = D7::NodeAddr.concat(@addr, node.addr)
+        @addr = D7::NodeAddr.concat(@addr, @offset, node.addr)
+        @offset = node.offset
         @successor = node.successor
       end
     end
 
-    def self.new(key : UInt32, successor : Node)
-      new(D7::NodeAddr[key], successor)
+    def self.new(key : UInt32, offset : UInt32, successor : Node)
+      new(D7::NodeAddr[key], offset, successor)
     end
   end
 
@@ -1298,7 +1300,8 @@ module Ww::MxRack
       children = Pf::Kit.stack_array(Node)
       tree.children.zip(tree.feature.range) do |child, key|
         recognize(setup, components, child).each do |successor|
-          children << ViAddrSeq(Node).new(key, successor)
+          offset = 0u32
+          children << ViAddrSeq(Node).new(key, offset, successor)
         end
       end
 
@@ -1584,8 +1587,8 @@ module Ww::MxRack
 
     # :nodoc:
     def instantiate(hg : D7::Hypergraph, addr : D7::NodeAddr, input : ViAddrSeq(Prev::Node)) : Slice(Node)
-      instantiate(hg, D7::NodeAddr.concat(addr, input.addr), input.successor).to_readonly_slice do |successor|
-        ViAddrSeq(Node).new(input.addr, successor).as(Node)
+      instantiate(hg, D7::NodeAddr.concat(addr, input.offset, input.addr), input.successor).to_readonly_slice do |successor|
+        ViAddrSeq(Node).new(input.addr, input.offset, successor).as(Node)
       end
     end
 
@@ -1637,7 +1640,7 @@ module Ww::MxRack
 
     # :nodoc:
     def unwrap(node : ViAddrSeq(Prev::Node)) : Node
-      ViAddrSeq(Node).new(node.addr, unwrap(node.successor))
+      ViAddrSeq(Node).new(node.addr, node.offset, unwrap(node.successor))
     end
 
     # :nodoc:
@@ -1737,7 +1740,7 @@ module Ww::MxRack
 
     # :nodoc:
     def situate(input : ViAddrSeq(Prev::Node), addr : D7::NodeAddr, scope : Slice(Term), argq : Deque(Node)) : Slice(Node)
-      situate(input.successor, D7::NodeAddr.concat(addr, input.addr), scope, argq)
+      situate(input.successor, D7::NodeAddr.concat(addr, input.offset, input.addr), scope, argq)
     end
 
     # :nodoc:
@@ -1925,7 +1928,7 @@ module Ww::MxRack
 
     # :nodoc:
     def unwrap(addr : D7::NodeAddr, scope : Slice(Term), node : ViAddrSeq(Prev::Node)) : Node
-      unwrap(D7::NodeAddr.concat(addr, node.addr), scope, node.successor)
+      unwrap(D7::NodeAddr.concat(addr, node.offset, node.addr), scope, node.successor)
     end
 
     # :nodoc:
@@ -1935,6 +1938,24 @@ module Ww::MxRack
 
     def unwrap(node : Thunk) : Node
       unwrap(node.addr, node.scope, node.successor)
+    end
+
+    def distill(roots : Slice(Node)) : Term
+      if root = roots.single?
+        visuals, _ = window_markup(root)
+        return Term.collapse(visuals)
+      end
+
+      result = Term::Dict.build do |commit|
+        commit << :box
+
+        roots.each do |root|
+          visuals, _ = window_markup(root)
+          commit << Term.collapse(visuals)
+        end
+      end
+
+      Term.of(result)
     end
   end
 
@@ -1950,19 +1971,32 @@ module Ww::MxRack
   defrecord WindowingSetup,
     cache : ViRecognized::RecognizeCache,
     microfold : Microfold::Codex,
-    epoch : UInt64
+    epoch : UInt64,
+    perf : Perf
 
   def windows(setup : WindowingSetup, scope : Slice(Term), circuit : D7::ParseTree, hg : D7::Hypergraph, interactive : Bool) : Array(Window)
-    components = ViRecognized.components(circuit)
-    recognized = ViRecognized.recognize(setup, components, circuit)
-    instance = ViInstantiated.instantiate(hg, recognized)
-    situated = ViSituated.situate(instance)
+    components = setup.perf.stage("Find components") do
+      ViRecognized.components(circuit)
+    end
+
+    recognized = setup.perf.stage("Recognize") do
+      ViRecognized.recognize(setup, components, circuit)
+    end
+
+    instance = setup.perf.stage("Instantiate") do
+      ViInstantiated.instantiate(hg, recognized)
+    end
+
+    situated = setup.perf.stage("Situate") do
+      ViSituated.situate(instance)
+    end
+
     staging = Pf::Kit.stack_array(StagingWindow)
 
-    setup.microfold.epoch do
+    setup.perf.stage("Render windows") do
       ViSituated.each_window_group(situated) do |window_group|
         visuals, questions = ViSituated.window_root_markup(window_group)
-        scenery = Microfold.render(setup.microfold, visuals).unwrap
+        scenery = Microfold.pooled_render(setup.microfold, visuals).unwrap
         next unless window_spec = window_spec?(scenery)
 
         window_spec = window_spec.copy_with(key: Term.of(scope + window_group.scope, window_spec.key))
@@ -1997,7 +2031,7 @@ module Ww::MxRack
     end
 
     staging.map do |window|
-      _, window_tree = hg.follow(window.addr)
+      _, window_tree = D7.follow(hg.tree, window.addr)
       assert window_tree.is_a?(D7::GroupNode)
       window_node = WindowNode.new(window.addr, window_tree)
 
@@ -2242,5 +2276,382 @@ module Ww::MxRack
     box = scene.box.translate(Scenery::Point[0, 0])
     answers = answers(scene.root.node, box, scene.vbox)
     answers.to_h { |answer| { {answer.addr, answer.key}, answer.value } }
+  end
+
+  # Performs focus exchange on each window in *windows*. Returns the modified *windows*,
+  # followed by zero or more adjustments to the draft.
+  def focus_exchange(windows : Array(Window)) : {Array(Window), Slice(Adjustment)}
+    adjustments = Pf::Kit.stack_array(Adjustment)
+    assignments = Pf::Kit.stack_array({Int32, Int32, InputFocus}, 4)
+
+    windows.each_with_index do |window, window_index|
+      wanted = false
+      seized = false
+      window.inputs.each do |input|
+        if input.focus.seized?
+          seized = true
+          break
+        end
+        if input.focus.wanted?
+          wanted = true
+        end
+      end
+
+      if seized
+        window.inputs.each_with_index do |input, input_index|
+          next unless input.focus.active?
+
+          adjustments << AdjustInputBlur.new(input.addr)
+          assignments << {window_index, input_index, InputFocus::Inactive}
+        end
+      end
+
+      next unless wanted
+
+      window.inputs.each_with_index do |input, input_index|
+        if input.focus.active?
+          adjustments << AdjustInputBlur.new(input.addr)
+          assignments << {window_index, input_index, InputFocus::Inactive}
+          next
+        end
+
+        if input.focus.wanted?
+          adjustments << AdjustInputFocus.new(input.addr)
+          assignments << {window_index, input_index, InputFocus::Active}
+          next
+        end
+      end
+    end
+
+    if assignments.empty?
+      return windows, adjustments.to_unsafe_readonly_slice! # Unchanged
+    end
+
+    windows = windows.map_with_index do |window, window_index|
+      unless assignments.any? { |(candidate_window_index, _, _)| candidate_window_index == window_index }
+        next window
+      end
+
+      inputs = window.inputs.map_with_index do |input, input_index|
+        assignments.each do |(candidate_window_index, candidate_input_index, focus)|
+          next unless candidate_window_index == window_index
+          next unless candidate_input_index == input_index
+
+          input = input.copy_with(focus: focus)
+        end
+
+        input
+      end
+
+      window.copy_with(inputs: inputs)
+    end
+
+    {windows, adjustments.to_unsafe_readonly_slice!}
+  end
+
+  private def hit(window : Window, session : WindowSession) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    # If there is no scene this means the user cannot see anything yet, so
+    # calculating hits makes no sense.
+    unless scene = session.scene?
+      return adjustments.to_unsafe_readonly_slice!
+    end
+
+    session.each_mouse_position do |mouse_id, mouse_point|
+      # NOTE: We use the single-click query to get all nodes that were hit. Using
+      # point query here would only get the topmost one. But we want to handle
+      # occlusion ourselves to support `opacity: _` in mouseareas!
+      hit_query = Scenery::HitQuery.new(mouse_point, mouse_point, :single)
+      hit_tree = Scenery.hit(scene, hit_query)
+
+      text_aims = Textoscope.text_aims(scene.root.node, scene.box.translate(Scenery::Point[0, 0]), hit_tree)
+      text_aims.each do |text_aim|
+        next unless text_aim.is_a?(Textoscope::QualifiedTextAim)
+
+        adjustments << AdjustQuestion.new(text_aim.addr, Term.of(:"?aim"), text_aim.description)
+      end
+
+      hit_mouseareas = hit_mouseareas_root(window.mouseareas, hit_tree)
+
+      mouse_captured = false
+
+      if session.mouse_pressed?(mouse_id)
+        window.mouseareas.each do |mousearea|
+          next unless mousearea.flags.wants_position_always? || (mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
+          next unless mouse = mousearea.mice.find { |candidate| candidate.id == mouse_id }
+
+          # Back-to-front.
+          hit_row = hit_mouseareas.last?
+          if hit_row && hit_row.mousearea.addr == mousearea.addr
+            hit_point = hit_row.point
+          end
+
+          hit_abs = Scenery::Point[0, 0]
+          if row = Scenery.hitarea?(scene.root.node, scene.box.translate(Scenery::Point[0, 0]), Term.of(mousearea.addr))
+            _, hit_box = row
+            hit_abs = mouse_point - hit_box.bounds.tl
+          end
+
+          adjustments << AdjustMouseareaPosition.new(mousearea.addr, mouse.key, hit_abs, hit_point)
+
+          mouse_captured = true
+        end
+      end
+
+      next if mouse_captured
+
+      # The mouse must join mouseareas it hit.
+      hit_mouseareas.each do |hit|
+        mouse = hit.mousearea.mice.find { |candidate| candidate.id == mouse_id }
+        if mouse.nil?
+          # A new mouse entered the mousearea.
+          mouse = session.mouse_model(mouse_id)
+          adjustments << AdjustMouseareaShowMouse.new(hit.mousearea.addr, mouse)
+          next
+        end
+
+        next unless hit.mousearea.flags.wants_position_always? || (hit.mousearea.flags.wants_position_drag? && session.mouse_pressed?(mouse_id))
+
+        adjustments << AdjustMouseareaDelta.new(hit.mousearea.addr, mouse.key, hit.point)
+      end
+
+      # The mouse must leave all mouseareas it did not hit.
+      window.mouseareas.each do |mousearea|
+        next if hit_mouseareas.any? { |hit| mousearea.addr == hit.mousearea.addr }
+        next unless mouse = mousearea.mice.find { |candidate| candidate.id == mouse_id }
+
+        adjustments << AdjustMouseareaHideMouse.new(mousearea.addr, mouse.key)
+      end
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : WindowSizeChanged) : Slice(Adjustment)
+    unless window.spec.flags.wants_size?
+      return Slice(Adjustment).empty
+    end
+
+    Slice(Adjustment).of(AdjustWindowSize.new(window.addr, message.width, message.height))
+  end
+
+  private def process(window : Window, message : WindowFocusChanged) : Slice(Adjustment)
+    unless window.spec.flags.wants_focus?
+      return Slice(Adjustment).empty
+    end
+
+    Slice(Adjustment).of(AdjustWindowFocus.new(window.addr, message.focus))
+  end
+
+  private def process(window : Window, message : WindowHoverChanged) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    if window.spec.flags.wants_hover?
+      adjustments << AdjustWindowHover.new(window.addr, message.hover)
+    end
+
+    if message.hover
+      return adjustments.to_unsafe_readonly_slice!
+    end
+
+    # Window was UNhovered
+
+    window.mouseareas.each do |mousearea|
+      next if mousearea.mice.empty?
+
+      # When the OS tells us that the mouse has left the window, this necessarily
+      # means there are no mice over the window, nor are there any mice "captured"
+      # by the window, so there's no drag either. Therefore it is safe for us to
+      # clear all mouseareas.
+      adjustments << AdjustMouseareaClear.new(mousearea.addr)
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : WindowFormChanged) : Slice(Adjustment)
+    unless window.spec.flags.wants_form?
+      return Slice(Adjustment).empty
+    end
+
+    Slice(Adjustment).of(AdjustWindowForm.new(window.addr, message.form))
+  end
+
+  private def process(window : Window, message : MouseMoved) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment, 4)
+
+    window.mice.each do |mouse|
+      next unless mouse.id?.in?(nil, message.mouse_id)
+      next unless mouse.flags.wants_position_always?
+
+      adjustments << AdjustMousePosition.new(mouse.addr, Scenery::Point[message.x, message.y])
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : MouseDragged) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    window.mice.each do |mouse|
+      next unless mouse.id?.in?(nil, message.mouse_id)
+      next unless mouse.flags.wants_position_drag?
+
+      adjustments << AdjustMousePosition.new(mouse.addr, Scenery::Point[message.x, message.y])
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : MouseButtonPressed) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    window.mice.each do |mouse|
+      next unless mouse.id?.in?(nil, message.mouse_id)
+
+      adjustments << AdjustMousePress.new(mouse.addr, message.button, message.clicks)
+    end
+
+    window.mouseareas.each do |mousearea|
+      next unless mouse = mousearea.mice.find { |candidate| candidate.id == message.mouse_id }
+
+      adjustments << AdjustMouseareaPress.new(mousearea.addr, mouse.key, message.button, message.clicks)
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : MouseButtonReleased) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    window.mice.each do |mouse|
+      next unless mouse.id?.in?(nil, message.mouse_id)
+
+      adjustments << AdjustMouseRelease.new(mouse.addr, message.button)
+    end
+
+    window.mouseareas.each do |mousearea|
+      next unless mouse = mousearea.mice.find { |candidate| candidate.id == message.mouse_id }
+
+      reset_delta = mousearea.flags.wants_position_drag?
+      adjustments << AdjustMouseareaRelease.new(mousearea.addr, mouse.key, message.button, reset_delta)
+    end
+
+    adjustments.to_unsafe_readonly_slice!
+  end
+
+  private def process(window : Window, message : KeyboardMessage) : Slice(Adjustment)
+    adjustments = Pf::Kit.stack_array(Adjustment)
+
+    # When an input is unfocused (donor input), it does not make sense to
+    # send it Tab or S-Tab or other focus control key; nor does it make
+    # sense to send the key to the focus recipient. So we remember both focus
+    # donors and recipients, and skip them when we unify keys.
+    inputs_focused_or_unfocused = Set(D7::NodeAddr).new
+
+    pass do
+      next unless message.is_a?(RunePressed)
+
+      case message.rune
+      when Term.of(:key, :tab)
+        next if window.inputs.any?(&.focus.seized?)
+
+        if window.inputs.none?(&.focus.active?)
+          # Focus first inactive input.
+          window.inputs.each do |input|
+            next unless input.focus.inactive?
+
+            adjustments << AdjustInputFocus.new(input.addr)
+            inputs_focused_or_unfocused << input.addr
+            break
+          end
+        else
+          # Focus next input.
+          focusable = window.inputs.select { |input| input.focus.active? || input.focus.inactive? }
+          focusable.each_with_index do |input, input_index|
+            if input.focus.active?
+              # On Tab, active inputs make themselves inactive and clear themselves
+              # (becoming focus donors).
+              adjustments << AdjustInputBlur.new(input.addr)
+              inputs_focused_or_unfocused << input.addr
+            elsif input.focus.inactive?
+              prev_input = focusable[(input_index - 1) % focusable.size]
+              next unless prev_input.focus.active?
+
+              # On Tab, inactive inputs preceded by (with wraparound) active inputs
+              # make themselves active (becoming focus recipients).
+              adjustments << AdjustInputFocus.new(input.addr)
+              inputs_focused_or_unfocused << input.addr
+            end
+          end
+        end
+      when Term.of(:key, :tab, shift: true)
+        next if window.inputs.any?(&.focus.seized?)
+
+        if window.inputs.none?(&.focus.active?)
+          # Focus last inactive input.
+          (0...window.inputs.size).reverse_each do |input_index|
+            input = window.inputs[input_index]
+            next unless input.focus.inactive?
+
+            adjustments << AdjustInputFocus.new(input.addr)
+            inputs_focused_or_unfocused << input.addr
+            break
+          end
+        else
+          # Focus previous input.
+          focusable = window.inputs.select { |input| input.focus.active? || input.focus.inactive? }
+          focusable.each_with_index do |input, input_index|
+            if input.focus.active?
+              # On S-Tab, active inputs make themselves inactive and clear themselves
+              # (becoming focus donors).
+              adjustments << AdjustInputBlur.new(input.addr)
+              inputs_focused_or_unfocused << input.addr
+            elsif input.focus.inactive?
+              next_input = focusable[(input_index + 1) % focusable.size]
+              next unless next_input.focus.active?
+
+              # On S-Tab, inactive inputs followed by (with wraparound) active inputs
+              # make themselves active (becoming focus recipients).
+              adjustments << AdjustInputFocus.new(input.addr)
+              inputs_focused_or_unfocused << input.addr
+            end
+          end
+        end
+      when Term.of(:key, :escape)
+        next unless window.inputs.none?(&.focus.seized?)
+
+        window.inputs.each_with_index do |input, input_index|
+          next unless input.focus.active?
+
+          adjustments << AdjustInputBlur.new(input.addr)
+          inputs_focused_or_unfocused << input.addr
+        end
+      end
+    end
+
+    # Unify message against active inputs.
+    window.inputs.each do |input|
+      next unless input.focus.should_receive_keys?
+      next if input.addr.in?(inputs_focused_or_unfocused)
+
+      case {input, message}
+      when {KeyboardInput, KeyPressed}
+        adjustments << AdjustInputPress.new(input.addr, message.key)
+      when {KeyboardInput, KeyReleased}
+        next unless input_key = input.keys.find { |candidate_key| candidate_key.repr == message.key }
+
+        adjustments << AdjustInputRelease.new(input.addr, input_key.index)
+      when {RuneInput, RunePressed}
+        adjustments << AdjustInputPress.new(input.addr, message.rune)
+      when {RuneInput, RuneReleased}
+        next unless input_key = input.keys.find { |candidate_key| Term.of(candidate_key.repr.itemspart) == message.rune }
+
+        adjustments << AdjustInputRelease.new(input.addr, input_key.index)
+      end
+    end
+
+    adjustments.to_unsafe_readonly_slice!
   end
 end

@@ -323,15 +323,9 @@ module Ww::Microfold
   # Interprets an arbitrary *node* as a Microfold node. Returns the resulting
   # `StyleNode` alongside diagnostics, which are rooted at *node*.
   def recognize(codex : Codex, node : Term::Dict) : Outcome::Accepted(StyleNode)
-    codex.recognize_cache.epoch do
-      codex.feature_cache.epoch do
-        codex.eval_cache.epoch do
-          thunk_out = recognize_node(codex, node)
-          thunk_out.map do |thunk|
-            eval(codex, thunk, location: Location.new(index: 0, total: 1), pairspart: node.pairspart)
-          end
-        end
-      end
+    thunk_out = recognize_node(codex, node)
+    thunk_out.map do |thunk|
+      eval(codex, thunk, location: Location.new(index: 0, total: 1), pairspart: node.pairspart)
     end
   end
 end

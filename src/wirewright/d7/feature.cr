@@ -586,6 +586,9 @@ module Ww::D7
   # A parse cache is inextricably linked to a `Classifier`. Using multiple
   # different classifiers with the same cache is not recommended and will
   # almost always cause bugs (on your end, not on `D7`'s!)
+  #
+  # WARNING: The parser's cache must be swept occasionally (`sweep`). You are
+  # responsible for sweeping the cache.
   struct Parser
     # Returns the classifier used by this parser.
     getter clf : Classifier
@@ -601,9 +604,11 @@ module Ww::D7
     #
     # See `D7.parse` for more info.
     def parse(circuit : Term) : ParseTree
-      @cache.epoch do
-        D7.parse(@clf, circuit, cache: @cache)
-      end
+      D7.parse(@clf, circuit, cache: @cache)
+    end
+
+    def sweep : Nil
+      @cache.sweep
     end
   end
 
@@ -922,5 +927,47 @@ module Ww::D7
 
     # repair : ParentRepair
     fn.call(collapse(repair), addr)
+  end
+
+  def follow?(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}?
+    prefix = NodeAddr.empty
+    id_zero = NodeId.new(0)
+
+    addr.each do |index|
+      loop do
+        case tree
+        in InertLeaf, GndLeaf
+          return
+        in ScopeNode, MixtureNode
+          tree = tree.child
+          next
+        in GroupNode, CircuitNode
+          if tree.is_a?(CircuitNode)
+            id_zero += D7.population(tree.leaf) # Leave an id range reserved for the leaf
+          end
+
+          offset = tree.feature.range.begin
+          assert index >= offset
+
+          # Do not forget to shift the id of the child by all prior ids.
+          prior = tree.children.trim(index - offset)
+          prior.each do |child|
+            id_zero += D7.population(child)
+          end
+
+          tree = tree.children[index - offset]
+        end
+
+        break
+      end
+
+      prefix = prefix.append(index)
+    end
+
+    {id_zero, tree}
+  end
+
+  def follow(tree : ParseTree, addr : NodeAddr) : {NodeId, ParseTree}
+    follow?(tree, addr) || raise KeyError.new
   end
 end

@@ -572,7 +572,11 @@ module Ww
       @vertices = @vertices.add(vertex)
 
       if parent = @stack.last?
-        @graph[parent] = (@graph[parent]? || Pf::USet32.new).add(vertex)
+        fanout0 = @graph[parent]? || Pf::USet32.new
+        fanout1 = fanout0.add(vertex)
+        if fanout1.size > fanout0.size # added
+          @graph[parent] = fanout1
+        end
       else
         @roots = @roots.add(vertex)
       end
@@ -623,15 +627,21 @@ module Ww
       @vertices = alive
     end
 
-    def size
+    # Returns the number of vertices in the dependency graph.
+    def vertexcnt : UInt32
+      @vertices.usize
+    end
+
+    # Returns the number of entries in the cache.
+    def size : UInt32
       @cache.size
     end
 
     def stat
-      {cache:    @cache.size,
-       graph:    @graph.size,
-       graphcnt: @graph.sum { |_, fanout| fanout.size },
-       hitrate:  (@reads - @misses)/@reads}
+      {cache:     @cache.size,
+       graph:     @graph.size,
+       vertexcnt: @vertices.size,
+       hitrate:   (@reads - @misses)/@reads}
     end
 
     def epoch(&)

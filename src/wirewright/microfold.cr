@@ -107,6 +107,10 @@ module Ww::Microfold
 
       SyncCodex.new(fork)
     end
+
+    def to_unsafe : Codex
+      @codex
+    end
   end
 
   # Constructs a Microfold codex from *document* and *rem*.
@@ -134,11 +138,13 @@ module Ww::Microfold
   # in that they point to missing utilities and the like.
   def render(codex : SyncCodex, root : Term) : Outcome::Accepted(Term)
     codex.synchronize do |unsafe_codex|
-      render(unsafe_codex, root)
+      pooled_render(unsafe_codex, root)
+    ensure
+      unsafe_codex.sweep
     end
   end
 
-  def render(codex : Codex, root : Term) : Outcome::Accepted(Term)
+  def pooled_render(codex : Codex, root : Term) : Outcome::Accepted(Term)
     unless root_dict = root.as_d?
       return Outcome.ok_despite(root, "root term is not a dict")
     end

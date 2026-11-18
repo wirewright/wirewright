@@ -170,4 +170,76 @@ module Ww::MxRack
       mouse.copy_with(addr: D7::NodeAddr.concat(window.addr, mouse.addr))
     end
   end
+
+  defrecord HitMouseArea, mousearea : MouseArea, point : Scenery::Point
+
+  enum HitOpacity
+    Transparent
+    Opaque
+  end
+
+  private def hit_mouseareas(mouseareas : Slice(MouseArea), hit_node : Scenery::HitNode) : {Slice(HitMouseArea), Slice(HitMouseArea), HitOpacity}
+    case hit_node
+    in Scenery::HitEmpty
+      {Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent}
+    in Scenery::HitTextLeaf, Scenery::HitLeaf
+      {Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Opaque}
+    in Scenery::HitAreaLeaf
+      unless addrQ = hit_node.payload.as_d?
+        return Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent
+      end
+
+      unless addr = D7::NodeAddr.new?(addrQ)
+        return Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent
+      end
+
+      unless mousearea = mouseareas.find { |candidate| candidate.addr == addr }
+        return Slice(HitMouseArea).empty, Slice(HitMouseArea).empty, HitOpacity::Transparent
+      end
+
+      hit = HitMouseArea.new(mousearea, hit_node.part.tl)
+
+      case mousearea.opacity
+      in .transparent?
+        opacity = HitOpacity::Transparent
+        {Slice[hit], Slice(HitMouseArea).empty, opacity}
+      in .fallthrough?
+        opacity = HitOpacity::Transparent
+        {Slice(HitMouseArea).empty, Slice[hit], opacity}
+      in .opaque?
+        opacity = HitOpacity::Opaque
+        {Slice[hit], Slice(HitMouseArea).empty, opacity}
+      end
+    in Scenery::HitGroup
+      ordinary_hits = Pf::Kit.stack_array(HitMouseArea)
+      fallthrough_hits = Pf::Kit.stack_array(HitMouseArea)
+
+      # Front-to-back
+      hit_node.children.reverse_each do |child|
+        ordinary_child_hits, fallthrough_child_hits, opacity = hit_mouseareas(mouseareas, child)
+        ordinary_hits.concat(ordinary_child_hits)
+        fallthrough_hits.concat(fallthrough_child_hits)
+
+        case opacity
+        in .transparent?
+        in .opaque?
+          return ordinary_hits.to_unsafe_readonly_slice!, fallthrough_hits.to_unsafe_readonly_slice!, HitOpacity::Opaque
+        end
+      end
+
+      {ordinary_hits.to_unsafe_readonly_slice!, fallthrough_hits.to_unsafe_readonly_slice!, HitOpacity::Transparent}
+    end
+  end
+
+  def hit_mouseareas_root(mouseareas : Slice(MouseArea), hit_node : Scenery::HitNode) : Slice(HitMouseArea)
+    ordinary_hits, fallthrough_hits, _ = hit_mouseareas(mouseareas, hit_node)
+
+    # If there's no ordinary (opaque) mousearea hit, then return transparent
+    # and fallthrough ones (if any).
+    if ordinary_hits.all?(&.mousearea.opacity.transparent?)
+      return ordinary_hits + fallthrough_hits
+    end
+
+    ordinary_hits
+  end
 end

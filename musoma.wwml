@@ -10,23 +10,17 @@
 ;;  ###############
 ;;   ###############
 
-
 ;; TODO: pretty printing
-;;   - (medium) implement `figure`
 ;;   - (hard) how to keep `expander` state (and similar) across pretty-print frames
 ;;     (e.g. keyed by node addr)?
-;;
-;; TODO: Make sure MuSoma-dependent examples run:
-;;   - figure.musoma.wwml
-;;   - parser.musoma.wwml
 ;;
 ;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale
 ;; keys occasionally/on unfocus (?)
 ;;
 ;; TODO(medium, rack, irack, mxrack): allow to load seed from arguments `argv` (?)
 ;;
-;; TODO: WE ARE TERRIBLY, TERRIBLY SLOW. MY GOSH! It's not going to be possible
-;; to ditch the old MuSoma until we can be on par with it in terms of performance,
+;; TODO(hard): WE ARE TERRIBLY, TERRIBLY SLOW. MY GOSH! It's not going to be possible
+;; to ditch the old MuSoma until we can be on par with it in terms of performance
 
 ;;
 ;; Theme
@@ -34,54 +28,53 @@
 
 ;; [Rose Pine Main](https://rosepinetheme.com)
 (theme
-  (var base): "#191724"
-  (var surface): "#1f1d2e"
-  (var overlay): "#26233a"
-  (var muted): "#6e6a86"
-  (var subtle): "#908caa"
-  (var text): "#e0def4"
-  (var love): "#eb6f92"
-  (var gold): "#f6c177"
-  (var rose): "#ebbcba"
-  (var pine): "#31748f"
-  (var foam): "#9ccfd8"
-  (var iris): "#c4a7e7"
-  (var highlight-low): "#21202e"
-  (var highlight-med): "#403d52"
-  (var highlight-high): "#524f67"
+  base: "#191724"
+  surface: "#1f1d2e"
+  overlay: "#26233a"
+  muted: "#6e6a86"
+  subtle: "#908caa"
+  text: "#e0def4"
+  love: "#eb6f92"
+  gold: "#f6c177"
+  rose: "#ebbcba"
+  pine: "#31748f"
+  foam: "#9ccfd8"
+  iris: "#c4a7e7"
+  highlight-low: "#21202e"
+  highlight-med: "#403d52"
+  highlight-high: "#524f67"
 
-  (table colors):
-    {"theme-base": ^base,
-     "theme-surface": ^surface,
-     "theme-overlay": ^overlay,
-     "theme-muted": ^muted,
-     "theme-subtle": ^subtle,
-     "theme-text": ^text,
-     "theme-decor-low": ^highlight-low,
-     "theme-decor-med": ^highlight-med,
-     "theme-decor-high": ^highlight-high,
-     "theme-punct": ^subtle,
-     "theme-number": ^gold,
-     "theme-boolean": ^rose,
-     "theme-key": ^foam,
-     "theme-blob": ^pine,
-     "theme-string": ^gold,
-     "theme-edge": ^love,
-     "theme-comment": ^muted,
-     "theme-section": ^iris,
-     "theme-editor-selection-bg": ^gold,
-     "theme-editor-selection-fg": ^base,
-     "theme-selection-bg": ^foam,
-     "theme-selection-fg": ^base,
-     "theme-grab-bg": ^pine,
-     "theme-grab-fg": ^text,
-     "theme-normal-bg": ^iris,
-     "theme-normal-fg": ^base,
-     "theme-insert-bg": ^gold,
-     "theme-insert-fg": ^base,
-     "theme-attention-fg": ^gold,
-     "theme-err-fg": ^rose,
-     "theme-info-fg": ^foam})
+  ((table colors) "theme-base"): base
+  ((table colors) "theme-surface"): surface
+  ((table colors) "theme-overlay"): overlay
+  ((table colors) "theme-muted"): muted
+  ((table colors) "theme-subtle"): subtle
+  ((table colors) "theme-text"): text
+  ((table colors) "theme-decor-low"): highlight-low
+  ((table colors) "theme-decor-med"): highlight-med
+  ((table colors) "theme-decor-high"): highlight-high
+  ((table colors) "theme-punct"): subtle
+  ((table colors) "theme-number"): gold
+  ((table colors) "theme-boolean"): rose
+  ((table colors) "theme-key"): foam
+  ((table colors) "theme-blob"): pine
+  ((table colors) "theme-string"): gold
+  ((table colors) "theme-edge"): love
+  ((table colors) "theme-comment"): muted
+  ((table colors) "theme-section"): iris
+  ((table colors) "theme-editor-selection-bg"): gold
+  ((table colors) "theme-editor-selection-fg"): base
+  ((table colors) "theme-selection-bg"): foam
+  ((table colors) "theme-selection-fg"): base
+  ((table colors) "theme-grab-bg"): pine
+  ((table colors) "theme-grab-fg"): text
+  ((table colors) "theme-normal-bg"): iris
+  ((table colors) "theme-normal-fg"): base
+  ((table colors) "theme-insert-bg"): gold
+  ((table colors) "theme-insert-fg"): base
+  ((table colors) "theme-attention-fg"): gold
+  ((table colors) "theme-err-fg"): rose
+  ((table colors) "theme-info-fg"): foam)
 
 
 ;;
@@ -558,11 +551,6 @@
     {¦ mode: normal input: ⟨K←(key "\\" shift: true)⟩ layout: {¦ -pane-r_}}
       <> {(K): (), pane-r: true}
 
-    ;; \normal `s`
-    ;; Spawn an editor.
-    {¦ mode: normal input: ⟨K←(key "s")⟩ -action_}
-      <> {(K): (), action: (spawn editor)}
-
     ;; \normal `i`
     ;; Go to Insert mode.
     {¦ mode_: normal input: ⟨K←(key "i") R←(rune "i")⟩ -present}
@@ -660,10 +648,6 @@
     {¦ action: (cut time) past: (_* `>present) present_ future_ draft_}
       <> {>present: ^present, (present): (), future: (), draft: ^present}
 
-    ;; Spawn editor.
-    {¦ action: (spawn editor) draft: (_* `dst) workspace: {¦ token_}}
-      <> {dst: ("" (I ^token) "")}
-
     ;; Reload seed from disk.
     {¦ action: reload seed: {¦ document_ ⋮sync} draft_ -statuses_}
       <> {draft: ^document, sync: true, statuses: (info "Reloaded from disk")}
@@ -681,7 +665,11 @@
 
     ;; Initialize editor motions with current keys.
     {¦ input: [input keys_+] -motions_}
-      <> {(keys): (), motions: ^keys})
+      <> {(keys): (), motions: ^keys}
+
+    ;; Spawn editor if missing.
+    {¦ locus: (_* `dst) workspace: {¦ token_ repr: {¦ -editing}}}
+      <> {dst: ("" (I ^token) "")})
 
   (step (guardR {¦ motions} rulesetR)
     ;; Determine whether selection is wanted based on an explicit list of keys.
@@ -1401,7 +1389,7 @@
     ;; Exceptions to the rule above.
     (shape [(%any backsys rewriter) [(%any rule backmap) _ _] _*])
       => node
-    (shape [(%any group box window section stage device %all) _+])
+    (shape [(%any group box window section stage device figure %all) _+])
       => node
 
     ;; (head x: 100
@@ -1419,6 +1407,10 @@
 
   ;; Assign `form` locally based on shapes.
   (step (waveR rulesetR cues: (dict))
+    ;; Forms are always always multiline.
+    (figure _* ⍊ -form_)
+      <> {form: multiline}
+
     ;; Force dicts with these shapes to be multiline (but their children
     ;; can be of any form).
     (group node _* ⍊ detail: dict -form_)
@@ -1662,9 +1654,12 @@
     node←(cat l←[(%any row col) _* tail_] r_)
       <> {node: ^(up l), tail: (cat ^tail ^r)}
 
-    ;; Let `cat`s "fall down" indents, interiors.
-    node←(cat l←[(%any indent interior) child_] r_)
+    ;; Let `cat`s "fall down" indents.
+    node←(cat l←[indent child_] r_)
       <> {node: ^(up l), child: (cat ^child ^r)}
+
+    (head←cat [interior _] r_)
+      <> {head: row, r: (bottom ^r)}
 
     ;; A cat of atoms with the same detail is a string concat.
     (cat (atom l_string ¦ () detail_) (atom r_string ¦ () detail_))
@@ -1765,6 +1760,9 @@
                         (^head _* ⍊ -open_) <> {open: true}
                         (^head _* ⍊ open_) <> {(open): ()})})))
 
+    ;; Format figure.
+    [figure microfold_] => (visual ^microfold)
+
     ;; Format rows.
     (row members_*) => (group ^*members style: "flow-row")
     (row members_* gap: xs) => (group ^*members style: "flow-row gap-3/2")
@@ -1774,12 +1772,15 @@
 
     ;; Format indent.
     (indent member_)
-      => (box style: "ml-2 pl-2 border-l-xs border-theme-decor-low"
-           ^member)
+      => (box ^member style: "ml-2 pl-2 border-l-xs border-theme-decor-low")
 
+    ;; Format interior.
     (interior member_)
-      => (box style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm"
-           ^member)))
+      => (box ^member style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm")
+
+    ;; Format bottom.
+    (bottom member_)
+      => (box ^member style: "bottom")))
 
 ;;| This module manages the @seed cell, the @seed-src cell, which is the seed
 ;;| reader, and the @seed-dst cell, which is the seed writer.
@@ -1787,7 +1788,29 @@
   (cell @seed)
   ;(cell @seed
     {document:
-      ((window title: "Counter" style: "backdrop-ui-base center"
+      (;;| Try incrementing / decrementing the counter.
+       (figure
+         ;;| Here you are, inside the counter. ssuming It contains some state:
+         (cell @count 15)
+         (cell @msg)
+         ;;| ... a backsystem responsible for its behavior:
+         (backsys
+           {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
+           {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
+         ;;| ... and then there's a bunch of stuff that comprises its appearance.
+         (group style: "max-w-4xs bg-ui-surface px-5 py-3 gap-3 rounded-lg"
+           (p @count style: "text-6xl font-bold text-ui-content center")
+           (group style: "flow-row gap-3 item-fr-1"
+             ($OutlinedButton (@msg inc) "Increment")
+             ($OutlinedButton (@msg dec) "Decrement"))))
+
+       ;(figure
+         (box style: "bg-red-500 min-w-32 min-h-32")
+         (node @n
+           (mousearea)))
+       ;(reading @n)
+
+       ;(window title: "Counter" style: "backdrop-ui-base center"
          ;;| This is an example of a comment.
          (group style: "flow-col bg-ui-surface p-5 rounded-3xl gap-5"
            (node @count
@@ -1996,8 +2019,8 @@
                  µ-page-x: (0 px)
                  µ-page-y: (0 px)
                  µ-scale: 1
-              (group style: "flow-col content dl-40"
-                ;(p ^(ml/display @pretty))
+              ;(group style: "floating flow-col content dl-40"
+                (p ^(ml/display @pretty))
                 ;(p ^(ml/display @program)))
               (box style: "font-notation text-sm/5"
                 (node @pretty))))

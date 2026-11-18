@@ -55,10 +55,6 @@ module Ww::Microfold
   # used here are `DependentCache`s, just like in Scenery, it's advised that
   # you have a codex for each "frame source", as in, an entity producing a sequence
   # of frames.
-  #
-  # `SyncCodex` must be used for thread-safety (in fact, it is the only accepted
-  # kind of codex in high-level functions such as `codex` and `render`, so it is
-  # harder for clients to mess up).
   class Codex
     # :nodoc:
     getter feature_cache
@@ -464,14 +460,13 @@ module Ww::Microfold
       @utilities_by_name[name]?
     end
 
-    def epoch(&)
-      @recognize_cache.epoch do
-        @designate_cache.epoch do
-          @instantiate_cache.epoch do
-            yield
-          end
-        end
-      end
+    # Sweeps all underlying caches. Normally `Microfold.render` calls this for
+    # you. If you use `Microfold.pooled_render`, however, you'd have to call
+    # this method yourself.
+    def sweep : Nil
+      @recognize_cache.sweep
+      @designate_cache.sweep
+      @instantiate_cache.sweep
     end
 
     defrecord Match, vars : Term::Dict, defn : UtilityDefn | ShorthandDefn

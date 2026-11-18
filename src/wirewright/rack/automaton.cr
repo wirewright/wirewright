@@ -234,7 +234,7 @@ class Ww::Rack::Automaton
   end
 
   # :nodoc:
-  def step(subframes, frames, circuit : Term, prepass, library) : Nil
+  def step(subframes, frames, circuit : Term, prepass, library, perf : IPerf = NoPerf.new) : Nil
     # HACK: This is a "shadow step" to make sure rigs execute in the same tick
     # invisibly from the main Rack pass. From the latter's point of view, rigs
     # are immediate.
@@ -244,9 +244,11 @@ class Ww::Rack::Automaton
     # it one circuit this tick, and another one the next tick. Or it could be the same, but
     # evolved circuit. The point being, there's no distinction. So we have to "fix" the circuit
     # at the beginning always. Hopefully this will be optimized later, there are ways to do that.
-    subframes << Rack.manipulate(@parser, circuit, prepass).last
+    perf.stage("Rack.manipulate (pre)") do
+      subframes << Rack.manipulate(@parser, circuit, prepass).last
+    end
 
-    pass do
+    perf.stage("Assembler.step") do
       input = subframes.last
       subframes.concat(Assembler.step(@assembler_state, @parser, library, input))
       output = subframes.last
@@ -255,7 +257,7 @@ class Ww::Rack::Automaton
       end
     end
 
-    pass do
+    perf.stage("Tspace.step") do
       input = subframes.last
       subframes.concat(Tspace.step(@tspace_state, @parser, input, prepass))
       output = subframes.last
@@ -264,29 +266,37 @@ class Ww::Rack::Automaton
       end
     end
 
-    # To achieve the immediacy of `rack.supervisor`, we have to "repair" the circuit
-    # before and after the main pass. This is more of a hack than a feature on
-    # the implementation side, though...
-    subframes.concat(Supervisor.step(@parser, subframes.last, prepass))
+    perf.stage("Supervisor.step (pre)") do
+      # To achieve the immediacy of `rack.supervisor`, we have to "repair" the circuit
+      # before and after the main pass. This is more of a hack than a feature on
+      # the implementation side, though...
+      subframes.concat(Supervisor.step(@parser, subframes.last, prepass))
+    end
 
-    subframes.concat(
-      contribute(subframes.last, prepass,
-        {Extrinsics, @extrinsic_state},
-        {Database, @database_state},
-        {Parser, @parser_state},
-        {Accord, @accord_state},
-        {FS, @fs_state},
-        {Rewriter, @rewriter_state},
-        {Backsys, @backsys_state},
-        {Timekeeper, @timekeeper_state},
-        Misc,
+    perf.stage("contribute") do
+      subframes.concat(
+        contribute(subframes.last, prepass,
+          {Extrinsics, @extrinsic_state},
+          {Database, @database_state},
+          {Parser, @parser_state},
+          {Accord, @accord_state},
+          {FS, @fs_state},
+          {Rewriter, @rewriter_state},
+          {Backsys, @backsys_state},
+          {Timekeeper, @timekeeper_state},
+          Misc,
+        )
       )
-    )
+    end
 
-    subframes.concat(Supervisor.step(@parser, subframes.last, prepass))
+    perf.stage("Supervisor.step (post)") do
+      subframes.concat(Supervisor.step(@parser, subframes.last, prepass))
+    end
 
     # Execute manipulate again to fix inconsistencies.
-    frames << Rack.manipulate(@parser, subframes.last, prepass).last
+    perf.stage("Rack.manipulate (post)") do
+      frames << Rack.manipulate(@parser, subframes.last, prepass).last
+    end
   end
 
   # Advances the automaton by one abstract step by evolving *circuit*. Returns
@@ -304,6 +314,8 @@ class Ww::Rack::Automaton
 
     measure do
       step(subframes, frames, circuit, prepass, library)
+    ensure
+      @parser.sweep
     end
 
     # Commit.
@@ -372,6 +384,8 @@ class Ww::Rack::Automaton
         buffer << frame
         seen = frame
       end
+
+      @fuse_parser.sweep
 
       buffer.each { |content| @display << DisplayFrame.new(content) }
       buffer.clear

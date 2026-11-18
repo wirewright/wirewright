@@ -196,8 +196,6 @@ module Ww::Microfold
   # also have a direction, i.e., they know where they're going to go (is it up?
   # down? or to self? any combination of these?)
   def designate?(codex : Codex, node : UncuedStyleNode) : DirectedDesignationNode?
-    codex.designate_cache.epoch do
-      designate_node?(codex, node)
-    end
+    designate_node?(codex, node)
   end
 end

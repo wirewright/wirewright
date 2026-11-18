@@ -291,19 +291,17 @@ module Ww::Microfold
   #
   # NOTE: This function assumes implicitly that *mu* is isomorphic to *node*.
   def instantiate(codex : Codex, node : Term::Dict, mu : DirectedDesignationNode) : Outcome::Accepted(Term)
-    codex.instantiate_cache.epoch do
-      instance_out, upflow = instantiate(codex, node, mu, dnflow: Slice(DownboundDesignation).empty)
-      instance_out.map do |instance|
-        # Process upbound designations targeting the root.
-        upflow.each do |designation|
-          case designation
-          in RootDesignation
-            instance = Term.merge(instance, Term.of(designation.settings))
-          end
+    instance_out, upflow = instantiate(codex, node, mu, dnflow: Slice(DownboundDesignation).empty)
+    instance_out.map do |instance|
+      # Process upbound designations targeting the root.
+      upflow.each do |designation|
+        case designation
+        in RootDesignation
+          instance = Term.merge(instance, Term.of(designation.settings))
         end
-
-        instance
       end
+
+      instance
     end
   end
 end
