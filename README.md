@@ -17,14 +17,14 @@ Here are some interesting aspects of Wirewright:
 This README is unfortunately quite long so I made this outline to make the whole thing easier to navigate.
 
 The guides are more practically oriented and are my attempt to carefully introduce various parts of Wirewright. If you want to jump right into Wirewright, follow the guides:
-- [Wirewright: The Guide (Part 0)](<guides/Guide (Part 0).md>)
-- [Wirewright: The Guide (Part 1)](<guides/Guide (Part 1).md>)
-- [Wirewright: The Guide (Part 2)](<guides/Guide (Part 2).md>)
-- [Wirewright: The Guide (Part 3)](<guides/Guide (Part 3).md>)
-- [Wirewright: The Guide (Part 4)](<guides/Guide (Part 4).md>)
+- [Wirewright: The Guide (Part 0) — Introduction & basic nodes](<guides/Guide (Part 0).md>)
+- [Wirewright: The Guide (Part 1) — Terms and variants of the feed node](<guides/Guide (Part 1).md>)
+- [Wirewright: The Guide (Part 2) — Delay, discard, queue, path, fs, db](<guides/Guide (Part 2).md>)
+- [Wirewright: The Guide (Part 3) — Transform, view, feed](<guides/Guide (Part 3).md>)
+- [Wirewright: The Guide (Part 4) — Building interactive apps with MxRack](<guides/Guide (Part 4).md>)
 - ... TODO ...
 
-The guides and the associated assets are stored in the `guides/` directory. They are also shipped with each Wirewright release.
+The guides and the associated assets are stored in the `guides/` directory. They are also shipped with each Wirewright release. Guides that you see here in the repo may not necessarily work with the latest release (the latest release might not have the necessary features). Instead, refer to the guides in the specific release.
 
 There's the [Gallery](#gallery) section where I maintain a selection of screenshots and videos of Wirewright. Some of them can be outdated, but they should give you a rough idea of how Wirewright looks like regardless.
 
