@@ -129,7 +129,7 @@ module Ww
     # and reparses the resulting string as a symbol.
     #
     # Effectively, this is an optimized way to do something along the lines of:
-    # `Term::Sym.new(sym.to(StringView).ldrop(nchars).to_s)`.
+    # `Term::Sym.new(sym.to(Pf::StringSeln).ldrop(nchars).to_s)`.
     #
     # ```
     # sym = Term[:"^\qux"]

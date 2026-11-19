@@ -71,7 +71,7 @@ module Ww::DwUIR
     # (e.g. *fg*, *decoration*).
     record Span,
       bounds : Rect,
-      caption : String | StringView,
+      caption : String | Pf::StringSeln,
       fg : Pigment::RGBA,
       decoration : TextDecoration
 

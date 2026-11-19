@@ -10,7 +10,7 @@ module Ww::ML
     # Represents a failing but choice-recoverable parse with an associated
     # *detail* and *text* (the latter selects the offending fragment
     # of source code).
-    record Refusal, detail : String, text : StringView do
+    record Refusal, detail : String, text : Pf::StringSeln do
       # :nodoc:
       def ord
         {-1, text.byte_start}
@@ -22,7 +22,7 @@ module Ww::ML
     #
     # `Failure`s interrupt the parsing process. They are essentially
     # lightweight exceptions.
-    record Failure, detail : String, text : StringView do
+    record Failure, detail : String, text : Pf::StringSeln do
       # :nodoc:
       def ord
         {+1, text.byte_start}
@@ -142,11 +142,11 @@ module Ww::ML
       end
     end
 
-    private def refusal(detail : String, text : StringView, **kwargs)
+    private def refusal(detail : String, text : Pf::StringSeln, **kwargs)
       Refusal.new(detail, text, **kwargs)
     end
 
-    private def failure(detail : String, text : StringView, **kwargs)
+    private def failure(detail : String, text : Pf::StringSeln, **kwargs)
       Failure.new(detail, text, **kwargs)
     end
 
@@ -1093,7 +1093,7 @@ module Ww::ML
       end
     end
 
-    private def entry_itself(comments : Array(StringView))
+    private def entry_itself(comments : Array(Pf::StringSeln))
       π = short_pair
       unless π.is_a?(Refusal)
         return π
@@ -1129,7 +1129,7 @@ module Ww::ML
     # Reads a single item, pair, or rule. Rules may consume comments
     # above them.
     private def entry
-      comments = [] of StringView
+      comments = [] of Pf::StringSeln
 
       if @addons.doc_comment?
         # Collect comments that we'll possibly attach to the entry.

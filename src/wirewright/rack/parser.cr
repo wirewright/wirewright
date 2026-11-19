@@ -27,14 +27,14 @@ module Ww::Rack::Parser
   end
 
   private def execute(grammars, task : Task, ping) : Result
-    view = task.source.to(StringView)
+    seln = task.source.to(Pf::StringSeln)
 
     grammar = grammars.put_if_absent(task.ruleset) do
       ParseKit.flatten(ParseKit.grammar(task.ruleset))
     end
 
     ctx = ParseKit.context(grammar, ping)
-    ParseKit.resolve(ParseKit.parse(ctx, task.top, view))
+    ParseKit.resolve(ParseKit.parse(ctx, task.top, seln))
   end
 
   def pending?(state : State) : Bool

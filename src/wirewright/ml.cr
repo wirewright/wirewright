@@ -117,7 +117,7 @@ module Ww::ML
         begin
           render{{suffix.id}}(tree)
         rescue e : Renderer::RenderError
-          raise SyntaxError.new(e.detail, e.text? || source.view)
+          raise SyntaxError.new(e.detail, e.text? || Pf::StringSeln.new(source))
         end
       rescue e : SyntaxError
         # Re-parse with location turned on if it was turned off. This way, we'll get
@@ -149,7 +149,7 @@ module Ww::ML
     conf = Conf.new(**kwargs)
     row = parse(conf, source, &.section(allow_empty: true))
     unless row.itemsonly? && row.itemsize == 1
-      raise SyntaxError.new("expected a single top-level term", source.view, filename: conf.filename)
+      raise SyntaxError.new("expected a single top-level term", Pf::StringSeln.new(source), filename: conf.filename)
     end
 
     row[0]
@@ -166,7 +166,7 @@ module Ww::ML
     conf = Conf.new(**kwargs)
     row, srcmap = parse_with_srcmap(conf, source, &.section(allow_empty: true))
     unless row.itemsonly? && row.itemsize == 1
-      raise SyntaxError.new("expected a single top-level term", source.view, filename: conf.filename)
+      raise SyntaxError.new("expected a single top-level term", Pf::StringSeln.new(source), filename: conf.filename)
     end
 
     {row[0], srcmap.cd(0)}

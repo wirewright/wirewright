@@ -63,7 +63,7 @@ module Ww::DwUIR
   end
 
   # Facilitates interaction with a DwUIR `server`.
-  alias Request = FrameRequest | SnapRequest | TextReplyRequest | GraphicsReplyRequest
+  alias Request = FrameRequest | SnapRequest | TextReplyRequest | GraphicsReplyRequest | HitRequest | IntersectRequest
 
   # Corresponds to `Viewer#show`.
   defcase FrameRequest,
@@ -90,6 +90,18 @@ module Ww::DwUIR
     format : SnapFormat::Sink,
     response : Sync::Future(Bytes) | Sync::Future(String)
 
+  # Corresponds to `hit?`.
+  defcase HitRequest,
+    subject : Term,
+    point : Point,
+    response : Sync::Future(Hit::Any)
+
+  # Corresponds to `intersect`.
+  defcase IntersectRequest,
+    subject : Term,
+    rect : Rect,
+    response : Sync::Future(Array(Target))
+
   # Starts a thread that will handle DwUIR requests. All rendering and measurement
   # should take place on this thread through `Request`s, since DwUIR is deeply single-
   # threaded. Yields a channel through which you should make requests. The thread
@@ -98,47 +110,50 @@ module Ww::DwUIR
   # NOTE: You transfer ownership of *ctx* to this function until it returns.
   def serve(ctx : Viewer::Context, & : Channel(Request) -> _)
     dw = Channel(Request).new
-    worker = WaitGroup.new(1)
+
+    server_ctx = Fiber::ExecutionContext::Isolated.new("DwUIR Server", spawn_context: MT) do
+      while request = dw.receive?
+        begin
+          case request
+          in FrameRequest
+            viewer = Viewer.new(request.pixels, ctx)
+            damage = viewer.show(request.content, bg: request.backdrop)
+            request.response.set(FrameResponse.new(damage))
+          in SnapRequest
+            case response = request.response
+            in Sync::Future(Bytes)
+              io = IO::Memory.new
+              snap(io, ctx, request.conf, request.format)
+              response.set(io.to_readonly_slice)
+            in Sync::Future(String)
+              src = IO::Memory.new
+              snap(src, ctx, request.conf, request.format)
+              response.set(Base64.urlsafe_encode(src))
+            end
+          in TextReplyRequest
+            result = Textual.reply(request.subject)
+            request.response.set(result)
+          in GraphicsReplyRequest
+            result = reply(ctx.platform, request.subject)
+            request.response.set(result)
+          in HitRequest
+            result = hit(request.subject, ctx.platform.pencils, request.point)
+            request.response.set(result)
+          in IntersectRequest
+            result = intersect(request.subject, request.rect)
+            request.response.set(result)
+          end
+        rescue e : Exception
+          request.response.fail(e)
+        end
+      end
+    end
 
     begin
-      Fiber::ExecutionContext::Isolated.new("DwUIR Server", spawn_context: MT) do
-        while request = dw.receive?
-          begin
-            case request
-            in FrameRequest
-              viewer = Viewer.new(request.pixels, ctx)
-              damage = viewer.show(request.content, bg: request.backdrop)
-              request.response.set(FrameResponse.new(damage))
-            in SnapRequest
-              case response = request.response
-              in Sync::Future(Bytes)
-                io = IO::Memory.new
-                snap(io, ctx, request.conf, request.format)
-                response.set(io.to_readonly_slice)
-              in Sync::Future(String)
-                src = IO::Memory.new
-                snap(src, ctx, request.conf, request.format)
-                response.set(Base64.urlsafe_encode(src))
-              end
-            in TextReplyRequest
-              result = Textual.reply(request.subject)
-              request.response.set(result)
-            in GraphicsReplyRequest
-              result = reply(ctx.platform, request.subject)
-              request.response.set(result)
-            end
-          rescue e : Exception
-            request.response.fail(e)
-          end
-        end
-      ensure
-        worker.done
-      end
-
       yield dw
     ensure
       dw.close
-      worker.wait
+      server_ctx.wait
     end
   end
 end

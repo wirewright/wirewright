@@ -172,15 +172,15 @@ module Ww::Microfold
       Outcome.ok_despite(vars.as(Term::Dict?), *args)
     end
 
-    private def parse?(parser : Exact, seln : StringView) : Out
+    private def parse?(parser : Exact, seln : Pf::StringSeln) : Out
       seln == parser.stem ? ok_parse(Term[]) : Outcome.rej
     end
 
-    private def parse?(parser : Var, seln : StringView) : Out
+    private def parse?(parser : Var, seln : Pf::StringSeln) : Out
       ok_parse(Term[].with(parser.name, seln.to_s))
     end
 
-    private def parse?(parser : Number, seln : StringView) : Out
+    private def parse?(parser : Number, seln : Pf::StringSeln) : Out
       return Outcome.rej unless seln.size >= 1
 
       # Fast path
@@ -203,18 +203,18 @@ module Ww::Microfold
       ok_parse(Term[].with(parser.name, decimal))
     end
 
-    private def parse?(parser : Symbol, seln : StringView) : Out
+    private def parse?(parser : Symbol, seln : Pf::StringSeln) : Out
       ok_parse(Term[].with(parser.name, Term::Sym.new(seln.to_s)))
     end
 
     # Maps `(table name, key)` to a value term. See: `Codex`.
     alias Tables = Hash({Term::Sym, String}, Term)
 
-    def parse?(tables : Tables, parser : Exact | Number | Var | Symbol, seln : StringView) : Out
+    def parse?(tables : Tables, parser : Exact | Number | Var | Symbol, seln : Pf::StringSeln) : Out
       parse?(parser, seln)
     end
 
-    def parse?(tables : Tables, parser : OneOf, seln : StringView) : Out
+    def parse?(tables : Tables, parser : OneOf, seln : Pf::StringSeln) : Out
       unless value = tables[{parser.table, seln.to_s}]?
         return Outcome.rej
       end
@@ -222,25 +222,25 @@ module Ww::Microfold
       ok_parse(Term[].with(parser.name, value))
     end
 
-    def parse?(tables : Tables, parser : Prefix, seln : StringView) : Out
+    def parse?(tables : Tables, parser : Prefix, seln : Pf::StringSeln) : Out
       return Outcome.rej unless rest = seln.lchop?(parser.prefix)
 
       parse?(tables, parser.stem, rest)
     end
 
-    def parse?(tables : Tables, parser : Suffix, seln : StringView) : Out
+    def parse?(tables : Tables, parser : Suffix, seln : Pf::StringSeln) : Out
       return Outcome.rej unless prior = seln.rchop?(parser.suffix)
 
       parse?(tables, parser.stem, prior)
     end
 
-    def parse?(tables : Tables, parser : Circumfix, seln : StringView) : Out
+    def parse?(tables : Tables, parser : Circumfix, seln : Pf::StringSeln) : Out
       return Outcome.rej unless mid = seln.chop?(parser.l, parser.r)
 
       parse?(tables, parser.stem, mid)
     end
 
-    def parse?(tables : Tables, parser : Infix, seln : StringView) : Out
+    def parse?(tables : Tables, parser : Infix, seln : Pf::StringSeln) : Out
       seln.each_before_and_after do |l, r|
         next unless r = r.lchop?(parser.infix)
 
@@ -258,7 +258,7 @@ module Ww::Microfold
       ok_parse(nil)
     end
 
-    def parse?(tables : Tables, parser : And, seln : StringView) : Out
+    def parse?(tables : Tables, parser : And, seln : Pf::StringSeln) : Out
       memo = Term[]
 
       parser.arms.each do |arm|
@@ -278,7 +278,7 @@ module Ww::Microfold
     end
 
     def parse?(tables : Tables, parser : Any, string : String) : Out
-      parse?(tables, parser, string.view)
+      parse?(tables, parser, Pf::StringSeln.new(string))
     end
   end
 end

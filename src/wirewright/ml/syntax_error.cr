@@ -5,13 +5,13 @@ module Ww::ML
     getter detail : String
 
     # Returns the offending text -- a view of the original source string.
-    getter text : StringView
+    getter text : Pf::StringSeln
 
     # Gets or sets the name of the file associated with the offending text.
     property? filename : String?
 
     # :nodoc:
-    def initialize(@detail : String, @text : StringView, @filename : String? = nil)
+    def initialize(@detail : String, @text : Pf::StringSeln, @filename : String? = nil)
     end
 
     def message : String
@@ -27,7 +27,7 @@ module Ww::ML
     #   but the one on the right is)
     # - Line number (counting from 1).
     # - Column (counting from 1).
-    def self.lookaround(text : StringView) : {StringView, Int32, Int32}
+    def self.lookaround(text : Pf::StringSeln) : {Pf::StringSeln, Int32, Int32}
       extended = text
         .reverse_extend { |chr| chr != '\n' }
         .extend(exclusive: false) { |chr| chr != '\n' }

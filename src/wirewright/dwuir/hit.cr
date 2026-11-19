@@ -11,20 +11,21 @@ module Ww::DwUIR
     end
   end
 
-  # Variants of the positive response of `.hit?`.
   module Hit
-    alias Any = Node | Text
+    alias Any = None | Some
+
+    defrecord None
+
+    alias Some = Node | Text
 
     # A node was hit.
     #
-    # - *keypath* specifies its keypath.
     # - *node* specifies the node itself, to enable convenient inspection
     #   without having to follow the keypath on the caller's end.
-    record Node, keypath : Term::Dict, node : Term
+    defrecord Node, target : Target
 
     # A text node was hit.
     #
-    # - *keypath* and *node* are the same as in `Node`.
     # - *char* is a string view pointing to the character under the hit point.
     #   It is guaranteed to point into the full caption of the text node. It is
     #   provided to enable access to positional information (e.g. byte index).
@@ -32,10 +33,9 @@ module Ww::DwUIR
     #   inside the target character's (logical) bounding box. For example,
     #   `0.5 < normpt.x <= 1` would mean the hit point landed on the right half of
     #   the character's bounding box. Coordinate range is guaranteed to be `0-1`.
-    record Text, keypath : Term::Dict, node : Term, char : StringView, normpt : Point
+    defrecord Text, target : Target, char : Pf::StringSeln, normpt : Point
   end
 
-  # :nodoc:
   defcase Target,
     node : Term,
     tf : Tf,
@@ -50,13 +50,7 @@ module Ww::DwUIR
     walk(root, keypath: Term[], viewport: Rect.inf) do |context, node|
       Term.case(node) do
         matchpi %[(_ ⍊ final-w final-h)] do
-          tfbounds = context.tf.map(context.bounds)
-          unless tfbounds.intersects?(context.view)
-            next WalkFlow::Recurse
-          end
-
-          tfquad = context.tf.quad(context.bounds)
-          unless tfquad.includes?(point)
+          unless hit?(context.view, context.tf, context.bounds, point)
             next WalkFlow::Recurse
           end
 
@@ -98,8 +92,51 @@ module Ww::DwUIR
     true
   end
 
+  private def intersects?(view : View, tf : Tf, bounds : Rect, rect : Rect) : Bool
+    return false unless tf.map(bounds).intersects?(view)
+    return false unless rect.intersects?(tf.quad(bounds))
+
+    true
+  end
+
+  def intersect(root : Term, rect : Rect) : Array(Target)
+    results = [] of Target
+
+    walk(root, keypath: Term[], viewport: Rect.inf) do |context, node|
+      Term.case(node) do
+        matchpi %[(_ ⍊ final-w final-h)] do
+          unless intersects?(context.view, context.tf, context.bounds, rect)
+            next WalkFlow::Recurse
+          end
+
+          results << Target.new(
+            node: node,
+            tf: context.tf,
+            view: context.view,
+            layer: context.layer,
+            origin: context.bounds.tl,
+            keypath: context.keypath || unreachable,
+          )
+
+          WalkFlow::Next
+        end
+
+        otherwise do
+          # We must recurse here in any case because DwUIR's tree is not necessarily
+          # reflecting the true bounds of things. I.e., you can have a child
+          # which is shifted by a big negative delta into view, whereas its parent
+          # is out of view. While the parent cannot get hit by the point, the child
+          # can, and we must be able to reach it.
+          WalkFlow::Recurse
+        end
+      end
+    end
+
+    results
+  end
+
   # Determines the sized leaf of *root* that lies under the given *point*. Returns
-  # a `Hit::Any` object detailing the hit. Returns `nil` if no such leaf exists.
+  # a `Hit::Any` object detailing the hit.
   #
   # *pencils* is required to serve pencils that are used to calculate the properties
   # associated with `Hit::Text`.
@@ -111,8 +148,10 @@ module Ww::DwUIR
   #
   # Only sized leaves are inspected and can be hit. The resulting hit object includes
   # a keypath which you can use to get nodes along the path to the leaf (hit parents).
-  def hit?(root : Term, pencils : PencilServer, point : Point) : Hit::Any?
-    return unless target = target?(root, point)
+  def hit(root : Term, pencils : PencilServer, point : Point) : Hit::Any
+    unless target = target?(root, point)
+      return Hit::None.new
+    end
 
     Term.case(target.node) do
       matchpi %[(text ⍊ final-w: ±w final-h: ±h)] do
@@ -135,27 +174,30 @@ module Ww::DwUIR
           word.segments.each do |segment|
             case segment
             in TextDrawable::InlineSegment
-              segment.view.each_char_with_abs_byte_index do |chr, byte_index|
+              view = segment.view
+              view.each_char_with_abs_byte_index do |chr, byte_index|
                 pencil, bounds = pencil.after_writing_with_bounds(chr)
                 bounds = bounds.translate(word.bounds.tl)
                 next unless hit?(target.view, target.tf, bounds, point)
 
-                char = StringView.new(segment.view.string, byte_index, byte_index + 1, chr.single_byte?)
+                char = Pf::StringSeln.new(view.@trunk, byte_index.to_u32, (byte_index + 1).to_u32)
                 worldpt = target.tf.inverse.map(point)
                 normpt = bounds.normalize(worldpt)
-                return Hit::Text.new(target.keypath, target.node, char, normpt)
+                return Hit::Text.new(target, char, normpt)
               end
             in TextDrawable::VirtualSegment
               pencil = pencil.after_writing(segment.string)
             end
           end
 
-          return Hit::Node.new(target.keypath, target.node)
+          return Hit::Node.new(target)
         end
+
+        continue
       end
 
       otherwise do
-        Hit::Node.new(target.keypath, target.node)
+        Hit::Node.new(target)
       end
     end
   end

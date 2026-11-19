@@ -33,7 +33,7 @@ module Ww::ML
     # `T` should not include `Location(T)`; that would make little sense. Hence
     # you'll see unions such as `Expr` (`ExprNode` or located `ExprNode`)
     # vs. `ExprNode`.
-    defcase Location(T), child : T, text : StringView do
+    defcase Location(T), child : T, text : Pf::StringSeln do
       def pretty_print(pp)
         pp.surround("Location(", ")", left_break: "", right_break: nil) do
           {% for ivar, i in @type.instance_vars.map(&.name).sort %}
@@ -151,8 +151,8 @@ module Ww::ML
 
     alias DictRule = TemplateRule | BackmapRule
 
-    defcase TemplateRule, pattern : Expr, template : Expr, comments : Array(StringView), caches_hash: true
-    defcase BackmapRule, pattern : Expr, backspec : Expr, comments : Array(StringView), caches_hash: true
+    defcase TemplateRule, pattern : Expr, template : Expr, comments : Array(Pf::StringSeln), caches_hash: true
+    defcase BackmapRule, pattern : Expr, backspec : Expr, comments : Array(Pf::StringSeln), caches_hash: true
 
     alias DictPair = DictAlloyPair | DictEdgePair | DictKVPair
 
@@ -168,7 +168,7 @@ module Ww::ML
     defcase DictExtend, itemside : DictSection, extra : Expr
 
     defcase DocumentDict, default : DictSection, sections : Array(DocumentSection)
-    defcase DocumentSection, name : Expr, body : DictSection, text : StringView
+    defcase DocumentSection, name : Expr, body : DictSection, text : Pf::StringSeln
 
     alias Placeholder = RuleId | RuleBlockId | RuleIdBlank | RuleBlockIdBlank
 
@@ -188,13 +188,13 @@ module Ww::ML
     alias HasLocation = Expr | Selector | DictEntry | SplitPart
 
     # :nodoc:
-    def location(node : Location, text : StringView)
+    def location(node : Location, text : Pf::StringSeln)
       node
     end
 
     {% for type in [ExprNode, SelectorNode, DictEntryNode, SplitPartNode] %}
       # :nodoc:
-      def location(node : {{type}}, text : StringView)
+      def location(node : {{type}}, text : Pf::StringSeln)
         Location({{type}}).new(node, text)
       end
     {% end %}
@@ -202,7 +202,7 @@ module Ww::ML
     {% if flag?(:docs) %}
       # Wraps *node* in a `Location` node, if it is one of the `HasLocationNode`s.
       # Otherwise, returns *node* unchanged.
-      def location(node, text : StringView)
+      def location(node, text : Pf::StringSeln)
       end
     {% end %}
 

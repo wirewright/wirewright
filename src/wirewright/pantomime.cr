@@ -121,8 +121,8 @@ module Ww
       bytes.any? { |byte| control?(byte) }
     end
 
-    private def matches?(pattern : Includes, string : StringView) : Bool
-      string.each_before_and_after do |l, r|
+    private def matches?(pattern : Includes, seln : Pf::StringSeln) : Bool
+      seln.each_before_and_after do |l, r|
         if r.starts_with?(pattern.seq)
           return true
         end
@@ -131,22 +131,22 @@ module Ww
       false
     end
 
-    private def matches?(pattern : StartsWith, string : StringView) : Bool
-      string.starts_with?(pattern.seq)
+    private def matches?(pattern : StartsWith, seln : Pf::StringSeln) : Bool
+      seln.starts_with?(pattern.seq)
     end
 
-    private def matches?(pattern : AfterWhitespace, string : StringView) : Bool
-      matches?(pattern.child, string.lstrip(" \n\t"))
+    private def matches?(pattern : AfterWhitespace, seln : Pf::StringSeln) : Bool
+      matches?(pattern.child, seln.lstrip(" \n\t"))
     end
 
-    private def matches?(pattern : Choice, string : StringView) : Bool
+    private def matches?(pattern : Choice, seln : Pf::StringSeln) : Bool
       pattern.branches.any? do |branch|
-        matches?(branch, string)
+        matches?(branch, seln)
       end
     end
 
     private def matches?(pattern : StringPattern, string : String) : Bool
-      matches?(pattern, string.view)
+      matches?(pattern, Pf::StringSeln.new(string))
     end
 
     def detect(buffer : Bytes) : MIME::MediaType

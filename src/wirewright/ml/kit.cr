@@ -40,7 +40,7 @@ module Ww::ML
 
     # Parses a string of Unicode base-10 subscript digits (₀-₉) into a number term.
     # Returns `nil` on invalid input.
-    def sub2nat?(digitsrc : StringView) : Term::Num?
+    def sub2nat?(digitsrc : Pf::StringSeln) : Term::Num?
       n = Term[0]
 
       digitsrc.each_char do |digit|
@@ -54,7 +54,7 @@ module Ww::ML
 
     # Parses a string of Unicode superscript digits into a Crystal `Int32`.
     # Returns `nil` on invalid input.
-    def sup2i?(digitsrc : StringView) : Int32?
+    def sup2i?(digitsrc : Pf::StringSeln) : Int32?
       n = 0
 
       digitsrc.each_char do |digit|
@@ -95,7 +95,7 @@ module Ww::ML
     # expn
     #   ("e" | "E") ("+" | "-" | "") nat
     # ```
-    def decimal(src : StringView, *, exact : Bool = true) : Term | Term::Num
+    def decimal(src : Pf::StringSeln, *, exact : Bool = true) : Term | Term::Num
       if src.empty?
         raise ArgumentError.new
       end
@@ -166,7 +166,7 @@ module Ww::ML
     # underscores this isn't simply `digitsrc.size`).
     #
     # Raises `SyntaxError` on invalid input.
-    def nat(digitsrc : StringView, *, exact : Bool) : {Term::Num, Term::Num}
+    def nat(digitsrc : Pf::StringSeln, *, exact : Bool) : {Term::Num, Term::Num}
       # Validate
       digitsrc.each_split do |l, m, r|
         case m
@@ -209,7 +209,7 @@ module Ww::ML
     # would be `digits: "123" radix: "₁₀"`.
     #
     # Raises `SyntaxError` on invalid input.
-    def radix(digitsrc : StringView, radixsrc : StringView) : Term
+    def radix(digitsrc : Pf::StringSeln, radixsrc : Pf::StringSeln) : Term
       unless radix = sub2nat?(radixsrc)
         raise SyntaxError.new("invalid radix", radixsrc)
       end
@@ -288,7 +288,7 @@ module Ww::ML
 
     # Evaluates escape sequences in *src*. Raises `SyntaxError` on invalid
     # escape sequences.
-    def unescape(src : StringView) : Term::Str
+    def unescape(src : Pf::StringSeln) : Term::Str
       prefix, src = src.skip_to("\\")
       if src.empty?
         # "⏏hello world" -> "hello world⏏", no escape sequences.
@@ -303,14 +303,14 @@ module Ww::ML
       Term[interior]
     end
 
-    private def unescape(io : IO, src : StringView) : Nil
+    private def unescape(io : IO, src : Pf::StringSeln) : Nil
       until src.empty?
         rune, src = unescape1(src)
         io << rune
       end
     end
 
-    private def unescape1(src : StringView) : {Char | String, StringView}
+    private def unescape1(src : Pf::StringSeln) : {Char | String, Pf::StringSeln}
       if src.empty?
         raise ArgumentError.new
       end
@@ -411,7 +411,7 @@ module Ww::ML
     # Characters that can be used in an emoji name.
     U_EMOJI_NAME_CHARSET = "a-zA-Z0-9_"
 
-    private def unescape1u(src : StringView) : {Char | String, StringView}
+    private def unescape1u(src : Pf::StringSeln) : {Char | String, Pf::StringSeln}
       if src.starts_with?('{')
         src = src.rest
         # \u{⏏

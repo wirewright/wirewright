@@ -29,7 +29,7 @@ module Ww::DwUIR
       end
     end
 
-    record InlineSegment, view : StringView do
+    record InlineSegment, view : Pf::StringSeln do
       def to_s(io)
         io << view
       end

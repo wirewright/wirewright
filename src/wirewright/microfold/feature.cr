@@ -109,7 +109,7 @@ module Ww::Microfold
     alias Ok = Outcome::Accepted
     alias Rej = Outcome::Rejected
 
-    def feature(origin : StyleOrigin, seln : StringView) : Ok(Feature)
+    def feature(origin : StyleOrigin, seln : Pf::StringSeln) : Ok(Feature)
       outcome = Outcome.choice!(
         cond(origin, seln),
         cue(seln),
@@ -121,7 +121,7 @@ module Ww::Microfold
       outcome.map(&.as(Feature))
     end
 
-    def cond(origin : StyleOrigin, seln : StringView) : Ok(Cond) | Rej
+    def cond(origin : StyleOrigin, seln : Pf::StringSeln) : Ok(Cond) | Rej
       l, m, r = seln.partition(':')
       return Outcome.rej if m.empty? # no ':'
 
@@ -130,7 +130,7 @@ module Ww::Microfold
       end
     end
 
-    def cue(seln : StringView) : Ok(UpCue) | Ok(DnCue) | Rej
+    def cue(seln : Pf::StringSeln) : Ok(UpCue) | Ok(DnCue) | Rej
       l, m, r = seln.partition('-')
       return Outcome.rej if m.empty? # no '-'
 
@@ -142,7 +142,7 @@ module Ww::Microfold
       end
     end
 
-    def item(origin : StyleOrigin, seln : StringView) : Ok(Item) | Rej
+    def item(origin : StyleOrigin, seln : Pf::StringSeln) : Ok(Item) | Rej
       l, m, r = seln.partition('-')
       return Outcome.rej if m.empty? # no '-'
 
@@ -153,7 +153,7 @@ module Ww::Microfold
       utility(origin, r).map { |arg| Item.new(arg) }
     end
 
-    def presence(seln : StringView) : Ok(Present) | Ok(Absent) | Rej
+    def presence(seln : Pf::StringSeln) : Ok(Present) | Ok(Absent) | Rej
       case seln
       when "present"
         Outcome.ok(Present.new)
@@ -164,11 +164,11 @@ module Ww::Microfold
       end
     end
 
-    def utility(origin : StyleOrigin, seln : StringView) : Ok(Utility)
+    def utility(origin : StyleOrigin, seln : Pf::StringSeln) : Ok(Utility)
       Outcome.ok(Utility.new(origin, seln.to_s))
     end
 
-    def filter(seln : StringView) : Ok(Filter) | Rej
+    def filter(seln : Pf::StringSeln) : Ok(Filter) | Rej
       outcome = Outcome.choice(
         not_filter(seln),
         relative_filter(seln),
@@ -180,7 +180,7 @@ module Ww::Microfold
       outcome.map(&.as(Filter))
     end
 
-    def uncued_filter(seln : StringView) : Ok(UncuedFilter) | Rej
+    def uncued_filter(seln : Pf::StringSeln) : Ok(UncuedFilter) | Rej
       outcome = Outcome.choice(
         not_filter(seln),
         relative_filter(seln),
@@ -191,7 +191,7 @@ module Ww::Microfold
       outcome.map(&.as(UncuedFilter))
     end
 
-    def not_filter(seln : StringView) : Ok(Not) | Rej
+    def not_filter(seln : Pf::StringSeln) : Ok(Not) | Rej
       return Outcome.rej unless seln.starts_with?('-')
 
       uncued_filter(seln.lskip(1)).map do |arg|
@@ -199,11 +199,11 @@ module Ww::Microfold
       end
     end
 
-    def entry_present_filter(seln : StringView) : Ok(PairPresent) | Rej
+    def entry_present_filter(seln : Pf::StringSeln) : Ok(PairPresent) | Rej
       symbol_list(seln).map { |keypath| PairPresent.new(keypath) }
     end
 
-    def entry_eq_filter(seln : StringView) : Ok(PairEq) | Rej
+    def entry_eq_filter(seln : Pf::StringSeln) : Ok(PairEq) | Rej
       l, m, r = seln.partition('/')
       return Outcome.rej if m.empty? # no '/'
 
@@ -214,7 +214,7 @@ module Ww::Microfold
       end
     end
 
-    def relative_filter(seln : StringView) : Ok(IsFirst) | Ok(IsLast) | Ok(IsOnly) | Ok(IsPeriod) | Rej
+    def relative_filter(seln : Pf::StringSeln) : Ok(IsFirst) | Ok(IsLast) | Ok(IsOnly) | Ok(IsPeriod) | Rej
       unless seln.starts_with?('@')
         return Outcome.rej
       end
@@ -235,7 +235,7 @@ module Ww::Microfold
       nat(r).map { |n| IsPeriod.new(n) }
     end
 
-    def cue_filter(seln : StringView) : Ok(InCue) | Ok(HasCue) | Rej
+    def cue_filter(seln : Pf::StringSeln) : Ok(InCue) | Ok(HasCue) | Rej
       l, m, r = seln.partition('-')
       return Outcome.rej if m.empty? # no '-'
 
@@ -247,7 +247,7 @@ module Ww::Microfold
       end
     end
 
-    def nat(seln : StringView) : Ok(Int32) | Rej
+    def nat(seln : Pf::StringSeln) : Ok(Int32) | Rej
       value = 0
 
       seln.each_char_with_index do |chr, index|
@@ -268,7 +268,7 @@ module Ww::Microfold
       Outcome.ok(value)
     end
 
-    def symbol_list(seln : StringView) : Ok(Slice(Term::Sym)) | Rej
+    def symbol_list(seln : Pf::StringSeln) : Ok(Slice(Term::Sym)) | Rej
       l, m, r = seln.partition('.')
       if m.empty? # no '.'
         return symbol(l).map { |sym| Slice[sym] }
@@ -281,7 +281,7 @@ module Ww::Microfold
       end
     end
 
-    def symbol(seln : StringView) : Ok(Term::Sym) | Rej
+    def symbol(seln : Pf::StringSeln) : Ok(Term::Sym) | Rej
       seln.each_char do |chr|
         unless ML::Rune.new(chr).symbolic?
           return Outcome.rej
@@ -292,7 +292,7 @@ module Ww::Microfold
     end
   end
 
-  private def each_feature_view(style : StringView, & : StringView ->) : Nil
+  private def each_feature_view(style : Pf::StringSeln, & : Pf::StringSeln ->) : Nil
     loop do
       l, m, r = style.partition(&.whitespace?)
 
@@ -385,7 +385,7 @@ module Ww::Microfold
     end
   end
 
-  private def features(origin : StyleOrigin, style : StringView) : Outcome::Accepted(FeatureSeq)
+  private def features(origin : StyleOrigin, style : Pf::StringSeln) : Outcome::Accepted(FeatureSeq)
     Outcome.accumulate do |acc|
       content = Pf::Kit.stack_array(Feature)
       cue_membrane = false
@@ -441,7 +441,7 @@ module Ww::Microfold
 
   # Parses *style* and returns the corresponding set of features.
   def features(origin : StyleOrigin, style : String) : Outcome::Accepted(FeatureSeq)
-    features(origin, style.view)
+    features(origin, Pf::StringSeln.new(style))
   end
 
   # :ditto:

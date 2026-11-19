@@ -30,8 +30,8 @@ module Ww
       @value
     end
 
-    def to?(type : StringView.class) : StringView
-      @value.view
+    def to?(type : Pf::StringSeln.class) : Pf::StringSeln
+      Pf::StringSeln.new(@value)
     end
 
     def to?(type : Path.class) : Path

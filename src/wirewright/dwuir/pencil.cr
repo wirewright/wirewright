@@ -73,7 +73,7 @@ module Ww::DwUIR
     abstract def after_writing(ch : Char) : IPencil
 
     # Returns a copy of this pencil after writing *string* at this pencil's tip.
-    def after_writing(string : String | StringView) : IPencil
+    def after_writing(string : String | Pf::StringSeln) : IPencil
       pencil = self
       string.each_char do |ch|
         pencil = pencil.after_writing(ch)

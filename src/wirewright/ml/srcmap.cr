@@ -2,7 +2,7 @@ module Ww::ML
   # Represents a source map: a hash mapping termpaths to views of the original
   # source string that they come from (or are related to, as it is not always
   # possible to link things back properly).
-  alias SrcMapHash = Hash(Tpath, StringView)
+  alias SrcMapHash = Hash(Tpath, Pf::StringSeln)
 
   # A thin wrapper around `SrcMapHash` that simplifies querying.
   struct SrcMap
@@ -16,7 +16,7 @@ module Ww::ML
     # tried, and so on, until the path is empty or something is found. This
     # way, if the exact *path* is unavailable, at least the source of its parent
     # (or grandparent, etc.) is returned.
-    def []?(path) : StringView?
+    def []?(path) : Pf::StringSeln?
       tpath = Tpath[path]
 
       loop do
@@ -31,7 +31,7 @@ module Ww::ML
     end
 
     # Same as `[]?`, but raises `KeyError` if no view can be found.
-    def [](path) : StringView
+    def [](path) : Pf::StringSeln
       self[path]? || raise KeyError.new
     end
 

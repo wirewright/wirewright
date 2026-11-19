@@ -65,7 +65,7 @@ module Ww::DwUIR
 
     # Represents a *guaranteed inline* string view into the original string
     # (i.e. does not contain newline characters).
-    record InlineText, view : StringView
+    record InlineText, view : Pf::StringSeln
 
     # Represents a space turned into a line break by the wrapping algorithm.
     record SpaceBreak
@@ -158,7 +158,7 @@ module Ww::DwUIR
       pencil
     end
 
-    private def wrap(pencil0, spec, line : StringView, *, to history)
+    private def wrap(pencil0, spec, line : Pf::StringSeln, *, to history)
       unless pencil0.in?(spec.bounds)
         return pencil0, false
       end
@@ -204,7 +204,7 @@ module Ww::DwUIR
         word.each_char_with_index do |ch, ch_index|
           pencil1 = pencil0.after_writing(ch)
           if (word_index.zero? && ch_index.zero?) || pencil1.in?(spec.bounds)
-            history << {pencil0, InlineText.new(ch.view)}
+            history << {pencil0, InlineText.new(Pf::StringSeln.new(ch.to_s))}
             pencil0 = pencil1
             next
           end
@@ -226,7 +226,7 @@ module Ww::DwUIR
             history << {pencil0, SpaceBreak.new}
           else
             history << {pencil0, SoftBreak.new}
-            history << {pencil1, InlineText.new(ch.view)}
+            history << {pencil1, InlineText.new(Pf::StringSeln.new(ch.to_s))}
           end
 
           pencil0 = pencil2
@@ -247,7 +247,7 @@ module Ww::DwUIR
     def each(pencil pencil0 : IPencil, spec : WrapSpec, string : String, &sink : Any ->) : {IPencil, Bool}
       history = WrapHistory.new(spec.history, sink)
 
-      string.each_line_view do |line|
+      Pf::StringSeln.new(string).each_line do |line|
         if hard_break = line.ends_with?('\n')
           line = line.rstrip
         end

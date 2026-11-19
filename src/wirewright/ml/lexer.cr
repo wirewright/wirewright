@@ -42,7 +42,7 @@ module Ww::ML
     # Raises `SyntaxError` on invalid input.
     def self.new(source : String) : Lexer
       unless source.valid_encoding?
-        raise SyntaxError.new("source must be valid UTF-8", "".view) # ?!
+        raise SyntaxError.new("source must be valid UTF-8", Pf::StringSeln.new("")) # ?!
       end
 
       # NOTE: simdutf saves a millisecond or two on the corpus here, and some
@@ -57,23 +57,23 @@ module Ww::ML
       new(source, runes.to_readonly_slice)
     end
 
-    private def raise(detail : String, text : StringView = ahead1)
+    private def raise(detail : String, text : Pf::StringSeln = ahead1)
       raise SyntaxError.new(detail, text)
     end
 
-    private def subview(byte_start : Int, byte_end : Int) : StringView
+    private def subview(byte_start : Int, byte_end : Int) : Pf::StringSeln
       # Since we verify above that `@source.valid_encoding?`, we can create
-      # StringViews from it using the unsafe constructor.
-      StringView.new(@source, byte_start.to_u32, byte_end.to_u32)
+      # Pf::StringSelns from it using the unsafe constructor.
+      Pf::StringSeln.new(@source, byte_start.to_u32, byte_end.to_u32)
     end
 
     # Returns a view of the beginning-of-input.
-    private def boi : StringView
+    private def boi : Pf::StringSeln
       subview(byte_start: 0, byte_end: @source.bytesize)
     end
 
     # Returns a view of the end-of-input.
-    private def eoi : StringView
+    private def eoi : Pf::StringSeln
       bytesize = @source.bytesize
       subview(byte_start: bytesize, byte_end: bytesize)
     end
@@ -91,16 +91,16 @@ module Ww::ML
     end
 
     # Returns a view of the character ahead of the cursor (of EOI if none).
-    private def ahead1 : StringView
+    private def ahead1 : Pf::StringSeln
       eoi? ? eoi : subview(byte_start: @byte_index, byte_end: @byte_index + ahead.bytesize)
     end
 
     # Returns a view of the character behind the cursor (of BOI if none).
-    private def behind1 : StringView
+    private def behind1 : Pf::StringSeln
       boi? ? boi : subview(byte_start: @byte_index - behind.bytesize, byte_end: @byte_index)
     end
 
-    private def prior : StringView
+    private def prior : Pf::StringSeln
       subview(byte_start: 0, byte_end: @byte_index - behind.bytesize)
     end
 
@@ -190,10 +190,10 @@ module Ww::ML
       end
     end
 
-    # Returns a `StringView` spanning the portion of the source string
+    # Returns a `Pf::StringSeln` spanning the portion of the source string
     # the cursor traversed while executing the block. The view may be
     # empty if the cursor did not move during the block.
-    private def view(&) : StringView
+    private def view(&) : Pf::StringSeln
       byte_start = @byte_index
       yield
       byte_end = @byte_index
@@ -201,7 +201,7 @@ module Ww::ML
       subview(byte_start, byte_end)
     end
 
-    private def view_and_object(& : -> T) : {StringView, T} forall T
+    private def view_and_object(& : -> T) : {Pf::StringSeln, T} forall T
       object = nil
       view = view { object = {yield} }
       {view, *(object || unreachable)}
@@ -446,7 +446,7 @@ module Ww::ML
           skip { |rune| !rune.vspace? }
         end
 
-        lines = Pf::Kit.stack_array(StringView, 8)
+        lines = Pf::Kit.stack_array(Pf::StringSeln, 8)
         lines << line
 
         #   ;;| Line 1⏏
@@ -601,7 +601,7 @@ module Ww::ML
       unreachable("subscript must be called with at least one subscript rune")
     end
 
-    private def raw(lparen : Char, rparen : Char, *, caption : String, & : StringView -> TxnResponse) : TxnResponse
+    private def raw(lparen : Char, rparen : Char, *, caption : String, & : Pf::StringSeln -> TxnResponse) : TxnResponse
       unless past?(lparen)
         return revert
       end
@@ -1012,7 +1012,7 @@ module Ww::ML
 
         case ahead
         when '⸨'
-          options = [] of StringView
+          options = [] of Pf::StringSeln
           delay = 0
 
           text = view do
@@ -1029,7 +1029,7 @@ module Ww::ML
             end
           end
         when '⟦'
-          options = [] of StringView
+          options = [] of Pf::StringSeln
           delay = 1
 
           text = view do
@@ -1046,7 +1046,7 @@ module Ww::ML
             end
           end
         when .symbolic?
-          options = [] of StringView
+          options = [] of Pf::StringSeln
           delay = 0
 
           text = view do
@@ -1072,7 +1072,7 @@ module Ww::ML
       end
     end
 
-    private def radix(text : StringView) : TxnResponse
+    private def radix(text : Pf::StringSeln) : TxnResponse
       unless ahead.sub_digit?
         return revert
       end

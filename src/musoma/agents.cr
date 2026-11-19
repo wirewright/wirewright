@@ -1181,7 +1181,7 @@ module MuSoma
             next
           end
 
-          body = match["body"].view
+          body = Pf::StringSeln.new(match["body"])
 
           paragraphs = [] of Term
           paragraph = [] of Term

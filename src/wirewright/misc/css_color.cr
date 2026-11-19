@@ -166,7 +166,7 @@ module Ww::CSSColor
   end
 
   # :nodoc:
-  def hexcolor?(seln : StringView) : {UInt8, UInt8, UInt8, UInt8}?
+  def hexcolor?(seln : Pf::StringSeln) : {UInt8, UInt8, UInt8, UInt8}?
     seln = seln.lstrip(" ")
     return unless seln = seln.lchop?('#')
 
@@ -212,6 +212,6 @@ module Ww::CSSColor
   # In theory, the reference is: https://drafts.csswg.org/css-color/#hex-notation.
   # In practice, I don't know how much we (need to) adhere to it here.
   def hexcolor?(string : String) : {UInt8, UInt8, UInt8, UInt8}?
-    hexcolor?(string.view)
+    hexcolor?(Pf::StringSeln.new(string))
   end
 end

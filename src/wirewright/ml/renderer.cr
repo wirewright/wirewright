@@ -11,7 +11,7 @@ module Ww::ML
 
     # :nodoc:
     defcase RenderContext(Tsrc),
-      location : StringView?,
+      location : Pf::StringSeln?,
       rule_id : Term::Sym?,
       rule_block_id : Term::Sym?,
       ids : Hash(Tree::PlaceholderContainer, Term::Sym),
@@ -20,13 +20,13 @@ module Ww::ML
     # Raised when rendering fails.
     class RenderError < Exception
       getter detail : String
-      getter? text : StringView?
+      getter? text : Pf::StringSeln?
 
       def initialize(@detail, @text)
       end
     end
 
-    private def raise(detail : String, blame : StringView)
+    private def raise(detail : String, blame : Pf::StringSeln)
       raise RenderError.new(detail, text: blame)
     end
 
@@ -42,7 +42,7 @@ module Ww::ML
     #
     # This is certainly not an exception used for control flow!
     class RequiresRuleId < Exception
-      getter? blame : StringView?
+      getter? blame : Pf::StringSeln?
 
       def initialize(@blame)
         @callstack = CallStack.empty
@@ -53,7 +53,7 @@ module Ww::ML
     #
     # This is certainly not an exception used for control flow!
     class RequiresRuleBlockId < Exception
-      getter? blame : StringView?
+      getter? blame : Pf::StringSeln?
 
       def initialize(@blame)
         @callstack = CallStack.empty
@@ -65,7 +65,7 @@ module Ww::ML
     # :nodoc:
     defrecord DictAppend(Tsrc), item : Tsrc
     # :nodoc:
-    defrecord DictAssign(Tsrc), blame : Tree::Expr | StringView, key : Tsrc, value : Tsrc
+    defrecord DictAssign(Tsrc), blame : Tree::Expr | Pf::StringSeln, key : Tsrc, value : Tsrc
 
     private def nop
       DictNop.new
@@ -116,7 +116,7 @@ module Ww::ML
 
     # Do not use exceptions for control flow!
     class RequiresRuleId < Exception
-      getter? blame : StringView?
+      getter? blame : Pf::StringSeln?
 
       def initialize(@blame)
         @callstack = CallStack.empty
@@ -125,7 +125,7 @@ module Ww::ML
 
     # Do not use exceptions for control flow!
     class RequiresRuleBlockId < Exception
-      getter? blame : StringView?
+      getter? blame : Pf::StringSeln?
 
       def initialize(@blame)
         @callstack = CallStack.empty
@@ -921,7 +921,7 @@ module Ww::ML
       DictAppend.new(rule)
     end
 
-    private def doc?(ctx : RenderContext, comments : Array(StringView)) : Tsrc?
+    private def doc?(ctx : RenderContext, comments : Array(Pf::StringSeln)) : Tsrc?
       return if comments.empty?
 
       Tsrc.build do |commit|

@@ -26,7 +26,7 @@ module Ww::DwUIR
 
     # The client should append *view* (a guaranteed inline string view
     # of the original string) to its buffer; or handle it immediately.
-    record PushInline, view : StringView do
+    record PushInline, view : Pf::StringSeln do
       # Constructs a string from `view` for compatibility with `PushVirtual`.
       def string : String
         view.to_s
@@ -36,8 +36,8 @@ module Ww::DwUIR
     # The client should append *string* to its buffer; or handle it immediately.
     record PushVirtual, string : String do
       # Constructs a vie from `string` for compatibility with `PushInline`.
-      def view : StringView
-        string.view
+      def view : Pf::StringSeln
+        Pf::StringSeln.new(string)
       end
     end
 

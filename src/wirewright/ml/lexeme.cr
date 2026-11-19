@@ -25,7 +25,7 @@ module Ww::ML
     # - *type* determines the type of the token.
     # - *text* points to the fragment of the source string that generated
     #   this token.
-    record Token, type : Type, text : StringView do
+    record Token, type : Type, text : Pf::StringSeln do
       # Lists the available types of tokens.
       enum Type : UInt8
         # Indicates beginning-of-input.
@@ -147,7 +147,7 @@ module Ww::ML
     #   the "historical token type" of the datum.
     # - *text* points to the fragment of the source string that generated
     #   this datum.
-    record Datum, label : Label, term : Term, text : StringView do
+    record Datum, label : Label, term : Term, text : Pf::StringSeln do
       enum Label : UInt8
         Other
         Number
@@ -161,7 +161,7 @@ module Ww::ML
     end
 
     # Represents a *lexical choice*.
-    record Choice, type : Token::Type, options : Array(StringView), text : StringView, delay : Int32
+    record Choice, type : Token::Type, options : Array(Pf::StringSeln), text : Pf::StringSeln, delay : Int32
 
     # Represents a nested group of lexemes. Such groups can be produced e.g. by
     # string interpolation, which performs lexical analysis recursively but is

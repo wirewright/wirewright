@@ -97,7 +97,7 @@ module Ww::LR
 
     io << "str\n"
 
-    content.view.each_split do |l, m, r|
+    Pf::StringSeln.new(content).each_split do |l, m, r|
       chr = m.first_char
 
       if chr == ' ' && (l.empty? || l.ends_with?('\n') || r.empty? || r.starts_with?('\n'))

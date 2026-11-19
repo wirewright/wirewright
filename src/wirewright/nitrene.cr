@@ -264,7 +264,7 @@ module Ww::Nitrene
       char.in_set?("~!@#$%^&*()\\-=+[{]}\\|;:'\",.<>/?←→↑↓¦⍊⟨⟩⟪⟫")
     end
 
-    def wdrop(text : StringView, head : StringView -> Char, tail : StringView -> StringView)
+    def wdrop(text : Pf::StringSeln, head : Pf::StringSeln -> Char, tail : Pf::StringSeln -> Pf::StringSeln)
       initial = text
 
       if text.nonempty? && head.call(text).vspace?
@@ -299,40 +299,46 @@ module Ww::Nitrene
       text
     end
 
-    def lwdrop(text : StringView) : StringView
-      wdrop(text, head: ->(view : StringView) { view.first_char }, tail: ->(view : StringView) { view.rest })
+    def lwdrop(text : Pf::StringSeln) : Pf::StringSeln
+      wdrop(text,
+        head: ->(seln : Pf::StringSeln) { seln.first_char },
+        tail: ->(seln : Pf::StringSeln) { seln.rest },
+      )
     end
 
-    def rwdrop(text : StringView) : StringView
-      wdrop(text, head: ->(view : StringView) { view.last_char }, tail: ->(view : StringView) { view.prior })
+    def rwdrop(text : Pf::StringSeln) : Pf::StringSeln
+      wdrop(text,
+        head: ->(seln : Pf::StringSeln) { seln.last_char },
+        tail: ->(seln : Pf::StringSeln) { seln.prior },
+      )
     end
 
-    def lwdrop(text : StringView, n : Int) : StringView
+    def lwdrop(text : Pf::StringSeln, n : Int) : Pf::StringSeln
       n.times { text = lwdrop(text) }
 
       text
     end
 
-    def rwdrop(text : StringView, n : Int) : StringView
+    def rwdrop(text : Pf::StringSeln, n : Int) : Pf::StringSeln
       n.times { text = rwdrop(text) }
 
       text
     end
 
-    def lwtake(text : StringView, n : Int) : StringView
+    def lwtake(text : Pf::StringSeln, n : Int) : Pf::StringSeln
       rest = lwdrop(text, n)
 
-      StringView.between(text.before_begin, rest.before_begin)
+      Pf::StringSeln.between(text.before_begin, rest.before_begin)
     end
 
-    def rwtake(text : StringView, n : Int) : StringView
+    def rwtake(text : Pf::StringSeln, n : Int) : Pf::StringSeln
       rest = rwdrop(text, n)
 
-      StringView.between(rest.after_end, text.after_end)
+      Pf::StringSeln.between(rest.after_end, text.after_end)
     end
 
     # NOTE: *e* is inclusive!
-    def words(text : StringView, b : Int, e : Int)
+    def words(text : Pf::StringSeln, b : Int, e : Int)
       text = b.negative? ? rwtake(text, b.abs) : lwdrop(text, b)
       text = e.negative? ? rwdrop(text, e.abs - 1) : lwtake(text, e - b + 1)
       text
@@ -2249,16 +2255,16 @@ module Ww::Nitrene
         Term.of(arg[b...e]? || "")
       end
 
-      matchpiT %{(word arg_string i←(%number i32))}, arg: StringView do
+      matchpiT %{(word arg_string i←(%number i32))}, arg: Pf::StringSeln do
         Term.of(WordTokenizer.words(arg, i, i))
       end
 
       # TODO: ditto
-      matchpiT %{(words arg_string b←(%number i32) ..= e←(%number i32))}, arg: StringView do
+      matchpiT %{(words arg_string b←(%number i32) ..= e←(%number i32))}, arg: Pf::StringSeln do
         Term.of(WordTokenizer.words(arg, b, e))
       end
 
-      matchpiT %{(words arg_string)}, arg: StringView do
+      matchpiT %{(words arg_string)}, arg: Pf::StringSeln do
         result = Term::Dict.build do |commit|
           remaining = arg
           until remaining.empty?
@@ -2282,11 +2288,11 @@ module Ww::Nitrene
         Term.of(text.rpartition(sep))
       end
 
-      matchpi %{(balance text_string ⍊ nest_string unnest_string)}, text: StringView, nest: String, unnest: String do
+      matchpi %{(balance text_string ⍊ nest_string unnest_string)}, text: Pf::StringSeln, nest: String, unnest: String do
         Term.of(balance(text, nest, unnest))
       end
 
-      matchpi %{(rbalance text_string ⍊ nest_string unnest_string)}, text: StringView, nest: String, unnest: String do
+      matchpi %{(rbalance text_string ⍊ nest_string unnest_string)}, text: Pf::StringSeln, nest: String, unnest: String do
         Term.of(rbalance(text, nest, unnest))
       end
 
@@ -2459,31 +2465,31 @@ module Ww::Nitrene
       end
 
       # TODO: Remove in favor of partition/rpartition
-      matchpi %{(line/stem arg_string)}, arg: StringView do
+      matchpi %{(line/stem arg_string)}, arg: Pf::StringSeln do
         l, _, _ = arg.partition('\n')
         Term.of(l)
       end
 
       # TODO: Remove in favor of partition/rpartition
-      matchpi %{(line/rest arg_string)}, arg: StringView do
+      matchpi %{(line/rest arg_string)}, arg: Pf::StringSeln do
         _, sep, r = arg.partition('\n')
         Term.of(sep &+ r)
       end
 
       # TODO: Remove in favor of partition/rpartition
-      matchpi %{(rline/stem arg_string)}, arg: StringView do
+      matchpi %{(rline/stem arg_string)}, arg: Pf::StringSeln do
         _, _, r = arg.rpartition('\n')
         Term.of(r)
       end
 
       # TODO: Remove in favor of partition/rpartition
-      matchpi %{(rline/rest arg_string)}, arg: StringView do
+      matchpi %{(rline/rest arg_string)}, arg: Pf::StringSeln do
         l, sep, _ = arg.rpartition('\n')
         Term.of(l &+ sep)
       end
 
       # (run (prefix matcheeQ_) (charset prefixQ_))
-      matchpi %{(prefix-run matchee_string prefix_string)}, matchee: StringView, prefix: String do |matchee|
+      matchpi %{(prefix-run matchee_string prefix_string)}, matchee: Pf::StringSeln, prefix: String do |matchee|
         run = String.build do |io|
           while matchee.starts_with?(prefix)
             matchee = matchee.lskip(prefix.size)
@@ -2648,7 +2654,7 @@ module Ww::Nitrene
     eval(Interpreter::DEFAULT, vars, expr)
   end
 
-  private def balance(text : StringView, nest : String, unnest : String)
+  private def balance(text : Pf::StringSeln, nest : String, unnest : String)
     depth = 1
 
     text.each_before_and_after do |before, after|
@@ -2666,7 +2672,7 @@ module Ww::Nitrene
     {text.before_begin, text}
   end
 
-  private def rbalance(text : StringView, nest : String, unnest : String)
+  private def rbalance(text : Pf::StringSeln, nest : String, unnest : String)
     depth = 1
 
     text.reverse_each_before_and_after do |before, after|

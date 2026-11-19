@@ -795,7 +795,7 @@ end
 module TextWrap
   extend self
 
-  private def scan(text : StringView, maxw : Int, maxh : Int, &) : Nil
+  private def scan(text : Pf::StringSeln, maxw : Int, maxh : Int, &) : Nil
     w = 0
     h = 1
     wsidx = wsx = nil
@@ -853,12 +853,12 @@ module TextWrap
     end
   end
 
-  def wrap(io : IO, text : StringView, maxw : Int, maxh : Int, *, ellipsis : String = "…") : Nil
+  def wrap(io : IO, text : Pf::StringSeln, maxw : Int, maxh : Int, *, ellipsis : String = "…") : Nil
     cursor = 0
     truncated = false
 
     scan(text, maxw, maxh) do |action, index|
-      prefix = StringView.new(text.@trunk, byte_start: cursor.to_u32, byte_end: index.to_u32) # FIXME
+      prefix = Pf::StringSeln.new(text.@trunk, byte_start: cursor.to_u32, byte_end: index.to_u32) # FIXME
       cursor += prefix.bytesize
 
       io << prefix
@@ -885,18 +885,18 @@ module TextWrap
 
     return if truncated
 
-    remaining = StringView.new(text.@trunk, byte_start: cursor.to_u32, byte_end: text.bytesize.to_u32) # FIXME
+    remaining = Pf::StringSeln.new(text.@trunk, byte_start: cursor.to_u32, byte_end: text.bytesize.to_u32) # FIXME
     io << remaining
   end
 
-  def wrap(text : StringView, maxw : Int, maxh : Int, **kwargs)
+  def wrap(text : Pf::StringSeln, maxw : Int, maxh : Int, **kwargs)
     String.build((text.bytesize * 1.33).to_i) do |io|
       wrap(io, text, maxw, maxh, **kwargs)
     end
   end
 
   def wrap(text : String, maxw : Int, maxh : Int, **kwargs)
-    wrap(text.view, maxw, maxh, **kwargs)
+    wrap(Pf::StringSeln.new(text), maxw, maxh, **kwargs)
   end
 end
 
@@ -1030,16 +1030,8 @@ struct Char
     0 <= ord <= 0xff
   end
 
-  def view : StringView
-    to_s.view
-  end
-
   def each_char(& : Char ->) : Nil
     yield self
-  end
-
-  def ===(other : StringView)
-    other === self
   end
 
   def hexdigit? : Int32?
@@ -1070,6 +1062,20 @@ struct Char
   # ```
   def tspecial? : Bool
     in?('(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/','[', ']', '?', '=', ' ', '\t')
+  end
+end
+
+struct Char
+  def ===(other : Pf::StringSeln)
+    other === self
+  end
+end
+
+struct Range
+  def ===(other : Pf::StringSeln) : Bool
+    return false unless other.size == 1
+
+    other.first_char.in?(self)
   end
 end
 
@@ -1994,12 +2000,6 @@ struct Range(B, E)
     if q > 0
       yield b...b + q
     end
-  end
-
-  def ===(other : StringView) : Bool
-    return false unless other.size == 1
-
-    other.first_char.in?(self)
   end
 
   def split(n : Int, & : Range(B, E) ->)
@@ -3992,27 +3992,6 @@ class ::PrettyPrint
     @indent.times { @output << ' ' }
     @output_width = @indent
     @buffer_width = 0
-  end
-end
-
-alias StringView = Pf::StringSeln
-
-class String
-  def view : StringView
-    StringView.new(self)
-  end
-
-  def view? : StringView?
-    StringView.new?(self)
-  end
-
-  # Yields string views corresponding to each line in this string. Byte slices
-  # will include *trailing* newlines (i.e. this method does not "take away" any
-  # characters from the string).
-  #
-  # If this string is empty, does not yield anything.
-  def each_line_view(& : StringView ->) : Nil
-    view.each_line { |v| yield v }
   end
 end
 

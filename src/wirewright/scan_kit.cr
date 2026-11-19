@@ -436,7 +436,7 @@ module Ww::ScanKit
   end
 
   def recognize(pattern : String, anchor_l : Bool, anchor_r : Bool) : Pattern
-    recognize(pattern.view, anchor_l, anchor_r)
+    recognize(Pf::StringSeln.new(pattern), anchor_l, anchor_r)
   end
 
   def recognize(pattern : Pf::StringSeln) : Pattern
@@ -460,7 +460,7 @@ module Ww::ScanKit
   end
 
   def recognize(pattern : String) : Pattern
-    recognize(pattern.view)
+    recognize(Pf::StringSeln.new(pattern))
   end
 
   private def nullable?(scanner : Char | Category) : Bool

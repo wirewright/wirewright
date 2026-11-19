@@ -726,7 +726,7 @@ module Ww
     end
 
     # Constructs a string term representing the given string view *object*.
-    def self.[](object : StringView) : Str
+    def self.[](object : Pf::StringSeln) : Str
       Term[object.to_s]
     end
 

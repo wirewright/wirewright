@@ -5,24 +5,24 @@ module Ww::ML
     getter term : Term
 
     # :nodoc:
-    getter srcmap : Hash(Tpath, StringView)
+    getter srcmap : Hash(Tpath, Pf::StringSeln)
 
     # :nodoc:
     def initialize(@term, @srcmap)
     end
 
-    def self.of(text : StringView?, object : TrackedTsrc, *, src : StringView? = nil)
+    def self.of(text : Pf::StringSeln?, object : TrackedTsrc, *, src : Pf::StringSeln? = nil)
       object
     end
 
-    def self.of(text : StringView?, object : Tuple, *, src : StringView? = nil)
+    def self.of(text : Pf::StringSeln?, object : Tuple, *, src : Pf::StringSeln? = nil)
       build(text) do |commit|
         object.each { |item| commit << TrackedTsrc.of(text, item) }
       end
     end
 
     # *src* gives the preferred location, if any. Otherwise, `ctx.location` is used.
-    def self.of(text : StringView?, object, *, src : StringView? = nil)
+    def self.of(text : Pf::StringSeln?, object, *, src : Pf::StringSeln? = nil)
       if location = src || text
         new(Term.of(object), srcmap: SrcMapHash{Tpath[] => location})
       else
@@ -30,7 +30,7 @@ module Ww::ML
       end
     end
 
-    def self.build(text : StringView?, &)
+    def self.build(text : Pf::StringSeln?, &)
       if text
         srcmap = SrcMapHash{Tpath[] => text}
       else
@@ -55,7 +55,7 @@ module Ww::ML
     end
 
     struct Commit
-      def initialize(@commit : Term::Dict::Commit, @srcmap : Hash(Tpath, StringView))
+      def initialize(@commit : Term::Dict::Commit, @srcmap : Hash(Tpath, Pf::StringSeln))
       end
 
       private def subsume(prefix, srcmap)
@@ -178,21 +178,21 @@ module Ww::ML
     def initialize(@term)
     end
 
-    def self.of(text : StringView?, object : UntrackedTsrc, *, src : StringView? = nil)
+    def self.of(text : Pf::StringSeln?, object : UntrackedTsrc, *, src : Pf::StringSeln? = nil)
       object
     end
 
-    def self.of(text : StringView?, object : Tuple, *, src : StringView? = nil)
+    def self.of(text : Pf::StringSeln?, object : Tuple, *, src : Pf::StringSeln? = nil)
       build(text) do |commit|
         object.each { |item| commit << UntrackedTsrc.of(text, item) }
       end
     end
 
-    def self.of(text : StringView?, object, *, src : StringView? = nil)
+    def self.of(text : Pf::StringSeln?, object, *, src : Pf::StringSeln? = nil)
       new(Term.of(object))
     end
 
-    def self.build(text : StringView?, &)
+    def self.build(text : Pf::StringSeln?, &)
       build { |commit| yield commit }
     end
 
