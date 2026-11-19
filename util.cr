@@ -3563,13 +3563,13 @@ def sync_rand(arg)
 end
 
 module ::Compress::Gzip
-  def self.compress(data) : Bytes
+  def self.compress(data, *, level = BEST_SPEED) : Bytes
     io = IO::Memory.new
     Compress::Gzip::Writer.open(io, level: level, &.write(data.to_slice))
     io.to_slice
   end
 
-  def self.decompress(data, *, level = BEST_SPEED) : Bytes
+  def self.decompress(data) : Bytes
     io = IO::Memory.new(data.to_slice)
     Compress::Gzip::Reader.open(io, &.getb_to_end)
   end

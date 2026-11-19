@@ -24,7 +24,7 @@ uiR: {codex: "../runtime/codices/uiR.codex.wwml"}
   tags: (ml))
 
 (comparison "WwML Corpus"
-  (ml "corpus.in.wwml") (lr.gz "corpus.expected.wwlr.gz")
+  (ml.gz (document "corpus.in.wwml.gz")) (ml.gz (term "corpus.reference.wwml.gz"))
   tags: (ml ml-corpus))
 
 (test "patterns.test.wwml"

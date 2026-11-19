@@ -36,7 +36,6 @@ require "./wirewright/extrinsic_map"
 {% end %}
 
 require "./wirewright/ml"
-require "./wirewright/lr"
 
 require "./wirewright/lang"
 require "./wirewright/nitrene"

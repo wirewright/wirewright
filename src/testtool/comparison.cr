@@ -1,10 +1,10 @@
 module Testtool
   alias Comparand = TermComparand | ImageComparand
 
-  alias TermComparand = MLdoc | LRdoc
+  alias TermComparand = MLdoc | MLterm
 
   defrecord MLdoc, source : String
-  defrecord LRdoc, source : Bytes
+  defrecord MLterm, source : String
 
   alias ImageComparand = DwDoc | UIRdoc | Ppm
   alias ImageComparandWithTemp = DwDoc | UIRdoc
@@ -19,12 +19,16 @@ module Testtool
   # May raise `ArgumentError`.
   def comparand(base : NormalPath, term : Term) : Comparand
     Term.case(term, engine: M0) do
-      matchpi %{(ml path_string)}, path: Path do
+      matchpi %{(ml (document path_string))}, path: Path do
         MLdoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_string))
       end
 
-      matchpi %{(lr.gz path_string)}, path: Path do
-        LRdoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress))
+      matchpi %{(ml.gz (term path_string))}, path: Path do
+        MLterm.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress, String.new))
+      end
+
+      matchpi %{(ml.gz (document path_string))}, path: Path do
+        MLdoc.new(pipe(NormalPath[base / path], ResourceService.file, ResourceService.read_blob, Compress::Gzip.decompress, String.new))
       end
 
       matchpi %{(dwuir path_string ¦ vars_)}, path: Path, vars: Term::Dict do
@@ -63,10 +67,8 @@ module Testtool
     ML.document(comparand.source, doc: false)
   end
 
-  def termcmp(comparand : LRdoc) : Term
-    io = IO::Memory.new(comparand.source)
-
-    LR.decode(io)
+  def termcmp(comparand : MLterm) : Term
+    ML.term(comparand.source)
   end
 
   # NOTE: The current implementation of DwUIR is really really messy so the best
