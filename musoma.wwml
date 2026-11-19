@@ -14,6 +14,9 @@
 ;;   - (hard) how to keep `expander` state (and similar) across pretty-print frames
 ;;     (e.g. keyed by node addr)?
 ;;
+;; FIXME: inputs / mouseareas in nested automata do not seem to work (open mu in mu,
+;; then open e.g. calculator; can't press buttons...)
+;;
 ;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale
 ;; keys occasionally/on unfocus (?)
 ;;
@@ -22,461 +25,453 @@
 ;; TODO(hard): WE ARE TERRIBLY, TERRIBLY SLOW. MY GOSH! It's not going to be possible
 ;; to ditch the old MuSoma until we can be on par with it in terms of performance
 
-;;
-;; Theme
-;;
+(section "Theme"
+  ;;| [Rose Pine Main](https://rosepinetheme.com)
+  (theme
+    base: "#191724"
+    surface: "#1f1d2e"
+    overlay: "#26233a"
+    muted: "#6e6a86"
+    subtle: "#908caa"
+    text: "#e0def4"
+    love: "#eb6f92"
+    gold: "#f6c177"
+    rose: "#ebbcba"
+    pine: "#31748f"
+    foam: "#9ccfd8"
+    iris: "#c4a7e7"
+    highlight-low: "#21202e"
+    highlight-med: "#403d52"
+    highlight-high: "#524f67"
 
-;; [Rose Pine Main](https://rosepinetheme.com)
-(theme
-  base: "#191724"
-  surface: "#1f1d2e"
-  overlay: "#26233a"
-  muted: "#6e6a86"
-  subtle: "#908caa"
-  text: "#e0def4"
-  love: "#eb6f92"
-  gold: "#f6c177"
-  rose: "#ebbcba"
-  pine: "#31748f"
-  foam: "#9ccfd8"
-  iris: "#c4a7e7"
-  highlight-low: "#21202e"
-  highlight-med: "#403d52"
-  highlight-high: "#524f67"
+    ((table colors) "theme-base"): base
+    ((table colors) "theme-surface"): surface
+    ((table colors) "theme-overlay"): overlay
+    ((table colors) "theme-muted"): muted
+    ((table colors) "theme-subtle"): subtle
+    ((table colors) "theme-text"): text
+    ((table colors) "theme-decor-low"): highlight-low
+    ((table colors) "theme-decor-med"): highlight-med
+    ((table colors) "theme-decor-high"): highlight-high
+    ((table colors) "theme-punct"): subtle
+    ((table colors) "theme-number"): gold
+    ((table colors) "theme-boolean"): rose
+    ((table colors) "theme-key"): foam
+    ((table colors) "theme-blob"): pine
+    ((table colors) "theme-string"): gold
+    ((table colors) "theme-edge"): love
+    ((table colors) "theme-comment"): muted
+    ((table colors) "theme-section"): iris
+    ((table colors) "theme-editor-selection-bg"): gold
+    ((table colors) "theme-editor-selection-fg"): base
+    ((table colors) "theme-selection-bg"): foam
+    ((table colors) "theme-selection-fg"): base
+    ((table colors) "theme-grab-bg"): pine
+    ((table colors) "theme-grab-fg"): text
+    ((table colors) "theme-normal-bg"): iris
+    ((table colors) "theme-normal-fg"): base
+    ((table colors) "theme-insert-bg"): gold
+    ((table colors) "theme-insert-fg"): base
+    ((table colors) "theme-attention-fg"): gold
+    ((table colors) "theme-err-fg"): rose
+    ((table colors) "theme-info-fg"): foam))
 
-  ((table colors) "theme-base"): base
-  ((table colors) "theme-surface"): surface
-  ((table colors) "theme-overlay"): overlay
-  ((table colors) "theme-muted"): muted
-  ((table colors) "theme-subtle"): subtle
-  ((table colors) "theme-text"): text
-  ((table colors) "theme-decor-low"): highlight-low
-  ((table colors) "theme-decor-med"): highlight-med
-  ((table colors) "theme-decor-high"): highlight-high
-  ((table colors) "theme-punct"): subtle
-  ((table colors) "theme-number"): gold
-  ((table colors) "theme-boolean"): rose
-  ((table colors) "theme-key"): foam
-  ((table colors) "theme-blob"): pine
-  ((table colors) "theme-string"): gold
-  ((table colors) "theme-edge"): love
-  ((table colors) "theme-comment"): muted
-  ((table colors) "theme-section"): iris
-  ((table colors) "theme-editor-selection-bg"): gold
-  ((table colors) "theme-editor-selection-fg"): base
-  ((table colors) "theme-selection-bg"): foam
-  ((table colors) "theme-selection-fg"): base
-  ((table colors) "theme-grab-bg"): pine
-  ((table colors) "theme-grab-fg"): text
-  ((table colors) "theme-normal-bg"): iris
-  ((table colors) "theme-normal-fg"): base
-  ((table colors) "theme-insert-bg"): gold
-  ((table colors) "theme-insert-fg"): base
-  ((table colors) "theme-attention-fg"): gold
-  ((table colors) "theme-err-fg"): rose
-  ((table colors) "theme-info-fg"): foam)
+(section "Components"
+  (MuLogo)
+    => (svg
+         style: ""
+         fit: keep-ratio
+         src:
+           '⎡<svg width="92" height="122" viewBox="0 0 92 122" fill="none" xmlns="http://www.w3.org/2000/svg">
+             <path fill-rule="evenodd" clip-rule="evenodd" d="M66.5789 0C75.2702 0 82.3158 7.24568 82.3158 16.1837V44.8163C82.3158 68.1926 63.8888 87.1429 41.1579 87.1429C18.427 87.1429 0 68.1926 0 44.8163V16.1837C0 7.24568 7.04562 0 15.7368 0H66.5789ZM41.1579 59.7551C49.8491 59.7551 56.8947 52.5094 56.8947 43.5714C56.8947 34.6334 49.8491 27.3878 41.1579 27.3878C32.4667 27.3878 25.4211 34.6334 25.4211 43.5714C25.4211 52.5094 32.4667 59.7551 41.1579 59.7551Z" fill="currentColor"/>
+             <path d="M0 105.816V80.6602C9.87405 92.2636 24.3812 99.5918 40.5526 99.5918C57.1778 99.5918 72.0439 91.8466 81.9253 79.6735H82.3158V102.082C87.6642 102.082 92 106.541 92 112.041C92 117.541 87.6642 122 82.3158 122H15.7368C7.04562 122 0 114.754 0 105.816Z" fill="currentColor"/>
+             </svg>⎤)
 
+  (MuBanner)
+    => (group style: "flow-row gap-5"
+         (box style: "color-theme-text max-w-64px max-h-90px" ;; w, h eyeballed
+           (MuLogo))
+         (box style: "flow-col gap-1 text-theme-text px-1 content-center-y"
+           (p "Wirewright MuSoma" style: "text-lg/6 font-medium")
+           (p "A symbolic physics laboratory" style: "text-base/5 font-light")))
 
-;;
-;; Visual components
-;;
+  (ModeIndicatorText caption_string)
+    => (p style: "font-mono font-semibold text-xs leading-none px-3/2 py-1/3 upcase"
+         ^caption)
 
+  (ModeIndicator none)
+    => (box style: "content-center bg-theme-decor-med rounded-xs")
 
-(MuLogo)
-  => (svg
-       style: ""
-       fit: keep-ratio
-       src:
-         '⎡<svg width="92" height="122" viewBox="0 0 92 122" fill="none" xmlns="http://www.w3.org/2000/svg">
-           <path fill-rule="evenodd" clip-rule="evenodd" d="M66.5789 0C75.2702 0 82.3158 7.24568 82.3158 16.1837V44.8163C82.3158 68.1926 63.8888 87.1429 41.1579 87.1429C18.427 87.1429 0 68.1926 0 44.8163V16.1837C0 7.24568 7.04562 0 15.7368 0H66.5789ZM41.1579 59.7551C49.8491 59.7551 56.8947 52.5094 56.8947 43.5714C56.8947 34.6334 49.8491 27.3878 41.1579 27.3878C32.4667 27.3878 25.4211 34.6334 25.4211 43.5714C25.4211 52.5094 32.4667 59.7551 41.1579 59.7551Z" fill="currentColor"/>
-           <path d="M0 105.816V80.6602C9.87405 92.2636 24.3812 99.5918 40.5526 99.5918C57.1778 99.5918 72.0439 91.8466 81.9253 79.6735H82.3158V102.082C87.6642 102.082 92 106.541 92 112.041C92 117.541 87.6642 122 82.3158 122H15.7368C7.04562 122 0 114.754 0 105.816Z" fill="currentColor"/>
-           </svg>⎤)
+  (ModeIndicator (some grab))
+    => (box style: "content-center bg-theme-grab-bg text-theme-grab-fg rounded-xs"
+         (ModeIndicatorText "Grab"))
 
-(MuBanner)
-  => (group style: "flow-row gap-5"
-       (box style: "color-theme-text max-w-64px max-h-90px" ;; w, h eyeballed
-         (MuLogo))
-       (box style: "flow-col gap-1 text-theme-text px-1 content-center-y"
-         (p "Wirewright MuSoma" style: "text-lg/6 font-medium")
-         (p "A symbolic physics laboratory" style: "text-base/5 font-light")))
+  (ModeIndicator (some normal))
+    => (box style: "content-center bg-theme-normal-bg text-theme-normal-fg rounded-xs"
+         (ModeIndicatorText "Normal"))
 
-(ModeIndicatorText caption_string)
-  => (p style: "font-mono font-semibold text-xs leading-none px-3/2 py-1/3 upcase"
-       ^caption)
+  (ModeIndicator (some insert))
+    => (box style: "content-center bg-theme-insert-bg text-theme-insert-fg rounded-xs"
+         (ModeIndicatorText "Insert"))
 
-(ModeIndicator none)
-  => (box style: "content-center bg-theme-decor-med rounded-xs")
+  ;; Here we employ some "positioning"/"sizing" hacking and eyeballed deltas (the text-sm/5
+  ;; and dt-5 are the same 5, by the way) to get the out-of-layout wrapping effect on overflow.
+  (TextIndicator ¦ () icon_string caption_string variant⋮ default)
+    => (group style: "flow-row gap-1 text-theme-subtle variant/ok:text-theme-info-fg \
+                      variant/warn:text-theme-attention-fg variant/err:text-theme-err-fg \
+                      item-center-y bg-theme-overlay floating-y content-y origin-bl dt-5 \
+                      rounded-t px-1"
+              ^:variant
+         (icon ^icon)
+         (p ^caption style: "fr-1 text-sm/5"))
 
-(ModeIndicator (some grab))
-  => (box style: "content-center bg-theme-grab-bg text-theme-grab-fg rounded-xs"
-       (ModeIndicatorText "Grab"))
+  (SeedIndicator ⍊ seed: none seed-src: none)
+    => (TextIndicator icon: "hide_source" caption: "Seed file unset")
 
-(ModeIndicator (some normal))
-  => (box style: "content-center bg-theme-normal-bg text-theme-normal-fg rounded-xs"
-       (ModeIndicatorText "Normal"))
+  (SeedIndicator ⍊ seed-src: (some [path (_ reading) [absent _]]))
+    => (TextIndicator icon: "error_outline" caption: "Lost track of seed file" variant: warn)
 
-(ModeIndicator (some insert))
-  => (box style: "content-center bg-theme-insert-bg text-theme-insert-fg rounded-xs"
-       (ModeIndicatorText "Insert"))
+  (SeedIndicator ⍊ seed: none seed-src: (some [path (_ reading) [present _]]))
+    => (TextIndicator icon: "error_outline" caption: "Syntax error in seed file" variant: err)
 
-;; Here we employ some "positioning"/"sizing" hacking and eyeballed deltas (the text-sm/5
-;; and dt-5 are the same 5, by the way) to get the out-of-layout wrapping effect on overflow.
-(TextIndicator ¦ () icon_string caption_string variant⋮ default)
-  => (group style: "flow-row gap-1 text-theme-subtle variant/ok:text-theme-info-fg \
-                    variant/warn:text-theme-attention-fg variant/err:text-theme-err-fg \
-                    item-center-y bg-theme-overlay floating-y content-y origin-bl dt-5 \
-                    rounded-t px-1"
-            ^:variant
-       (icon ^icon)
-       (p ^caption style: "fr-1 text-sm/5"))
+  (SeedIndicator ⍊ seed: (some _) seed-src: (some [path ((/ path_*) reading) [present _]]))
+    => (TextIndicator icon: "sync_problem" caption: ^(~ "/" (join path "/")) variant: warn)
 
-(SeedIndicator ⍊ seed: none seed-src: none)
-  => (TextIndicator icon: "hide_source" caption: "Seed file unset")
+  (SeedIndicator ⍊ seed: (some {¦ sync}) seed-src: (some [path ((/ path_*) reading) [present _]]) autoreload: none)
+    => (TextIndicator icon: "sync_disabled" caption: ^(~ "/" (join path "/")))
 
-(SeedIndicator ⍊ seed-src: (some [path (_ reading) [absent _]]))
-  => (TextIndicator icon: "error_outline" caption: "Lost track of seed file" variant: warn)
+  (SeedIndicator ⍊ seed: (some {¦ sync}) seed-src: (some [path ((/ path_*) reading) [present _]]) autoreload: (some _))
+    => (TextIndicator icon: "sync" caption: ^(~ "/" (join path "/")) variant: ok)
 
-(SeedIndicator ⍊ seed: none seed-src: (some [path (_ reading) [present _]]))
-  => (TextIndicator icon: "error_outline" caption: "Syntax error in seed file" variant: err)
+  (SeedIndicator ⍊ seed: (some _) seed-src: none)
+    => (TextIndicator icon: "memory" caption: "In-memory seed")
 
-(SeedIndicator ⍊ seed: (some _) seed-src: (some [path ((/ path_*) reading) [present _]]))
-  => (TextIndicator icon: "sync_problem" caption: ^(~ "/" (join path "/")) variant: warn)
+  ;; Display info status.
+  (StatusMessage (some (%any° status_string (info status_string))))
+    => (TextIndicator icon: "info" caption: ^status variant: ok)
 
-(SeedIndicator ⍊ seed: (some {¦ sync}) seed-src: (some [path ((/ path_*) reading) [present _]]) autoreload: none)
-  => (TextIndicator icon: "sync_disabled" caption: ^(~ "/" (join path "/")))
+  ;; Display error status.
+  (StatusMessage (some (err status_string)))
+    => (TextIndicator icon: "warning" caption: ^status variant: err)
 
-(SeedIndicator ⍊ seed: (some {¦ sync}) seed-src: (some [path ((/ path_*) reading) [present _]]) autoreload: (some _))
-  => (TextIndicator icon: "sync" caption: ^(~ "/" (join path "/")) variant: ok)
+  (WindowView (window content_* ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false) ¦ () grabbed⋮ false)
+    => (box style: "membrane content border-xs border-transparent rounded-lg p-3 -dl-3 \
+                    grabbed:cue-grabbed grabbed:border-theme-grab-bg"
+            ^:grabbed
+         (group style: "flow-col border border-2px border-theme-overlay rounded-sm"
+           (group style: "floating-x rounded-t-sm px-1 py-1/2 flow-row gap-1 bg-theme-overlay \
+                          text-theme-muted in-grabbed:text-theme-text item-center-y"
+             (group style: "fr-1 content clip flow-row gap-1 item-center-y"
+               (icon "view_quilt" style: "font-base")
+               (p ^title style: "fr-1 font-medium text-sm leading-5"))
+             (group style: "flow-row gap-1 text-sm text-theme-muted"
+               (icon "minimize")
+               (icon "open_in_full")
+               (icon "close")))
+           (box style: "fr-1 content-clip in-grabbed:input -input-enabled:-input"
+                input-enabled: ^input
+             (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
+               ;; Nodes in `content` are Scenery already, so let's save Microfold
+               ;; a whole bunch of work by marking this node as `leaf`.
+               (box style: "leaf"
+                    µ-bg: ^backdrop
+                    µ-cursor: (^unless (= cursor arrow) ^cursor)
+                 ^*content)))))
 
-(SeedIndicator ⍊ seed: (some _) seed-src: none)
-  => (TextIndicator icon: "memory" caption: "In-memory seed")
+  (WindowTabView title_string key_)
+    => (box
+         (p style: "text-theme-subtle in-hover:bg-theme-surface in-hover:cursor-pointer \
+                    in-checked:text-theme-text in-checked:bg-theme-overlay text-sm/5 \
+                    font-medium px-3 py-1 in-disabled:opacity-25% in-active:bg-okl-30% \
+                    rounded-full"
+           ^"⸢title⸣ (⸢key⸣)")
+         (node @mousearea (mousearea)))
 
-;; Display info status.
-(StatusMessage (some (%any° status_string (info status_string))))
-  => (TextIndicator icon: "info" caption: ^status variant: ok)
+  (WindowPane @mode_ @windows_)
+    => (component {@:mode, @:windows}
+         (group style: "flow-col p-5 gap-3"
+           (cell @current)
+           (cell @next)
 
-;; Display error status.
-(StatusMessage (some (err status_string)))
-  => (TextIndicator icon: "warning" caption: ^status variant: err)
+           (supervisor (@windows @window {¦ key_} - @tabs {:@current, :@next})
+             (node @slot)
+             (backsys
+               {¦ window: {¦ title_string key_} -slot_}
+                 <> {slot: ($Trigger (@next ^key) ($WindowTabView ^title ^key))}))
 
-(WindowView (window content_* ⍊ title_ width_ height_ backdrop_ cursor_ input⋮ false) ¦ () grabbed⋮ false)
-  => (box style: "membrane content border-xs border-transparent rounded-lg p-3 -dl-3 \
-                  grabbed:cue-grabbed grabbed:border-theme-grab-bg"
-          ^:grabbed
-       (group style: "flow-col border border-2px border-theme-overlay rounded-sm"
-         (group style: "floating-x rounded-t-sm px-1 py-1/2 flow-row gap-1 bg-theme-overlay \
-                        text-theme-muted in-grabbed:text-theme-text item-center-y"
-           (group style: "fr-1 content clip flow-row gap-1 item-center-y"
-             (icon "view_quilt" style: "font-base")
-             (p ^title style: "fr-1 font-medium text-sm leading-5"))
-           (group style: "flow-row gap-1 text-sm text-theme-muted"
-             (icon "minimize")
-             (icon "open_in_full")
-             (icon "close")))
-         (box style: "fr-1 content-clip in-grabbed:input -input-enabled:-input"
-              input-enabled: ^input
-           (limit min-w: ^width min-h: ^height max-w: ^width max-h: ^height
-             ;; Nodes in `content` are Scenery already, so let's save Microfold
-             ;; a whole bunch of work by marking this node as `leaf`.
-             (box style: "leaf"
-                  µ-bg: ^backdrop
-                  µ-cursor: (^unless (= cursor arrow) ^cursor)
-               ^*content)))))
+           (box style: "flow-row gap-2 item-fr-1"
+             (nodes @tabs))
 
-(WindowTabView title_string key_)
-  => (box
-       (p style: "text-theme-subtle in-hover:bg-theme-surface in-hover:cursor-pointer \
-                  in-checked:text-theme-text in-checked:bg-theme-overlay text-sm/5 \
-                  font-medium px-3 py-1 in-disabled:opacity-25% in-active:bg-okl-30% \
-                  rounded-full"
-         ^"⸢title⸣ (⸢key⸣)")
-       (node @mousearea (mousearea)))
-
-(WindowPane @mode_ @windows_)
-  => (component {@:mode, @:windows}
-       (group style: "flow-col p-5 gap-3"
-         (cell @current)
-         (cell @next)
-
-         (supervisor (@windows @window {¦ key_} - @tabs {:@current, :@next})
-           (node @slot)
            (backsys
-             {¦ window: {¦ title_string key_} -slot_}
-               <> {slot: ($Trigger (@next ^key) ($WindowTabView ^title ^key))}))
+             {¦ -current_ windows: ((window _* ⍊ key_) _*)}
+               <> {current: ^key}
 
-         (box style: "flow-row gap-2 item-fr-1"
-           (nodes @tabs))
+             {¦ current_ next_}
+               <> {current: ^next, (next): ()})
+
+           (box style: "fr-1"
+             (visual
+               (^match ((edge? mode) @windows (edge? current))
+                 ;; Show the active window.
+                 (when ((some mode_) ⟨window←(window _* ⍊ key_)⟩ (some key_))
+                   (WindowView ^window grabbed: ^(= mode grab)))
+                 (when _
+                   (p "No windows to show" style: "center text-theme-muted")))))))
+
+  (TimeIconName 0) => "pause"
+  (TimeIconName _number) => "not_started"
+  (TimeIconName ∞) => "play_arrow"
+
+  (TimeIndicator charge_)
+    => (box style: "floating-y content"
+         (box style: "-dt-10 px-5 py-3 bg-theme-overlay rounded-tr"
+           (icon style: "text-theme-text font-3xl"
+             (TimeIconName ^charge))))
+
+  ;; Show everything else as text.
+  (TimeFrameIcon label_ ⍊ active⋮ false)
+    => (p style: "content font-mono text-xs/4 text-theme-subtle bg-theme-overlay \
+                  dim:bg-theme-surface border-xs border-theme-decor-high \
+                  active:border-theme-info-fg dim:border-theme-decor-med \
+                  bg-min-none px-1 rounded-sm"
+          ^:active
+          dim: ^(= label " ")
+         ^label)
+
+  (TimeFrameZip ±l ±r)
+    => (group style: "flow-row gap-1"
+         (^br (>= l 2)
+           (TimeFrameIcon 0)
+           (TimeFrameIcon " "))
+         (p "…" style: "text-xs/4 text-theme-muted")
+         (^br (>= l 1)
+           (TimeFrameIcon ^(- l 1))
+           (TimeFrameIcon " "))
+         (TimeFrameIcon ^l active: true)
+         ;; Show a "shadow" draft I-beam to make it clear there's still some
+         ;; stuff ahead.
+         (^if (= r 0)
+           (rect style: "max-w-2px bg-min-none bg-theme-decor-med"))
+         (^br (>= r 1)
+           (TimeFrameIcon ^(+ l 1))
+           (TimeFrameIcon " "))
+         (p "…" style: "text-xs/4 text-theme-muted")
+         (^br (>= r 2)
+           (TimeFrameIcon ^(+ l r))
+           (TimeFrameIcon " ")))
+
+  (TimeFrameZip ±l *)
+    => (group style: "flow-row gap-1"
+         (^br (>= l 3)
+           (TimeFrameIcon 0)
+           (TimeFrameIcon " "))
+         (p "…" style: "text-xs/4 text-theme-muted")
+         (^br (>= l 2)
+           (TimeFrameIcon ^(- l 2))
+           (TimeFrameIcon " "))
+         (^br (>= l 1)
+           (TimeFrameIcon ^(- l 1))
+           (TimeFrameIcon " "))
+         (rect style: "max-w-2px bg-min-none bg-theme-info-fg")
+         (TimeFrameIcon " ")
+         (p "…" style: "text-xs/4 text-theme-muted")
+         (TimeFrameIcon " "))
+
+  (ListingEntry (file name_string ⍊ current⋮ false))
+    => (ListingEntry icon: "description" ^:name ^:current)
+
+  (ListingEntry (dir name_string ⍊ current⋮ false))
+    => (ListingEntry icon: "folder" ^:name ^:current)
+
+  (ListingEntry ⍊ icon_string name_string current_boolean)
+    => (group style: "p-1 flow-row gap-1 rounded-sm text-theme-text item-center-y \
+                      in-hover:bg-theme-decor-med in-active:bg-theme-decor-high \
+                      in-hover:cursor-pointer current:bg-theme-decor-med current:aim"
+              ^:current
+         (icon ^icon)
+         (p ^name style: "text-base/5"))
+
+  (FilePicker origin_  @paths_ @command_)
+    => (component {@:paths, @:command}
+         (group style: "flow-col gap-1 bg-theme-surface rounded"
+           ;; Top bar.
+           (group style: "flow-row gap-2 item-center-y bg-theme-overlay rounded-t"
+             ($IconButton (@action ascend) "arrow_upward" style: "in-hover:bg-theme-decor-med")
+             (visual
+               (^when (@path (/ parts_*))
+                 (p style: "text-sm/5 text-theme-text font-medium"
+                    ^"/⸢(join parts "/")⸣"))))
+
+           ;; Listing view.
+           (box style: "fr-1"
+             (cell @scroll-signal)
+             (ensemble ($Scroll @scroll-signal)
+               (group style: "flow-col"
+                 (guard (@listing ())
+                   (p "Waiting for files" style: "center text-theme-muted fr-1"))
+                 (node ((@listing) (form _ listing_*))
+                   (form (@listingf)))))
+
+             (node (@mouse [mousearea mouse_])
+               (mousearea opacity: transparent))))
+
+         (cell @action)
+
+         (node @fs (template (path (^origin report))))
+         (part (@fs @path) (path (path_ _) _))
+         (part (@fs @report) (path _ report_))
+
+         (supervisor (@report @entry [_ path_string] - @listing)
+           (part (@entry @action) (%any° {¦ action_} {¦ -action_}))
+           (outlet @choice)
+           (backsys
+             {¦ action_} <> {(action): ()}
+             {¦ action: select entry_ -choice_} <> {choice: ^entry})
+           (ensemble
+             ($Trigger (@action select)
+               (box
+                 (site)
+                 (node @mousearea (mousearea))))
+             (visual (ListingEntry ^@entry))))
 
          (backsys
-           {¦ -current_ windows: ((window _* ⍊ key_) _*)}
-             <> {current: ^key}
+           {¦ command_}
+             <> {(command): ()}
 
-           {¦ current_ next_}
-             <> {current: ^next, (next): ()})
+           {¦ command: (%any up dn) report: (%all (%items () {¦ current} min: 0) ⟨{¦ -current_}⟩)}
+             <> {current: true}
 
-         (box style: "fr-1"
-           (visual
-             (^match ((edge? mode) @windows (edge? current))
-               ;; Show the active window.
-               (when ((some mode_) ⟨window←(window _* ⍊ key_)⟩ (some key_))
-                 (WindowView ^window grabbed: ^(= mode grab)))
-               (when _
-                 (p "No windows to show" style: "center text-theme-muted")))))))
+           {¦ command: up report: ⟨{¦ -current: l} {¦ current: r_}⟩}
+             <> {l: true, (r): ()}
 
-(TimeIconName 0) => "pause"
-(TimeIconName _number) => "not_started"
-(TimeIconName ∞) => "play_arrow"
+           {¦ command: dn report: ⟨{¦ current: l_} {¦ -current: r}⟩}
+             <> {(l): (), r: true}
 
-(TimeIndicator charge_)
-  => (box style: "floating-y content"
-       (box style: "-dt-10 px-5 py-3 bg-theme-overlay rounded-tr"
-         (icon style: "text-theme-text font-3xl"
-           (TimeIconName ^charge))))
+           {¦ command: ascend -action_}
+             <> {action: ascend}
 
-;; Show everything else as text.
-(TimeFrameIcon label_ ⍊ active⋮ false)
-  => (p style: "content font-mono text-xs/4 text-theme-subtle bg-theme-overlay \
-                dim:bg-theme-surface border-xs border-theme-decor-high \
-                active:border-theme-info-fg dim:border-theme-decor-med \
-                bg-min-none px-1 rounded-sm"
-        ^:active
-        dim: ^(= label " ")
-       ^label)
+           {¦ command: select report: ⟨{¦ current -action_}⟩}
+             <> {action: select}
 
-(TimeFrameZip ±l ±r)
-  => (group style: "flow-row gap-1"
-       (^br (>= l 2)
-         (TimeFrameIcon 0)
-         (TimeFrameIcon " "))
-       (p "…" style: "text-xs/4 text-theme-muted")
-       (^br (>= l 1)
-         (TimeFrameIcon ^(- l 1))
-         (TimeFrameIcon " "))
-       (TimeFrameIcon ^l active: true)
-       ;; Show a "shadow" draft I-beam to make it clear there's still some
-       ;; stuff ahead.
-       (^if (= r 0)
-         (rect style: "max-w-2px bg-min-none bg-theme-decor-med"))
-       (^br (>= r 1)
-         (TimeFrameIcon ^(+ l 1))
-         (TimeFrameIcon " "))
-       (p "…" style: "text-xs/4 text-theme-muted")
-       (^br (>= r 2)
-         (TimeFrameIcon ^(+ l r))
-         (TimeFrameIcon " ")))
+           {¦ command: pgup -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll 0 -10)}
 
-(TimeFrameZip ±l *)
-  => (group style: "flow-row gap-1"
-       (^br (>= l 3)
-         (TimeFrameIcon 0)
-         (TimeFrameIcon " "))
-       (p "…" style: "text-xs/4 text-theme-muted")
-       (^br (>= l 2)
-         (TimeFrameIcon ^(- l 2))
-         (TimeFrameIcon " "))
-       (^br (>= l 1)
-         (TimeFrameIcon ^(- l 1))
-         (TimeFrameIcon " "))
-       (rect style: "max-w-2px bg-min-none bg-theme-info-fg")
-       (TimeFrameIcon " ")
-       (p "…" style: "text-xs/4 text-theme-muted")
-       (TimeFrameIcon " "))
+           {¦ command: pgdn -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll 0 +10)}
 
-(ListingEntry (file name_string ⍊ current⋮ false))
-  => (ListingEntry icon: "description" ^:name ^:current)
+           {¦ action_}
+             <> {(action): ()}
 
-(ListingEntry (dir name_string ⍊ current⋮ false))
-  => (ListingEntry icon: "folder" ^:name ^:current)
+           {¦ action: ascend path: (_* name_)}
+             <> {(name): ()}
 
-(ListingEntry ⍊ icon_string name_string current_boolean)
-  => (group style: "p-1 flow-row gap-1 rounded-sm text-theme-text item-center-y \
-                    in-hover:bg-theme-decor-med in-active:bg-theme-decor-high \
-                    in-hover:cursor-pointer current:bg-theme-decor-med current:aim"
-            ^:current
-       (icon ^icon)
-       (p ^name style: "text-base/5"))
+           {¦ mouse: {¦ wheel-up: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll 0 ^(* n -2))}
 
-(FilePicker origin_  @paths_ @command_)
-  => (component {@:paths, @:command}
-       (group style: "flow-col gap-1 bg-theme-surface rounded"
-         ;; Top bar.
-         (group style: "flow-row gap-2 item-center-y bg-theme-overlay rounded-t"
-           ($IconButton (@action ascend) "arrow_upward" style: "in-hover:bg-theme-decor-med")
-           (visual
-             (^when (@path (/ parts_*))
-               (p style: "text-sm/5 text-theme-text font-medium"
-                  ^"/⸢(join parts "/")⸣"))))
+           {¦ mouse: {¦ wheel-dn: ±n} -scroll-signal_}
+             <> {(n): (), scroll-signal: (scroll 0 ^(* n +2))}
 
-         ;; Listing view.
-         (box style: "fr-1"
-           (cell @scroll-signal)
-           (ensemble ($Scroll @scroll-signal)
-             (group style: "flow-col"
-               (guard (@listing ())
-                 (p "Waiting for files" style: "center text-theme-muted fr-1"))
-               (node ((@listing) (form _ listing_*))
-                 (form (@listingf)))))
+           {¦ listingf_: ([dir name_string]) path: (/ _* `>name)}
+             <> {(listingf): (), >name: ^name}
 
-           (node (@mouse [mousearea mouse_])
-             (mousearea opacity: transparent))))
+           {¦ listingf_: ([file name_string]) path_: (/ _*) -paths_}
+             <> {(listingf): (), paths: (^*path ^name)}))
 
-       (cell @action)
+  (MuMenuButton spec_ ¦ () icon_string caption_string shortcut_string)
+    => ($Trigger ^spec
+         (box
+           (group style: "flow-row gap-2 item-center-y text-theme-text in-hover:bg-theme-overlay \
+                          in-hover:cursor-pointer in-active:bg-theme-decor-med text-base/6 px-3 \
+                          py-2 rounded border border-xs border-theme-decor-med"
+             (icon ^icon)
+             (p ^caption style: "fr-1")
+             (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))
+           (node @mousearea (mousearea))))
 
-       (node @fs (template (path (^origin report))))
-       (part (@fs @path) (path (path_ _) _))
-       (part (@fs @report) (path _ report_))
+  (MuMenuPicker origin_ @path_ @command_)
+    => (box style: "p-1 dt-1 floating content max-3xs origin-l-0.1"
+         ;; The triangle thing.
+         (rect
+           style: "center-x fill-theme-overlay bg-min-none max-w-4 max-h-4 -dt-2 \
+                   pivot-center rotate-45")
+         ($FilePicker ^origin ^path ^command))
 
-       (supervisor (@report @entry [_ path_string] - @listing)
-         (part (@entry @action) (%any° {¦ action_} {¦ -action_}))
-         (outlet @choice)
+  (MuMenu @workspace_ @mode_ @seed_ @seed-src_)
+    => (component {@:workspace, @:mode, @:seed, @:seed-src}
+         (cell @path)
+         (cell @action)
+         (node @input (input focus: always))
+         (cell @command)
+
+         (box
+           ;;| The simplistic backdrop shadow thing.
+           (box style: "bg-black opacity-60%")
+           (box style: "bg-theme-base m-8 p-8 rounded-lg"
+             (group style: "flow-col gap-4 max-w-4xs center-x pt-16 justify"
+               (visual (MuBanner))
+
+               (group style: "flow-col gap-2"
+                 ($MuMenuButton ((@input (key "n")) @action new)
+                   icon: "add"
+                   caption: "New in-memory seed"
+                   shortcut: "n")
+
+                 ($MuMenuButton ((@input (key "o")) @action open)
+                   icon: "file_open"
+                   caption: "Open seed"
+                   shortcut: "o")
+
+                 (node @picker)))))
+
          (backsys
-           {¦ action_} <> {(action): ()}
-           {¦ action: select entry_ -choice_} <> {choice: ^entry})
-         (ensemble
-           ($Trigger (@action select)
-             (box
-               (site)
-               (node @mousearea (mousearea))))
-           (visual (ListingEntry ^@entry))))
+           ;; When they hit new, initialize seed and mode. To give the bigger picture,
+           ;; initializing seed is the thing that causes the MuMenu to cease. This doesn't
+           ;; happen here because MuMenu cannot cause or represent its own cessation in
+           ;; a practically useful way :)
+           ;;
+           ;; NOTE: Due to the peculiarities of writing editor rules that can be edited
+           ;; by the very same editor they power, and related issues, we have to use
+           ;; numeric ids to identify each editor so as to disambiguite runtime from
+           ;; rule definition time and so on.
+           {¦ action: new -mode_ -seed_ workspace: {¦ token_}}
+             <> {mode: normal, seed: {document: (("" (I ^token) ""))}}
 
-       (backsys
-         {¦ command_}
-           <> {(command): ()}
+           ;; When they hit open, populate the picker fragment with the file picker.
+           ;; FIXME: current working directory `.` instead of this hard-coded path.
+           {¦ action: open -picker_ -seed-src}
+             <> {picker: ($MuMenuPicker (/ "mnt" "Data" "Dev" "wirewright" "kappa" "examples" "future") @path @command)}
 
-         {¦ command: (%any up dn) report: (%all (%items () {¦ current} min: 0) ⟨{¦ -current_}⟩)}
-           <> {current: true}
+           ;; Go to previous file.
+           {¦ input: ⟨K←(key (%any up "k"))⟩ action_: open picker_ -command_}
+             <> {(K): (), command: up}
 
-         {¦ command: up report: ⟨{¦ -current: l} {¦ current: r_}⟩}
-           <> {l: true, (r): ()}
+           ;; Go to next file.
+           {¦ input: ⟨K←(key (%any dn "j"))⟩ action_: open picker_ -command_}
+             <> {(K): (), command: dn}
 
-         {¦ command: dn report: ⟨{¦ current: l_} {¦ -current: r}⟩}
-           <> {(l): (), r: true}
+           ;; Go back up.
+           {¦ input: ⟨K←(key (%any backspace "h"))⟩ action_: open picker_ -command_}
+             <> {(K): (), command: ascend}
 
-         {¦ command: ascend -action_}
-           <> {action: ascend}
+           ;; Descend or select.
+           {¦ input: ⟨K←(key (%any enter "l"))⟩ action_: open picker_ -command_}
+             <> {(K): (), command: select}
 
-         {¦ command: select report: ⟨{¦ current -action_}⟩}
-           <> {action: select}
+           ;; Page up
+           {¦ input: ⟨K←(key pgup)⟩ action_: open picker_ -command_}
+             <> {(K): (), command: pgup}
 
-         {¦ command: pgup -scroll-signal_}
-           <> {(n): (), scroll-signal: (scroll 0 -10)}
+           ;; Page down
+           {¦ input: ⟨K←(key pgdn)⟩ action_: open picker_ -command_}
+             <> {(K): (), command: pgdn}
 
-         {¦ command: pgdn -scroll-signal_}
-           <> {(n): (), scroll-signal: (scroll 0 +10)}
+           ;; Oops, they want to cancel the picker.
+           {¦ input: ⟨K←(key escape)⟩ action_: open picker_}
+             <> {(K): (), (action): (), (picker): ()}
 
-         {¦ action_}
-           <> {(action): ()}
-
-         {¦ action: ascend path: (_* name_)}
-           <> {(name): ()}
-
-         {¦ mouse: {¦ wheel-up: ±n} -scroll-signal_}
-           <> {(n): (), scroll-signal: (scroll 0 ^(* n -2))}
-
-         {¦ mouse: {¦ wheel-dn: ±n} -scroll-signal_}
-           <> {(n): (), scroll-signal: (scroll 0 ^(* n +2))}
-
-         {¦ listingf_: ([dir name_string]) path: (/ _* `>name)}
-           <> {(listingf): (), >name: ^name}
-
-         {¦ listingf_: ([file name_string]) path_: (/ _*) -paths_}
-           <> {(listingf): (), paths: (^*path ^name)}))
-
-(MuMenuButton spec_ ¦ () icon_string caption_string shortcut_string)
-  => ($Trigger ^spec
-       (box
-         (group style: "flow-row gap-2 item-center-y text-theme-text in-hover:bg-theme-overlay \
-                        in-hover:cursor-pointer in-active:bg-theme-decor-med text-base/6 px-3 \
-                        py-2 rounded border border-xs border-theme-decor-med"
-           (icon ^icon)
-           (p ^caption style: "fr-1")
-           (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))
-         (node @mousearea (mousearea))))
-
-(MuMenuPicker origin_ @path_ @command_)
-  => (box style: "p-1 dt-1 floating content max-3xs origin-l-0.1"
-       ;; The triangle thing.
-       (rect
-         style: "center-x fill-theme-overlay bg-min-none max-w-4 max-h-4 -dt-2 \
-                 pivot-center rotate-45")
-       ($FilePicker ^origin ^path ^command))
-
-(MuMenu @workspace_ @mode_ @seed_ @seed-src_)
-  => (component {@:workspace, @:mode, @:seed, @:seed-src}
-       (cell @path)
-       (cell @action)
-       (node @input (input focus: always))
-       (cell @command)
-
-       (box
-         ;;| The simplistic backdrop shadow thing.
-         (box style: "bg-black opacity-60%")
-         (box style: "bg-theme-base m-8 p-8 rounded-lg"
-           (group style: "flow-col gap-4 max-w-4xs center-x pt-16 justify"
-             (visual (MuBanner))
-
-             (group style: "flow-col gap-2"
-               ($MuMenuButton ((@input (key "n")) @action new)
-                 icon: "add"
-                 caption: "New in-memory seed"
-                 shortcut: "n")
-
-               ($MuMenuButton ((@input (key "o")) @action open)
-                 icon: "file_open"
-                 caption: "Open seed"
-                 shortcut: "o")
-
-               (node @picker)))))
-
-       (backsys
-         ;; When they hit new, initialize seed and mode. To give the bigger picture,
-         ;; initializing seed is the thing that causes the MuMenu to cease. This doesn't
-         ;; happen here because MuMenu cannot cause or represent its own cessation in
-         ;; a practically useful way :)
-         ;;
-         ;; NOTE: Due to the peculiarities of writing editor rules that can be edited
-         ;; by the very same editor they power, and related issues, we have to use
-         ;; numeric ids to identify each editor so as to disambiguite runtime from
-         ;; rule definition time and so on.
-         {¦ action: new -mode_ -seed_ workspace: {¦ token_}}
-           <> {mode: normal, seed: {document: (("" (I ^token) ""))}}
-
-         ;; When they hit open, populate the picker fragment with the file picker.
-         ;; FIXME: current working directory `.` instead of this hard-coded path.
-         {¦ action: open -picker_ -seed-src}
-           <> {picker: ($MuMenuPicker (/ "mnt" "Data" "Dev" "wirewright" "kappa" "examples" "future") @path @command)}
-
-         ;; Go to previous file.
-         {¦ input: ⟨K←(key (%any up "k"))⟩ action_: open picker_ -command_}
-           <> {(K): (), command: up}
-
-         ;; Go to next file.
-         {¦ input: ⟨K←(key (%any dn "j"))⟩ action_: open picker_ -command_}
-           <> {(K): (), command: dn}
-
-         ;; Go back up.
-         {¦ input: ⟨K←(key (%any backspace "h"))⟩ action_: open picker_ -command_}
-           <> {(K): (), command: ascend}
-
-         ;; Descend or select.
-         {¦ input: ⟨K←(key (%any enter "l"))⟩ action_: open picker_ -command_}
-           <> {(K): (), command: select}
-
-         ;; Page up
-         {¦ input: ⟨K←(key pgup)⟩ action_: open picker_ -command_}
-           <> {(K): (), command: pgup}
-
-         ;; Page down
-         {¦ input: ⟨K←(key pgdn)⟩ action_: open picker_ -command_}
-           <> {(K): (), command: pgdn}
-
-         ;; Oops, they want to cancel the picker.
-         {¦ input: ⟨K←(key escape)⟩ action_: open picker_}
-           <> {(K): (), (action): (), (picker): ()}
-
-         ;; When they have chosen the file, clear the picker and set the seed source.
-         {¦ path_ picker_ -mode_ -seed-src_}
-           <> {(path): (), (picker): (), mode: normal, seed-src: (path (^path reading))}))
+           ;; When they have chosen the file, clear the picker and set the seed source.
+           {¦ path_ picker_ -mode_ -seed-src_}
+             <> {(path): (), (picker): (), mode: normal, seed-src: (path (^path reading))})))
 
 ;;
 ;; The circuit
@@ -681,13 +676,13 @@
       <> {(shift): (), selection: false})
 
   ;; Control selection by setting/unsetting anchor on transition.
-  (step (guardR {¦ motions} rulesetR)
+  (step (guardR {¦ motions} (descR rulesetR axis: locus cues: (I) part: entries))
     ;; Selection is wanted but there is no anchor.
-    {¦ selection_: true locus: ⟪(l_string (I _number) _ ⍊ -anchor_)⟫}
+    {¦ selection_: true locus: (l_string I° _ ⍊ -anchor_)}
       <> {(selection): (), anchor: ^(charcount l)}
 
     ;; Selection is not wanted but there is an anchor.
-    {¦ selection_: false locus: ⟪(_ (I _number) _ ⍊ anchor_)⟫}
+    {¦ selection_: false locus: (_ I° _ ⍊ anchor_)}
       <> {(selection): (), (anchor): ()})
 
   ;; This is the editor. This step handles both text and structural editing.
@@ -697,191 +692,191 @@
       <> {(M): ()}
 
     ;; Insert rune.
-    {¦ motions: (M←(rune rune_string) _*) locus: [_ (I _number) _]}
+    {¦ motions: (M←(rune rune_string) _*) locus: [_ I° _]}
       <> {M: (subst ^rune)}
 
     ;; Insert line break.
-    {¦ motions: (M←(key enter) _*) locus: [_ (I _number) _]}
+    {¦ motions: (M←(key enter) _*) locus: [_ I° _]}
       <> {M: (subst "\n")}
 
     ;; Insert indent.
-    {¦ motions: (M←(key tab) _*) locus: [_ (I _number) _]}
+    {¦ motions: (M←(key tab) _*) locus: [_ I° _]}
       <> {M: (subst "  ")}
 
     ;; Delete rune behind.
-    {¦ motions: (M←(key backspace) _*) locus: ((%string "…l←%_") (I _number) _ ⍊ -anchor)}
+    {¦ motions: (M←(key backspace) _*) locus: ((%string "…(l)") I° _ ⍊ -anchor)}
       <> {(M): (), (l): ()}
 
     ;; Delete word behind.
-    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ((%string "…l←([%w]*[^%w]*)") (I _number) _ ⍊ -anchor)}
+    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ((%string "…(l←[%w]*[^%w]*)") I° _ ⍊ -anchor)}
       <> {(M): (), (l): ()}
 
     ;; Delete rune ahead.
-    {¦ motions: (M←(key delete) _*) locus: (_ (I _number) (%string "r←%_…") ⍊ -anchor)}
+    {¦ motions: (M←(key delete) _*) locus: (_ I° (%string "(r)…") ⍊ -anchor)}
       <> {(M): (), (r): ()}
 
     ;; Delete word ahead.
-    {¦ motions: (M←(key delete ctrl: true) _*) locus: (_ (I _number) (%string "r←([^%w]*[%w]*)…") ⍊ -anchor)}
+    {¦ motions: (M←(key delete ctrl: true) _*) locus: (_ I° (%string "(r←[^%w]*[%w]*)…") ⍊ -anchor)}
       <> {(M): (), (r): ()}
 
     ;; Clear selection.
-    {¦ motions: (M←[key (%any delete backspace)] _*) locus: [_ (I _number) _]}
+    {¦ motions: (M←[key (%any delete backspace)] _*) locus: [_ I° _]}
       <> {M: (subst "")}
 
     ;; Go before rune behind.
-    {¦ motions: (M←(key left) _*) locus: [(%string "…l←%_") (I _number) r_string]}
+    {¦ motions: (M←(key left) _*) locus: [(%string "…(l)") I° r_string]}
       <> {(M): (), (l): (), r: ^(~ l r)}
 
     ;; Go before word behind.
-    {¦ motions: (M←(key left ctrl: true) _*) locus: [(%string "…l←([%w]*[^%w]*)") (I _number) r_string]}
+    {¦ motions: (M←(key left ctrl: true) _*) locus: [(%string "…(l←[%w]*[^%w]*)") I° r_string]}
       <> {(M): (), (l): (), r: ^(~ l r)}
 
     ;; Go after rune ahead.
-    {¦ motions: (M←(key right) _*) locus: [l_string (I _number) (%string "r←%_…")]}
+    {¦ motions: (M←(key right) _*) locus: [l_string I° (%string "(r)…")]}
       <> {(M): (), l: ^(~ l r), (r): ()}
 
     ;; Go after word ahead.
-    {¦ motions: (M←(key right ctrl: true) _*) locus: [l_string (I _number) (%string "r←([^%w]*[%w]*)…")]}
+    {¦ motions: (M←(key right ctrl: true) _*) locus: [l_string I° (%string "(r←[^%w]*[%w]*)…")]}
       <> {(M): (), l: ^(~ l r), (r): ()}
 
     ;; Go before text begin.
-    {¦ motions: (M←(key home ctrl: true) _*) locus: [l_string (I _number) r_string]}
+    {¦ motions: (M←(key home ctrl: true) _*) locus: [l_string I° r_string]}
       <> {(M): (), l: "", r: ^(~ l r)}
 
     ;; Go after text end.
-    {¦ motions: (M←(key end ctrl: true) _*) locus: [l_string (I _number) r_string]}
+    {¦ motions: (M←(key end ctrl: true) _*) locus: [l_string I° r_string]}
       <> {(M): (), l: ^(~ l r), r: ""}
 
     ;; Go before line begin. If at line begin go to prev line's begin.
-    {¦ motions: (M←(key home) _*) locus: [(%string "…l←([^%v]*[%v]?)") (I _number) r_string]}
+    {¦ motions: (M←(key home) _*) locus: [(%string "…(l←[^%v]*[%v]?)") I° r_string]}
       <> {(M): (), (l): (), r: ^(~ l r)}
 
     ;; Go before line end. If at line end go to next line's end.
-    {¦ motions: (M←(key end) _*) locus: [l_string (I _number) (%string "r←([%v]?[^%v]*)…")]}
+    {¦ motions: (M←(key end) _*) locus: [l_string I° (%string "(r←[%v]?[^%v]*)…")]}
       <> {(M): (), l: ^(~ l r), (r): ()}
 
     ;; Go to line above.
-    {¦ motions: (M←(key up) _*) locus: [(%string "…(above)←([^%v]*%v)(behind)←[^%v]*") (I _number) r_string]}
+    {¦ motions: (M←(key up) _*) locus: [(%string "…(above←[^%v]*%v)(behind←[^%v]*)") I° r_string]}
       <> {M: (goto ^(charcount behind)), (above): (), (behind): (), r: ^(~ above behind r)}
 
     ;; Go to line below.
-    {¦ motions: (M←(key dn) _*) locus: [l←(%string "…(behind)←[^%v]*") (I _number) (%string "(ahead)←[^%v]*(sep)←%v…")]}
+    {¦ motions: (M←(key dn) _*) locus: [l←(%string "…(behind←[^%v]*)") I° (%string "(ahead←[^%v]*)(sep←%v)…")]}
       <> {M: (goto ^(charcount behind)), l: ^(~ l ahead sep), (ahead): (), (sep): ()}
 
     ;; Select all.
-    {¦ motions: (M←(key "a" ctrl: true) _*) locus: (l_string (I _number) r_string ⍊ -anchor_)}
+    {¦ motions: (M←(key "a" ctrl: true) _*) locus: (l_string I° r_string ⍊ -anchor_)}
       <> {(M): (), l: ^(~ l r), r: "", anchor: 0}
 
     ;; Cut.
-    {¦ motions: (M←(key "x" ctrl: true) _*) locus: (_ (I _number) _ ⍊ ±anchor)}
+    {¦ motions: (M←(key "x" ctrl: true) _*) locus: (_ I° _ ⍊ ±anchor)}
       <> {(M): (copy (subst ""))}
 
     ;; Copy.
-    {¦ motions: (M←(key "c" ctrl: true) _*) locus: (_ (I _number) _ ⍊ ±anchor)}
+    {¦ motions: (M←(key "c" ctrl: true) _*) locus: (_ I° _ ⍊ ±anchor)}
       <> {M: copy}
 
     ;; Paste.
-    {¦ motions: (M←(key "v" ctrl: true) _*) locus: (_ (I _number) _ ⍊ clipboard_string)}
+    {¦ motions: (M←(key "v" ctrl: true) _*) locus: (_ I° _ ⍊ clipboard_string)}
       <> {M: (subst ^clipboard)}
 
     ;; Compose: enter.
-    {¦ motions: (M←(key insert) _*) locus: [_ m←(I _number) _]}
+    {¦ motions: (M←(key insert) _*) locus: [_ m←I° _]}
       <> {(M): (), m: (^m "")}
 
     ;; Compose: leave at any point.
-    {¦ motions: (M←(key insert) _*) locus_: (m←(I _number) _string)}
+    {¦ motions: (M←(key insert) _*) locus_: (m←I° _string)}
       <> {(M): (), locus: ^m}
 
     ;; Compose: input.
-    {¦ motions: (M←(rune rune_string) _*) locus: ((I _number) buffer_string)}
+    {¦ motions: (M←(rune rune_string) _*) locus: (I° buffer_string)}
       <> {(M): (), buffer: ^(~ buffer rune)}
 
     ;; Compose: backspace.
-    {¦ motions: (M←(key backspace) _*) locus: ((I _number) (%string "…(pred)←%_"))}
+    {¦ motions: (M←(key backspace) _*) locus: (I° (%string "…(pred)"))}
       <> {(M): (), (pred): ()}
 
     ;; Compose: leave on backspace at start.
-    {¦ motions: (M←(key backspace) _*) locus_: (m←(I _number) "")}
+    {¦ motions: (M←(key backspace) _*) locus_: (m←I° "")}
       <> {(M): (), locus: ^m}
 
     ;; Compose: lookup table.
     ;;
     ;; Feel free to add your own combos here.
-    {¦ motions: (`M _*) locus_: (m←(I _number) " ")} <> {M: (subst " "), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "(")} <> {M: (subst "("), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) ")")} <> {M: (subst ")"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "oo")} <> {M: (subst "°"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "+-")} <> {M: (subst "±"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^0")} <> {M: (subst "⁰"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^1")} <> {M: (subst "¹"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^2")} <> {M: (subst "²"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^3")} <> {M: (subst "³"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^4")} <> {M: (subst "⁴"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^5")} <> {M: (subst "⁵"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^6")} <> {M: (subst "⁶"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^7")} <> {M: (subst "⁷"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^8")} <> {M: (subst "⁸"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^9")} <> {M: (subst "⁹"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_0")} <> {M: (subst "₀"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_1")} <> {M: (subst "₁"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_2")} <> {M: (subst "₂"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_3")} <> {M: (subst "₃"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_4")} <> {M: (subst "₄"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_5")} <> {M: (subst "₅"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_6")} <> {M: (subst "₆"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_7")} <> {M: (subst "₇"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_8")} <> {M: (subst "₈"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_9")} <> {M: (subst "₉"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^+")} <> {M: (subst "⁺"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^-")} <> {M: (subst "⁻"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_+")} <> {M: (subst "₊"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_-")} <> {M: (subst "₋"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "sm")} <> {M: (subst "∈"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "/sm")} <> {M: (subst "∉"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "s=")} <> {M: (subst "⊆"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "s<")} <> {M: (subst "⊂"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^[")} <> {M: (subst "\⸢"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^)")} <> {M: (subst "⸣"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_[")} <> {M: (subst "⸤"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "_)")} <> {M: (subst "⸥"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "{{")} <> {M: (subst "⟨"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "}}")} <> {M: (subst "⟩"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "||")} <> {M: (subst "¦"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "::")} <> {M: (subst "⋮"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "==")} <> {M: (subst "≡"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "..")} <> {M: (subst "…"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "xx")} <> {M: (subst "×"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "<-")} <> {M: (subst "←"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "->")} <> {M: (subst "→"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^|")} <> {M: (subst "↑"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "|v")} <> {M: (subst "↓"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "|[")} <> {M: (subst "⎡"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "|)")} <> {M: (subst "⎤"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "((")} <> {M: (subst "⸨"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "))")} <> {M: (subst "⸩"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "[[")} <> {M: (subst "⟦"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) ")]")} <> {M: (subst "⟧"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "//")} <> {M: (subst "⫽"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "**")} <> {M: (subst "⁑"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "|_")} <> {M: (subst "⍊"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "<>")} <> {M: (subst "◇"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "[)")} <> {M: (subst "▢"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "*(")} <> {M: (subst "⟅"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "*)")} <> {M: (subst "⟆"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "\"{")} <> {M: (subst "⟪"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "\"}")} <> {M: (subst "⟫"), locus: ^m}
-    {¦ motions: (`M _*) locus_: (m←(I _number) "^^")} <> {M: (subst "⏏"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° " ")} <> {M: (subst " "), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "(")} <> {M: (subst "("), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° ")")} <> {M: (subst ")"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "oo")} <> {M: (subst "°"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "+-")} <> {M: (subst "±"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^0")} <> {M: (subst "⁰"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^1")} <> {M: (subst "¹"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^2")} <> {M: (subst "²"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^3")} <> {M: (subst "³"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^4")} <> {M: (subst "⁴"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^5")} <> {M: (subst "⁵"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^6")} <> {M: (subst "⁶"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^7")} <> {M: (subst "⁷"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^8")} <> {M: (subst "⁸"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^9")} <> {M: (subst "⁹"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_0")} <> {M: (subst "₀"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_1")} <> {M: (subst "₁"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_2")} <> {M: (subst "₂"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_3")} <> {M: (subst "₃"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_4")} <> {M: (subst "₄"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_5")} <> {M: (subst "₅"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_6")} <> {M: (subst "₆"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_7")} <> {M: (subst "₇"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_8")} <> {M: (subst "₈"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_9")} <> {M: (subst "₉"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^+")} <> {M: (subst "⁺"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^-")} <> {M: (subst "⁻"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_+")} <> {M: (subst "₊"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_-")} <> {M: (subst "₋"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "sm")} <> {M: (subst "∈"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "/sm")} <> {M: (subst "∉"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "s=")} <> {M: (subst "⊆"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "s<")} <> {M: (subst "⊂"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^[")} <> {M: (subst "\⸢"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^)")} <> {M: (subst "⸣"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_[")} <> {M: (subst "⸤"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "_)")} <> {M: (subst "⸥"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "{{")} <> {M: (subst "⟨"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "}}")} <> {M: (subst "⟩"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "||")} <> {M: (subst "¦"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "::")} <> {M: (subst "⋮"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "==")} <> {M: (subst "≡"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "..")} <> {M: (subst "…"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "xx")} <> {M: (subst "×"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "<-")} <> {M: (subst "←"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "->")} <> {M: (subst "→"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^|")} <> {M: (subst "↑"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "|v")} <> {M: (subst "↓"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "|[")} <> {M: (subst "⎡"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "|)")} <> {M: (subst "⎤"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "((")} <> {M: (subst "⸨"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "))")} <> {M: (subst "⸩"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "[[")} <> {M: (subst "⟦"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° ")]")} <> {M: (subst "⟧"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "//")} <> {M: (subst "⫽"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "**")} <> {M: (subst "⁑"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "|_")} <> {M: (subst "⍊"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "<>")} <> {M: (subst "◇"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "[)")} <> {M: (subst "▢"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "*(")} <> {M: (subst "⟅"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "*)")} <> {M: (subst "⟆"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "\"{")} <> {M: (subst "⟪"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "\"}")} <> {M: (subst "⟫"), locus: ^m}
+    {¦ motions: (`M _*) locus_: (m←I° "^^")} <> {M: (subst "⏏"), locus: ^m}
 
     ;; Utility: go to column.
-    {¦ motions: (M←(goto ±n) _*) locus: [l_string (I _number) (%string "(ahead)←[^%v]*…")]}
+    {¦ motions: (M←(goto ±n) _*) locus: [l_string I° (%string "(ahead←[^%v]*)…")]}
       <> {(M): (), l: ^(~ l (runes ahead 0 ..< n)), ahead: ^(runes ahead n ..= -1)}
 
     ;; Utility: substitute, selection inactive.
-    {¦ motions: (M←(subst rep_string) _*) locus: (l_string (I _number) _ ⍊ -anchor)}
+    {¦ motions: (M←(subst rep_string) _*) locus: (l_string I° _ ⍊ -anchor)}
       <> {(M): (), l: ^(~ l rep)}
 
     ;; Utility: substitute, selection active.
-    {¦ motions: (M←(subst rep_string) _*) locus: (l_string m←(I _number) r_string ⍊ ±anchor)}
+    {¦ motions: (M←(subst rep_string) _*) locus: (l_string m←I° r_string ⍊ ±anchor)}
       <> {(M): (), (l): (), (r): (), (anchor): (),
           (m): ^(let text: (~ l r)
                      lo: (min (charcount l) anchor)
@@ -889,7 +884,7 @@
                   ((~ (runes text 0 ..< lo) rep) m (runes text hi ..= -1)))}
 
     ;; Utility: copy.
-    {¦ motions: (M←copy _*) locus: (l_string (I _number) r_string ⍊ ±anchor ⋮clipboard)}
+    {¦ motions: (M←copy _*) locus: (l_string I° r_string ⍊ ±anchor ⋮clipboard)}
       <> {(M): (),
           clipboard: ^(let text: (~ l r)
                            lo: (min (charcount l) anchor)
@@ -897,103 +892,150 @@
                         (runes text lo ..< hi))}
 
     ;; Move before previous item.
-    {¦ motions: (M←(key up) _*) locus: ⟨L_ R←["" (I _number) ""]⟩}
+    {¦ motions: (M←(key up) _*) locus: ⟨L_ R←["" I° ""]⟩}
       <> {(M): (), L: ^R, R: ^L}
 
     ;; Move after next item.
-    {¦ motions: (M←(key dn) _*) locus: ⟨L←["" (I _number) ""] R_⟩}
+    {¦ motions: (M←(key dn) _*) locus: ⟨L←["" I° ""] R_⟩}
       <> {(M): (), L: ^R, R: ^L}
 
     ;; Remove previous item.
-    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨L_ ["" (I _number) ""]⟩}
+    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨L_ ["" I° ""]⟩}
       <> {(M): (), (L): ()}
 
     ;; Remove next item.
-    {¦ motions: (M←(key delete ctrl: true) _*) locus: ⟨["" (I _number) ""] R_⟩}
+    {¦ motions: (M←(key delete ctrl: true) _*) locus: ⟨["" I° ""] R_⟩}
       <> {(M): (), (R): ()}
 
     ;; Edit previous item.
-    {¦ motions: (M←(key (%any left backspace)) _*) locus: ⟨term←(%any° (%atom) @_) [l←"" (I _number) ""]⟩}
+    {¦ motions: (M←(key (%any left backspace)) _*) locus: ⟨term←(%any° (%atom) @_) [l←"" I° ""]⟩}
       <> {(M): (), (term): (), l: ^(ml/display term)}
 
     ;; Edit next item.
-    {¦ motions: (M←(key (%any right delete)) _*) locus: ⟨["" (I _number) r←""] term←(%any° (%atom) @_)⟩}
+    {¦ motions: (M←(key (%any right delete)) _*) locus: ⟨["" I° r←""] term←(%any° (%atom) @_)⟩}
       <> {(M): (), (term): (), r: ^(ml/display term)}
 
     ;; Force edit previous item.
-    {¦ motions: (M←(key left ctrl: true) _*) locus: ⟨term_ [l←"" (I _number) ""]⟩}
+    {¦ motions: (M←(key left ctrl: true) _*) locus: ⟨term_ [l←"" I° ""]⟩}
       <> {(M): (), (term): (), l: ^(ml/display term)}
 
     ;; Force edit next item.
-    {¦ motions: (M←(key right ctrl: true) _*) locus: ⟨["" (I _number) r←""] term_⟩}
+    {¦ motions: (M←(key right ctrl: true) _*) locus: ⟨["" I° r←""] term_⟩}
       <> {(M): (), (term): (), r: ^(ml/display term)}
 
     ;; Escape dict left.
-    {¦ motions: (M←(key left) _*) locus: ⟨P←[E←["" (I _number) ""] _*]⟩}
+    {¦ motions: (M←(key left) _*) locus: ⟨P←[E←["" I° ""] _*]⟩}
       <> {(M): (), (P): (^E ^(up P)), (E): ()}
 
     ;; Escape dict right.
-    {¦ motions: (M←(key right) _*) locus: ⟨P←[_* E←["" (I _number) ""]]⟩}
+    {¦ motions: (M←(key right) _*) locus: ⟨P←[_* E←["" I° ""]]⟩}
       <> {(M): (), (P): (^(up P) ^E), (E): ()}
 
     ;; Enter dict from back.
-    {¦ motions: (M←(key left) _*) locus: ⟨[_* `>E] E←["" (I _number) ""]⟩}
+    {¦ motions: (M←(key left) _*) locus: ⟨[_* `>E] E←["" I° ""]⟩}
       <> {(M): (), >E: ^E, (E): ()}
 
     ;; Enter dict from front.
-    {¦ motions: (M←(key right) _*) locus: ⟨E←["" (I _number) ""] [`>E _*]⟩}
+    {¦ motions: (M←(key right) _*) locus: ⟨E←["" I° ""] [`>E _*]⟩}
       <> {(M): (), >E: ^E, (E): ()}
 
     ;; Surround with dict.
-    {¦ motions: (M←(rune "(") _*) locus_: ["" (I _number) ""]}
+    {¦ motions: (M←(rune "(") _*) locus_: ["" I° ""]}
       <> {(M): (), locus: (^locus)}
 
     ;; Remove surrounding dict.
-    {¦ motions: (M←(key backspace) _*) locus: ⟨P←(E←["" (I _number) ""])⟩}
+    {¦ motions: (M←(key backspace) _*) locus: ⟨P←(E←["" I° ""])⟩}
       <> {(M): (), P: ^E}
 
     ;; Flatten surrounding dict.
-    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨P←(E←["" (I _number) ""] rest_*)⟩}
+    {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨P←(E←["" I° ""] rest_*)⟩}
       <> {(M): (), (P): (^E ^*rest)}
 
     ;; Escape dict from back.
-    {¦ motions: (M←(rune ")") _*) locus: ⟨P←[_* E←["" (I _number) ""]]⟩}
+    {¦ motions: (M←(rune ")") _*) locus: ⟨P←[_* E←["" I° ""]]⟩}
       <> {(M): (), (P): (^(up P) ^E), (E): ()}
 
     ;; Submit left irrespective of position in text.
-    {¦ motions: (M←(key enter ctrl: true) _*) locus: [l_string (I _number) r_string]}
+    {¦ motions: (M←(key enter ctrl: true) _*) locus: [l_string I° r_string]}
       <> {M: (submit left nop nop)}
 
     ;; Submit left on right arrow or End at the end.
-    {¦ motions: (M←(key (%any right end)) _*) locus: ⟨[(%string nonempty) (I _number) ""]⟩}
+    {¦ motions: (M←(key (%any right end)) _*) locus: ⟨[(%string nonempty) I° ""]⟩}
       <> {M: (submit left nop nop)}
 
     ;; Submit right on left arrow or Home at the start.
-    {¦ motions: (M←(key (%any left home)) _*) locus: ⟨["" (I _number) (%string nonempty)]⟩}
+    {¦ motions: (M←(key (%any left home)) _*) locus: ⟨["" I° (%string nonempty)]⟩}
       <> {M: (submit right nop nop)}
 
     ;; Submit left on whitespace at the end, else append whitespace.
-    {¦ motions: (M←(rune " ") _*) locus: ⟨[(%string nonempty) (I _number) ""]⟩}
+    {¦ motions: (M←(rune " ") _*) locus: ⟨[(%string nonempty) I° ""]⟩}
       <> {M: (submit left nop (subst " "))}
 
     ;; Move after next item on whitespace.
-    {¦ motions: (M←(rune " ") _*) locus: ⟨L←["" (I _number) ""] R_⟩}
+    {¦ motions: (M←(rune " ") _*) locus: ⟨L←["" I° ""] R_⟩}
       <> {(M): (), L: ^R, R: ^L}
 
     ;; Escape dict right on whitespace.
-    {¦ motions: (M←(rune " ") _*) locus: ⟨P←[_* E←["" (I _number) ""]]⟩}
+    {¦ motions: (M←(rune " ") _*) locus: ⟨P←[_* E←["" I° ""]]⟩}
       <> {(M): (), (P): (^(up P) ^E), (E): ()}
 
+    ;; Enter pair.
+    {¦ motions: (M←(rune ":") _*) locus: [l_string I° ""]}
+      <> {M: (goto pair ^(ml/term l) (subst ":"))}
+
+    ;; Remove pair and leave.
+    {¦ motions: (M←(key (%any backspace delete left right home end)) _*)
+       locus: (_* `dst ¦ (%entry key_ E←["" I° ""]))}
+      <> {(M): (), dst: ^(up E), (E): ()}
+
+    ;; Submit pair and leave.
+    {¦ motions: (M←(rune " ") _*) locus: (_* ¦ (%entry key_ [_string I° ""]))}
+      <> {M: (submit entry nop (subst " "))}
+
     ;; Utility: Submit.
-    {¦ motions: ((submit _ `parse _ _) _*) locus: [l_string (I _number) r_string]}
+
+    ;; Produce a parse of the complete string.
+    {¦ motions: ((submit _ `parse _ _) _*) locus: [l_string I° r_string]}
       <> {parse: ^(ml/term (~ l r))}
-    {¦ motions: (M←(submit left (ok term_) ok_ _) _*) locus: ⟨E←[l_string (I _number) r_string]⟩}
+
+    ;; Place parsed term before the editor.
+    {¦ motions: (M←(submit left (ok term_) ok_ _) _*) locus: ⟨E←[l_string I° r_string]⟩}
       <> {M: ^ok, (E): (^term ^(up E)), l: "", r: ""}
-    {¦ motions: (M←(submit right (ok term_) ok_ _) _*) locus: ⟨E←[l_string (I _number) r_string]⟩}
+
+    ;; Place parsed term after the editor.
+    {¦ motions: (M←(submit right (ok term_) ok_ _) _*) locus: ⟨E←[l_string I° r_string]⟩}
       <> {M: ^ok, (E): (^(up E) ^term), l: "", r: ""}
-    {¦ motions: (M←(submit _ _ _ err_) _*) locus: [_ (I _number) _]}
+
+    ;; Place parsed term at the editor's entry.
+    {¦ motions: (M←(submit entry (ok term_) ok_ _) _*)
+       locus: (_* `dst ¦ (%entry _ E←[l_string I° r_string]))}
+      <> {M: ^ok, dst: ^(up E), E: ^term, l: "", r: ""}
+
+    ;; Fallback if parsing failed.
+    {¦ motions: (M←(submit _ _ _ err_) _*) locus: [_ I° _]}
       <> {M: ^err}
-  )
+
+    ;; Utility: Go to pair.
+
+    ;; When the pair is absent, create it.
+    {¦ motions: (M←(goto pair (ok key_) _) _*)
+       locus: (%all ⟨E←[l_string I° ""]⟩ (%-value key value))}
+      <> {(M): (), (E): (), l: "", value: ^(up E)}
+
+    ;; When the pair is present, and is an atom or an edge, select it (edit it
+    ;; as text).
+    {¦ motions: (M←(goto pair (ok key_) _) _*)
+       locus: (%all ⟨E←[l_string I° ""]⟩ (%value key value←(%any° (%atom) @_)))}
+      <> {(M): (), (E): (), l: ^(ml/display value), value: ^(up E)}
+
+    ;; When the pair is present, and is a dict, go to the first item.
+    {¦ motions: (M←(goto pair (ok key_) _) _*)
+       locus: (%all ⟨E←[l_string I° ""]⟩ (%value key [`dst _*]))}
+      <> {(M): (), (E): (), l: "", dst: ^(up E)}
+
+    ;; If the key fails to parse, use the error motion.
+    {¦ motions: (M←(goto pair _ err_) _*) locus: [_string I° _string]}
+      <> {M: ^err})
 
   ;; Cleanup after the editor.
   (step rulesetR
@@ -1016,849 +1058,858 @@
     {¦ past: (head_ (%plural min: 127))}
       <> {(head): ()}))
 
-(rewriter ((@repr @repr-version) -> chainR - @pretty)
-  (step (exhR (descR rulesetR passable: [passable pattern_]))
-    (passable [parent _*])
-    (passable [group _*])
-    (passable [inline _])
-
-    ;; Recognize terms.
-    (term term_symbol) => (atom ^\term detail: symbol)
-    (term term_string) => (atom ^\term detail: string)
-    (term term_boolean) => (atom ^\term detail: boolean)
-    (term term_number) => (atom ^\term detail: number)
-    (term term_blob) => (atom ^\term detail: blob)
-
-    (term ())
-      => (atom "()" detail: punct)
-
-    ;; (edge x) -> @x
-    (term (%'edge name_)) => (atom ^"@⸢name⸣" detail: edge)
-
-    ;; (%let x 100) -> x←100
-    (term (%'%let capture_symbol successor_))
-      => (group detail: row
-           (term ^capture)
-           (atom "←" detail: punct)
-           (term ^successor))
-
-    ;; (%let x _number) -> ±x
-    (term (%'%let capture_symbol %'_number))
-      => (group detail: row
-           (atom "±")
-           (term ^capture))
-
-    ;; (^ (+ 1 2)) -> ^(+ 1 2)
-    (term (^ expr_))
-      => (group detail: row
-           (atom "^") (term ^expr))
-
-    ;; Example: (%slot x) -> `x
-    (term (%'%slot name_symbol))
-      => (group detail: row
-           (atom "`" detail: punct) (term ^name))
-
-    ;; Editor: no selection.
-    (term (l_string (I _number) r_string ⍊ -anchor))
-      => (atom ^(~ l r) detail: (Editor ^(charcount l) 0))
-
-    ;; Editor: selection.
-    (term (l_string (I _number) r_string ⍊ ±anchor))
-      => (^let span: (- (charcount l) anchor)
-           (atom ^(~ l r) detail: (Editor ^anchor ^span)))
-
-    ;; Editor: compose.
-    (term [l_string ((I _number) m_string) r_string])
-      => (atom ^(~ l m r) detail: (Editor ^(charcount l) ^(charcount m) ^(charcount l m)))
-
-    ;; Descend into dictionaries.
-    (term D←(items_* ¦ pairs_))
-      => (group detail: dict
-           (shape ^D)
-           (^each (items as item_) (term ^item))
-           (pairsep)
-           (^each (pairs pair as (key_ value_))
-             (pair ^key ^value)))
-
-    ;; (%item a b c) -> ⟨a b c⟩
-    (term (%'%item args_*))
-      => (group detail: dict lbr: "⟨" rbr: "⟩"
-           generic ;; shape
-           (^each (args as arg_)
-             (term ^arg)))
-
-    ;; (%leaf a b c order: bfs self: true) -> ⟪a b c⟫
-    (term (%'%leaf args_* order: bfs self: true))
-      => (group detail: dict lbr: "⟪" rbr: "⟫"
-           generic ;; shape
-           (^each (args as arg_)
-             (term ^arg)))
-
-    ;; (%partition (a b c) _) -> [a b c]
-    (term (%'%partition args←(_*) %'_))
-      => (group detail: dict lbr: "[" rbr: "]"
-           generic ;; shape
-           (^each (args as arg_)
-             (term ^arg)))
-
-    ;; (%layer _ {x: 100, y: 200}) -> {¦ x: 100 y: 200}
-    (term (%'%layer %'_ side_dict))
-      => (group detail: dict lbr: "{¦ " rbr: "}"
-           generic ;; shape
-           (^each (side entry as (key_ value_))
-             (selector ^key ^value)))
-
-    ;; (+ a b c ⍊ -d)
-    (term (%'%partition itemside←(_*) (%'%layer %'_ pairside_dict)))
-      => (group detail: dict
-           (interfix "⍊")
-           (^each (itemside as item_)
-             (term ^item))
-           (pairsep)
-           (^each (pairside entry as (key_ value_))
-             (selector ^key ^value)))
-
-    ;; (rule x_ 100) -> x_ => 100
-    (term (rule pattern_ body_ ¦ doc_: (%optional () (_string*))))
-      => (group detail: (rule ^:doc)
-           (term ^pattern)
-           ;; NOTE: We make the infix heavy to make sure only very small rules are printed
-           ;; inline. Most rules should be printed multiline because they are very dense --
-           ;; even if, in terms of characters, thay are not very long.
-           (atom "=>" detail: punct size: 32)
-           (term ^body))
-
-    (term (backmap pattern_ backspec_ ¦ doc_: (%optional () (_string*))))
-      => (group detail: (rule ^:doc)
-           (term ^pattern)
-           ;; Ditto
-           (atom "<>" detail: punct size: 32)
-           (term ^backspec))
-
-    ;; {¦ active: active←true} -> {¦ active_: true}
-    (selector key_symbol (%'%let key_ value_))
-      => (group detail: row
-           (atom ^\key detail: key form: inline)
-           (atom "_:" detail: (pair colon))
-           (term ^value))
-
-    ;; {¦ msg: msg_} -> {¦ msg_}
-    ;; {¦ msg: msg_string} -> {¦ msg_string}
-    (selector key_symbol (%symbol blank key_ type_))
-      => (group detail: row
-           (atom ^\key detail: key)
-           (atom ^\type))
-
-    ;; {¦ age: (%let age _number)} -> {¦ ±age}
-    (selector key_symbol (%'%let key_ %'_number))
-      => (group detail: row
-           (atom "±")
-           (atom ^\key detail: key))
-
-    ;; {¦ active: _} -> {¦ active}
-    (selector key_symbol %'_)
-      => (atom ^\key detail: key)
-
-    ;; {¦ ⏏x: 100⏏}
-    (selector key_ value_)
-      => (pair ^key ^value)
-
-    ;; Example: x: (%- _) -> -x
-    (selector key_symbol %'(%- _))
-      => (group detail: row
-           (atom "-")
-           (atom ^\key detail: key))
-
-    ;; hover: (%- _ hover) -> -hover_
-    (selector key_symbol (%'%- %'_ key_))
-      => (group detail: row
-           (atom "-")
-           (atom ^\key detail: key)
-           (atom "_" detail: punct))
-
-    ;; status: (%- (%never) status) -> ⋮status
-    (selector key_symbol (%'%- %'(%never) key_))
-      => (group detail: row
-           (atom "⋮" detail: punct)
-           (atom ^\key detail: key))
-
-    ;; title: (%optional "Untitled" title_string) -> title⋮ "Untitled"
-    (selector key_symbol (%'%optional value←(%pipe type T_) (%symbol blank key_ T_)))
-      => (group detail: row
-           (atom ^\key detail: key)
-           (atom "⋮" detail: (pair colon))
-           (term ^value))
-
-    ;; title: (%optional "Untitled" title_) -> title_⋮ "Untitled"
-    (selector key_symbol (%'%optional value_ (%symbol blank key_ %'_)))
-      => (group detail: row
-           (atom ^\key detail: key)
-           (atom "_⋮" detail: (pair colon))
-           (term ^value))
-
-    ;; hover: (%optional false hover←false) -> hover_: (%optional false false)
-    (selector key_symbol (%'%optional default_ (%'%let key_ value_)))
-      => (group detail: row
-           (atom ^\key detail: key)
-           (atom "_:" detail: (pair colon))
-           (term (%optional ^default ^value)))
-
-    ;; "hello world": "hello world" -> :"hello world"
-    (pair key_ key_)
-      => (group detail: row
-           (atom ":" detail: punct)
-           (inline (term ^key)))
-
-    ;; x: @x -> @:x
-    (pair key_symbol (%'edge key_))
-      => (group detail: row
-           (atom ^"@:⸢key⸣" detail: edge))
-
-    ;; Example: x: 100
-    (pair key_symbol value_)
-      => (group detail: pair
-           (atom ^\key detail: key form: inline)
-           (term ^value))
-
-    ;; Example: "hello world": 100
-    (pair key_ value_)
-      => (group detail: pair
-           (inline (term ^key)) (term ^value))
-
-    [inert term_] => (term ^term)
-
-    ;; Recognize comment nodes (which also have the syntax `;;| ...`).
-    [inert (comment content_string)]
-      => (atom ^content detail: comment form: multiline)
-
-    [gnd term_] => (term ^term)
-
-    ;; Recognize the toplevel parent.
-    (parent children_* ⍊ addr: () reference: (_* ¦ pairs_))
-      => (group detail: col
-           (^each (pairs pair as (key_ value_))
-             (group (term ^key) (term ^value) detail: pair))
-           (^each (children as child_)
-             ^child))
-
-    ;; Recognize all other parents.
-    (parent children_* ⍊ reference_: (_* ¦ pairs_))
-      => (group detail: dict form: multiline
-           (shape ^reference)
-           (^each (children as child_)
-             ^child)
-           (pairsep)
-           (^each (reference pair as (key_ value_))
-             (pair ^key ^value)))
-
-    ;; Section widget (closed).
-    (gnd (section title_string _*) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (section ^addr) icon: "chevron_right" center: true))
-           (atom ^title detail: section))
-
-    ;; Section widget (open).
-    (parent _ _ children_* ⍊ addr_ reference_: (section title_string _* ¦ () open))
-      => (group detail: col form: multiline
-           (group detail: row
-             (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
-             (atom ^title detail: section))
-           ^*children)
-
-    ;; Slot widget (closed).
-    (gnd (slot call_ _) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (slot ^addr) icon: "chevron_right" center: true))
-           (inline (term ^call)))
-
-    ;; Slot widget (open).
-    (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ () open))
-      => (group detail: col form: multiline
-           (group detail: row
-             (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
-             (inline (term ^call)))
-           (group detail: interior
-             ^child))
-
-    ;; Backsys or rewriter widget (open).
-    (gnd node←(⸨backsys,rewriter⸩ _* ¦ () open) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (backsys ^addr) icon: "expand_more"))
-           (term ^(itemspart node)))
-
-    ;; Backsys or rewriter widget with explicit edges (closed).
-    (gnd reference←(⸨backsys,rewriter⸩ header_dict _*) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
-           (inline
-             (group detail: dict
-               generic
-               (term ⸨backsys,rewriter⸩)
-               (term ^header)
-               (atom "…" detail: punct))))
-
-    ;; Backsys or rewriter with inferred edges widget (closed).
-    (gnd reference←(⸨backsys,rewriter⸩ [(%any rule backmap) _ _] _*) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
-           (inline
-             (group detail: dict
-               generic
-               (term ⸨backsys,rewriter⸩)
-               (atom "…" detail: punct))))
-
-    ;; Supervisor widget (open).
-    (parent children_* ⍊ addr_ reference: (supervisor _* ¦ () open) -editing)
-      => (group detail: row
-           (atom "" detail: (expander (supervisor ^addr) icon: "expand_more"))
-           (group detail: dict form: multiline
-             block
-             ^*children))
-
-    ;; Supervisor widget (closed).
-    (gnd (supervisor spec_ _*) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (supervisor ^addr) icon: "chevron_right"))
-           (inline
-             (group detail: dict
-               generic
-               (term supervisor)
-               (term ^spec)
-               (atom "…" detail: punct))))
-
-    ;; Device widget (open).
-    (parent children_* ⍊ addr_ reference: (device _* ¦ () open) -editing)
-      => (group detail: row
-           (atom "" detail: (expander (device ^addr) icon: "expand_more"))
-           (group detail: dict form: multiline
-             call
-             ^*children))
-
-    ;; Device widget (closed).
-    (gnd (device _*) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
-           (inline
-             (group detail: dict
-               generic
-               (term device)
-               (atom "…" detail: punct))))
-
-    ;; Rule widget (open)
-    (parent _ pattern_ body_ ⍊ addr_ reference: (rule _ _ ⍊ doc_: (%optional () (_string*))) -editing)
-      => (group detail: row
-           (atom "" detail: (expander (device ^addr) icon: "expand_more"))
-           (group detail: (rule ^:doc)
-              ^pattern
-              (atom "=>" detail: punct size: 32)
-              ^body))
-
-    ;; Rule widget (closed)
-    (gnd (rule pattern_ _ ⍊ doc_: (%optional () (_string*))) ⍊ addr_ -editing)
-      => (group detail: row
-           (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
-           (group detail: (rule ^:doc)
-             (term ^pattern)
-             (atom "=>" detail: punct size: 32)
-             (atom "…" detail: punct)))
-
-    ;; Dictionary shape recognition rules.
-
-    ;; (1
-    ;;  2
-    ;;  3)
-    (shape _) => generic
-
-    ;; (head
-    ;;   1
-    ;;   2
-    ;;   3)
-    (shape (_symbol _+)) => call
-
-    ;; Exceptions to the rule above.
-    (shape ((%any ^match ^case ^when) _ _+))
-      => block
-
-    ;; (head (1 2 3)
-    ;;   a
-    ;;   b
-    ;;   c)
-    (shape (_symbol _dict _+))
-      => block
-
-    ;; Exceptions to the rule above.
-    (shape [(%any backsys rewriter) [(%any rule backmap) _ _] _*])
-      => node
-    (shape [(%any group box window section stage device figure %all) _+])
-      => node
-
-    ;; (head x: 100
-    ;;       y: 200
-    ;;   1
-    ;;   2)
-    (shape (_symbol _+ ¦ (%not ())))
-      => node
-
-    ;; {x: 100, y: 200}
-    ;; {x: 100,
-    ;;  y: 200}
-    (shape (¦ (%not ())))
-      => pairsonly)
-
-  ;; Assign `form` locally based on shapes.
-  (step (waveR rulesetR cues: (dict))
-    ;; Forms are always always multiline.
-    (figure _* ⍊ -form_)
-      <> {form: multiline}
-
-    ;; Force dicts with these shapes to be multiline (but their children
-    ;; can be of any form).
-    (group node _* ⍊ detail: dict -form_)
-      <> {form: multiline})
-
-  ;; Propagate `inline` down.
-  (step (exhR (descR rulesetR cues: (inline)))
-    node←(inline child←{¦ ⋮form})
-      <> {node: ^(up child), form: (forced inline)}
-
-    (group …⟨{¦ ⋮form}⟩… ⍊ form: formp←(forced inline))
-      <> {form: ^formp, formp: inline}
-
-    (atom _ ⍊ form_: (forced inline))
-      <> {form: inline})
-
-  ;; Propagate form up the tree when no form is set.
-  (step (ascR (rulesetR exh: true))
-    ;; An atom's size is the size of its string.
-    (atom id_string ⍊ -size_)
-      <> {size: ^(charcount id)}
-
-    ;; An atom is multiline if its size passes a threshold.
-    (atom _ ⍊ -form_ size: (%number _ < 60))
-      <> {form: inline}
-    (atom _ ⍊ -form_ size)
-      <> {form: multiline}
-
-    ;; A group is multiline if any of its children is multiline.
-    (group …⟨{¦ form: multiline}⟩… ⍊ -form_)
-      <> {form: multiline}
-
-    ;; A group's size is the sum of sizes of its children (i.e. inline size).
-    (group children_* ⍊ -sizes_)
-      <> {sizes: ((^each (children as {¦ ±size}) ^size))}
-    (group _* ⍊ sizes_: (_*) -size_)
-      <> {(sizes): (), size: ^(sum sizes)}
-
-    ;; A group is multiline if its size passes a threshold.
-    (group _* ⍊ size: (%number _ < 60) -form_)
-      <> {form: inline}
-    (group _* ⍊ size -form_)
-      <> {form: multiline})
-
-  ;; Elaborate.
-  (step (exhR (descR rulesetR))
-    (group shape←(%any call node block) _* ⍊ detail_: dict form_: multiline)
-      <> {(shape): (), detail: (dict ^shape), (form): ()}
-
-    (group shape←pairsonly _* ⍊ detail_: dict form_)
-      <> {(shape): (), detail: (dict ^form pairsonly), (form): ()}
-
-    (group shape←(interfix _string) _* ⍊ detail_: dict form_)
-      <> {(shape): (), detail: (dict ^form ^shape), (form): ()}
-
-    (group shape_ _* ⍊ detail_: dict form_)
-      <> {(shape): (), detail: (dict ^form), (form): ()}
-
-    (group _* ⍊ detail: [rule `>form] form_)
-      <> {>form: ^form, (form): ()}
-
-    (group _* ⍊ detail_: pair form_)
-      <> {detail: (pair ^form), (form): ()})
-
-  ;; Render
-  (step (ascR rulesetR)
-    ;; Utility
-    (group members_* ⍊ detail: row) => (row ^*members)
-    (group members_* ⍊ detail: col) => (col ^*members)
-
-    ;; ("a" "b" "c")
-    ;; ("a" "b" "c" x: 100 y: 200)
-    (group members_* ⍊ detail: (dict inline) lbr⋮ "(" rbr⋮ ")")
-      => (row
-           (atom ^lbr detail: punct)
-           (row ^*members gap: xs)
-           (atom ^rbr detail: punct))
-
-    ;; ("a"
-    ;;  "b"
-    ;;  "c")
-    (group members_* ⍊ detail: (dict multiline) lbr⋮ "(" rbr⋮ ")")
-      => (row
-           (atom ^lbr detail: punct)
-           (cat
-             (col ^*members)
-             (atom ^rbr detail: punct)))
-
-    ;; {x: 100, y: 200}
-    (group members_* tail_ ⍊ detail: (dict inline pairsonly))
-      => (row
-           (atom "{" detail: punct)
-           (row gap: xs
-             (^each (members as member_)
-               (cat ^member (atom "," detail: punct)))
-             ^tail)
-           (atom "}" detail: punct))
-
-    ;; {x: 100,
-    ;;  y: 200}
-    (group members_* tail_ ⍊ detail: (dict multiline pairsonly))
-      => (row
-           (atom "{" detail: punct)
-           (cat
-             (col
-               (^each (members as member_)
-                 (cat ^member (atom "," detail: punct)))
-               ^tail)
-             (atom "}" detail: punct)))
-
-    ;; (+ 1 2 ⍊ x y z)
-    (group (%plural/min args) (%flex (pairsep)) (%plural/min selectors) ⍊ detail: (dict inline (interfix ifx_string)))
-      => (row
-           (atom "(" detail: punct)
-           (row ^*args gap: xs)
-           (atom ^ifx detail: interfix)
-           (row ^*selectors gap: xs)
-           (atom ")" detail: punct))
-
-    ;; (head
-    ;;   1
-    ;;   2
-    ;;  ⍊ x
-    ;;    y
-    ;;    z)
-    (group head_ (%plural/min args) (%flex (pairsep)) (%plural/min selectors) ⍊ detail: (dict multiline (interfix ifx_string)))
-      => (row
-           (atom "(" detail: punct)
-           (col
-             ^head
-             (indent (col ^*args))
-             (row
+;;| This module is the pretty printer. It is responsible for pretty printing
+;;| the circuit. Its input is @repr, and its output is @pretty. It consumes
+;;| @repr and writes over @pretty.
+(section "Pretty printer"
+  (module {:@repr, :@pretty}
+    (cell @repr)
+    (cell @repr-version)
+
+    (rewriter ((@repr @repr-version) -> chainR - @pretty)
+      (step (exhR (descR rulesetR passable: [passable pattern_]))
+        (passable [parent _*])
+        (passable [group _*])
+        (passable [inline _])
+
+        ;; Recognize terms.
+        (term term_symbol) => (atom ^\term detail: symbol)
+        (term term_string) => (atom ^\term detail: string)
+        (term term_boolean) => (atom ^\term detail: boolean)
+        (term term_number) => (atom ^\term detail: number)
+        (term term_blob) => (atom ^\term detail: blob)
+
+        (term ())
+          => (atom "()" detail: punct)
+
+        ;; (edge x) -> @x
+        (term (%'edge name_)) => (atom ^"@⸢name⸣" detail: edge)
+
+        ;; (%let x 100) -> x←100
+        (term (%'%let capture_symbol successor_))
+          => (group detail: row
+               (term ^capture)
+               (atom "←" detail: punct)
+               (term ^successor))
+
+        ;; (%let x _number) -> ±x
+        (term (%'%let capture_symbol %'_number))
+          => (group detail: row
+               (atom "±")
+               (term ^capture))
+
+        ;; (^ (+ 1 2)) -> ^(+ 1 2)
+        (term (^ expr_))
+          => (group detail: row
+               (atom "^") (term ^expr))
+
+        ;; Example: (%slot x) -> `x
+        (term (%'%slot name_symbol))
+          => (group detail: row
+               (atom "`" detail: punct) (term ^name))
+
+        ;; Editor: no selection.
+        (term (l_string I° r_string ⍊ -anchor))
+          => (atom ^(~ l r) detail: (Editor ^(charcount l) 0))
+
+        ;; Editor: selection.
+        (term (l_string I° r_string ⍊ ±anchor))
+          => (^let span: (- (charcount l) anchor)
+               (atom ^(~ l r) detail: (Editor ^anchor ^span)))
+
+        ;; Editor: compose.
+        (term [l_string (I° m_string) r_string])
+          => (atom ^(~ l m r) detail: (Editor ^(charcount l) ^(charcount m) ^(charcount l m)))
+
+        ;; Descend into dictionaries.
+        (term D←(items_* ¦ pairs_))
+          => (group detail: dict
+               (shape ^D)
+               (^each (items as item_) (term ^item))
+               (pairsep)
+               (^each (pairs pair as (key_ value_))
+                 (pair ^key ^value)))
+
+        ;; (%item a b c) -> ⟨a b c⟩
+        (term (%'%item args_*))
+          => (group detail: dict lbr: "⟨" rbr: "⟩"
+               generic ;; shape
+               (^each (args as arg_)
+                 (term ^arg)))
+
+        ;; (%leaf a b c order: bfs self: true) -> ⟪a b c⟫
+        (term (%'%leaf args_* order: bfs self: true))
+          => (group detail: dict lbr: "⟪" rbr: "⟫"
+               generic ;; shape
+               (^each (args as arg_)
+                 (term ^arg)))
+
+        ;; (%partition (a b c) _) -> [a b c]
+        (term (%'%partition args←(_*) %'_))
+          => (group detail: dict lbr: "[" rbr: "]"
+               generic ;; shape
+               (^each (args as arg_)
+                 (term ^arg)))
+
+        ;; (%layer _ {x: 100, y: 200}) -> {¦ x: 100 y: 200}
+        (term (%'%layer %'_ side_dict))
+          => (group detail: dict lbr: "{¦ " rbr: "}"
+               generic ;; shape
+               (^each (side entry as (key_ value_))
+                 (selector ^key ^value)))
+
+        ;; (+ a b c ⍊ -d)
+        (term (%'%partition itemside←(_*) (%'%layer %'_ pairside_dict)))
+          => (group detail: dict
+               (interfix "⍊")
+               (^each (itemside as item_)
+                 (term ^item))
+               (pairsep)
+               (^each (pairside entry as (key_ value_))
+                 (selector ^key ^value)))
+
+        ;; (rule x_ 100) -> x_ => 100
+        (term (rule pattern_ body_ ¦ doc_: (%optional () (_string*))))
+          => (group detail: (rule ^:doc)
+               (term ^pattern)
+               ;; NOTE: We make the infix heavy to make sure only very small rules are printed
+               ;; inline. Most rules should be printed multiline because they are very dense --
+               ;; even if, in terms of characters, thay are not very long.
+               (atom "=>" detail: punct size: 32)
+               (term ^body))
+
+        (term (backmap pattern_ backspec_ ¦ doc_: (%optional () (_string*))))
+          => (group detail: (rule ^:doc)
+               (term ^pattern)
+               ;; Ditto
+               (atom "<>" detail: punct size: 32)
+               (term ^backspec))
+
+        ;; {¦ active: active←true} -> {¦ active_: true}
+        (selector key_symbol (%'%let key_ value_))
+          => (group detail: row
+               (atom ^\key detail: key form: inline)
+               (atom "_:" detail: (pair colon))
+               (term ^value))
+
+        ;; {¦ msg: msg_} -> {¦ msg_}
+        ;; {¦ msg: msg_string} -> {¦ msg_string}
+        (selector key_symbol (%symbol blank key_ type_))
+          => (group detail: row
+               (atom ^\key detail: key)
+               (atom ^\type))
+
+        ;; {¦ age: (%let age _number)} -> {¦ ±age}
+        (selector key_symbol (%'%let key_ %'_number))
+          => (group detail: row
+               (atom "±")
+               (atom ^\key detail: key))
+
+        ;; {¦ active: _} -> {¦ active}
+        (selector key_symbol %'_)
+          => (atom ^\key detail: key)
+
+        ;; {¦ ⏏x: 100⏏}
+        (selector key_ value_)
+          => (pair ^key ^value)
+
+        ;; Example: x: (%- _) -> -x
+        (selector key_symbol %'(%- _))
+          => (group detail: row
+               (atom "-")
+               (atom ^\key detail: key))
+
+        ;; hover: (%- _ hover) -> -hover_
+        (selector key_symbol (%'%- %'_ key_))
+          => (group detail: row
+               (atom "-")
+               (atom ^\key detail: key)
+               (atom "_" detail: punct))
+
+        ;; status: (%- (%never) status) -> ⋮status
+        (selector key_symbol (%'%- %'(%never) key_))
+          => (group detail: row
+               (atom "⋮" detail: punct)
+               (atom ^\key detail: key))
+
+        ;; title: (%optional "Untitled" title_string) -> title⋮ "Untitled"
+        (selector key_symbol (%'%optional value←(%pipe type T_) (%symbol blank key_ T_)))
+          => (group detail: row
+               (atom ^\key detail: key)
+               (atom "⋮" detail: (pair colon))
+               (term ^value))
+
+        ;; title: (%optional "Untitled" title_) -> title_⋮ "Untitled"
+        (selector key_symbol (%'%optional value_ (%symbol blank key_ %'_)))
+          => (group detail: row
+               (atom ^\key detail: key)
+               (atom "_⋮" detail: (pair colon))
+               (term ^value))
+
+        ;; hover: (%optional false hover←false) -> hover_: (%optional false false)
+        (selector key_symbol (%'%optional default_ (%'%let key_ value_)))
+          => (group detail: row
+               (atom ^\key detail: key)
+               (atom "_:" detail: (pair colon))
+               (term (%optional ^default ^value)))
+
+        ;; "hello world": "hello world" -> :"hello world"
+        (pair key_ key_)
+          => (group detail: row
+               (atom ":" detail: punct)
+               (inline (term ^key)))
+
+        ;; x: @x -> @:x
+        (pair key_symbol (%'edge key_))
+          => (group detail: row
+               (atom ^"@:⸢key⸣" detail: edge))
+
+        ;; Example: x: 100
+        (pair key_symbol value_)
+          => (group detail: pair
+               (atom ^\key detail: key form: inline)
+               (term ^value))
+
+        ;; Example: "hello world": 100
+        (pair key_ value_)
+          => (group detail: pair
+               (inline (term ^key)) (term ^value))
+
+        [inert term_] => (term ^term)
+
+        ;; Recognize comment nodes (which also have the syntax `;;| ...`).
+        [inert (comment content_string)]
+          => (atom ^content detail: comment form: multiline)
+
+        [gnd term_] => (term ^term)
+
+        ;; Recognize the toplevel parent.
+        (parent children_* ⍊ addr: () reference: (_* ¦ pairs_))
+          => (group detail: col
+               (^each (pairs pair as (key_ value_))
+                 (group (term ^key) (term ^value) detail: pair))
+               (^each (children as child_)
+                 ^child))
+
+        ;; Recognize all other parents.
+        (parent children_* ⍊ reference_: (_* ¦ pairs_))
+          => (group detail: dict form: multiline
+               (shape ^reference)
+               (^each (children as child_)
+                 ^child)
+               (pairsep)
+               (^each (reference pair as (key_ value_))
+                 (pair ^key ^value)))
+
+        ;; Section widget (closed).
+        (gnd (section title_string _*) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (section ^addr) icon: "chevron_right" center: true))
+               (atom ^title detail: section))
+
+        ;; Section widget (open).
+        (parent _ _ children_* ⍊ addr_ reference_: (section title_string _* ¦ () open))
+          => (group detail: col form: multiline
+               (group detail: row
+                 (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
+                 (atom ^title detail: section))
+               ^*children)
+
+        ;; Slot widget (closed).
+        (gnd (slot call_ _) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (slot ^addr) icon: "chevron_right" center: true))
+               (inline (term ^call)))
+
+        ;; Slot widget (open).
+        (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ () open))
+          => (group detail: col form: multiline
+               (group detail: row
+                 (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
+                 (inline (term ^call)))
+               (group detail: interior
+                 ^child))
+
+        ;; Backsys or rewriter widget (open).
+        (gnd node←(⸨backsys,rewriter⸩ _* ¦ () open) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (backsys ^addr) icon: "expand_more"))
+               (term ^(itemspart node)))
+
+        ;; Backsys or rewriter widget with explicit edges (closed).
+        (gnd reference←(⸨backsys,rewriter⸩ header_dict _*) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+               (inline
+                 (group detail: dict
+                   generic
+                   (term ⸨backsys,rewriter⸩)
+                   (term ^header)
+                   (atom "…" detail: punct))))
+
+        ;; Backsys or rewriter with inferred edges widget (closed).
+        (gnd reference←(⸨backsys,rewriter⸩ [(%any rule backmap) _ _] _*) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+               (inline
+                 (group detail: dict
+                   generic
+                   (term ⸨backsys,rewriter⸩)
+                   (atom "…" detail: punct))))
+
+        ;; Supervisor widget (open).
+        (parent children_* ⍊ addr_ reference: (supervisor _* ¦ () open) -editing)
+          => (group detail: row
+               (atom "" detail: (expander (supervisor ^addr) icon: "expand_more"))
+               (group detail: dict form: multiline
+                 block
+                 ^*children))
+
+        ;; Supervisor widget (closed).
+        (gnd (supervisor spec_ _*) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (supervisor ^addr) icon: "chevron_right"))
+               (inline
+                 (group detail: dict
+                   generic
+                   (term supervisor)
+                   (term ^spec)
+                   (atom "…" detail: punct))))
+
+        ;; Device widget (open).
+        (parent children_* ⍊ addr_ reference: (device _* ¦ () open) -editing)
+          => (group detail: row
+               (atom "" detail: (expander (device ^addr) icon: "expand_more"))
+               (group detail: dict form: multiline
+                 call
+                 ^*children))
+
+        ;; Device widget (closed).
+        (gnd (device _*) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
+               (inline
+                 (group detail: dict
+                   generic
+                   (term device)
+                   (atom "…" detail: punct))))
+
+        ;; Rule widget (open)
+        (parent _ pattern_ body_ ⍊ addr_ reference: (rule _ _ ⍊ doc_: (%optional () (_string*))) -editing)
+          => (group detail: row
+               (atom "" detail: (expander (device ^addr) icon: "expand_more"))
+               (group detail: (rule ^:doc)
+                  ^pattern
+                  (atom "=>" detail: punct size: 32)
+                  ^body))
+
+        ;; Rule widget (closed)
+        (gnd (rule pattern_ _ ⍊ doc_: (%optional () (_string*))) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
+               (group detail: (rule ^:doc)
+                 (term ^pattern)
+                 (atom "=>" detail: punct size: 32)
+                 (atom "…" detail: punct)))
+
+        ;; Dictionary shape recognition rules.
+
+        ;; (1
+        ;;  2
+        ;;  3)
+        (shape _) => generic
+
+        ;; (head
+        ;;   1
+        ;;   2
+        ;;   3)
+        (shape (_symbol _+)) => call
+
+        ;; Exceptions to the rule above.
+        (shape ((%any ^match ^case ^when) _ _+))
+          => block
+
+        ;; (head (1 2 3)
+        ;;   a
+        ;;   b
+        ;;   c)
+        (shape (_symbol _dict _+))
+          => block
+
+        ;; Exceptions to the rule above.
+        (shape [(%any backsys rewriter) [(%any rule backmap) _ _] _*])
+          => node
+        (shape [(%any group box window section stage device figure %all) _+])
+          => node
+
+        ;; (head x: 100
+        ;;       y: 200
+        ;;   1
+        ;;   2)
+        (shape (_symbol _+ ¦ (%not ())))
+          => node
+
+        ;; {x: 100, y: 200}
+        ;; {x: 100,
+        ;;  y: 200}
+        (shape (¦ (%not ())))
+          => pairsonly)
+
+      ;; Assign `form` locally based on shapes.
+      (step (waveR rulesetR cues: (dict))
+        ;; Forms are always always multiline.
+        (figure _* ⍊ -form_)
+          <> {form: multiline}
+
+        ;; Force dicts with these shapes to be multiline (but their children
+        ;; can be of any form).
+        (group node _* ⍊ detail: dict -form_)
+          <> {form: multiline})
+
+      ;; Propagate `inline` down.
+      (step (exhR (descR rulesetR cues: (inline)))
+        node←(inline child←{¦ ⋮form})
+          <> {node: ^(up child), form: (forced inline)}
+
+        (group …⟨{¦ ⋮form}⟩… ⍊ form: formp←(forced inline))
+          <> {form: ^formp, formp: inline}
+
+        (atom _ ⍊ form_: (forced inline))
+          <> {form: inline})
+
+      ;; Propagate form up the tree when no form is set.
+      (step (ascR (rulesetR exh: true))
+        ;; An atom's size is the size of its string.
+        (atom id_string ⍊ -size_)
+          <> {size: ^(charcount id)}
+
+        ;; An atom is multiline if its size passes a threshold.
+        (atom _ ⍊ -form_ size: (%number _ < 60))
+          <> {form: inline}
+        (atom _ ⍊ -form_ size)
+          <> {form: multiline}
+
+        ;; A group is multiline if any of its children is multiline.
+        (group …⟨{¦ form: multiline}⟩… ⍊ -form_)
+          <> {form: multiline}
+
+        ;; A group's size is the sum of sizes of its children (i.e. inline size).
+        (group children_* ⍊ -sizes_)
+          <> {sizes: ((^each (children as {¦ ±size}) ^size))}
+        (group _* ⍊ sizes_: (_*) -size_)
+          <> {(sizes): (), size: ^(sum sizes)}
+
+        ;; A group is multiline if its size passes a threshold.
+        (group _* ⍊ size: (%number _ < 60) -form_)
+          <> {form: inline}
+        (group _* ⍊ size -form_)
+          <> {form: multiline})
+
+      ;; Elaborate.
+      (step (exhR (descR rulesetR))
+        (group shape←(%any call node block) _* ⍊ detail_: dict form_: multiline)
+          <> {(shape): (), detail: (dict ^shape), (form): ()}
+
+        (group shape←pairsonly _* ⍊ detail_: dict form_)
+          <> {(shape): (), detail: (dict ^form pairsonly), (form): ()}
+
+        (group shape←(interfix _string) _* ⍊ detail_: dict form_)
+          <> {(shape): (), detail: (dict ^form ^shape), (form): ()}
+
+        (group shape_ _* ⍊ detail_: dict form_)
+          <> {(shape): (), detail: (dict ^form), (form): ()}
+
+        (group _* ⍊ detail: [rule `>form] form_)
+          <> {>form: ^form, (form): ()}
+
+        (group _* ⍊ detail_: pair form_)
+          <> {detail: (pair ^form), (form): ()})
+
+      ;; Render
+      (step (ascR rulesetR)
+        ;; Utility
+        (group members_* ⍊ detail: row) => (row ^*members)
+        (group members_* ⍊ detail: col) => (col ^*members)
+
+        ;; ("a" "b" "c")
+        ;; ("a" "b" "c" x: 100 y: 200)
+        (group members_* ⍊ detail: (dict inline) lbr⋮ "(" rbr⋮ ")")
+          => (row
+               (atom ^lbr detail: punct)
+               (row ^*members gap: xs)
+               (atom ^rbr detail: punct))
+
+        ;; ("a"
+        ;;  "b"
+        ;;  "c")
+        (group members_* ⍊ detail: (dict multiline) lbr⋮ "(" rbr⋮ ")")
+          => (row
+               (atom ^lbr detail: punct)
+               (cat
+                 (col ^*members)
+                 (atom ^rbr detail: punct)))
+
+        ;; {x: 100, y: 200}
+        (group members_* tail_ ⍊ detail: (dict inline pairsonly))
+          => (row
+               (atom "{" detail: punct)
+               (row gap: xs
+                 (^each (members as member_)
+                   (cat ^member (atom "," detail: punct)))
+                 ^tail)
+               (atom "}" detail: punct))
+
+        ;; {x: 100,
+        ;;  y: 200}
+        (group members_* tail_ ⍊ detail: (dict multiline pairsonly))
+          => (row
+               (atom "{" detail: punct)
+               (cat
+                 (col
+                   (^each (members as member_)
+                     (cat ^member (atom "," detail: punct)))
+                   ^tail)
+                 (atom "}" detail: punct)))
+
+        ;; (+ 1 2 ⍊ x y z)
+        (group (%plural/min args) (%flex (pairsep)) (%plural/min selectors) ⍊ detail: (dict inline (interfix ifx_string)))
+          => (row
+               (atom "(" detail: punct)
+               (row ^*args gap: xs)
+               (atom ^ifx detail: interfix)
+               (row ^*selectors gap: xs)
+               (atom ")" detail: punct))
+
+        ;; (head
+        ;;   1
+        ;;   2
+        ;;  ⍊ x
+        ;;    y
+        ;;    z)
+        (group head_ (%plural/min args) (%flex (pairsep)) (%plural/min selectors) ⍊ detail: (dict multiline (interfix ifx_string)))
+          => (row
+               (atom "(" detail: punct)
+               (col
+                 ^head
+                 (indent (col ^*args))
+                 (row
+                   (atom ^ifx detail: interfix)
+                   (cat
+                     (col ^*selectors)
+                     (atom ")" detail: punct)))))
+
+        ;; Edge case:
+        ;; (⍊ x
+        ;;    y
+        ;;    z)
+        (group (pairsep) selectors_* ⍊ detail: (dict multiline (interfix ifx_string)))
+          => (row
+               (atom "(" detail: punct)
                (atom ^ifx detail: interfix)
                (cat
                  (col ^*selectors)
-                 (atom ")" detail: punct)))))
+                 (atom ")" detail: punct)))
 
-    ;; Edge case:
-    ;; (⍊ x
-    ;;    y
-    ;;    z)
-    (group (pairsep) selectors_* ⍊ detail: (dict multiline (interfix ifx_string)))
-      => (row
-           (atom "(" detail: punct)
-           (atom ^ifx detail: interfix)
-           (cat
-             (col ^*selectors)
-             (atom ")" detail: punct)))
+        ;; (head
+        ;;   1
+        ;;   2
+        ;;   3)
+        (group head_ args_* ⍊ detail: (dict call))
+          => (col
+               (row (atom "(" detail: punct) ^head)
+               (indent
+                 (cat
+                   (col ^*args)
+                   (atom ")" detail: punct))))
 
-    ;; (head
-    ;;   1
-    ;;   2
-    ;;   3)
-    (group head_ args_* ⍊ detail: (dict call))
-      => (col
-           (row (atom "(" detail: punct) ^head)
-           (indent
-             (cat
-               (col ^*args)
-               (atom ")" detail: punct))))
+        ;; (head (1 2 3)
+        ;;   a
+        ;;   b
+        ;;   c)
+        (group head_ spec_ block_* ⍊ detail: (dict block))
+          => (col
+               (row
+                 (atom "(" detail: punct)
+                 (row ^head ^spec gap: xs))
+               (indent
+                 (cat
+                   (col ^*block)
+                   (atom ")" detail: punct))))
 
-    ;; (head (1 2 3)
-    ;;   a
-    ;;   b
-    ;;   c)
-    (group head_ spec_ block_* ⍊ detail: (dict block))
-      => (col
-           (row
-             (atom "(" detail: punct)
-             (row ^head ^spec gap: xs))
-           (indent
-             (cat
-               (col ^*block)
-               (atom ")" detail: punct))))
+        ;; (head x: 100
+        ;;       y: 200
+        ;;   1
+        ;;   2)
+        (group head_ (%plural/min block) (%flex (pairsep)) (%plural/min pairs) ⍊ detail: (dict node))
+          => (col
+               (row
+                 (atom "(" detail: punct)
+                 (row gap: xs
+                   ^head
+                   (col ^*pairs)))
+               (indent
+                 (cat
+                   (col ^*block)
+                   (atom ")" detail: punct))))
 
-    ;; (head x: 100
-    ;;       y: 200
-    ;;   1
-    ;;   2)
-    (group head_ (%plural/min block) (%flex (pairsep)) (%plural/min pairs) ⍊ detail: (dict node))
-      => (col
-           (row
-             (atom "(" detail: punct)
-             (row gap: xs
-               ^head
-               (col ^*pairs)))
-           (indent
-             (cat
-               (col ^*block)
-               (atom ")" detail: punct))))
+        ;; Fallback (e.g. detail: (dict node) with no pairs)
+        (group members_* ⍊ detail_: (dict node))
+          <> {detail: (dict call)}
 
-    ;; Fallback (e.g. detail: (dict node) with no pairs)
-    (group members_* ⍊ detail_: (dict node))
-      <> {detail: (dict call)}
+        ;; ;; Line 0
+        ;; ;; Line 1
+        ;; x => 100
+        ;; x <> {y: 100}
+        (group members_* ⍊ detail: (rule inline ⍊ doc_: (_*)))
+          => (col
+               (^each (doc as line_string)
+                 (atom ^line detail: doc-line))
+               (row ^*members gap: xs))
 
-    ;; ;; Line 0
-    ;; ;; Line 1
-    ;; x => 100
-    ;; x <> {y: 100}
-    (group members_* ⍊ detail: (rule inline ⍊ doc_: (_*)))
-      => (col
-           (^each (doc as line_string)
-             (atom ^line detail: doc-line))
-           (row ^*members gap: xs))
+        ;; ;; Line 1
+        ;; ;; Line 2
+        ;; ;; Line 3
+        ;; x
+        ;;   => 100
+        (group pattern_ infix_ body_ ⍊ detail: (rule multiline ⍊ doc_: (_*)))
+          => (col
+               (^each (doc as line_string)
+                 (atom ^line detail: doc-line))
+               (col ^pattern
+                 (indent
+                   (row ^infix ^body gap: xs))))
 
-    ;; ;; Line 1
-    ;; ;; Line 2
-    ;; ;; Line 3
-    ;; x
-    ;;   => 100
-    (group pattern_ infix_ body_ ⍊ detail: (rule multiline ⍊ doc_: (_*)))
-      => (col
-           (^each (doc as line_string)
-             (atom ^line detail: doc-line))
-           (col ^pattern
-             (indent
-               (row ^infix ^body gap: xs))))
+        ;; x: 100
+        (group key_ value_ ⍊ detail: (pair inline))
+          => (row ^key (atom ":" detail: (pair colon)) ^value)
 
-    ;; x: 100
-    (group key_ value_ ⍊ detail: (pair inline))
-      => (row ^key (atom ":" detail: (pair colon)) ^value)
+        ;; x:
+        ;;   100
+        (group key_ value_ ⍊ detail: (pair multiline))
+          => (col
+               (row ^key (atom ":" detail: punct))
+               (indent ^value))
 
-    ;; x:
-    ;;   100
-    (group key_ value_ ⍊ detail: (pair multiline))
-      => (col
-           (row ^key (atom ":" detail: punct))
-           (indent ^value))
+        (group child_ ⍊ detail: interior)
+          => (interior ^child)
+      )
 
-    (group child_ ⍊ detail: interior)
-      => (interior ^child)
-  )
+      ;; Remove `pairsep`.
+      (step (ascR rulesetR cues: (pairsep))
+        (pairsep) => (^splice))
 
-  ;; Remove `pairsep`.
-  (step (ascR rulesetR cues: (pairsep))
-    (pairsep) => (^splice))
+      ;; Remove `cat` nodes by evaluating them.
+      (step (exhR (descR rulesetR))
+        ;; Let `cat`s "fall down" rows and cols.
+        node←(cat l←[(%any row col) _* tail_] r_)
+          <> {node: ^(up l), tail: (cat ^tail ^r)}
 
-  ;; Remove `cat` nodes by evaluating them.
-  (step (exhR (descR rulesetR))
-    ;; Let `cat`s "fall down" rows and cols.
-    node←(cat l←[(%any row col) _* tail_] r_)
-      <> {node: ^(up l), tail: (cat ^tail ^r)}
+        ;; Let `cat`s "fall down" indents.
+        node←(cat l←[indent child_] r_)
+          <> {node: ^(up l), child: (cat ^child ^r)}
 
-    ;; Let `cat`s "fall down" indents.
-    node←(cat l←[indent child_] r_)
-      <> {node: ^(up l), child: (cat ^child ^r)}
+        (head←cat [interior _] r_)
+          <> {head: row, r: (bottom ^r)}
 
-    (head←cat [interior _] r_)
-      <> {head: row, r: (bottom ^r)}
+        ;; A cat of atoms with the same detail is a string concat.
+        (cat (atom l_string ¦ () detail_) (atom r_string ¦ () detail_))
+          => (atom ^(~ l r) ^:detail)
 
-    ;; A cat of atoms with the same detail is a string concat.
-    (cat (atom l_string ¦ () detail_) (atom r_string ¦ () detail_))
-      => (atom ^(~ l r) ^:detail)
+        ;; A cat of atoms with different details or with additional pairs will lead
+        ;; to loss of information if we were to concat strings. So we have to use
+        ;; `row` instead to achieve visual concat.
+        (head←cat [atom _string] [atom _string])
+          <> {head: row}
 
-    ;; A cat of atoms with different details or with additional pairs will lead
-    ;; to loss of information if we were to concat strings. So we have to use
-    ;; `row` instead to achieve visual concat.
-    (head←cat [atom _string] [atom _string])
-      <> {head: row}
+        ;; Simplify col and row.
+        (col member_ ¦ (%keypool gap)) => ^member
+        (row member_ ¦ (%keypool gap)) => ^member)
 
-    ;; Simplify col and row.
-    (col member_ ¦ (%keypool gap)) => ^member
-    (row member_ ¦ (%keypool gap)) => ^member)
+      ;; Format.
+      (step (ascR rulesetR)
+        ;; Format atoms of all sorts. Provide a fallback format.
+        (atom id_string ⍊ detail: number) => (p ^id style: "text-theme-number")
+        (atom id_string ⍊ detail: boolean) => (p ^id style: "text-theme-boolean")
+        (atom id_string ⍊ detail: string) => (p ^id style: "text-theme-string clamp max-w-xs")
+        (atom id_string ⍊ detail: blob) => (p ^id style: "text-theme-blob")
+        (atom id_string ⍊ detail: edge) => (p ^id style: "text-theme-edge")
+        (atom id_string ⍊ detail: punct) => (p ^id style: "text-theme-subtle")
+        (atom id_string ⍊ detail: key) => (p ^id style: "text-theme-key")
+        (atom id_string ⍊ detail: (pair colon)) => (p ^id style: "text-theme-subtle mr-1")
+        (atom id_string ⍊ detail: interfix) => (p ^id style: "text-theme-subtle mx-1")
+        [atom id_string] => (p ^id style: "text-theme-text")
 
-  ;; Format.
-  (step (ascR rulesetR)
-    ;; Format atoms of all sorts. Provide a fallback format.
-    (atom id_string ⍊ detail: number) => (p ^id style: "text-theme-number")
-    (atom id_string ⍊ detail: boolean) => (p ^id style: "text-theme-boolean")
-    (atom id_string ⍊ detail: string) => (p ^id style: "text-theme-string clamp max-w-xs")
-    (atom id_string ⍊ detail: blob) => (p ^id style: "text-theme-blob")
-    (atom id_string ⍊ detail: edge) => (p ^id style: "text-theme-edge")
-    (atom id_string ⍊ detail: punct) => (p ^id style: "text-theme-subtle")
-    (atom id_string ⍊ detail: key) => (p ^id style: "text-theme-key")
-    (atom id_string ⍊ detail: (pair colon)) => (p ^id style: "text-theme-subtle mr-1")
-    (atom id_string ⍊ detail: interfix) => (p ^id style: "text-theme-subtle mx-1")
-    [atom id_string] => (p ^id style: "text-theme-text")
+        ;; Format the editor.
+        (atom content_string ⍊ detail: (Editor ±anchor ±span))
+          => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
+                          bg-theme-surface in-focused:bg-theme-overlay clamp max-w-5xs max-h-5xs"
+               (p style: "px-3/2 content sel sel-aim sel-clearance-1 beam-thick sel-theme-decor-med \
+                          in-focused:sel-theme-editor-selection-bg in-editor-hidden:sel-theme-decor-high \
+                          sel-text-theme-text in-focused:sel-text-theme-editor-selection-fg \
+                          text-theme-subtle in-focused:text-theme-text"
+                  selection-anchor: ^anchor
+                  selection-span: ^span
+                 ^content))
 
-    ;; Format the editor.
-    (atom content_string ⍊ detail: (Editor ±anchor ±span))
-      => (box style: "content content-clip content-aim-through rounded-sm bg-min-none \
-                      bg-theme-surface in-focused:bg-theme-overlay clamp max-w-5xs max-h-5xs"
-           (p style: "px-3/2 content sel sel-aim sel-clearance-1 beam-thick sel-theme-decor-med \
-                      in-focused:sel-theme-editor-selection-bg in-editor-hidden:sel-theme-decor-high \
-                      sel-text-theme-text in-focused:sel-text-theme-editor-selection-fg \
-                      text-theme-subtle in-focused:text-theme-text"
-              selection-anchor: ^anchor
-              selection-span: ^span
-             ^content))
+        ;; Format the editor (compose mode).
+        (atom content_string ⍊ detail: (Editor ±anchor ±span ±beam))
+          => (box style: "content content-clip content-aim-through rounded-sm bg-min-none text-theme-muted \
+                          in-focused:bg-theme-overlay clamp max-w-5xs max-h-5xs"
+               (p style: "px-3/2 content sel sel-theme-overlay sel-text-theme-subtle in-focused:sel-text-theme-text \
+                          in-focused:sel-theme-decor-med x-sel-aim x-sel-clearance-1 x-beam-thick \
+                          x-sel-theme-muted in-focused:x-sel-theme-editor-selection-fg \
+                          in-focused:x-sel-theme-editor-selection-bg"
+                  selection-anchor: ^anchor
+                  selection-span: ^span
+                  selections: ({selection-anchor: ^beam, selection-span: 0})
+                 ^content))
 
-    ;; Format the editor (compose mode).
-    (atom content_string ⍊ detail: (Editor ±anchor ±span ±beam))
-      => (box style: "content content-clip content-aim-through rounded-sm bg-min-none text-theme-muted \
-                      in-focused:bg-theme-overlay clamp max-w-5xs max-h-5xs"
-           (p style: "px-3/2 content sel sel-theme-overlay sel-text-theme-subtle in-focused:sel-text-theme-text \
-                      in-focused:sel-theme-decor-med x-sel-aim x-sel-clearance-1 x-beam-thick \
-                      x-sel-theme-muted in-focused:x-sel-theme-editor-selection-fg \
-                      in-focused:x-sel-theme-editor-selection-bg"
-              selection-anchor: ^anchor
-              selection-span: ^span
-              selections: ({selection-anchor: ^beam, selection-span: 0})
-             ^content))
+        ;; Format comment.
+        (atom caption_string ⍊ detail: comment)
+          => (p style: "font-sans text-xs/4 text-theme-comment clamp max-w-2xs border-l-sm \
+                        ml-1 -@first:mt-2 pl-3/2 border-theme-comment"
+               ^caption)
 
-    ;; Format comment.
-    (atom caption_string ⍊ detail: comment)
-      => (p style: "font-sans text-xs/4 text-theme-comment clamp max-w-2xs border-l-sm \
-                    ml-1 -@first:mt-2 pl-3/2 border-theme-comment"
-           ^caption)
+        ;; Format doc comment.
+        (atom caption_string ⍊ detail: doc-line)
+          => (p ^";; ⸢caption⸣" style: "text-theme-comment text-xs/4")
 
-    ;; Format doc comment.
-    (atom caption_string ⍊ detail: doc-line)
-      => (p ^";; ⸢caption⸣" style: "text-theme-comment text-xs/4")
+        ;; Format section.
+        (atom caption_string ⍊ detail: section)
+          => (p style: "font-sans pl-2 my-1 text-lg/6 text-theme-section font-medium \
+                        border-l-md border-theme-section"
+               ^caption)
 
-    ;; Format section.
-    (atom caption_string ⍊ detail: section)
-      => (p style: "font-sans pl-2 my-1 text-lg/6 text-theme-section font-medium \
-                    border-l-md border-theme-section"
-           ^caption)
+        ;; Format expander.
+        (atom _ ⍊ detail: (expander (head_ addr_) ⍊ icon_string center⋮ false))
+          => (module {:@program}
+               (cell @addr ^addr)
 
-    ;; Format expander.
-    (atom _ ⍊ detail: (expander (head_ addr_) ⍊ icon_string center⋮ false))
-      => (module {:@program}
-           (cell @addr ^addr)
+               (node @icon
+                 (box style: "membrane content-x center:center-y -center:content-y hover:cue-hover" ^:center
+                   (box style: "font-lg text-theme-subtle rounded-sm bg-transparent \
+                                in-hover:bg-theme-overlay in-hover:text-theme-text \
+                                in-hover:cursor-pointer"
+                     (icon ^icon))
+                   (node (@mouse [mousearea mouse_])
+                     (mousearea))))
 
-           (node @icon
-             (box style: "membrane content-x center:center-y -center:content-y hover:cue-hover" ^:center
-               (box style: "font-lg text-theme-subtle rounded-sm bg-transparent \
-                            in-hover:bg-theme-overlay in-hover:text-theme-text \
-                            in-hover:cursor-pointer"
-                 (icon ^icon))
-               (node (@mouse [mousearea mouse_])
-                 (mousearea))))
+               (^verbatim
+                 (backsys
+                   ;; Handle mouse hover.
+                   {¦ mouse: (mouse _) icon: {¦ -hover_}}
+                     <> {hover: true}
+                   {¦ -mouse icon: {¦ hover_}}
+                     <> {(hover): ()}
 
-           (^verbatim
-             (backsys
-               ;; Handle mouse hover.
-               {¦ mouse: (mouse _) icon: {¦ -hover_}}
-                 <> {hover: true}
-               {¦ -mouse icon: {¦ hover_}}
-                 <> {(hover): ()}
+                   ;; When they click, send a program to toggle the corresponding node open.
+                   {¦ mouse: {¦ left_} icon: {¦ hover} addr_ -program_}
+                     <> {(left): (),
+                         program:
+                           (^addr
+                            (^head _* ⍊ -open_) <> {open: true}
+                            (^head _* ⍊ open_) <> {(open): ()})})))
 
-               ;; When they click, send a program to toggle the corresponding node open.
-               {¦ mouse: {¦ left_} icon: {¦ hover} addr_ -program_}
-                 <> {(left): (),
-                     program:
-                       (^addr
-                        (^head _* ⍊ -open_) <> {open: true}
-                        (^head _* ⍊ open_) <> {(open): ()})})))
+        ;; Format figure.
+        [figure microfold_] => (visual ^microfold)
 
-    ;; Format figure.
-    [figure microfold_] => (visual ^microfold)
+        ;; Format rows.
+        (row members_*) => (group ^*members style: "flow-row")
+        (row members_* gap: xs) => (group ^*members style: "flow-row gap-3/2")
 
-    ;; Format rows.
-    (row members_*) => (group ^*members style: "flow-row")
-    (row members_* gap: xs) => (group ^*members style: "flow-row gap-3/2")
+        ;; Format columns.
+        (col members_*) => (group ^*members style: "flow-col gap-1")
 
-    ;; Format columns.
-    (col members_*) => (group ^*members style: "flow-col gap-1")
+        ;; Format indent.
+        (indent member_)
+          => (box ^member style: "ml-2 pl-2 border-l-xs border-theme-decor-low")
 
-    ;; Format indent.
-    (indent member_)
-      => (box ^member style: "ml-2 pl-2 border-l-xs border-theme-decor-low")
+        ;; Format interior.
+        (interior member_)
+          => (box ^member style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm")
 
-    ;; Format interior.
-    (interior member_)
-      => (box ^member style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm")
-
-    ;; Format bottom.
-    (bottom member_)
-      => (box ^member style: "bottom")))
+        ;; Format bottom.
+        (bottom member_)
+          => (box ^member style: "bottom")))))
 
 ;;| This module manages the @seed cell, the @seed-src cell, which is the seed
 ;;| reader, and the @seed-dst cell, which is the seed writer.
-(module {:@seed, :@seed-src, :@seed-dst}
-  (cell @seed)
-  ;(cell @seed
-    {document:
-      (;;| Try incrementing / decrementing the counter.
-       (figure
-         ;;| Here you are, inside the counter. ssuming It contains some state:
-         (cell @count 15)
-         (cell @msg)
-         ;;| ... a backsystem responsible for its behavior:
-         (backsys
-           {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
-           {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
-         ;;| ... and then there's a bunch of stuff that comprises its appearance.
-         (group style: "max-w-4xs bg-ui-surface px-5 py-3 gap-3 rounded-lg"
-           (p @count style: "text-6xl font-bold text-ui-content center")
-           (group style: "flow-row gap-3 item-fr-1"
-             ($OutlinedButton (@msg inc) "Increment")
-             ($OutlinedButton (@msg dec) "Decrement"))))
-
-       ;(figure
-         (box style: "bg-red-500 min-w-32 min-h-32")
-         (node @n
-           (mousearea)))
-       ;(reading @n)
-
-       ;(window title: "Counter" style: "backdrop-ui-base center"
-         ;;| This is an example of a comment.
-         (group style: "flow-col bg-ui-surface p-5 rounded-3xl gap-5"
-           (node @count
-             (p 0 style: "center text-6xl text-ui-content font-medium"))
-
-           (group style: "flow-wrap gap-3"
-             ($OutlinedButton (@msg (sub 1)) "Decrement")
-             ($OutlinedButton (@msg (set 0)) "Reset")
-             ($OutlinedButton (@msg (add 1)) "Increment"))
-
+(section "Seed (warning: this can be very large)"
+  (module {:@seed, :@seed-src, :@seed-dst}
+    (cell @seed)
+    ;(cell @seed
+      {document:
+        (;;| Try incrementing / decrementing the counter.
+         (figure
+           ;;| Here you are, inside the counter. ssuming It contains some state:
+           (cell @count 15)
            (cell @msg)
-
+           ;;| ... a backsystem responsible for its behavior:
            (backsys
-             {¦ msg_: (add ±n) count: [p ±count]}
-               <> {(msg): (), count: ^(+ count n)}
-             {¦ msg_: (sub ±n) count: [p ±count]}
-               <> {(msg): (), count: ^(- count n)}
-             {¦ msg_: (set ±n) count: [p ±count]}
-               <> {(msg): (), count: ^n})))
+             {¦ ±count msg_: inc} <> {count: ^(+ count 1), (msg): ()}
+             {¦ ±count msg_: dec} <> {count: ^(- count 1), (msg): ()})
+           ;;| ... and then there's a bunch of stuff that comprises its appearance.
+           (group style: "max-w-4xs bg-ui-surface px-5 py-3 gap-3 rounded-lg"
+             (p @count style: "text-6xl font-bold text-ui-content center")
+             (group style: "flow-row gap-3 item-fr-1"
+               ($OutlinedButton (@msg inc) "Increment")
+               ($OutlinedButton (@msg dec) "Decrement"))))
 
-       ;(section "Section title"
-         (cell "hello")
-         ;(cell @ifx (+ 1 2 ⍊ x y z))
-         ;(cell @side {¦ x: 100 y_: true z a: a_ b: b_string ±c -d -e_ ⋮f g⋮ "Untitled" h_⋮ "Untitled" i: (%optional false i←false)}))
+         ;(figure
+           (box style: "bg-red-500 min-w-32 min-h-32")
+           (node @n
+             (mousearea)))
+         ;(reading @n)
 
-       ;(window
-         (p "Hello World!" style: "text-green-500" current: ^current)))})
-  ;(cell @seed {document: ( (window (p "Hello" style: "foobar") ("" (I 952222506600661151) "")) )})
-  ;(cell @seed {document: ((cell @x (%let x 100) foo: 100) (cell @y 200) (feed @x @y) (foobar) ("" (I 952222506600661151) ""))})
-  (node @seed-src)
-  (cell @seed-dst)
+         ;(window title: "Counter" style: "backdrop-ui-base center"
+           ;;| This is an example of a comment.
+           (group style: "flow-col bg-ui-surface p-5 rounded-3xl gap-5"
+             (node @count
+               (p 0 style: "center text-6xl text-ui-content font-medium"))
 
-  (cell @win)
-  (cell @wout)
-  (fs @win @wout)
-  (discard @wout)
+             (group style: "flow-wrap gap-3"
+               ($OutlinedButton (@msg (sub 1)) "Decrement")
+               ($OutlinedButton (@msg (set 0)) "Reset")
+               ($OutlinedButton (@msg (add 1)) "Increment"))
 
-  (backsys
-    ;; Initialize the seed from @seed-src. Keep the seed up-to-date (updates
-    ;; remove our `parsed` flag and trigger a reparse).
-    ;;
-    ;; Parse errors either do not initialize `seed`, or clear it.
-    {¦ seed-src: [path _ (present content_string ⍊ -parsed_)] ⋮seed}
-      <> {seed: (^when ((ml/document content) (ok document_)) {^:document}), parsed: true}
+             (cell @msg)
 
-    ;; Process writes.
-    {¦ seed-src: [path ((/ path_* name_string) reading) _] seed-dst: document_ -win_ -wout}
-      <> {(document): (), win: (overwrite file ^"/⸢(join path "/")⸣/⸢name⸣.snapshot" ^(ml/display-document document))}))
+             (backsys
+               {¦ msg_: (add ±n) count: [p ±count]}
+                 <> {(msg): (), count: ^(+ count n)}
+               {¦ msg_: (sub ±n) count: [p ±count]}
+                 <> {(msg): (), count: ^(- count n)}
+               {¦ msg_: (set ±n) count: [p ±count]}
+                 <> {(msg): (), count: ^n})))
+
+         ;(section "Section title"
+           (cell "hello")
+           ;(cell @ifx (+ 1 2 ⍊ x y z))
+           ;(cell @side {¦ x: 100 y_: true z a: a_ b: b_string ±c -d -e_ ⋮f g⋮ "Untitled" h_⋮ "Untitled" i: (%optional false i←false)}))
+
+         ;(window
+           (p "Hello World!" style: "text-green-500" current: ^current)))})
+    ;(cell @seed {document: ( (window (p "Hello" style: "foobar") ("" (I 952222506600661151) "")) )})
+    ;(cell @seed {document: ((cell @x (%let x 100) foo: 100) (cell @y 200) (feed @x @y) (foobar) ("" (I 952222506600661151) ""))})
+    (node @seed-src)
+    (cell @seed-dst)
+
+    (cell @win)
+    (cell @wout)
+    (fs @win @wout)
+    (discard @wout)
+
+    (backsys
+      ;; Initialize the seed from @seed-src. Keep the seed up-to-date (updates
+      ;; remove our `parsed` flag and trigger a reparse).
+      ;;
+      ;; Parse errors either do not initialize `seed`, or clear it.
+      {¦ seed-src: [path _ (present content_string ⍊ -parsed_)] ⋮seed}
+        <> {seed: (^when ((ml/document content) (ok document_)) {^:document}), parsed: true}
+
+      ;; Process writes.
+      {¦ seed-src: [path ((/ path_* name_string) reading) _] seed-dst: document_ -win_ -wout}
+        <> {(document): (), win: (overwrite file ^"/⸢(join path "/")⸣/⸢name⸣.snapshot" ^(ml/display-document document))})))
 
 ;;| Manages the yellow status text in the bottom bar (current status
 ;;| text is exposed at @status). New statuses should be sent to @statuses.
@@ -1892,9 +1943,10 @@
 ;;| The timeline stores the past and the future. Ideally we'd store the present
 ;;| here too, but in practice `automaton` needs to know it, so present is stored
 ;;| in @automaton's workspace.
-(cell @timeline {past: (), future: ()})
-(part (@timeline @past) {¦ past_: (_*)})
-(part (@timeline @future) {¦ future_: (_*)})
+(section "Timeline (warning: this can be very large)"
+  (cell @timeline {past: (), future: ()})
+  (part (@timeline @past) {¦ past_: (_*)})
+  (part (@timeline @future) {¦ future_: (_*)}))
 
 ;;| Provide access to the parts of interest of the @automaton, namely
 ;;| the workspace and the draft. The draft is embedded right in
@@ -1910,17 +1962,13 @@
 
 ;;| Refer to parts of the workspace we're interested in.
 
-;;| The pretty-printed representation of @present or @draft (if @present is missing).
-(cell @repr)
-(cell @repr-version)
-
 ;;| A noninteractive historical circuit under review. It normally comes from
 ;;| the @timeline, and "shadows" the draft, which continues to absorb changes
 ;;| in the meantime.
 (part (@workspace @present) (%any° {¦ present_} {¦ -present_}))
 
 ;;| Indicates that the physics engine's turn is over and we are expected
-;;| to handle the draft now; taking town @turn eventually.
+;;| to handle the draft now; taking down @turn eventually.
 (part (@workspace @turn) (%any° {¦ turn_} {¦ -turn_}))
 
 ;;| A list of zero or more window projections of @present or @draft (if @present missing).
@@ -1937,7 +1985,7 @@
 ;;| - `normal`: Normal mode lets you interact with MuSoma itself.
 ;;| - `insert`: Insert mode lets you interact with the editor in the circuit,
 ;;|   thereby, modifying and navigating the circuit, live.
-;;| - `grab: Grab mode focuses the automaton: forwards all input to it
+;;| - `grab`: Grab mode focuses the automaton: forwards all input to it
 ;;|   and so on.
 (cell @mode)
 
@@ -1961,7 +2009,8 @@
 
   ;;| Initialize the automaton. The automaton must be here under `window`,
   ;;| because conceptually they belong to the window and so it must see them.
-  (node @automaton (automaton (µ {})))
+  (section "Automaton (warning: this can be very large)"
+    (node @automaton (automaton (µ {}))))
 
   ;;| This is the only input that's used by MuSoma, for everything. Even when
   ;;| you enter grab mode, keys still reach this input -- they're just ignored

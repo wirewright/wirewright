@@ -33,6 +33,8 @@ module Ww::MxRack
   alias MediaProgramQueue = BlockingQueue(MediaProgram)
   alias MediaProgram = WindowProgram
 
+  FORCED_REMOTE_HEADS = Set{Term.of(:slot), Term.of(:rule), Term.of(:backmap)}
+
   # An implementation of a very simple three-way merge with MxRack-specific heuristics.
   #
   # EXPERIMENTAL: This is by no means a general three-way merge or diff, nor is it
@@ -69,7 +71,7 @@ module Ww::MxRack
       next unless head0.type.symbol? && head1.type.symbol?
 
       if head0 == head1
-        return remote if head0 == Term.of(:slot)
+        return remote if head0.in?(FORCED_REMOTE_HEADS)
         next
       end
 

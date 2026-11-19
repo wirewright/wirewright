@@ -13,6 +13,8 @@
 
 --- theme ;; Extensions to Microfold (ufold.codex.wwml)
 
+;; [Rose Pine Main](https://rosepinetheme.com)
+
 base: "#191724"
 surface: "#1f1d2e"
 overlay: "#26233a"
