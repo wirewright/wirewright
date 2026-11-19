@@ -49,6 +49,12 @@ The big disclaimer is that Wirewright is still deeply experimental (it isn't eve
 
 Like in Blender you can have one or more projections of the same cube (say), in Wirewright, you can have one or more projections of the same *circuit*. In most screenshots and videos below, you'll see two projections of the same circuit: on the left is the *visual* projection (a window and so on), and on the right is a pretty-printed term. What I want to say is, both are effectively *views* of the same thing (and let me not digress on what that thing is!).
 
+### MuSoma in MuSoma
+
+One of peculiarities of having a self-hosted implementation of MuSoma (NOTE: it is still in progress) is that we can open and edit and see, live, how an instance of MuSoma runs & works inside another instance of MuSoma.
+
+<img width="1920" height="1054" alt="MuSoma open in MuSoma, inner MuSoma shows the calculator example" src="https://github.com/user-attachments/assets/fae71e58-8443-49b4-93e3-e2f8a52c0b5a" />
+
 ### Todo list
 
 This is an example of a basic CRUD TODO app. It also supports search and filtering. The whole app spans about 250 lines of code,
