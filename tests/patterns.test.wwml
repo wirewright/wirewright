@@ -240,6 +240,18 @@
     (= (+ a_ 100 b_ {x: 100}) {x: 100})
     (- (+ a_ 100 b_ {x: 200}) (+ 100 200 300 {x: 200}))))
 
+;; I beam ord shorthand
+(group
+  (pattern I°
+    (- I° (I _number))
+    (+ (I 100) (I 0) (I -10))
+    (- "hello" 123 I (I) (I 1 2 3) (I 10 x: 100)))
+
+  (pattern (I°)
+    (- (I°) ((I _number)))
+    (+ ((I 100)) ((I 0)) ((I -10)))
+    (- ("hello") (123) (I) ((I)) ((I 1 2 3)) ((I 10 x: 100)))))
+
 ;; %string nonempty
 (pattern (%string nonempty)
   (+ "a" "abc" "John Doe")

@@ -31,6 +31,9 @@ module Ww::M1
   NORMAL_EDGE_BLOB = Term.of(:"%edge", :_blob, depth: 1)
 
   # :nodoc:
+  SYM_IBEAM_ORD = Term[:I°]
+
+  # :nodoc:
   STRING_NONEMPTY = Term.of(:"%all", {:"%not", ""}, :_string)
 
   # :nodoc:
@@ -49,7 +52,7 @@ module Ww::M1
 
     # :ditto:
     def probably_operator?(sym : Term::Sym) : Bool
-      sym.prefixed_by?('%') || sym == SYM_EDGE
+      sym.prefixed_by?('%') || sym.in?(SYM_EDGE, SYM_IBEAM_ORD)
     end
 
     # Returns `true` if *term* is a literal term (either a non-dict literal term
@@ -1122,6 +1125,7 @@ module Ww::M1
       # %'_dict
       # %'_blob
       # (%symbol blank _ _)
+      # I°
       #
       # |@block
       # A blank matches a term of a chosen type; or any term if there is no chosen type.
@@ -1162,6 +1166,10 @@ module Ww::M1
       # (square 4)     ;; => (ok 16)
       # (square "Qux") ;; => (err "Oops. Cannot square it")
       # ```
+      #
+      # The symbol `I°` is a shorthand for an I-beam with a number blank: `(I _number)`.
+      # Think of it as an "I-beam blank". In order to match the symbol `I°` literally, use
+      # `%literal`: `(%literal I°)`, or more succinctly `%'I°`.
       matchpi %{_symbol} do
         sym = pattern.as_sym
 
@@ -1180,6 +1188,8 @@ module Ww::M1
         when SYM_BLANK_BOOLEAN then NORMAL_BLANK_BOOLEAN
         when SYM_BLANK_DICT    then NORMAL_BLANK_DICT
         when SYM_BLANK_BLOB    then NORMAL_BLANK_BLOB
+        when SYM_IBEAM_ORD
+          normalize(Π.pattern(Term.of(:I, :_number)))
         else
           continue unless blank = sym.blank?
           continue unless blank.singular?
