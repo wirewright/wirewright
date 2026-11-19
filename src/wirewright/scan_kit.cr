@@ -2,6 +2,313 @@
 module Ww::ScanKit
   extend self
 
+  # |@ scankit
+  #
+  # |@summary
+  # A small string pattern matching language designed as a companion to `parsekit`.
+  #
+  # |@block
+  # The syntax of patterns is inspired by Lua string patterns, but only in a very minor way.
+  # Reference: https://www.lua.org/pil/20.2.html.
+  #
+  # | Syntax                | Meaning                                   | Example       |
+  # | --------------------- | ----------------------------------------- | ------------- |
+  # | `a`                   | Literal character                         | `hello`       |
+  # | `%x`                  | Character category                        | `%d`          |
+  # | `%`                   | Literal percent sign                      | `%`           |
+  # | `%\|…\|`              | Category/literal sequence                 | `%\|dd-dd\|`  |
+  # | `[ ... ]`             | Character set                             | `[abc]`       |
+  # | `[a-z]`               | Character range                           | `[a-z]`       |
+  # | `[^ ... ]`            | Exclusion set                             | `[^0-9]`      |
+  # | `[positive^negative]` | Inclusion with exclusions                 | `[a-z^aeiou]` |
+  # | `[ ... ]?`            | Zero or one repetition                    | `[a-z]?`      |
+  # | `[ ... ]+`            | One or more repetitions                   | `[a-z]+`      |
+  # | `[ ... ]*`            | Zero or more repetitions                  | `[a-z]*`      |
+  # | `[ ... ]{m,n}`        | Bounded repetition                        | `[0-9]{2,4}`  |
+  # | `[ ... ]{m,}`         | Minimum repetition                        | `[0-9]{2,}`   |
+  # | `(name←...)`          | Named capture                             | `(age←[%d]+)` |
+  # | `(name)`              | Capture one arbitrary character           | `(char)`      |
+  # | `(name*)`             | Capture zero or more arbitrary characters | `(rest*)`     |
+  # | `…pattern`            | Unanchored left boundary                  | `…hello`      |
+  # | `pattern…`            | Unanchored right boundary                 | `hello…`      |
+  # | `…pattern…`           | Unanchored both boundaries                | `…hello…`     |
+  # | *Whitespace*          | One or more whitespace characters         | `hello world` |
+  #
+  # |@example
+  # ```
+  # …(date←(day←%|dd|)/(month←%|dd|)/(year←%|dddd|))…
+  # ```
+  #
+  # ... matches `"Deadline is 30/05/1999, firm"`.
+
+  # |@ scankit.category
+  #
+  # |@summary
+  # Character category.
+  #
+  # |@block
+  # Character categories are introduced using `%` followed by a category qualifier.
+  #
+  # | Syntax | Meaning                                                                               |
+  # | ------ | ------------------------------------------------------------------------------------- |
+  # | `%_`   | Matches any character.                                                                |
+  # | `%a`   | Matches an alphabetic character (uppercase or lowercase letter according to Unicode). |
+  # | `%b`   | Matches a binary digit (shorthand for `[01]`).                                        |
+  # | `%c`   | Matches a control character according to Unicode.                                     |
+  # | `%d`   | Matches a decimal digit (shorthand for `[0-9]`).                                      |
+  # | `%e`   | Matches an emoji.                                                                     |
+  # | `%g`   | Matches a grapheme.                                                                   |
+  # | `%h`   | Matches a horizontal space character according to Unicode.                            |
+  # | `%L`   | Matches an uppercase letter according to Unicode.                                     |
+  # | `%l`   | Matches a lowercase letter according to Unicode.                                      |
+  # | `%n`   | Matches a number character according to Unicode.                                      |
+  # | `%o`   | Matches an octal digit (shorthand for `[0-7]`).                                       |
+  # | `%p`   | Matches a punctuation character according to Unicode.                                 |
+  # | `%s`   | Matches a horizontal or vertical space character (shorthand for `[%h%v]`.             |
+  # | `%v`   | Matches a vertical space character according to Unicode.                              |
+  # | `%w`   | Matches a word character (shorthand for `[a-zA-Z0-9_]`).                              |
+  # | `%x`   | Matches a hex digit (shorthand for `[0-9a-fA-F]`).                                    |
+  #
+  # To match the character `%` itself, use the character set syntax: `[%]`.
+  #
+  # An important distinction is that `%s` includes both horizontal and vertical
+  # whitespace, whereas `%h` and `%v` match their respective subsets.
+  #
+  # |@example
+  # ```
+  # %x%x%x%x
+  # ```
+
+  # |@ scankit.category-sequence
+  #
+  # |@summary
+  # Category sequence.
+  #
+  # |@block
+  # Instead of writing e.g. `%d%d%d%d` you can use the category sequence notation:
+  # `%|dddd|`. Characters that are not associated with a category are matched literally.
+  #
+  # |@example
+  # ```
+  # %|dd-dd-dddd|
+  # ```
+  #
+  # ... represents a sequence equivalent to:
+  #
+  # ```
+  # %d%d-%d%d-%d%d%d%d
+  # ```
+  #
+  # This matches strings such as `25-01-2026`. `-` is matched literally because it
+  # does not correspond to any category.
+
+  # |@ scankit.charset
+  #
+  # |@summary
+  # Character set.
+  #
+  # |@block
+  # Character sets are delimited by the square brackets `[]`. Things inside
+  # a character set are called *character units*. There can be zero or more
+  # character units inside a character set. An empty character set will never
+  # match. Each character unit is allowed to contribute any number of characters
+  # to the set. This means, for instance, that overlapping character units are
+  # OK (e.g., `[a-cb-f]`)
+  #
+  # | Syntax    | Meaning                                                                                                     |
+  # | --------- | ----------------------------------------------------------------------------------------------------------- |
+  # | *c*       | Contributes one character *c*. For example: `[x]`, `[ax]`.                                                  |
+  # | *c₀*-*c₁* | Contributes characters in the range *c₀* to *c₁* according to Unicode. For example, `[a-z]`, `[a-zA-Z0-9]`. |
+  # | `%...`    | Contributes characters from a category. For example, `[%d]`, `[%L%l%d]`.                                    |
+  #
+  # Character sets have an optional "negative" part which you can use to subtract some
+  # characters from the set. The negative part starts with `^`. For example, the pattern
+  # `[a-z^aeiou]` matches a character that is in range `a-z` that is not a vowel.
+  #
+  # A negative-only character set starts with an empty positive part: `[^`. An empty
+  # positive part matches any character. The negative part then tells which characters to
+  # reject. For example, the pattern `[^a-z]` matches any character that is not in
+  # the set `a-z`.
+  #
+  # As a curiosity, the above means `[]` will never match (the positive part is empty
+  # and the negative part is absent), but `[^]` is equivalent to `%_` (the positive part
+  # is empty but the negative part is present, therefore, the base case is to match any
+  # character, and then the negative part doesn't subtract anything from that).
+  #
+  # A *quantifier* can be attached to a character set. For example, `[a-z]{0,3}`, `[0-9]*`.
+  # See also: `scankit.quantifier`
+  #
+  # |@example
+  # ```
+  # [abc]
+  # [a-z]
+  # [A-Z]
+  # [a-zA-Z]
+  # [0-9]
+  # [%d]
+  # [^0-9]
+  # ```
+
+  # |@ scankit.quantifier
+  #
+  # |@summary
+  # Character set quantifier.
+  #
+  # |@block
+  # Quantifiers apply to character sets and determine how many consecutive
+  # matching characters are consumed.
+  #
+  # | Quantifier | Meaning                                                              |
+  # | ---------- | -------------------------------------------------------------------- |
+  # | `*`        | Zero or more times (shorthand for `{0,}`).                           |
+  # | `+`        | One or more times (shorthand for `{1,}`).                            |
+  # | `{n,}`     | *n* or more times. *n* is restricted to 1-4 digits (i.e., `0-9999`). |
+  # | `{,n}`     | 0 up to *n* times. *n* is restricted to 1-4 digits.                  |
+  # | `{m,n}`    | *m* up to *n* times. Both *m* and *n* are restricted to 1-4 digits.  |
+  #
+  # **Matching is greedy.** ScanKit consumes as many consecutive matching
+  # characters as possible, up to the maximum, but no less than the minimum.
+  #
+  # Whitespace around the comma `,` in `{}` quantifiers is ignored.
+  #
+  # > [!NOTE]
+  # > You cannot use quantifiers with categories: the pattern`%d*` does not mean
+  # > what you probably think it does, and will instead match `%d` (a digit) followed
+  # > by literal `*` (asterisk). Instead, you have to remember that only character
+  # > sets accept quantifiers; so put the `%d` in a character set like so: `[%d]`;
+  # > and then attach the quantifier: `[%d]*`. To reiterate, something like `%d*%l*`
+  # > matches digit-asterisk-letter-asterisk, whereas `[%d]*[%l]*` matches zero
+  # > or more digits followed by zero or more letters. And something like `%d*%d`
+  # > matches digit-asterisk-digit.
+  #
+  # |@example
+  # ```
+  # [%d]+
+  # ```
+  #
+  # ... matches one or more decimal digits.
+  #
+  # ```
+  # [%d]{2,4}
+  # ```
+  #
+  # ... matches between two and four decimal digits.
+  #
+  # ```
+  # [%a]{3,}
+  # ```
+  #
+  # ... matches at least three alphabetic characters.
+
+  # |@ scankit.capture
+  #
+  # |@summary
+  # Named capture.
+  #
+  # |@block
+  # Named captures associate a matching substring with a symbolic name.
+  #
+  # There are several forms.
+  #
+  # | Syntax           | Description                                                               |
+  # | ---------------- | ------------------------------------------------------------------------- |
+  # | `(name←S0S1…Sn)` | Captures the substring matched by one or more scanners *S0* through *Sn*. |
+  # | `(name*)`        | Captures zero or more arbitrary characters. The same as `(name←[%_]*)`    |
+  # | `(name)`         | Captures exactly one arbitrary character. The same as `(name←%_)`         |
+  #
+  # Named captures also play the role of groups. Most often you need groups
+  # for capturing, so ScanKit does not implement groups as a separate construct
+  # (unlike regex where it's `(...)`).
+  #
+  # |@example
+  # ```
+  # (age←[%d]+)
+  # ```
+  #
+  # Grouping:
+  #
+  # ```
+  # (triple←[%d]+-[%d]+-[%d]+)
+  # ```
+  #
+  # Here, under *triple*, we capture a *group*  (a concatenation) of three
+  # scanners `[%d]+`, separated by a literal dash `-`. The equivalent regex
+  # could be `(?<triple>\d+-\d+-\d+)`.
+
+  # |@ scankit.anchor
+  #
+  # |@summary
+  # Pattern anchoring.
+  #
+  # |@block
+  # Patterns are anchored to both boundaries by default.
+  #
+  # For example, the pattern `hello` requires the entire input to match hello.
+  #
+  # The ellipsis character `…` disables anchoring at the corresponding boundary.
+  #
+  # | Pattern   | Left anchored | Right anchored |
+  # | --------- | ------------- | -------------- |
+  # | `hello`   | Yes           | Yes            |
+  # | `…hello`  | No            | Yes            |
+  # | `hello…`  | Yes           | No             |
+  # | `…hello…` | No            | No             |
+  #
+  # When left anchoring is disabled, ScanKit searches successive input positions
+  # until it finds a successful match.
+  #
+  # When right anchoring is disabled, a successful prefix match is sufficient,
+  # even if additional input remains.
+  #
+  # When both boundaries are unanchored, the pattern searches for the first
+  # successful occurrence.
+
+  # |@ scankit.whitespace
+  #
+  # |@summary
+  # Literal space in patterns.
+  #
+  # |@block
+  # For convenience, a literal space in a pattern is not interpreted as a literal
+  # space character. Instead, it is equivalent to `[%s]+`. Consequently,
+  # a pattern such as `hello world` matches `hello` followed by one or more
+  # whitespace characters, followed by `world`.
+  #
+  # Other whitespace characters (e.g. newline, tab) in the pattern are
+  # treated as ordinary literal characters.
+  #
+  # In order to match just one whitespace, use the character set syntax: `[ ]`.
+
+  # |@ scankit.escape
+  #
+  # |@summary
+  # Ways to escape special characters.
+  #
+  # |@block
+  # Most special characters can be escaped using the character set notation `[...]`.
+  # For example, to escape `%`, you can use `[%]`. Then e.g. `[%]x` will match
+  # the sequence of characters `%`, `x` literally.
+  #
+  # To escape parts of the charcater set notation itself, namely `[`, `]`, and `^`,
+  # use `%` as detailed in the table below.
+  #
+  # | Character | How to escape |
+  # | --------- | ------------- |
+  # | `[`       | `%[`          |
+  # | `]`       | `%]`          |
+  # | `^`       | `%^`          |
+  #
+  # For example, here is how the string `[a-z^%x]` can be escaped: `%[a-z^[%]x%]`.
+  # Here, `[`, `]` were replaced by `%[` and `%]`, correspondingly; and other special
+  # characters, including `%` itself, were replaced by character sets, e.g. `[%]`.
+  #
+  # Note that `^` doesn't have to be escaped outside of character sets. The only
+  # reason you might want to use `%^` is in character sets themselves, if you want
+  # to include `^` as one possible choice for the character. For example, `[a-z%^]`
+  # allows characters in the range `a-z` or the caret `^`. So, for example, `^qux` will
+  # match. On the other hand, `[\x20-\u{10FFFF}^%x%^]` matches all printable characters
+  # *excluding* hex characters `[a-fA-F0-9]` and the caret `^`.
+
   alias Scanner = Char | Category | Charset | Concat | Capture
 
   @[Flags]
@@ -320,71 +627,71 @@ module Ww::ScanKit
     category?(pattern) || category_seq?(pattern) || charset?(pattern)
   end
 
-  private def group?(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
+  private def capture?(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
     return unless pattern.starts_with?('(')
-
     pattern = pattern.rest
-    # (⏏%d%d%d)
+    # (⏏age←[%d]+)
 
-    members = Pf::Kit.stack_array(Scanner)
+    name, pattern = pattern.skip_thru("a-zA-Z-")
+    # (age⏏←[%d]+)
 
-    loop do
-      if pattern.starts_with?(')')
-        pattern = pattern.rest
-        # (%d%d%d)⏏
-        break
+    case pattern
+    when .starts_with?('←')
+      pattern = pattern.rest
+      # (age←⏏[%d]+)
+      # (age←⏏%x%d)
+
+      members = Pf::Kit.stack_array(Scanner)
+
+      loop do
+        if pattern.starts_with?(')')
+          pattern = pattern.rest
+          # (age←[%d]+)⏏
+          # (age←%x%d)⏏
+          break
+        end
+
+        return if pattern.empty? # (x←%d%d%d⏏
+
+        member, pattern = scanner(pattern)
+        members << member
+        # (age←[%d]+⏏)
+        #
+        # (age←%x⏏%d)
+        # (age←%x%d⏏)
       end
 
-      return if pattern.empty? # (%d%d%d⏏
-
-      scanner, pattern = scanner(pattern)
-      # (⏏%d%d%d)
-      # (%d⏏%d%d)
-      # (%d%d⏏%d)
-
-      members << scanner
-    end
-
-    if member = members.single?
-      return member, pattern
-    end
-
-    scanner = Concat.new(members.to_unsafe_readonly_slice!)
-    {scanner.as(Scanner), pattern}
-  end
-
-  private def capture?(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}?
-    return if pattern.empty?
-
-    if pattern.starts_with?('(')
+      if member = members.single?
+        successor = member
+      else
+        successor = Concat.new(members.to_unsafe_readonly_slice!)
+      end
+    when .starts_with?(')')
       pattern = pattern.rest
-      # (⏏age)←[%d]+
+      # (age)⏏
 
-      name, pattern = pattern.skip_thru("a-zA-Z")
-      return if name.empty?
-      # (age⏏)←[%d]+
+      successor = Charset.new(
+        min: 1u32,
+        max: 1u32,
+        positive: CharChoice.new(categories: Category::Wildcard),
+        negative: CharChoice.new,
+      )
+    when .starts_with?("*)")
+      pattern = pattern.rest.rest
+      # (rest*)⏏
 
-      return unless pattern.starts_with?(')')
-      pattern = pattern.rest
-      # (age)⏏←[%d]+
+      successor = Charset.new(
+        min: 0u32,
+        max: UInt32::MAX,
+        positive: CharChoice.new(categories: Category::Wildcard),
+        negative: CharChoice.new,
+      )
     else
-      # ⏏l←[%d]+
-      name, pattern = pattern.first_and_rest
-      return unless name.chr.in_set?("a-zA-Z")
-      # l⏏←[%d]+
+      return
     end
 
-    return unless pattern.starts_with?('←')
-    pattern = pattern.rest
-    # (age)←⏏[%d]+
-
-    return unless row = atom?(pattern) || group?(pattern)
-
-    scanner, pattern = row
-    # (age)←[%d]+⏏
-
-    scanner = Capture.new(Term::Sym.new(name.to_s), scanner)
-    {scanner.as(Scanner), pattern}
+    capture = Capture.new(Term::Sym.new(name.to_s), successor)
+    {capture.as(Scanner), pattern}
   end
 
   private def scanner(pattern : Pf::StringSeln) : {Scanner, Pf::StringSeln}

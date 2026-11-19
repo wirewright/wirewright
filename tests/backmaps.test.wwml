@@ -1275,56 +1275,56 @@
     (- "world"))
 
   ;; Replace full (empty)
-  (backmap ((%string "x←(hello)") {x: ""})
+  (backmap ((%string "(x←hello)") {x: ""})
     (= "hello" ""))
 
   ;; Replace full (smaller)
-  (backmap ((%string "x←(hello)") {x: "bye"})
+  (backmap ((%string "(x←hello)") {x: "bye"})
     (= "hello" "bye"))
 
   ;; Replace full (larger)
-  (backmap ((%string "x←(hello)") {x: "lorem ipsum"})
+  (backmap ((%string "(x←hello)") {x: "lorem ipsum"})
     (= "hello" "lorem ipsum"))
 
   ;; Replace one
-  (backmap ((%string "x←(h)ello") {x: "B"})
+  (backmap ((%string "(x←h)ello") {x: "B"})
     (= "hello" "Bello"))
 
   ;; Replace multiple
-  (backmap ((%string "a←(h)ellb←(o)") {a: "B", b: "y"})
+  (backmap ((%string "(a←h)ell(b←o)") {a: "B", b: "y"})
     (= "hello" "Belly"))
 
   ;; Replace with zero
-  (backmap ((%string "a←(h)ello") {(a): ()})
+  (backmap ((%string "(a←h)ello") {(a): ()})
     (= "hello" "ello"))
 
   ;; Replace with zero (multiple runes)
-  (backmap ((%string "a←(hel)lo") {(a): ()})
+  (backmap ((%string "(a←hel)lo") {(a): ()})
     (= "hello" "lo"))
 
   ;; Replace with zero (all)
-  (backmap ((%string "a←(hello)") {(a): ()})
+  (backmap ((%string "(a←hello)") {(a): ()})
     (= "hello" ""))
 
   ;; Replace with many
-  (backmap ((%string "a←(h)ello") {(a): ("x" "y" "z")})
+  (backmap ((%string "(a←h)ello") {(a): ("x" "y" "z")})
     (= "hello" "xyzello"))
-  (backmap ((%string "a←(h)ello") {(a): ("x" ^a "y" "z")})
+  (backmap ((%string "(a←h)ello") {(a): ("x" ^a "y" "z")})
     (= "hello" "xhyzello"))
 
   ;; Stringify
-  (backmap ((%string "a←(h)ello") {a: 123})
+  (backmap ((%string "(a←h)ello") {a: 123})
     (= "hello" "123ello"))
-  (backmap ((%string "a←(h)ello") {(a): ("x" 123 "y" {z: 45})})
+  (backmap ((%string "(a←h)ello") {(a): ("x" 123 "y" {z: 45})})
     (= "hello" "x123y{z: 45}ello"))
 
   ;; Deep replace
-  (backmap ({¦ input: (%string "a←(h)ello")} {a: "B"})
+  (backmap ({¦ input: (%string "(a←h)ello")} {a: "B"})
     (- "hello")
     (= {input: "hello"} {input: "Bello"}))
 
   ;; Surround
-  (backmap ((%string "…n←[%d]+…") {(n): ("(" ^n ")")})
+  (backmap ((%string "…(n←[%d]+)…") {(n): ("(" ^n ")")})
     (- "" "hello")
     (= "1" "(1)")
     (= "123" "(123)")
@@ -1336,39 +1336,39 @@
 
   ;; System, disjoint replace
   (backsys
-    ((%string "a←(h)ello") <> {(a): ()}
-     (%string "hellb←(o)") <> {b: "y!"})
+    ((%string "(a←h)ello") <> {(a): ()}
+     (%string "hell(b←o)") <> {b: "y!"})
     (seq "hello" "elly!"))
 
   ;; System, same range replace (no conflict)
   (backsys
-    ((%string "a←(h)ello") <> {a: "B"}
-     (%string "a←(h)ello") <> {a: "B"})
+    ((%string "(a←h)ello") <> {a: "B"}
+     (%string "(a←h)ello") <> {a: "B"})
     (seq "hello" "Bello"))
 
   ;; System, same range replace (conflict)
   (backsys
-    ((%string "a←(h)ello") <> {a: "foo"}
-     (%string "a←(h)ello") <> {a: "bar"})
+    ((%string "(a←h)ello") <> {a: "foo"}
+     (%string "(a←h)ello") <> {a: "bar"})
     (seq "hello" "barello"))
   (backsys
-    ((%string "a←(h)ello") <> {a: "bar"}
-     (%string "a←(h)ello") <> {a: "foo"})
+    ((%string "(a←h)ello") <> {a: "bar"}
+     (%string "(a←h)ello") <> {a: "foo"})
     (seq "hello" "fooello"))
 
   ;; System, overlapping range replace (conflict)
   (backsys
-    ((%string "a←(h)ello") <> {a: "foo"}
-     (%string "a←(he)llo") <> {a: "bar"})
+    ((%string "(a←h)ello") <> {a: "foo"}
+     (%string "(a←he)llo") <> {a: "bar"})
     (seq "hello" "barllo"))
   (backsys
-    ((%string "a←(he)llo") <> {a: "bar"}
-     (%string "a←(h)ello") <> {a: "foo"})
+    ((%string "(a←he)llo") <> {a: "bar"}
+     (%string "(a←h)ello") <> {a: "foo"})
     (seq "hello" "fooello"))
 
   ;; Rune nav system
   (backsys
-    ((l_string r←(%string "(x)←%_…"))
+    ((l_string r←(%string "(x)…"))
        <> {l: ^(~ l x), (x): ()})
     (seq
       ("" "Lorem ipsum dolor sit amet")
@@ -1380,7 +1380,7 @@
 
   ;; Word nav system
   (backsys
-    ((l_string r←(%string "(prefix)←[^%w%v]*(word)←[%w]*…"))
+    ((l_string r←(%string "(prefix←[^%w%v]*)(word←[%w]*)…"))
        <> {l: ^(~ l prefix word), (prefix): (), (word): ()})
     (seq
       ("" "Lorem ipsum dolor sit amet")
@@ -1398,7 +1398,7 @@
 
   ;; Line nav system (go to next line begin)
   (backsys
-    ((l_string r←(%string "(prefix)←[^%v]*(sep)←%v…"))
+    ((l_string r←(%string "(prefix←[^%v]*)(sep←%v)…"))
        <> {l: ^(~ l prefix sep), (prefix): (), (sep): ()})
 
     (seq
@@ -1420,9 +1420,9 @@
        <> {x: ("" ^x)}
      x←(l_string "")
        <> {x: ^l}
-     (_ `m r←(%string "(n)←[%d]+-(rest)←[%_]*"))
+     (_ `m r←(%string "(n←[%d]+)-(rest←[%_]*)"))
        <> {m: ^n, r: ^rest}
-     (_ `m r←(%string "(n)←[%d]+"))
+     (_ `m r←(%string "(n←[%d]+)"))
        <> {m: ^n, r: ""}
      ;; Parsing can't fail here because we know *n* is a [%d]+, which is
      ;; under all circumstances a valid ML number.
@@ -1480,7 +1480,7 @@
        <> {x: ("" ^x)}
      x←(l_string r_string)
        <> {x: ^(~ l r)}
-     (l_string (%string "(prefix)←[^%d]*(n)←[%d]+…"))
+     (l_string (%string "(prefix←[^%d]*)(n←[%d]+)…"))
        <> {l: ^(~ l prefix "(" n ")"), (prefix): (), (n): ()})
 
     (seq
@@ -1492,7 +1492,7 @@
 
   ;; Docs
   (backsys
-    ((%string "l←[%d]+-r←[%d]+")
+    ((%string "(l←[%d]+)-(r←[%d]+)")
        <> {l: ^r, r: ^l})
 
     (seq
