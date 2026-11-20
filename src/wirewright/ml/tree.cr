@@ -72,14 +72,9 @@ module Ww::ML
     defcase PairDict, pairs : Array(DictPair)
 
     alias Sigil = Edge |
-                  Up |
-                  Dn |
-                  My |
                   AlloyExpr |
                   AlloySpliceExpr |
                   Literal |
-                  Dollar |
-                  DollarOnce |
                   PatternLiteral |
                   PatternNonself |
                   PatternSlot |
@@ -88,14 +83,9 @@ module Ww::ML
                   Negative
 
     defcase Edge, arg : Expr
-    defcase Up, arg : Expr
-    defcase Dn, arg : Expr
-    defcase My, arg : Expr
     defcase AlloyExpr, arg : Expr
     defcase AlloySpliceExpr, arg : Expr
     defcase Literal, arg : Expr
-    defcase Dollar, arg : Expr
-    defcase DollarOnce, arg : Expr
     defcase Positive, arg : Expr
     defcase Negative, arg : Expr
 

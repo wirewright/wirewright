@@ -692,18 +692,18 @@
   (= ⎡◇_ => (456 ◇)⎤ ⎡dKsdJxcEcAcy_ => (456 dKsdJxcEcAcy)⎤)
   (= ⎡(foo ◇_) => ◇⎤ ⎡(foo TdMbxdoDcFbfbn_) => TdMbxdoDcFbfbn⎤)
   (= ⎡(foo ◇_: false) => {◇: true}⎤ ⎡(foo eKeFbicAfjfnaH_: false) => (eKeFbicAfjfnaH: true)⎤)
-  (= ⎡{¦ flag x_ ◇_} <> {x: $'(+ →x 1), ◇: true}⎤
-     ⎡{¦ flag x_ dzbJeZLbDdBdbp_} <> {x: $'(+ →x 1), dzbJeZLbDdBdbp: true}⎤)
+  (= ⎡{¦ flag x_ ◇_} <> {x: ($once (+ ($my x) 1)), ◇: true}⎤
+     ⎡{¦ flag x_ eDfqdXWdDxHbR_} <> {x: ($once (+ ($my x) 1)), eDfqdXWdDxHbR: true}⎤)
   (- ⎡(a ⏏◇⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤)
   (- ⎡(a ⏏◇_⏏ b c d)⎤ ⎡cannot use `◇` outside of a rule⎤))
 
 (ml
-  (doc= ⎡(foo ¦ _ v_number -▢_) <> {v: $'(+ →v 1), ▢: true}
-         (foo ¦ _ v_number -▢_) <> {v: $'(* →v 2), ▢: true}
-         (foo ¦ _ v_number -▢_) <> {v: $'(/ →v 3), ▢: true}⎤
-        ⎡(foo ¦ _ v_number -WeAbAbobYbxfadR_) <> {v: $'(+ →v 1), WeAbAbobYbxfadR: true}
-         (foo ¦ _ v_number -WeAbAbobYbxfadR_) <> {v: $'(* →v 2), WeAbAbobYbxfadR: true}
-         (foo ¦ _ v_number -WeAbAbobYbxfadR_) <> {v: $'(/ →v 3), WeAbAbobYbxfadR: true}⎤)
+  (doc= ⎡(foo ¦ _ v_number -▢_) <> {v: ($once (+ ($my v) 1)), ▢: true}
+         (foo ¦ _ v_number -▢_) <> {v: ($once (* ($my v) 2)), ▢: true}
+         (foo ¦ _ v_number -▢_) <> {v: ($once (/ ($my v) 3)), ▢: true}⎤
+        ⎡(foo ¦ _ v_number -jfdBbEbXWdNcJ_) <> {v: ($once (+ ($my v) 1)), jfdBbEbXWdNcJ: true}
+         (foo ¦ _ v_number -jfdBbEbXWdNcJ_) <> {v: ($once (* ($my v) 2)), jfdBbEbXWdNcJ: true}
+         (foo ¦ _ v_number -jfdBbEbXWdNcJ_) <> {v: ($once (/ ($my v) 3)), jfdBbEbXWdNcJ: true}⎤)
   ;; Multiple rule blocks
   (doc= ⎡(foo ◇ ▢) <> {▢: true}
          (foo ◇ bar ▢) <> {▢: true}
@@ -743,50 +743,6 @@
         y: 200
         ▢ => 100))⎤
       ([_* [xs_*]] [_* [xs_*]] [_* [xs_*]] [_* [xs_*]])))
-
-;; Backmap and rewriter circuit shorthands
-
-;; $my
-(ml
-  (= ⎡→x⎤ ⎡($my x)⎤)
-  (= ⎡→(+ 1 2)⎤ ⎡($my (+ 1 2))⎤)
-  (- ⎡→⏏⎤ ⎡unexpected end-of-input after prefix `→`⎤)
-  (- ⎡→⏏ ⏏x⎤ ⎡whitespace after prefix `→` not allowed⎤))
-
-;; $up
-(ml
-  (= ⎡↑x⎤ ⎡($up x)⎤)
-  (= ⎡↑(+ 1 2)⎤ ⎡($up (+ 1 2))⎤)
-  (- ⎡↑⏏⎤ ⎡unexpected end-of-input after prefix `↑`⎤)
-  (- ⎡↑⏏ ⏏x⎤ ⎡whitespace after prefix `↑` not allowed⎤))
-
-;; $down
-(ml
-  (= ⎡↓x⎤ ⎡($down x)⎤)
-  (= ⎡↓(+ 1 2)⎤ ⎡($down (+ 1 2))⎤)
-  (- ⎡↓⏏⎤ ⎡unexpected end-of-input after prefix `↓`⎤)
-  (- ⎡↓⏏ ⏏x⎤ ⎡whitespace after prefix `↓` not allowed⎤))
-
-;; $
-(ml
-  (+ ⎡$⎤ _symbol)
-  (+ ⎡$qux⎤ _symbol)
-  (= ⎡$$qux⎤ ⎡($ $qux)⎤)
-  (= ⎡$$$qux⎤ ⎡($ ($ $qux))⎤)
-  (= ⎡$100⎤ ⎡($ 100)⎤)
-  (= ⎡$true⎤ ⎡($ true)⎤)
-  (= ⎡$1010₂⎤ ⎡($ (digits 1 0 1 0 radix: 2))⎤)
-  (= ⎡$"hello"⎤ ⎡($ "hello")⎤)
-  (= ⎡$"foobar ⸢qux⸣ baz"⎤ ⎡($ (~ "foobar " qux " baz"))⎤)
-  (= ⎡$(+ 1 2)⎤ ⎡($ (+ 1 2))⎤)
-  (= ⎡$(+ $1 $2)⎤ ⎡($ (+ ($ 1) ($ 2)))⎤))
-
-;; $'
-(ml
-  (= ⎡$'x⎤ ⎡($once x)⎤)
-  (= ⎡$'(+ 1 2)⎤ ⎡($once (+ 1 2))⎤)
-  (- ⎡$'⏏⎤ ⎡unexpected end-of-input after prefix `$'`⎤)
-  (- ⎡$'⏏ ⏏x⎤ ⎡whitespace after prefix `$'` not allowed⎤))
 
 ;; Nitrene shorthands
 
@@ -850,30 +806,30 @@
 (ml
   (doc=
     ⎡(padding {¦ up-w⫽h: ±src} ⍊ ±px⫽y -up-w⫽h: dst)
-       <> {dst: $'(+ →src →px⫽y), (src): ()}⎤
+       <> {dst: ($once (+ ($my src) ($my px⫽y))), (src): ()}⎤
 
     ⎡(padding {¦ up-w: ±src} ⍊ ±px -up-w: dst)
-       <> {dst: $'(+ →src →px), (src): ()}
+       <> {dst: ($once (+ ($my src) ($my px))), (src): ()}
      (padding {¦ up-h: ±src} ⍊ ±py -up-h: dst)
-       <> {dst: $'(+ →src →py), (src): ()}⎤)
+       <> {dst: ($once (+ ($my src) ($my py))), (src): ()}⎤)
 
   (doc=
     ⎡(limit _ ⍊ up-w⫽h: (arg ±n ⍊ -◇_) ±⟦min,max⟧-w⫽h)
-       <> {n: $'(⟦max,min⟧ →⟦min,max⟧-w⫽h →n), ◇: true}⎤
+       <> {n: ($once (⟦max,min⟧ ($my ⟦min,max⟧-w⫽h) ($my n))), ◇: true}⎤
 
     ⎡(limit _ ⍊ up-w: (arg ±n ⍊ -◇_) ±⸨min,max⸩-w)
-       <> {n: $'(⸨max,min⸩ →⸨min,max⸩-w →n), ◇: true}
+       <> {n: ($once (⸨max,min⸩ ($my ⸨min,max⸩-w) ($my n))), ◇: true}
      (limit _ ⍊ up-h: (arg ±n ⍊ -◇_) ±⸨min,max⸩-h)
-       <> {n: $'(⸨max,min⸩ →⸨min,max⸩-h →n), ◇: true}⎤
+       <> {n: ($once (⸨max,min⸩ ($my ⸨min,max⸩-h) ($my n))), ◇: true}⎤
 
     ⎡(limit _ ⍊ up-w: (arg ±n ⍊ -◇_) ±min-w)
-       <> {n: $'(max →min-w →n), ◇: true}
+       <> {n: ($once (max ($my min-w) ($my n))), ◇: true}
      (limit _ ⍊ up-h: (arg ±n ⍊ -◇_) ±min-h)
-       <> {n: $'(max →min-h →n), ◇: true}
+       <> {n: ($once (max ($my min-h) ($my n))), ◇: true}
      (limit _ ⍊ up-w: (arg ±n ⍊ -◇_) ±max-w)
-       <> {n: $'(min →max-w →n), ◇: true}
+       <> {n: ($once (min ($my max-w) ($my n))), ◇: true}
      (limit _ ⍊ up-h: (arg ±n ⍊ -◇_) ±max-h)
-       <> {n: $'(min →max-h →n), ◇: true}⎤))
+       <> {n: ($once (min ($my max-h) ($my n))), ◇: true}⎤))
 
 ;; Attach comments to rule/backmap
 (ml
@@ -915,10 +871,10 @@
        y: 200)⎤
      ⎡(x: 100 y: 200)⎤)
   (doc= ⎡⟦rect,svg⟧⎤ ⎡rect svg⎤)
-  (doc= ⎡(⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}⎤
-        ⎡(rect ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}
+  (doc= ⎡(⟦rect,svg⟧ ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: ($my λ), (λ): ()}⎤
+        ⎡(rect ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: ($my λ), (λ): ()}
 
-         (svg ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: →λ, (λ): ()}⎤))
+         (svg ⍊ dn-w⫽h: ±λ, ⋮final-w⫽h) <> {final-w⫽h: ($my λ), (λ): ()}⎤))
 
 ;; Duplicate rule and pair
 (ml

@@ -1214,9 +1214,6 @@ module Ww::ML
       when past?('⸤')  then return token(:bl_half_bracket)
       when past?('⸥')  then return token(:br_half_bracket)
       when past?('±')  then return nows("±") { token(:plus_minus) }
-      when past?('→')  then return nows("→") { token(:arrow_right) }
-      when past?('↑')  then return nows("↑") { token(:arrow_up) }
-      when past?('↓')  then return nows("↓") { token(:arrow_dn) }
       when past?('\'') then return nows("'") { token(:quote) }
       when past?('`')  then return nows("`") { token(:backquote) }
       when past?('≡')  then return nows("≡") { token(:triple_equals) }
@@ -1312,27 +1309,20 @@ module Ww::ML
         if past?('\'')
           return nows("%'") { token(:percent_quote) }
         end
-      when past?('$')
-        if past?('\'')
-          return nows("$'") { token(:dollar_quote) }
-        end
-
-        if ahead.content?
-          return token(:dollar_left)
-        else
-          return token(:dollar)
-        end
       when past?('^')
         case
         when past?(':')
           # ^:⏏foo
           return nows("^:") { token(:caret_colon) }
         when past?('…')
+          # ^…⏏
           return token(:caret_ellipsis)
         when past?('*')
           if ahead.content?
+            # ^*⏏qux
             return token(:caret_star_left)
           else
+            # (^*⏏ 1 2)
             return token(:caret_star)
           end
         else

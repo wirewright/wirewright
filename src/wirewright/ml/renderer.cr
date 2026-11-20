@@ -420,18 +420,6 @@ module Ww::ML
       tsrc(ctx, {:edge, render(ctx, node.arg)})
     end
 
-    private def render0(ctx : RenderContext, node : Tree::Up) : Tsrc
-      tsrc(ctx, {:"$up", render(ctx, node.arg)})
-    end
-
-    private def render0(ctx : RenderContext, node : Tree::Dn) : Tsrc
-      tsrc(ctx, {:"$down", render(ctx, node.arg)})
-    end
-
-    private def render0(ctx : RenderContext, node : Tree::My) : Tsrc
-      tsrc(ctx, {:"$my", render(ctx, node.arg)})
-    end
-
     private def render0(ctx : RenderContext, node : Tree::AlloyExpr) : Tsrc
       tsrc(ctx, {:^, render(ctx, node.arg)})
     end
@@ -442,14 +430,6 @@ module Ww::ML
 
     private def render0(ctx : RenderContext, node : Tree::Literal) : Tsrc
       tsrc(ctx, {:literal, render(ctx, node.arg)})
-    end
-
-    private def render0(ctx : RenderContext, node : Tree::Dollar) : Tsrc
-      tsrc(ctx, {:"$", render(ctx, node.arg)})
-    end
-
-    private def render0(ctx : RenderContext, node : Tree::DollarOnce) : Tsrc
-      tsrc(ctx, {:"$once", render(ctx, node.arg)})
     end
 
     private def render0(ctx : RenderContext, node : Tree::Positive) : Tsrc

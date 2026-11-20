@@ -82,8 +82,6 @@ module Ww::ML
         CaretEllipsis
         CaretStar
         CaretStarLeft
-        DollarLeft
-        Dollar
         Symbol
         SymbolSuffix
         DquoteLeft
@@ -92,9 +90,6 @@ module Ww::ML
         TRHalfBracket
         RawString
         ArrowLeft
-        ArrowRight
-        ArrowUp
-        ArrowDn
         BarUnderscore
         SupLeft
         SupPlusLeft
@@ -116,7 +111,6 @@ module Ww::ML
         AtSignColon
         Quote
         PercentQuote
-        DollarQuote
         SubPlusColonLeft
         SubPlusColonRight
         ColonSubPlusLeft

@@ -423,6 +423,8 @@ module Testtool
       nil
     end
 
+    return if subjects.empty?
+
     reference = subjects[0]
     subjects.each(within: 1..) do |other|
       next if reference == other # ok
@@ -443,6 +445,8 @@ module Testtool
       nil
     end
 
+    return if subjects.empty?
+
     reference = subjects[0]
     subjects.each(within: 1..) do |other|
       next unless reference == other
@@ -462,6 +466,8 @@ module Testtool
 
       nil
     end
+
+    return if subjects.empty?
 
     subjects.each do |subject|
       next if M1.probe?(test.pattern, subject) # ok

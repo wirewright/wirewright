@@ -495,7 +495,7 @@ show up in practice outside of Wirewright internals.
   In Wirewright, we often use the prime symbol to "version" names, i.e. to denote
   successors: `x` means the first or base x, `x'` means its successor, `x''` means
   the successor of `x'` and so on.
-- Symbols can start with `+`, `-`, `^`, and `$`. They are simultaneously prefix operators.
+- Symbols can start with `+`, `-`, and `^`. They are simultaneously prefix operators.
   They are known internally as *ambiguous prefixes*.
 
 ### Raw symbol literal
@@ -1447,18 +1447,6 @@ Which is exactly what we want here.
 - `◇_` and `▢_` are lexemes distinct from `◇` and `▢`.
 - `◇/▢[_]` are valid where terms are valid. *They do not operate at the lexical level*.
   Writing something like `◇-foo` **is wrong**, and will confusingly enough result in `◇ -foo`.
-
-### Backmaps and rewriter circuits
-
-> [!WARNING]
-> These shorthands are DEPRECATED. They are not used by anything anymore and
-> will be removed.
-
-- `→<term>` is the same as writing `($my <term>)`
-- `↑<term>` is the same as writing `($up <term>)`
-- `↓<term>` is the same as writing `($down <term>)`
-- `$<term>` is the same as writing `($ <term>)`
-- `$'<term>` is the same as writing `($once <term>)`
 
 ### Rack
 

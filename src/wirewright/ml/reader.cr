@@ -294,20 +294,18 @@ module Ww::ML
       case
       when past?(:plus)       then return Tree::Leaf.new(Term.of(:+))
       when past?(:minus)      then return Tree::Leaf.new(Term.of(:-))
-      when past?(:dollar)     then return Tree::Leaf.new(Term.of(:"$"))
       when past?(:caret)      then return Tree::Leaf.new(Term.of(:^))
       when past?(:caret_star) then return Tree::Leaf.new(Term.of(:"^*"))
       when ahead?(:plus_left, :symbol),
            ahead?(:minus_left, :symbol),
-           ahead?(:dollar_left, :symbol),
            ahead?(:caret_left, :symbol),
            ahead?(:caret_star_left, :symbol)
         prefix = ahead.text
         forward
-        # $⏏foo
+        # ^⏏foo
         root = ahead.text
         forward
-        # $foo⏏
+        # ^foo⏏
       when ahead?(:symbol)
         prefix = ahead.text.before_begin
         root = ahead.text
@@ -946,22 +944,12 @@ module Ww::ML
       case
       when past?(:at_sign)
         Tree::Edge.new(value!(atom, expect: true))
-      when past?(:arrow_up)
-        Tree::Up.new(value!(atom, expect: true))
-      when past?(:arrow_dn)
-        Tree::Dn.new(value!(atom, expect: true))
-      when past?(:arrow_right)
-        Tree::My.new(value!(atom, expect: true))
       when past?(:caret_left)
         Tree::AlloyExpr.new(value!(atom, expect: true))
       when past?(:caret_star_left)
         Tree::AlloySpliceExpr.new(value!(atom, expect: true))
       when past?(:quote)
         Tree::Literal.new(value!(atom, expect: true))
-      when past?(:dollar_left)
-        Tree::Dollar.new(value!(atom, expect: true))
-      when past?(:dollar_quote)
-        Tree::DollarOnce.new(value!(atom, expect: true))
       when past?(:percent_quote)
         Tree::PatternLiteral.new(value!(atom, expect: true))
       when past?(:triple_equals)
