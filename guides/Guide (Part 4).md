@@ -7,11 +7,18 @@ doctool  examples  guides  irack  musoma-x86_64.AppImage  mxrack-x86_64.AppImage
 
 ... there's an AppImage called `mxrack-x86_64.AppImage`.
 
-MxRack is short for **M**edia E**x**tensions for **Rack**. MxRack lets you build interactive applications by introducing several interactive nodes, mainly `window`, `mouse`, `keyboard`, `input`, and also by letting you provide *visuals* (think visual markup) right in the circuit.
+MxRack is short for **M**edia E**x**tensions for **Rack**. MxRack lets you build interactive applications with Wirewright. For this purpose it introduces several interactive nodes, mainly `window`, `mouse`, `keyboard`, `input`. It also lets you include *visuals* (think visual markup) right in the circuit.
 
-We'll use MxRack in this part of the guide. Currently it has essentially no interface, and doesn't even have a help message. You're supposed to give it a file, for example: `./mxrack-x86_64.AppImage seed.wwml`. The AppImage works much like `irack` but without `--single-step`.
+We'll use MxRack in this part of the guide. When you run it it shows its help message:
 
-Optionally, you can provide `--quiet` to suppress printing the circuit at the start of each frame. Additionally, you can provide `--stat` to show frame statistics.
+```bash session
+$ ./mxrack-x86_64.AppImage
+<MxRack help message>
+```
+
+The AppImage works much like `irack`, except it doesn't support `--single-step` yet.
+
+You're expected to give it a file. Optionally, you can provide `--quiet` to suppress printing the circuit at the start of each frame. Additionally, you can provide `--stat` to show frame statistics, though this is more for internal use.
 
 Let's write a basic "Hello World" app using `mxrack`. In `seed.wwml`, write:
 
@@ -25,12 +32,20 @@ Next, run it with:
 $ ./mxrack-x86_64.AppImage seed.wwml
 ```
 
+By the way, feel free to check out the experimental live reloading flag, `--live`. It *mostly* works and will provide a much smoother experience.
+
+```bash session
+$ ./mxrack-x86_64.AppImage --live seed.wwml
+```
+
+In Wirewright, you very quickly get used to everything being live and responsive (more in the logical sense than in the design sense). And MxRack is not an exception.
+
 You should see a window open, containing a text that says "Hello World".
 
 ![Figure 0](<slides/Guide 4/figure0.png>)
 
 > [!NOTE]
-> In order to close the window, you have to Ctrl-C `mxrack-x86_64.AppImage` in the shell. This is because window closure is something that the circuit has to handle. It may also decide to reopen a window or something similar. So MxRack doesn't terminate on window closure. In this part of the guide we won't bother handling window closure properly.
+> In case you want to close the window, you have to Ctrl-C `mxrack-x86_64.AppImage` in the shell. This is because window closure is something that the circuit has to handle. So MxRack doesn't terminate on window closure. In this part of the guide we won't bother handling window closure properly.
 
 Here, `window` represents an operating-system window. Now, it is a literal symbolic representation of the window. For instance, if you specify a width and a height like so:
 
@@ -69,7 +84,7 @@ Now, with MxRack, what we get is this:
 
 The `center` *utility* centers the visual node it's on in the parent container.
 
-To make the text larger, we can use the `text-` sizing utilities. Microfold copies many "fundamental" utilities from Tailwind. So you get things like `text-lg`, `text-lg/8`, `text-3xl`, and so on. Similarly, there are `text-` color utilities such as `text-neutral-500` (the palette is, again, copied from Tailwind).
+To make the text larger, we can use the `text-` sizing utilities. Microfold copies many "fundamental" utilities from Tailwind. So you get things like `text-lg`, `text-lg/8`, `text-3xl`, and so on. Similarly, there are `text-` color utilities such as `text-neutral-500` (the palette is, again, copied from Tailwind). 
 
 We can make our text prettier using `font-light` as well. Light fonts tend to look better with very large sizes — but then remember I'm by no means a designer :^)
 
@@ -417,9 +432,15 @@ I'd recommend running MxRack like so:
 $ ./mxrack-x86_64.AppImage --quiet seed.wwml
 ```
 
+Or with the `--live` flag if you're running live:
+
+```bash session
+$ ./mxrack-x86_64.AppImage --live --quiet seed.wwml
+```
+
 This way, it won't flood your terminal with circuit printouts.
 
-![Figure 19](<slides/Guide 4/figure19.png>)
+![Figure 19](<slides/Guide 4/figure19.png>) 
 
 As you can see, the button is inactive; and as the mouse cursor indicates, you can't press it.
 
@@ -433,7 +454,7 @@ The reason is because the button lacks its action cell. Let's add it:
 
 Now that there's a cell, the button can be pressed — but only once! It then remains in this pressed state.
 
-![Figure 20.0|300](<slides/Guide 4/figure20_0.png>) ![Figure 20.1|300](<slides/Guide 4/figure20_1.png>)
+![Figure 20.0|300](<slides/Guide 4/figure20_0.png>) ![Figure 20.1|300](<slides/Guide 4/figure20_1.png>) 
 
 The reason is because the `@action` cell is now occupied. To test this, let's fill the `@action` cell ourselves:
 
@@ -511,7 +532,7 @@ The `node` node lets you refer to a live Rack/MxRack node through an edge. Now, 
   ($Button (@action inc) "Increment"))
 ```
 
-![Figure 25.0|300](<slides/Guide 4/figure25_0.png>) ![Figure 25.1|300](<slides/Guide 4/figure25_1.png>)
+![Figure 25.0|300](<slides/Guide 4/figure25_0.png>) ![Figure 25.1|300](<slides/Guide 4/figure25_1.png>) 
 
 As you can see, just after I pressed the button, the `@action` cell (here printed quite crudely, since `p` uses a very simple subset of WwML by default)  was filled with `inc`. As long as `inc` remains there, the button will keep its pressed state, and you won't be able to press any buttons on the same cell.
 
@@ -556,7 +577,7 @@ Finally, let's try implementing a simple counter app using the nodes we already 
   (discard @action)
   (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
   (view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
-
+  
   (p @count style: "text-neutral-50")
   ($Button (@action inc) "Increment")
   ($Button (@action dec) "Decrement"))
@@ -573,7 +594,7 @@ We can style the whole thing up a little bit:
   (discard @action)
   (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
   (view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
-
+  
   (group style: "center flow-col bg-neutral-900 p-5 rounded-lg"
     (p @count style: "center-x text-neutral-50 text-3xl font-light")
     (group style: "flow-row gap-3"
@@ -594,7 +615,7 @@ Let's use colors from the `ui` palette instead of the Tailwind palette to get a 
   (discard @action)
   (view ((@action @count) (inc ±n) (over @count)) ^(+ n 1))
   (view ((@action @count) (dec ±n) (over @count)) ^(- n 1))
-
+  
   (group style: "center flow-col bg-ui-surface p-5 rounded-lg"
     (p @count style: "center-x text-ui-content text-3xl font-light")
     (group style: "flow-row gap-3"
