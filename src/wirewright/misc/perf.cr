@@ -36,19 +36,19 @@ module Ww
       end
     end
 
-    def initialize(@stat : Bool, caption : String)
+    def initialize(caption : String)
       @root = Node.new(caption)
       @root.calls = 1u32 # Nobody calls root so we have to pretend something called it
       @stack = [@root]
     end
 
+    def sample : Node
+      @root
+    end
+
     def next(caption : String) : Nil
       assert @stack.size == 1
       assert @stack.first.same?(@root)
-
-      if @stat
-        @root.display(STDOUT, depth: 0u32)
-      end
 
       @root = Node.new(caption)
       @root.calls = 1u32

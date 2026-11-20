@@ -530,11 +530,38 @@ module Ww::MxRack
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
+        # |@ mxrack.automaton
+        #
+        # |@pattern
+        # [automaton (id_ workspace_dict) children_*]
+        #
+        # |@key id
+        #
+        # |@key workspace mxrack.automaton.workspace
+        #
+        # |@key children mxrack
         matchpi %{[automaton (_ _dict) _*]} do
           D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node), autonomous: true)
         end
 
+        # |@ mxrack.theme
+        #
+        # |@pattern
+        # (theme ¦ extension_)
+        #
+        # |@key extension
         matchpi %{[theme]} do
+          D7.gnd(node)
+        end
+
+        # |@ mxrack.argv
+        #
+        # |@pattern
+        # [argv args_string*]
+        #
+        # |@key args
+        # The list of arguments passed to the circuit through MxRack.
+        matchpi %{[argv]} do
           D7.gnd(node)
         end
 

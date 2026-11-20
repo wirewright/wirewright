@@ -11,16 +11,31 @@
 ;;   ###############
 
 ;; TODO: pretty printing
-;;   - (hard) how to keep `expander` state (and similar) across pretty-print frames
-;;     (e.g. keyed by node addr)?
+;;   - path reading widget (interactive)
+;;   - path report widget (interactive)
+;;   - number table widget
+;;   - go through examples/ and fix pretty printing bugs, there are plenty
 ;;
-;; FIXME: inputs / mouseareas in nested automata do not seem to work (open mu in mu,
-;; then open e.g. calculator; can't press buttons...)
+;; TODO(hard): how to keep `expander` (and similar) state across pretty-print frames
+;; (e.g. keyed by node addr)?
+;;
+;; FIXME(???): calculator keyboard input doesn't work. Also, could be related: open
+;; mu in mu, then open e.g. calculator; can't press buttons even with mouse... why?
 ;;
 ;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale
 ;; keys occasionally/on unfocus (?)
 ;;
-;; TODO(medium, rack, irack, mxrack): allow to load seed from arguments `argv` (?)
+;; TODO(medium): Add hints & help like in previous MuSoma, maybe some sort of
+;; interactive "tour"?
+;;
+;; TODO(hard): How to test MxRack, and how to test MuSoma?
+;;   Traditional script / interaction end-to-end tests? E.g. add a special --record
+;;   mode to MxRack which records events on eventq, then lets you press some key (eg F9)
+;;   to make a screenshot. The resulting test is an interleaved sequence of events
+;;   and screenshots. I honestly can't come up with anything better because the logical
+;;   part of everything is tested OK in rack tests. Things like rewriters, parsers, backsystems,
+;;   they are all tested OK. What is NOT tested extensively is stuff like hit testing,
+;;   interactivity, hover handling, and so on, as they are in real apps or examples.
 ;;
 ;; TODO(hard): WE ARE TERRIBLY, TERRIBLY SLOW. MY GOSH! It's not going to be possible
 ;; to ditch the old MuSoma until we can be on par with it in terms of performance
@@ -396,10 +411,9 @@
                    pivot-center rotate-45")
          ($FilePicker ^origin ^path ^command))
 
-  (MuMenu @workspace_ @mode_ @seed_ @seed-src_)
-    => (component {@:workspace, @:mode, @:seed, @:seed-src}
+  (MuMenu @action_)
+    => (component {@:action}
          (cell @path)
-         (cell @action)
          (node @input (input focus: always))
          (cell @command)
 
@@ -424,54 +438,42 @@
                  (node @picker)))))
 
          (backsys
-           ;; When they hit new, initialize seed and mode. To give the bigger picture,
-           ;; initializing seed is the thing that causes the MuMenu to cease. This doesn't
-           ;; happen here because MuMenu cannot cause or represent its own cessation in
-           ;; a practically useful way :)
-           ;;
-           ;; NOTE: Due to the peculiarities of writing editor rules that can be edited
-           ;; by the very same editor they power, and related issues, we have to use
-           ;; numeric ids to identify each editor so as to disambiguite runtime from
-           ;; rule definition time and so on.
-           {¦ action: new -mode_ -seed_ workspace: {¦ token_}}
-             <> {mode: normal, seed: {document: (("" (I ^token) ""))}}
-
            ;; When they hit open, populate the picker fragment with the file picker.
            ;; FIXME: current working directory `.` instead of this hard-coded path.
            {¦ action: open -picker_ -seed-src}
              <> {picker: ($MuMenuPicker (/ "mnt" "Data" "Dev" "wirewright" "kappa" "examples" "future") @path @command)}
 
            ;; Go to previous file.
-           {¦ input: ⟨K←(key (%any up "k"))⟩ action_: open picker_ -command_}
+           {¦ action: open input: ⟨K←(key (%any up "k"))⟩ picker_ -command_}
              <> {(K): (), command: up}
 
            ;; Go to next file.
-           {¦ input: ⟨K←(key (%any dn "j"))⟩ action_: open picker_ -command_}
+           {¦ action: open input: ⟨K←(key (%any dn "j"))⟩ picker_ -command_}
              <> {(K): (), command: dn}
 
            ;; Go back up.
-           {¦ input: ⟨K←(key (%any backspace "h"))⟩ action_: open picker_ -command_}
+           {¦ action: open input: ⟨K←(key (%any backspace "h"))⟩ picker_ -command_}
              <> {(K): (), command: ascend}
 
            ;; Descend or select.
-           {¦ input: ⟨K←(key (%any enter "l"))⟩ action_: open picker_ -command_}
+           {¦ action: open input: ⟨K←(key (%any enter "l"))⟩ picker_ -command_}
              <> {(K): (), command: select}
 
-           ;; Page up
-           {¦ input: ⟨K←(key pgup)⟩ action_: open picker_ -command_}
+           ;; Page up.
+           {¦ action: open input: ⟨K←(key pgup)⟩ picker_ -command_}
              <> {(K): (), command: pgup}
 
-           ;; Page down
-           {¦ input: ⟨K←(key pgdn)⟩ action_: open picker_ -command_}
+           ;; Page down.
+           {¦ action: open input: ⟨K←(key pgdn)⟩ picker_ -command_}
              <> {(K): (), command: pgdn}
 
            ;; Oops, they want to cancel the picker.
-           {¦ input: ⟨K←(key escape)⟩ action_: open picker_}
+           {¦ action_: open input: ⟨K←(key escape)⟩ picker_}
              <> {(K): (), (action): (), (picker): ()}
 
-           ;; When they have chosen the file, clear the picker and set the seed source.
-           {¦ path_ picker_ -mode_ -seed-src_}
-             <> {(path): (), (picker): (), mode: normal, seed-src: (path (^path reading))})))
+           ;; When they have chosen the file, clear the picker and publish the seed path.
+           {¦ action_: open path_ picker_}
+             <> {(path): (), (picker): (), action: (open ^path)})))
 
 ;;
 ;; The circuit
@@ -663,6 +665,12 @@
       <> {(keys): (), motions: ^keys}
 
     ;; Spawn editor if missing.
+    ;;
+    ;; NOTE: Due to the peculiarities of writing editor rules that can be edited
+    ;; by the very same editor they power -- and similar issues, related to passability
+    ;; of nodes -- we have to use numeric ids (which we call `token`) to identify each
+    ;; editor so as to disambiguite runtime instances of an editor from rule definition
+    ;; time ones (e.g. editor patterns).
     {¦ locus: (_* `dst) workspace: {¦ token_ repr: {¦ -editing}}}
       <> {dst: ("" (I ^token) "")})
 
@@ -2152,9 +2160,38 @@
       (box style: "pr-1 min-w-16"
         (visual (ModeIndicator ^(edge? mode))))))
 
-  ;;| When there's no seed, we let the user pick or set one through a simple menu.
-  ;;| When they finally submit the seed we close the menu.
-  (node @menu)
-  (backsys
-    {¦ -seed -menu_} <> {menu: ($MuMenu @workspace @mode @seed @seed-src)}
-    {¦ seed menu_} <> {(menu): ()}))
+  ;;| When there's no seed, we let the user pick or set one through the arguments
+  ;;| or a simple menu. When they finally submit the seed, we close the menu.
+  (section "Menu and seed loading logic"
+    (module {:@seed, :@seed-src, :@menu, :@mode}
+      ;;| The menu itself (`MuMenu`), created and destroyed on demand. It provides
+      ;;| the visuals and the functionality of the menu.
+      (node @menu)
+
+      ;;| The action of the menu or our own action. We share the cell with MuMenu.
+      (cell @action)
+
+      ;;| The list of arguments passed to the circuit through MxRack's CLI.
+      (node (@args (argv args←(_+)))
+        (argv))
+
+      (rewriter (rulesetR exh: true)
+        ;; If they've provided a path, load it instead of showing the menu.
+        {¦ -seed-src -seed args: (path_) -action_}
+          <> {action: (load ^path)}
+
+        ;; Show the menu.
+        {¦ -seed-src -seed -menu_}
+          <> {menu: ($MuMenu @action)}
+
+        ;; Create in-memory seed.
+        {¦ action_: new menu_ -seed_ -mode_}
+          <> {(action): (), (menu): (), mode: normal, seed: {document: ()}}
+
+        ;; Translate opening a file through the menu to the `load` action.
+        {¦ action_: (open path_) menu_}
+          <> {action: (load ^path), (menu): ()}
+
+        ;; Load seed from path.
+        {¦ action_: (load path_) -seed-src_ -mode_}
+          <> {(action): (), seed-src: (path (^path reading)), mode: normal}))))

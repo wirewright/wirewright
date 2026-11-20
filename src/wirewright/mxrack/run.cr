@@ -66,10 +66,45 @@ module Ww::MxRack
     left
   end
 
+  # Represents an `mxrack.argv` node.
+  defrecord ArgvNode, addr : D7::NodeAddr
+
+  # :nodoc:
+  SYM_ARGV = Term.of(:argv)
+
+  private def args_nodes(sink, tree : D7::ParseTree, addr : D7::NodeAddr) : Nil
+    case tree
+    in D7::InertLeaf
+    in D7::GndLeaf
+      Term.matchpi?(tree.feature.node, %{[argv]}) do
+        sink << ArgvNode.new(addr)
+      end
+    in D7::ScopeNode, D7::MixtureNode
+      args_nodes(sink, tree.child, addr)
+    in D7::CircuitNode
+      args_nodes(sink, tree.to_group, addr)
+    in D7::GroupNode
+      return unless tree.summary.has_head?(SYM_ARGV)
+
+      tree.children.zip(tree.feature.range) do |child, key|
+        args_nodes(sink, child, addr.append(key))
+      end
+    end
+  end
+
+  def args_nodes(tree : D7::ParseTree) : Slice(ArgvNode)
+    sink = Pf::Kit.stack_array(ArgvNode, 8)
+    addr = D7::NodeAddr.empty
+    args_nodes(sink, tree, addr)
+
+    sink.to_unsafe_readonly_slice!
+  end
+
   # :nodoc:
   HELP = <<-'HELP'
   USAGE
     mxrack [OPTIONS] path/to/seed.wwml
+    mxrack [OPTIONS] path/to/seed.wwml -- [CIRCUIT ARGS]
 
   SYNOPSIS
     Media Extensions for Rack. MxRack lets you build interactive applications
@@ -84,23 +119,38 @@ module Ww::MxRack
       EXPERIMENTAL: Watch for changes to the seed source and attempt to merge them.
       Failed merges prompt full reload.
 
+  CIRCUIT ARGS
+    Circuit arguments are passed to the circuit. They can be accessed through
+    the `mxrack.argv` node.
+
   EXAMPLE
     $ echo '(window (p "Kaixo mundua!"))' > /tmp/seed.wwml
     $ mxrack /tmp/seed.wwml
 
   HELP
 
-  private def run(alert : BlockingSignal, eventq : EventQueue) : Nil
-    if ARGV.empty?
-      abort(HELP)
+  private def run(iout : IO, alert : BlockingSignal, eventq : EventQueue, args : Array(String)) : Nil
+    # Take args up to `--` as our args; then the args that follow are the circuit's
+    # args which we'll expose through `mxrack.argv`.
+    if argsep = args.index { |arg| arg == "--" }
+      mxrack_args = args[...argsep]
+      circuit_argv = Term.of(args[argsep + 1..])
+    else
+      mxrack_args = args.dup
+      circuit_argv = Term.of
     end
 
-    Console.display(STDOUT, Console::MxBanner.new)
+    if args.empty?
+      iout << HELP
+      return
+    end
 
-    seed_path = NormalPath[ARGV[0]]
-    quiet = "--quiet".in?(ARGV)
-    stat = "--stat".in?(ARGV)
-    live = "--live".in?(ARGV)
+    Console.display(iout, Console::MxBanner.new)
+
+    seed_path = NormalPath[mxrack_args[0]]
+    quiet = "--quiet".in?(mxrack_args)
+    stat = "--stat".in?(mxrack_args)
+    live = "--live".in?(mxrack_args)
 
     wg = WaitGroup.new(3) # SDL and two adapters
 
@@ -119,12 +169,12 @@ module Ww::MxRack
 
     wm = WindowManager.new(sdl)
 
-    Console.display(STDOUT, Console::InfoLog.new("Initialized adapters & SDL"))
+    Console.display(iout, Console::InfoLog.new("Initialized adapters & SDL"))
 
     # Watch codices.
     pass do
       PathMonitorService.add(NormalPath[Path["runtime"] / "codices"])
-      Console.display(STDOUT, Console::InfoLog.new("Watching runtime/codices for changes"))
+      Console.display(iout, Console::InfoLog.new("Watching runtime/codices for changes"))
     end
 
     # Watch seed.
@@ -132,10 +182,10 @@ module Ww::MxRack
       next unless live
 
       PathMonitorService.add(seed_path.parent)
-      Console.display(STDOUT, Console::InfoLog.new("Watching #{seed_path.parent} for changes to #{seed_path.basename}"))
+      Console.display(iout, Console::InfoLog.new("Watching #{seed_path.parent} for changes to #{seed_path.basename}"))
     end
 
-    perf = Perf.new(stat, "Frame 0 (seed)")
+    perf = Perf.new("Frame 0 (seed)")
 
     # Load MxRack codex.
     mxrack_blob = ResourceService.read_blob(ResourceService.codex("mxrack"))
@@ -143,13 +193,13 @@ module Ww::MxRack
     mxrack = ML.document(mxrack_blob.to_string)
     mxrack_theme = theme_mixin(mxrack[:theme])
     mxrack_library = Rack::Assembler.library(mxrack[:library])
-    Console.display(STDOUT, Console::InfoLog.new("Loaded MxRack codex"))
+    Console.display(iout, Console::InfoLog.new("Loaded MxRack codex"))
 
     # Load Microfold codex.
     microfold_base_blob = ResourceService.read_blob(ResourceService.codex("ufold"))
     microfold_base_digest = microfold_base_blob.digest
     microfold_base_theme = ML.document(microfold_base_blob.to_string).as_d
-    Console.display(STDOUT, Console::InfoLog.new("Loaded Microfold codex"))
+    Console.display(iout, Console::InfoLog.new("Loaded Microfold codex"))
 
     # Load seed.
     seed_blob = PathService.read(seed_path).wait.unwrap.as(PathService::ContentReading).blob
@@ -157,7 +207,7 @@ module Ww::MxRack
     seed = ML.document(seed_blob.to_string)
     prev_seed = seed
 
-    Console.display(STDOUT, Console::InfoLog.new("Loaded seed"))
+    Console.display(iout, Console::InfoLog.new("Loaded seed"))
 
     microfold : Microfold::Codex? = nil
     microfold_mixed_theme = Term.of
@@ -173,7 +223,7 @@ module Ww::MxRack
     windowing_setup = nil
     windowing_cache = ViRecognized::RecognizeCache.new
 
-    Console.display(STDOUT, Console::InfoLog.new("Ready"))
+    Console.display(iout, Console::InfoLog.new("Ready"))
 
     epoch = 0u64
     UInt64::MAX.times do |frameno|
@@ -189,9 +239,9 @@ module Ww::MxRack
           mxrack = ML.document(mxrack_blob.to_string)
           mxrack_theme = theme_mixin(mxrack[:theme])
           mxrack_library = Rack::Assembler.library(mxrack[:library])
-          Console.display(STDOUT, Console::NoteLog.new("Reloaded MxRack codex"))
+          Console.display(iout, Console::NoteLog.new("Reloaded MxRack codex"))
         rescue e : ML::SyntaxError
-          Console.display(STDOUT, Console::ErrLog.new("Syntax error in MxRack codex: #{e.message}"))
+          Console.display(iout, Console::ErrLog.new("Syntax error in MxRack codex: #{e.message}"))
         end
       end
 
@@ -203,9 +253,9 @@ module Ww::MxRack
 
         begin
           microfold_base_theme = ML.document(microfold_base_blob.to_string).as_d
-          Console.display(STDOUT, Console::NoteLog.new("Reloaded Microfold codex"))
+          Console.display(iout, Console::NoteLog.new("Reloaded Microfold codex"))
         rescue e : ML::SyntaxError
-          Console.display(STDOUT, Console::ErrLog.new("Syntax error in Microfold codex: #{e.message}"))
+          Console.display(iout, Console::ErrLog.new("Syntax error in Microfold codex: #{e.message}"))
         end
       end
 
@@ -248,12 +298,12 @@ module Ww::MxRack
 
         if merged = merge3?(reference, circuit.draft, seed)
           circuit.draft = merged
-          Console.display(STDOUT, Console::NoteLog.new("Reloaded seed"))
+          Console.display(iout, Console::NoteLog.new("Reloaded seed"))
         else
-          Console.display(STDOUT, Console::NoteLog.new("Cannot merge changes automatically, do you wish to do a full reload? [y/]"))
+          Console.display(iout, Console::NoteLog.new("Cannot merge changes automatically, do you wish to do a full reload? [y/]"))
           next unless gets == "y"
 
-          Console.display(STDOUT, Console::NoteLog.new("Fully reloaded seed"))
+          Console.display(iout, Console::NoteLog.new("Fully reloaded seed"))
           circuit.draft = seed
         end
       end
@@ -310,6 +360,20 @@ module Ww::MxRack
 
         if adjustments.present?
           circuit.draft = adjust(circuit.parser.parse(circuit.draft), adjustments)
+        end
+      end
+
+      perf.stage("Fill `mxrack.argv` nodes") do
+        draft_tree = circuit.parser.parse(circuit.draft)
+        args_nodes = args_nodes(draft_tree)
+
+        adjustments = Slice(Adjustment).empty
+        args_nodes.each do |args_node|
+          adjustments = adjustments.append(AdjustArgv.new(args_node.addr, circuit_argv))
+        end
+
+        if adjustments.present?
+          circuit.draft = adjust(draft_tree, adjustments)
         end
       end
 
@@ -444,7 +508,7 @@ module Ww::MxRack
         to_display = frame
         next if prev_displayed == to_display
 
-        puts ML.display(to_display)
+        ML.display(iout, to_display)
         prev_displayed = to_display
       end
 
@@ -457,12 +521,18 @@ module Ww::MxRack
         circuits.each_value(&.sweep)
       end
 
+      if stat
+        perf_root = perf.sample
+        perf_root.display(iout, depth: 0u32)
+      end
+
       perf.next("Frame #{frameno + 1}")
 
       # Then there is this final section of the loop, which decides how and whether
       # to wait, just as in a classical game loop.
 
-      next unless version0 == circuit.version
+      version1 = circuit.version
+      next unless version0 == version1
       # Circuit not changed.
 
       next unless eventq.empty?
@@ -479,7 +549,7 @@ module Ww::MxRack
       end
     end
 
-    Console.display(STDOUT, Console::InfoLog.new("Reached quiescence"))
+    Console.display(iout, Console::InfoLog.new("Reached quiescence"))
 
     # TODO: deinit
   end
@@ -488,7 +558,7 @@ module Ww::MxRack
     ctx = Fiber::ExecutionContext::Isolated.new("MxRack main thread", spawn_context: MT) do
       alert = BlockingSignal.new
       events = EventQueue.new(alert)
-      run(alert, events)
+      run(STDOUT, alert, events, ARGV)
     end
     ctx.wait
   end

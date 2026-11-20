@@ -2,7 +2,7 @@ module Ww::MxRack
   # See `adjust` to learn what adjustments are.
   alias Adjustment = AdjustWindow | AdjustMouse | AdjustMousearea | AdjustInput |
                      AdjustTextoscope | AdjustQuestion | AdjustAutomatonUpdate |
-                     AdjustAutomatonUpdateDraft
+                     AdjustAutomatonUpdateDraft | AdjustArgv
 
   alias AdjustWindow = AdjustWindowSize | AdjustWindowFocus | AdjustWindowForm |
                        AdjustWindowHover
@@ -46,6 +46,8 @@ module Ww::MxRack
 
   defrecord AdjustAutomatonUpdate, addr : D7::NodeAddr, key : Term, value : Term?
   defrecord AdjustAutomatonUpdateDraft, addr : D7::NodeAddr, draft : Term
+
+  defrecord AdjustArgv, addr : D7::NodeAddr, args : Term
 
   # E.g. (window _* ⏏width: 500⏏ ⏏height: 400⏏) -> (window _* ⏏width: 800⏏ ⏏height: 600⏏)
   private def adjust(target : Term, adjustment : AdjustWindowSize) : Term
@@ -223,6 +225,11 @@ module Ww::MxRack
 
   private def adjust(target : Term, adjustment : AdjustAutomatonUpdateDraft) : Term
     Term.of(target.replace(2u32...target.uitemsize, Term.rep(adjustment.draft.items)))
+  end
+
+  # (argv ⏏) -> (argv ⏏("--foo" "--bar" "baz")⏏)
+  private def adjust(target : Term, adjustment : AdjustArgv) : Term
+    Term.of(target.with(1, adjustment.args))
   end
 
   private def adjust(tree : D7::InertLeaf, router : D7::NodeAddrRouter) : Term
