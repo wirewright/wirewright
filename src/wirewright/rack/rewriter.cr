@@ -70,41 +70,50 @@ module Ww::Rack::Rewriter
   # :nodoc:
   defrecord TransferQ,
     input_edge : Term,
-    spec : Rho::Rewriter | SpecQ,
+    spec : CompiledSpec | SpecQ,
     output_edge : Term
 
   # :nodoc:
   defrecord RelationQ,
     input_edge : Term,
-    spec : Rho::Rewriter | SpecQ,
+    spec : CompiledSpec | SpecQ,
     output_edge : Term
 
   # :nodoc:
   defrecord VersionedRelationQ,
     input_edge : Term,
-    spec : Rho::Rewriter | SpecQ,
+    spec : CompiledSpec | SpecQ,
     output_edge : Term,
     version_edge : Term
 
   # :nodoc:
   defrecord VersionedAsymmetricRelationQ,
     input_edge : Term,
-    spec : Rho::Rewriter | SpecQ,
+    spec : CompiledSpec | SpecQ,
     output_edge : Term,
     version_edge : Term
 
   # :nodoc:
   defrecord RegimeSingleQ,
-    spec : Rho::Rewriter | SpecQ,
+    spec : CompiledSpec | SpecQ,
     target_edge : Term
 
   # :nodoc:
   defrecord RegimeMultiQ,
-    spec : Rho::Rewriter | SpecQ,
+    spec : CompiledSpec | SpecQ,
     edge_template : Term::Dict
 
   # :nodoc:
   defrecord SpecQ, edge : Term, data : Term
+
+  # :nodoc:
+  defrecord CompiledSpec, digest : UInt64, rewriter : Rho::Rewriter
+
+  # FIXME: Use a stronger hashcode for digest!
+  private def compiled_spec(specQ : Term, data : Term)
+    digest = Int.mix(Term.hashcode(specQ), Term.hashcode(data))
+    CompiledSpec.new(digest, Rho.rewriter!(specQ, data))
+  end
 
   private def variantQ?(variantsQ : ICache, term : Term) : VariantQ?
     if variant = variantsQ.get?(term)
@@ -122,32 +131,32 @@ module Ww::Rack::Rewriter
     #   (rewriter (@x -> ⏏noR⏏ -> @y) ...)
     Term.case(term) do
       matchpi %{[rewriter (@input_ -> specQ_ -> @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
         TransferQ.new(input, spec, output)
       end
 
       matchpi %{[rewriter (@input_ - specQ_ - @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
         RelationQ.new(input, spec, output)
       end
 
       matchpi %{[rewriter ((@input_ @version_) - specQ_ - @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
         VersionedRelationQ.new(input, spec, output, version)
       end
 
       matchpi %{[rewriter ((@input_ @version_) -> specQ_ - @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
         VersionedAsymmetricRelationQ.new(input, spec, output, version)
       end
 
       matchpi %{[rewriter (specQ_ - @target_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
         RegimeSingleQ.new(spec, target)
       end
 
       matchpiT %{[rewriter (specQ_ - template_dict) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : Rho.rewriter!(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
         RegimeMultiQ.new(spec, template)
       end
 
@@ -196,7 +205,7 @@ module Ww::Rack::Rewriter
     RegimeMulti.new(spec, quote.edge_template)
   end
 
-  private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : Rho::Rewriter) : Rho::Rewriter
+  private def unquote(hg : D7::Hypergraph, node : D7::Node, quote : CompiledSpec) : CompiledSpec
     quote
   end
 
@@ -212,44 +221,44 @@ module Ww::Rack::Rewriter
   # :nodoc:
   defrecord Transfer,
     input : D7::AbsEdge,
-    spec : Rho::Rewriter | Spec,
+    spec : CompiledSpec | Spec,
     output : D7::AbsEdge
 
   # :nodoc:
   defrecord Relation,
     input : D7::AbsEdge,
-    spec : Rho::Rewriter | Spec,
+    spec : CompiledSpec | Spec,
     output : D7::AbsEdge
 
   # :nodoc:
   defrecord VersionedRelation,
     input : D7::AbsEdge,
-    spec : Rho::Rewriter | Spec,
+    spec : CompiledSpec | Spec,
     output : D7::AbsEdge,
     version : D7::AbsEdge
 
   # :nodoc:
   defrecord VersionedAsymmetricRelation,
     input : D7::AbsEdge,
-    spec : Rho::Rewriter | Spec,
+    spec : CompiledSpec | Spec,
     output : D7::AbsEdge,
     version : D7::AbsEdge
 
   # :nodoc:
   defrecord RegimeSingle,
-    spec : Rho::Rewriter | Spec,
+    spec : CompiledSpec | Spec,
     target : D7::AbsEdge
 
   # :nodoc:
   defrecord RegimeMulti,
-    spec : Rho::Rewriter | Spec,
+    spec : CompiledSpec | Spec,
     edge_template : Term::Dict
 
   # :nodoc:
   defrecord Spec, edge : D7::AbsEdge, data : Term
 
-  private def rewriter?(rewriters : ICache, hg : D7::Hypergraph, spec : Rho::Rewriter) : Rho::Rewriter?
-    spec
+  private def rewriter?(rewriters : ICache, hg : D7::Hypergraph, spec : CompiledSpec) : Rho::Rewriter?
+    spec.rewriter
   end
 
   private def rewriter?(rewriters : ICache, hg : D7::Hypergraph, spec : Spec) : Rho::Rewriter?
@@ -258,6 +267,22 @@ module Ww::Rack::Rewriter
     rewriters.put_if_absent({rwspec, spec.data}) do
       Rho.rewriter!(rwspec, spec.data)
     end
+  end
+
+  private def rewriter_and_digest?(rewriters : ICache, hg : D7::Hypergraph, spec : CompiledSpec) : {Rho::Rewriter, UInt64}?
+    {spec.rewriter, spec.digest}
+  end
+
+  private def rewriter_and_digest?(rewriters : ICache, hg : D7::Hypergraph, spec : Spec) : {Rho::Rewriter, UInt64}?
+    return unless rwspec = Rack.cell?(hg, spec.edge).try(&.value?)
+
+    rewriter = rewriters.put_if_absent({rwspec, spec.data}) do
+      Rho.rewriter!(rwspec, spec.data)
+    end
+    # FIXME: Use a stronger hashcode for digest!
+    digest = Int.mix(Term.hashcode(rwspec), Term.hashcode(spec.data))
+
+    {rewriter, digest}
   end
 
   private def output?(tasks, rewriter : Rho::Rewriter, input : Term)
@@ -327,6 +352,17 @@ module Ww::Rack::Rewriter
     D7.patch(output_cell.node, {2, output})
   end
 
+  # Returns the version digest for *spec* and *input*: the digest to place in
+  # the version cell or compare with.
+  #
+  # *spec* is the rewriter spec itself. We include it in the digest to trigger
+  # rewrites on changes to the rules.
+  #
+  # FIXME: Use a stronger hashcode for digest!
+  private def vdigest(rewriter_digest : UInt64, input : Term) : Term
+    Term.of(Int.mix(rewriter_digest, Term.hashcode(input)).to_s(base: 16))
+  end
+
   private def step(state, tasks, hg, node : D7::Node, variant : VersionedRelation) : D7::Patch?
     # Find a single version cell.
     return unless version_cell = Rack.cell?(hg, variant.version)
@@ -347,13 +383,7 @@ module Ww::Rack::Rewriter
       )
     end
 
-    input_version = Term.of(Term.hashcode(input).to_s(base: 16))
-
-    if version_cell.value? == input_version
-      return # No change
-    end
-
-    unless rewriter = rewriter?(state.rewriters, hg, variant.spec)
+    unless row = rewriter_and_digest?(state.rewriters, hg, variant.spec)
       # Clear output and version (missing spec cell or spec).
       return D7.patches(
         D7.patch(version_cell.node, {2, nil}),
@@ -361,12 +391,19 @@ module Ww::Rack::Rewriter
       )
     end
 
+    rewriter, rewriter_digest = row
+    digest = vdigest(rewriter_digest, input)
+
+    if version_cell.value? == digest
+      return # No change
+    end
+
     unless output = output?(tasks, rewriter, input)
       return # Output not yet available, no change
     end
 
     D7.patches(
-      D7.patch(version_cell.node, {2, input_version}),
+      D7.patch(version_cell.node, {2, digest}),
       D7.patch(output_cell.node, {2, output}),
     )
   end
@@ -387,19 +424,20 @@ module Ww::Rack::Rewriter
       return # No change
     end
 
-    input_version = Term.of(Term.hashcode(input).to_s(base: 16))
-
-    if version_cell.value? == input_version
-      # Input is the same as the one we've already seen, simply consume it.
-      return D7.patch(input_cell.node, {2, nil})
-    end
-
-    unless rewriter = rewriter?(state.rewriters, hg, variant.spec)
+    unless row = rewriter_and_digest?(state.rewriters, hg, variant.spec)
       # Clear output and version (missing spec cell or spec).
       return D7.patches(
         D7.patch(version_cell.node, {2, nil}),
         D7.patch(output_cell.node, {2, nil}),
       )
+    end
+
+    rewriter, rewriter_digest = row
+    digest = vdigest(rewriter_digest, input)
+
+    if version_cell.value? == digest
+      # Input is the same as the one we've already seen, simply consume it.
+      return D7.patch(input_cell.node, {2, nil})
     end
 
     unless output = output?(tasks, rewriter, input)
@@ -408,7 +446,7 @@ module Ww::Rack::Rewriter
 
     D7.patches(
       D7.patch(input_cell.node, {2, nil}),
-      D7.patch(version_cell.node, {2, input_version}),
+      D7.patch(version_cell.node, {2, digest}),
       D7.patch(output_cell.node, {2, output}),
     )
   end

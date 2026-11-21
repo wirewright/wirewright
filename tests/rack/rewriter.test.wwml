@@ -762,3 +762,165 @@
       ±n => ^(* n 2)))
 
   end)
+
+;; Changes to rules in versioned rewriter must change version.
+(group
+  (rack
+    (frame
+      (cell @version)
+      (backsys
+        {¦ rw: (rewriter _ `rule)}
+          <> {rule: (^verbatim (+ a_ b_) => ^(+ a b))})
+      (node @rw
+        (rewriter ((@in @version) - rulesetR - @out)))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (node @rw
+        (rewriter ((@in @version) - rulesetR - @out)
+          (+ a_ b_) => ^(+ a b)))
+      (cell @in (+ 1 2)) ;; Same input, but @version should've changed because rewriter rules did.
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in (+ 1 2))
+      (cell @out 3))
+
+    end)
+
+  (rack
+    (frame
+      (cell @version)
+      (backsys
+        {¦ rw: (rewriter _ `rule)}
+          <> {rule: (^verbatim (+ a_ b_) => ^(+ a b))}
+        {¦ -in_ out_: (+ _ _)}
+          <> {in: ^out})
+      (node @rw
+        (rewriter ((@in @version) -> rulesetR - @out)))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (node @rw
+        (rewriter ((@in @version) -> rulesetR - @out)
+          (+ a_ b_) => ^(+ a b)))
+      (cell @in)
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in (+ 1 2)) ;; Same input, but @version should've changed because rewriter rules did.
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in)
+      (cell @out 3))
+
+    end))
+
+;; Changes to rewriter spec must invalidate versioned rewriter (inline)
+(group
+  (rack
+    (frame
+      (cell @version)
+      (backsys
+        {¦ rwspec_: noR} <> {rwspec: rulesetR})
+      (node (@rwspec (rewriter (_ - rwspec_ - _) _*))
+        (rewriter ((@in @version) - noR - @out)
+          (+ a_ b_) => ^(+ a b)))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (node (@rwspec (rewriter (_ - rwspec_ - _) _*))
+        (rewriter ((@in @version) - rulesetR - @out)
+          (+ a_ b_) => ^(+ a b)))
+      (cell @in (+ 1 2))
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in (+ 1 2))
+      (cell @out 3))
+
+    end)
+
+  (rack
+    (frame
+      (cell @version)
+      (backsys
+        {¦ rwspec_: noR} <> {rwspec: rulesetR}
+        {¦ -in_ out_: (+ _ _)} <> {in: ^out})
+      (node (@rwspec (rewriter (_ -> rwspec_ - _) _*))
+        (rewriter ((@in @version) -> noR - @out)
+          (+ a_ b_) => ^(+ a b)))
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (node (@rwspec (rewriter (_ -> rwspec_ - _) _*))
+        (rewriter ((@in @version) -> rulesetR - @out)
+          (+ a_ b_) => ^(+ a b)))
+      (cell @in)
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in (+ 1 2))
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in)
+      (cell @out 3))
+
+    end))
+
+;; Changes to rewriter spec must invalidate versioned rewriter (cell)
+(group
+  (rack
+    (frame
+      (cell @version)
+      (backsys
+        {¦ rwspec_: noR} <> {rwspec: rulesetR})
+      (rewriter ((@in @version) - @rwspec - @out)
+        (+ a_ b_) => ^(+ a b))
+      (cell @rwspec noR)
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (cell @rwspec rulesetR)
+      (cell @in (+ 1 2))
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in (+ 1 2))
+      (cell @out 3))
+
+    end)
+
+  (rack
+    (frame
+      (cell @version)
+      (backsys
+        {¦ rwspec_: noR} <> {rwspec: rulesetR}
+        {¦ -in_ out_: (+ _ _)} <> {in: ^out})
+      (rewriter ((@in @version) -> @rwspec - @out)
+        (+ a_ b_) => ^(+ a b))
+      (cell @rwspec noR)
+      (cell @in (+ 1 2))
+      (cell @out))
+
+    (frame/tail
+      (cell @rwspec rulesetR)
+      (cell @in)
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in (+ 1 2))
+      (cell @out (+ 1 2)))
+
+    (frame/tail
+      (cell @in)
+      (cell @out 3))
+
+    end))
