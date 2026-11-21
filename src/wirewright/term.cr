@@ -1961,6 +1961,41 @@ module Ww
 
       term0 != term1
     end
+
+    def self.entry_changed?(dict0 : Dict, dict1 : Dict) : Bool
+      if dict0.same?(dict1)
+        return false # unchanged
+      end
+
+      unless dict0.itemsize == dict1.itemsize
+        return true # changed
+      end
+
+      dict1.each_entry(in: Dict.pairspart) do |key, value1|
+        next unless value0 = dict0[key]?
+        next if value0 == value1
+        return true # changed
+      end
+
+      dict0.items.zip(dict1.items) do |item0, item1|
+        return true if entry_changed?(item0, item1)
+      end
+
+      false # unchanged
+    end
+
+    def self.entry_changed?(term0 : Term, term1 : Term) : Bool
+      unless term0.type == term1.type
+        return true # changed
+      end
+
+      if (dict0 = term0.as_d?)
+        dict1 = term1.as_d
+        return entry_changed?(dict0, dict1)
+      end
+
+      term0 != term1
+    end
   end
 
   # Misc

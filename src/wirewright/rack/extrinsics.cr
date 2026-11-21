@@ -154,7 +154,7 @@ module Ww::Rack::Extrinsics
     end
 
     if prev
-      return unless Term.item_changed?(prev, transcription)
+      return unless Term.entry_changed?(prev, transcription)
     end
 
     D7.patch(variant.node, {2, transcription})
@@ -177,7 +177,7 @@ module Ww::Rack::Extrinsics
     end
 
     if prev
-      return unless Term.item_changed?(prev, transcription)
+      return unless Term.entry_changed?(prev, transcription)
     end
 
     D7.patch(variant.node, {2, transcription})

@@ -2448,9 +2448,18 @@ module Ww::Rack
       # |@block
       # Maintains a live rewrite of the term at *input* in the cell at *output*.
       #
-      # "Live" here is used very loosely; there is a delay or of one or more ticks,
-      # depending on whether *spec* is executed synchronously or asynchronously.
+      # "Live" here is used very loosely; there is a delay of at least one, and possibly
+      # more ticks. The delay depends on whether *spec* is executed synchronously or
+      # asynchronously, which is only known at runtime for a particular workload.
+      #
       # Clears *output* if *input* is missing.
+      #
+      # This rewriter keeps extensions to *output* intact. For example, you can annotate
+      # the term at *output* with some pairs for metadata (e.g. `seen: true`). However,
+      # if you modify the part of the *output* term *that is under the rewriter's
+      # control* (an item or pair that it has emitted), it will want to "fix" *output* --
+      # because it is no longer compatible with the rewriter's desired output. It will
+      # do so, erasing your annotations.
       #
       # |@example
       # Basic usage:

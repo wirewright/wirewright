@@ -924,3 +924,30 @@
       (cell @out 3))
 
     end))
+
+;; Changes to pairs controlled by the rewriter trigger it (`Term.changed?`)
+(rack
+  (frame
+    (rewriter (@x - noR - @y))
+    (backsys
+      {¦ y: {¦ -a_}} <> {a: "Kaixo"}
+      {¦ y: {¦ a b_}} <> {b: 200})
+    (cell @x (+ 1 2 b: 100))
+    (cell @y))
+
+  (frame/tail
+    (cell @x (+ 1 2 b: 100))
+    (cell @y (+ 1 2 b: 100)))
+
+  (frame/tail
+    (cell @x (+ 1 2 b: 100))
+    (cell @y (+ 1 2 a: "Kaixo" b: 100)))
+
+  (frame/tail
+    (cell @x (+ 1 2 b: 100))
+    (cell @y (+ 1 2 a: "Kaixo" b: 200))) ;; This change triggers the rewriter, it wants to fix @y
+
+  (frame/tail
+    (cell @x (+ 1 2 b: 100))
+    (cell @y (+ 1 2 b: 100)))) ;; ... which it does
+  ;; ...
