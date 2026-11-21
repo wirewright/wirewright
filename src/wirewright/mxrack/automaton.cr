@@ -89,7 +89,7 @@ module Ww::MxRack
   end
 
   # :nodoc:
-  SYM_FIGURE = Term[:figure]
+  SYM_WIDGET = Term[:widget]
 
   # :nodoc:
   defcase ReprContext,
@@ -123,20 +123,20 @@ module Ww::MxRack
   private def repr(ctx : ReprContext, tree : D7::GroupNode, addr : D7::NodeAddr) : Term
     parent = tree.feature
 
-    # If there is a passable path to this `figure` node, we visualize it. If there is
-    # no such path (e.g. figure is inside a supervisor template), we simply render
-    # the `figure` as a parent.
+    # If there is a passable path to this `widget` node, we visualize it. If there is
+    # no such path (e.g. widget is inside a supervisor template), we simply render
+    # the `widget` as a parent.
     pass do
-      next unless parent.node.probably_includes?(SYM_FIGURE)
-      next unless parent.signature.try(&.head) == SYM_FIGURE
+      next unless parent.node.probably_includes?(SYM_WIDGET)
+      next unless parent.signature.try(&.head) == SYM_WIDGET
       next unless row = D7.follow?(ctx.circuit, addr)
 
-      _, figure_tree = row
-      next unless figure_tree.is_a?(D7::GroupNode)
-      next unless figure_tree.feature.node.same?(parent.node)
+      _, widget_tree = row
+      next unless widget_tree.is_a?(D7::GroupNode)
+      next unless widget_tree.feature.node.same?(parent.node)
       next if editing?(Term.of(parent.node), ctx.token)
 
-      recognized = ViRecognized.recognize(ctx.setup, ctx.components, figure_tree)
+      recognized = ViRecognized.recognize(ctx.setup, ctx.components, widget_tree)
 
       # Prepend addr to roots.
       recognized = recognized.to_readonly_slice do |root|
@@ -155,7 +155,7 @@ module Ww::MxRack
 
       situated = ViSituated.situate(instance)
       visuals = ViSituated.distill(situated)
-      return Term.of(:figure, visuals, addr: addr)
+      return Term.of(:widget, visuals, addr: addr)
     end
 
     repr = Term::Dict.build do |commit|

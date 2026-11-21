@@ -520,13 +520,13 @@ module Ww::MxRack
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
-        # |@ mxrack.figure
+        # |@ mxrack.widget
         #
         # |@pattern
-        # [figure children_*]
+        # [widget children_*]
         #
         # |@key children mxrack
-        matchpi %{[figure _*]} do
+        matchpi %{[widget _*]} do
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end
 
