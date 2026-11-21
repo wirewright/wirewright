@@ -86,7 +86,11 @@ module Ww::Alloy
     unit = recognize(template)
     comp = CompiledTemplate.new(unit, reftab: Reftab.new)
 
-    @@lock.synchronize { @@bank.put(template, comp) }
+    # Do not waste cache space on literals. We have plenty of fast paths in recognize()
+    # that catch most Literals quickly.
+    unless unit.template.is_a?(Literal)
+      @@lock.synchronize { @@bank.put(template, comp) }
+    end
 
     comp
   end
@@ -140,7 +144,6 @@ module Ww::Alloy
   def rewrite_rep(rewriter : Rewriter, term : Term, *, cache : RenderCache = Uncached(RenderKey, Term::Rep).new) : Term::Rep
     reftab = rewriter.reftab
     ctx = RenderContext.new(cache, reftab, Nitrene.primitive, Nitrene.composite)
-
     rewrite(ctx, term, rewriter.components)
   end
 
@@ -170,6 +173,11 @@ module Ww::Alloy
     primitive : Nitrene::Eval = Nitrene::Eval.new { Nitrene.inert },
     composite : Nitrene::Eval = Nitrene::Eval.new { Nitrene.inert },
   ) : Term::Rep
+    # Fast path.
+    if literal = template.unit.template.as?(Literal)
+      return Term.rep_of(literal.term)
+    end
+
     ctx = RenderContext.new(cache, template.reftab,
       Nitrene.either(primitive, Nitrene.primitive),
       Nitrene.either(Alloy.composite, composite, Nitrene.composite),

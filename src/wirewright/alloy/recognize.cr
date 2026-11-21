@@ -15,6 +15,12 @@ module Ww::Alloy
     )
     end
 
+    def self.empty : ComponentSet
+      headed = {} of Term => Slice(Component)
+      unheaded = Slice(Component).empty
+      new(headed, unheaded)
+    end
+
     def self.map(objects : Enumerable, &) : ComponentSet
       headed = {} of Term => Slice(Component)
       unheaded = Pf::Kit.stack_array(Component)
@@ -770,9 +776,68 @@ module Ww::Alloy
     end
   end
 
+  SYM_VERBATIM = Term[:"^verbatim"]
+
   # Parses *template* to find Alloy template expressions; returns the resulting `Unit`.
   # Components are parsed from a prepared *rules* enumerable.
   def recognize(template : Term, rules : Enumerable({Term, Term}) = Slice({Term, Term}).empty) : Unit
+    # Fast path for non-symbol literals.
+    if template.type.number? || template.type.string? || template.type.boolean? || template == Term.of
+      return Unit.new(Literal.new(template), ComponentSet.empty)
+    end
+
+    # Fast path for symbol literals.
+    pass do
+      next unless symbol = template.as_sym?
+      next if symbol.prefixed_by?('^')
+      return Unit.new(Literal.new(template), ComponentSet.empty)
+    end
+
+    # Fast path for top-level (^verbatim _). This is often used in Rack
+    # (e.g. `part` uses it when you substitute a dictionary).
+    pass do
+      next unless dict = template.as_d?
+      next unless dict.itemsonly?
+      next unless dict.itemsize == 2
+      next unless dict.probably_includes?(SYM_VERBATIM)
+
+      head, _ = dict
+      next unless head == SYM_VERBATIM
+
+      _, arg = dict
+      return Unit.new(Literal.new(arg), ComponentSet.empty)
+    end
+
+    # Fast path for literal backspecs. Keys must be literals and values must
+    # be atoms. For example:
+    #
+    #   {¦ x_ y_} <> {x: 0, y: 0}
+    #
+    # Here, on the backspec `{x: 0, y: 0}`, we would like to bypass the whole
+    # recognize() process completely.
+    pass do
+      next unless dict = template.as_d?
+      next unless dict.pairsonly?
+      next unless dict.size <= 8
+
+      literal = dict.ee.all? do |key, value|
+        next unless key.type.symbol?
+
+        if value.type.number? || value.type.string? || value.type.boolean? || value == Term.of
+          next true # e.g. x: 100, foo: (), msg: "hello", ok: true
+        end
+
+        next unless symbol = value.as_sym?
+        next if symbol.prefixed_by?('^') # x: ^y, not a literal
+
+        true # e.g. node: y-stack
+      end
+
+      next unless literal
+
+      return Unit.new(Literal.new(template), ComponentSet.empty)
+    end
+
     heads = Pf::Kit.stack_array(Term?)
     patterns = Pf::Kit.stack_array(Pattern)
 
