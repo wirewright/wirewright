@@ -10,23 +10,21 @@
 ;;  ###############
 ;;   ###############
 
-;; TODO: pretty printing
-;;   - path reading widget (interactive)
-;;   - path report widget (interactive)
-;;   - number table widget
-;;   - go through examples/ and fix pretty printing bugs, there are plenty
-;;
-;; TODO(hard): how to keep `expander` (and similar) state across pretty-print frames
-;; (e.g. keyed by node addr)?
+;; TODO(???): go through examples/ and fix pretty printing bugs, there are plenty
 ;;
 ;; FIXME(???): calculator keyboard input doesn't work. Also, could be related: open
 ;; mu in mu, then open e.g. calculator; can't press buttons even with mouse... why?
+;;   runes don't work, keys do, runes are captured by input but not processed...
 ;;
 ;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale
 ;; keys occasionally/on unfocus (?)
+;;    when you escape grab mode it leaves dead keys in input forever
 ;;
-;; TODO(medium): Add hints & help like in previous MuSoma, maybe some sort of
+;; TODO(medium): Add hints & help like in previous MuSoma, maybe some sort of an
 ;; interactive "tour"?
+;;
+;; TODO(hard): how to keep `expander` (and similar) state across pretty-print frames
+;; (e.g. keyed by node addr)?
 ;;
 ;; TODO(hard): How to test MxRack, and how to test MuSoma?
 ;;   Traditional script / interaction end-to-end tests? E.g. add a special --record
@@ -100,6 +98,22 @@
            '⎡<svg width="92" height="122" viewBox="0 0 92 122" fill="none" xmlns="http://www.w3.org/2000/svg">
              <path fill-rule="evenodd" clip-rule="evenodd" d="M66.5789 0C75.2702 0 82.3158 7.24568 82.3158 16.1837V44.8163C82.3158 68.1926 63.8888 87.1429 41.1579 87.1429C18.427 87.1429 0 68.1926 0 44.8163V16.1837C0 7.24568 7.04562 0 15.7368 0H66.5789ZM41.1579 59.7551C49.8491 59.7551 56.8947 52.5094 56.8947 43.5714C56.8947 34.6334 49.8491 27.3878 41.1579 27.3878C32.4667 27.3878 25.4211 34.6334 25.4211 43.5714C25.4211 52.5094 32.4667 59.7551 41.1579 59.7551Z" fill="currentColor"/>
              <path d="M0 105.816V80.6602C9.87405 92.2636 24.3812 99.5918 40.5526 99.5918C57.1778 99.5918 72.0439 91.8466 81.9253 79.6735H82.3158V102.082C87.6642 102.082 92 106.541 92 112.041C92 117.541 87.6642 122 82.3158 122H15.7368C7.04562 122 0 114.754 0 105.816Z" fill="currentColor"/>
+             </svg>⎤)
+
+  (SvgOpenParen)
+    => (svg
+         style: "content-x"
+         src:
+           '⎡<svg width="4" height="11" viewBox="0 0 4 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+             <path d="M0 5.388C0 4.804 0.0640001 4.244 0.192 3.708C0.328 3.164 0.508 2.66 0.732 2.196C0.964 1.732 1.232 1.316 1.536 0.948C1.84 0.572 2.16 0.256 2.496 0H3.804C3.444 0.256 3.104 0.556 2.784 0.9C2.464 1.244 2.184 1.624 1.944 2.04C1.704 2.456 1.512 2.9 1.368 3.372C1.224 3.836 1.152 4.324 1.152 4.836V5.94C1.152 6.452 1.224 6.944 1.368 7.416C1.512 7.88 1.704 8.32 1.944 8.736C2.184 9.152 2.464 9.532 2.784 9.876C3.104 10.22 3.444 10.52 3.804 10.776H2.496C2.16 10.528 1.84 10.216 1.536 9.84C1.232 9.464 0.964 9.044 0.732 8.58C0.508 8.116 0.328 7.616 0.192 7.08C0.0640001 6.536 0 5.972 0 5.388Z" fill="currentColor"/>
+             </svg>⎤)
+
+  (SvgCloseParen)
+    => (svg
+         style: "content-x"
+         src:
+           '⎡<svg width="4" height="11" viewBox="0 0 4 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+             <path d="M3.804 5.388C3.804 5.972 3.736 6.536 3.6 7.08C3.472 7.616 3.292 8.116 3.06 8.58C2.836 9.044 2.572 9.464 2.268 9.84C1.964 10.216 1.644 10.528 1.308 10.776H0C0.36 10.52 0.7 10.22 1.02 9.876C1.34 9.532 1.62 9.152 1.86 8.736C2.1 8.32 2.292 7.88 2.436 7.416C2.58 6.944 2.652 6.452 2.652 5.94V4.836C2.652 4.324 2.58 3.836 2.436 3.372C2.292 2.9 2.1 2.456 1.86 2.04C1.62 1.624 1.34 1.244 1.02 0.9C0.7 0.556 0.36 0.256 0 0H1.308C1.644 0.256 1.964 0.572 2.268 0.948C2.572 1.316 2.836 1.732 3.06 2.196C3.292 2.66 3.472 3.164 3.6 3.708C3.736 4.244 3.804 4.804 3.804 5.388Z" fill="currentColor"/>
              </svg>⎤)
 
   (MuBanner)
@@ -400,7 +414,7 @@
                           py-2 rounded border border-xs border-theme-decor-med"
              (icon ^icon)
              (p ^caption style: "fr-1")
-             (p ^shortcut style: "font-mono text-sm/4 text-theme-info-fg"))
+             (p ^shortcut style: "font-mono text-sm/5 text-theme-info-fg"))
            (node @mousearea (mousearea))))
 
   (MuMenuPicker origin_ @path_ @command_)
@@ -473,7 +487,124 @@
 
            ;; When they have chosen the file, clear the picker and publish the seed path.
            {¦ action_: open path_ picker_}
-             <> {(path): (), (picker): (), action: (open ^path)})))
+             <> {(path): (), (picker): (), action: (open ^path)}))
+
+  (LongStringWidget content_string)
+    => (^let prefix: (runes content 0 ..< 30)
+             suffix: (runes content -30 ..= -1)
+             omitted: (- (charcount content) 60)
+         (box
+           (group style: "flow-row text-theme-string"
+             (p ^"\"⸢(escape prefix)⸣")
+             (p ^"⸢(escape suffix)⸣\""))
+           (p style: "font-sans text-xs/4 text-theme-subtle center-x bg-theme-overlay \
+                      rounded-full px-3 py-1"
+             ^"⸢omitted⸣ rune(s) omitted" )))
+
+  (LongBlobWidget content←(%mime type_))
+    => (p ^"⟬…⸢(hex (hashcode content))⸣… ⁑ ⸢type⸣⟭" style: "text-theme-blob")
+
+  (LongBlobWidget content_blob)
+    => (p ^"⟬…⸢(hex (hashcode content))⸣…⟭" style: "text-theme-blob")
+
+  (PathWidgetBox children_*)
+    => (group style: "max-w-4xs content-y flow-col bg-theme-surface border-theme-overlay \
+                      border-sm font-sans text-sm/5 text-theme-subtle rounded-sm -dt-1"
+         ^*children)
+
+  (AbsentReportView path_string detail_string)
+    => (PathWidgetBox
+         (p style: "clip fr-1 py-3/2 text-theme-muted center-x font-medium capitalize"
+           ^detail))
+
+  (FileReportView path_string (file ⍊ timestamp_string size: {¦ human: size_string}))
+    => (PathWidgetBox
+         (group style: "clip fr-1 flow-row center-x item-center-y gap-3 px-3 py-5"
+           (icon "insert_drive_file" style: "text-4xl text-theme-text")
+           (group style: "flow-col gap-1 border-l border-theme-decor-med pl-3 text-theme-subtle"
+             (p ^path style: "text-theme-text")
+             (p ^size)
+             (p ^timestamp))))
+
+  (DirReportEntry [file name_string])
+    => (DirReportEntry ^:name icon: "insert_drive_file")
+
+  (DirReportEntry [dir name_string])
+    => (DirReportEntry ^:name icon: "folder")
+
+  (DirReportEntry ⍊ icon_string name_string)
+    => (group style: "flow-row gap-2/3"
+         (icon ^icon style: "center-y")
+         (p ^name style: "fr-1 clip content-x"))
+
+  (DirEntriesView ())
+    => (p style: "py-5 text-theme-muted center-x font-medium capitalize"
+         "Waiting for entries")
+
+  (DirEntriesView entries←(_*))
+    => (group style: "p-2 gap-1"
+         (^each (entries as entry_)
+           (DirReportEntry ^entry)))
+
+  (DirReportHeader path_string timestamp_string)
+    => (group style: "flow-row item-center-y text-theme-subtle gap-2 px-2 \
+                      py-1 bg-theme-overlay"
+         (icon "folder")
+         (p ^path style: "fr-1 clip")
+         (p ^timestamp))
+
+  (DirReportView path_string (dir entries_* ⍊ timestamp_string))
+    => (PathWidgetBox
+         (DirReportHeader ^path ^timestamp)
+         (box style: "fr-1 clip"
+           (DirEntriesView ^entries)))
+
+  (AbsentReadingView path_string detail_string)
+    => (PathWidgetBox
+         (group style: "fr-1 clip flow-col gap-2 py-5"
+           (box style: "center-x"
+             (icon "broken_image" style: "text-4xl text-theme-text")
+             (p style: "-dl-1 -dt-1 content content-center font-bold rounded-full \
+                        text-xs/4 bg-theme-attention-fg text-theme-base"
+               "!"))
+           (p ^detail style: "text-theme-text center-x justify")))
+
+  (PresentReadingHeader path_string)
+    => (group style: "flow-row item-center-y text-theme-subtle gap-2 px-2 \
+                      py-1 bg-theme-overlay"
+         (icon "insert_drive_file")
+         (p ^path style: "fr-1"))
+
+  ;; TODO: Show only a couple of lines
+  ;; TODO: Allow to scroll (have controls in present reading header?)
+  (PresentReadingContent reading_string)
+    => (p style: "clip p-5 font-notation text-theme-string"
+          µ-offset-x: (0 px)
+          µ-offset-y: (0 px)
+         ^reading)
+
+  (PresentReadingContent reading_blob)
+    => (p style: "font-notation center text-theme-subtle"
+         ^"<Opaque binary data (⸢(bytesize reading)⸣B)>")
+
+  (PresentReadingContent (digest hexdigest_string ⍊ size: {¦ human: size_string}))
+    => (group style: "flow-col"
+         (group style: "flow-row gap-3 px-3 py-3/2 text-theme-text"
+           (p ^hexdigest style: "fr-1 clip")
+           (p ^size))
+         (group style: "flow-row gap-2 p-2 item-center-y text-xs/4 bg-theme-overlay"
+           (icon "info" style: "pt-2/3")
+           (group style: "flow-col fr-1"
+             (p "Wirewright can't load files that are so large yet." style: "text-theme-text font-semibold")
+             (p "Showing only digest and size."))))
+
+  ;; Digest
+
+  (PresentReadingView path_string reading_)
+    => (PathWidgetBox
+         (PresentReadingHeader ^path)
+         (box style: "fr-1 clip"
+           (PresentReadingContent ^reading))))
 
 ;;
 ;; The circuit
@@ -907,6 +1038,14 @@
     {¦ motions: (M←(key dn) _*) locus: ⟨L←["" I° ""] R_⟩}
       <> {(M): (), L: ^R, R: ^L}
 
+    ;; Move to begin of enclosing dict.
+    {¦ motions: (M←(key home) _*) locus: (%all [`dst _*] (%entry _ E←["" I° ""]))}
+      <> {(M): (), dst: ^E, (E): ()}
+
+    ;; Move to end of enclosing dict.
+    {¦ motions: (M←(key end) _*) locus: (%all [_* `dst] (%entry _ E←["" I° ""]))}
+      <> {(M): (), dst: ^E, (E): ()}
+
     ;; Remove previous item.
     {¦ motions: (M←(key backspace ctrl: true) _*) locus: ⟨L_ ["" I° ""]⟩}
       <> {(M): (), (L): ()}
@@ -1082,10 +1221,23 @@
 
         ;; Recognize terms.
         (term term_symbol) => (atom ^\term detail: symbol)
-        (term term_string) => (atom ^\term detail: string)
         (term term_boolean) => (atom ^\term detail: boolean)
         (term term_number) => (atom ^\term detail: number)
-        (term term_blob) => (atom ^\term detail: blob)
+
+        ;; Recognize string.
+        (term term_string) => (atom ^\term detail: short-string)
+        (term term←(%pipe charcount (%number _ > 60)))
+          => (atom detail: (long-string ^term) form: inline)
+
+        ;; Recognize blob.
+        (term term_blob)
+          => (^let hexwidth: (* (bytesize term) 2) ;; Each byte is two hexdigits
+               (^let width: (+ hexwidth (- hexwidth 1)) ;; Also one space between hexdigits
+                 (^match width
+                   (when (%number _ <= 60)
+                     (atom ^\term detail: short-blob))
+                   (when _
+                     (atom detail: (long-blob ^term) form: inline)))))
 
         (term ())
           => (atom "()" detail: punct)
@@ -1186,12 +1338,16 @@
                (atom "=>" detail: punct size: 32)
                (term ^body))
 
+        ;; (backmap x_ {x: 123}) -> x_ <> {x: 123}
         (term (backmap pattern_ backspec_ ¦ doc_: (%optional () (_string*))))
           => (group detail: (rule ^:doc)
                (term ^pattern)
                ;; Ditto
                (atom "<>" detail: punct size: 32)
                (term ^backspec))
+
+        (term D←((%plural type: _number min: 1)))
+          => (atom detail: (NumberBlock ^D) form: multiline)
 
         ;; {¦ active: active←true} -> {¦ active_: true}
         (selector key_symbol (%'%let key_ value_))
@@ -1291,6 +1447,32 @@
 
         [gnd term_] => (term ^term)
 
+        ;; Recognize path...report.
+        [gnd (path (path_ report) report←(%any° [absent _string] [file] [dir _*]))]
+          => (group detail: page
+               (group detail: dict
+                 block
+                 (term path)
+                 (group detail: PathWidgetHeader
+                   (group detail: dict
+                     generic
+                     (term ^path)
+                     (term report)))
+                 (atom detail: (PathReport ^path ^report) form: multiline)))
+
+        ;; Recognize path...reading.
+        [gnd (path (path_ reading) reading←(%any° [present _string] [present _blob] [absent _string]))]
+          => (group detail: page
+               (group detail: dict
+                 block
+                 (term path)
+                 (group detail: PathWidgetHeader
+                   (group detail: dict
+                     generic
+                     (term ^path)
+                     (term reading)))
+                 (atom detail: (PathReading ^path ^reading) form: multiline)))
+
         ;; Recognize the toplevel parent.
         (parent children_* ⍊ addr: () reference: (_* ¦ pairs_))
           => (group detail: col
@@ -1312,28 +1494,28 @@
         ;; Section widget (closed).
         (gnd (section title_string _*) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (section ^addr) icon: "chevron_right" center: true))
+               (atom form: inline detail: (expander (section ^addr) icon: "chevron_right" center: true))
                (atom ^title detail: section))
 
         ;; Section widget (open).
         (parent _ _ children_* ⍊ addr_ reference_: (section title_string _* ¦ () open))
           => (group detail: col form: multiline
                (group detail: row
-                 (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
+                 (atom form: inline detail: (expander (section ^addr) icon: "expand_more" center: true))
                  (atom ^title detail: section))
                ^*children)
 
         ;; Slot widget (closed).
         (gnd (slot call_ _) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (slot ^addr) icon: "chevron_right" center: true))
+               (atom form: inline detail: (expander (slot ^addr) icon: "chevron_right" center: true))
                (inline (term ^call)))
 
         ;; Slot widget (open).
         (parent _ _ child_ ⍊ addr_ reference_: (slot call_ _ ¦ () open))
           => (group detail: col form: multiline
                (group detail: row
-                 (atom "" detail: (expander (section ^addr) icon: "expand_more" center: true))
+                 (atom form: inline detail: (expander (section ^addr) icon: "expand_more" center: true))
                  (inline (term ^call)))
                (group detail: interior
                  ^child))
@@ -1341,24 +1523,23 @@
         ;; Backsys or rewriter widget (open).
         (gnd node←(⸨backsys,rewriter⸩ _* ¦ () open) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (backsys ^addr) icon: "expand_more"))
+               (atom form: inline detail: (expander (backsys ^addr) icon: "expand_more"))
                (term ^(itemspart node)))
 
         ;; Backsys or rewriter widget with explicit edges (closed).
         (gnd reference←(⸨backsys,rewriter⸩ header_dict _*) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
-               (inline
-                 (group detail: dict
-                   generic
-                   (term ⸨backsys,rewriter⸩)
-                   (term ^header)
-                   (atom "…" detail: punct))))
+               (atom form: inline detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+               (group detail: dict
+                 block
+                 (term ⸨backsys,rewriter⸩)
+                 (term ^header)
+                 (atom "…" detail: punct)))
 
         ;; Backsys or rewriter with inferred edges widget (closed).
         (gnd reference←(⸨backsys,rewriter⸩ [(%any rule backmap) _ _] _*) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+               (atom form: inline detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
                (inline
                  (group detail: dict
                    generic
@@ -1368,7 +1549,7 @@
         ;; Supervisor widget (open).
         (parent children_* ⍊ addr_ reference: (supervisor _* ¦ () open) -editing)
           => (group detail: row
-               (atom "" detail: (expander (supervisor ^addr) icon: "expand_more"))
+               (atom form: inline detail: (expander (supervisor ^addr) icon: "expand_more"))
                (group detail: dict form: multiline
                  block
                  ^*children))
@@ -1376,7 +1557,7 @@
         ;; Supervisor widget (closed).
         (gnd (supervisor spec_ _*) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (supervisor ^addr) icon: "chevron_right"))
+               (atom form: inline detail: (expander (supervisor ^addr) icon: "chevron_right"))
                (inline
                  (group detail: dict
                    generic
@@ -1387,7 +1568,7 @@
         ;; Device widget (open).
         (parent children_* ⍊ addr_ reference: (device _* ¦ () open) -editing)
           => (group detail: row
-               (atom "" detail: (expander (device ^addr) icon: "expand_more"))
+               (atom form: inline detail: (expander (device ^addr) icon: "expand_more"))
                (group detail: dict form: multiline
                  call
                  ^*children))
@@ -1395,7 +1576,7 @@
         ;; Device widget (closed).
         (gnd (device _*) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
+               (atom form: inline detail: (expander (device ^addr) icon: "chevron_right"))
                (inline
                  (group detail: dict
                    generic
@@ -1405,7 +1586,7 @@
         ;; Rule widget (open)
         (parent _ pattern_ body_ ⍊ addr_ reference: (rule _ _ ⍊ doc_: (%optional () (_string*))) -editing)
           => (group detail: row
-               (atom "" detail: (expander (device ^addr) icon: "expand_more"))
+               (atom form: inline detail: (expander (device ^addr) icon: "expand_more"))
                (group detail: (rule ^:doc)
                   ^pattern
                   (atom "=>" detail: punct size: 32)
@@ -1414,7 +1595,7 @@
         ;; Rule widget (closed)
         (gnd (rule pattern_ _ ⍊ doc_: (%optional () (_string*))) ⍊ addr_ -editing)
           => (group detail: row
-               (atom "" detail: (expander (device ^addr) icon: "chevron_right"))
+               (atom form: inline detail: (expander (device ^addr) icon: "chevron_right"))
                (group detail: (rule ^:doc)
                  (term ^pattern)
                  (atom "=>" detail: punct size: 32)
@@ -1729,6 +1910,10 @@
         (head←cat [atom _string] [atom _string])
           <> {head: row}
 
+        ;; We can't concatenate a text atom to a utility atom. Just bottom-align.
+        (head←cat [atom] r←[atom _string])
+          <> {head: row, r: (bottom ^r)}
+
         ;; Simplify col and row.
         (col member_ ¦ (%keypool gap)) => ^member
         (row member_ ¦ (%keypool gap)) => ^member)
@@ -1738,14 +1923,38 @@
         ;; Format atoms of all sorts. Provide a fallback format.
         (atom id_string ⍊ detail: number) => (p ^id style: "text-theme-number")
         (atom id_string ⍊ detail: boolean) => (p ^id style: "text-theme-boolean")
-        (atom id_string ⍊ detail: string) => (p ^id style: "text-theme-string clamp max-w-xs")
-        (atom id_string ⍊ detail: blob) => (p ^id style: "text-theme-blob")
         (atom id_string ⍊ detail: edge) => (p ^id style: "text-theme-edge")
         (atom id_string ⍊ detail: punct) => (p ^id style: "text-theme-subtle")
         (atom id_string ⍊ detail: key) => (p ^id style: "text-theme-key")
         (atom id_string ⍊ detail: (pair colon)) => (p ^id style: "text-theme-subtle mr-1")
         (atom id_string ⍊ detail: interfix) => (p ^id style: "text-theme-subtle mx-1")
         [atom id_string] => (p ^id style: "text-theme-text")
+
+        ;; Format number block.
+        (atom ⍊ detail: (NumberBlock block_dict))
+          => (box style: "flow-row content"
+               (box style: "color-theme-subtle px-1/2"
+                 (visual (SvgOpenParen)))
+               (p style: "flow-wrap gap-3/2 text-theme-number clamp max-w-3xs text-sm/5"
+                 (^each (block as ±n) ^\n))
+               (box style: "color-theme-subtle px-1/2"
+                 (visual (SvgCloseParen))))
+
+        ;; Format short string.
+        (atom id_string ⍊ detail: short-string)
+          => (p ^id style: "text-theme-string clamp max-w-xs")
+
+        ;; Format short blob.
+        (atom id_string ⍊ detail: short-blob)
+          => (p ^id style: "text-theme-blob")
+
+        ;; Format long string.
+        (atom ⍊ detail: (long-string term_string))
+          => (visual (LongStringWidget ^term))
+
+        ;; Format long blob.
+        (atom ⍊ detail: (long-blob term_blob))
+          => (visual (LongBlobWidget ^term))
 
         ;; Format the editor.
         (atom content_string ⍊ detail: (Editor ±anchor ±span))
@@ -1772,6 +1981,33 @@
                   selections: ({selection-anchor: ^beam, selection-span: 0})
                  ^content))
 
+        (group children_* ⍊ detail: page)
+          => (box ^*children style: "page")
+
+        (group header_ ⍊ detail: PathWidgetHeader)
+          => (box style: "bg-theme-overlay floating content overlay px-2 rounded-t-sm"
+               ^header)
+
+        ;; Format path report absent.
+        (atom ⍊ detail: (PathReport path_ [absent detail_string]))
+          => (visual (AbsentReportView ^path ^detail))
+
+        ;; Format path report file.
+        (atom ⍊ detail: (PathReport path_ report←[file]))
+          => (visual (FileReportView ^path ^report))
+
+        ;; Format path report dir.
+        (atom ⍊ detail: (PathReport path_ report←[dir _*]))
+          => (visual (DirReportView ^path ^report))
+
+        ;; Format path reading absent.
+        (atom ⍊ detail: (PathReading path_ [absent detail_string]))
+          => (visual (AbsentReadingView ^path ^detail))
+
+        ;; Format path reading present.
+        (atom ⍊ detail: (PathReading path_ [present reading_]))
+          => (visual (PresentReadingView ^path ^reading))
+
         ;; Format comment.
         (atom caption_string ⍊ detail: comment)
           => (p style: "font-sans text-xs/4 text-theme-comment clamp max-w-2xs border-l-sm \
@@ -1789,7 +2025,7 @@
                ^caption)
 
         ;; Format expander.
-        (atom _ ⍊ detail: (expander (head_ addr_) ⍊ icon_string center⋮ false))
+        (atom ⍊ detail: (expander (head_ addr_) ⍊ icon_string center⋮ false))
           => (module {:@program}
                (cell @addr ^addr)
 
