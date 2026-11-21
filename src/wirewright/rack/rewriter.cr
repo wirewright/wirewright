@@ -107,12 +107,10 @@ module Ww::Rack::Rewriter
   defrecord SpecQ, edge : Term, data : Term
 
   # :nodoc:
-  defrecord CompiledSpec, digest : UInt64, rewriter : Rho::Rewriter
+  defrecord CompiledSpec, rwspec : Term, data : Term, rewriter : Rho::Rewriter
 
-  # FIXME: Use a stronger hashcode for digest!
-  private def compiled_spec(specQ : Term, data : Term)
-    digest = Int.mix(Term.hashcode(specQ), Term.hashcode(data))
-    CompiledSpec.new(digest, Rho.rewriter!(specQ, data))
+  def CompiledSpec.new(rwspec : Term, data : Term)
+    CompiledSpec.new(rwspec, data, Rho.rewriter!(rwspec, data))
   end
 
   private def variantQ?(variantsQ : ICache, term : Term) : VariantQ?
@@ -131,32 +129,32 @@ module Ww::Rack::Rewriter
     #   (rewriter (@x -> ⏏noR⏏ -> @y) ...)
     Term.case(term) do
       matchpi %{[rewriter (@input_ -> specQ_ -> @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : CompiledSpec.new(specQ, data)
         TransferQ.new(input, spec, output)
       end
 
       matchpi %{[rewriter (@input_ - specQ_ - @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : CompiledSpec.new(specQ, data)
         RelationQ.new(input, spec, output)
       end
 
       matchpi %{[rewriter ((@input_ @version_) - specQ_ - @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : CompiledSpec.new(specQ, data)
         VersionedRelationQ.new(input, spec, output, version)
       end
 
       matchpi %{[rewriter ((@input_ @version_) -> specQ_ - @output_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : CompiledSpec.new(specQ, data)
         VersionedAsymmetricRelationQ.new(input, spec, output, version)
       end
 
       matchpi %{[rewriter (specQ_ - @target_) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : CompiledSpec.new(specQ, data)
         RegimeSingleQ.new(spec, target)
       end
 
       matchpiT %{[rewriter (specQ_ - template_dict) data_*]} do
-        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : compiled_spec(specQ, data)
+        spec = Term.edge?(specQ) ? SpecQ.new(specQ, data) : CompiledSpec.new(specQ, data)
         RegimeMultiQ.new(spec, template)
       end
 
@@ -269,20 +267,18 @@ module Ww::Rack::Rewriter
     end
   end
 
-  private def rewriter_and_digest?(rewriters : ICache, hg : D7::Hypergraph, spec : CompiledSpec) : {Rho::Rewriter, UInt64}?
-    {spec.rewriter, spec.digest}
+  private def rewriter_and_spec?(rewriters : ICache, hg : D7::Hypergraph, spec : CompiledSpec) : {Rho::Rewriter, Term, Term}?
+    {spec.rewriter, spec.rwspec, spec.data}
   end
 
-  private def rewriter_and_digest?(rewriters : ICache, hg : D7::Hypergraph, spec : Spec) : {Rho::Rewriter, UInt64}?
+  private def rewriter_and_spec?(rewriters : ICache, hg : D7::Hypergraph, spec : Spec) : {Rho::Rewriter, Term, Term}?
     return unless rwspec = Rack.cell?(hg, spec.edge).try(&.value?)
 
     rewriter = rewriters.put_if_absent({rwspec, spec.data}) do
       Rho.rewriter!(rwspec, spec.data)
     end
-    # FIXME: Use a stronger hashcode for digest!
-    digest = Int.mix(Term.hashcode(rwspec), Term.hashcode(spec.data))
 
-    {rewriter, digest}
+    {rewriter, rwspec, spec.data}
   end
 
   private def output?(tasks, rewriter : Rho::Rewriter, input : Term)
@@ -356,11 +352,9 @@ module Ww::Rack::Rewriter
   # the version cell or compare with.
   #
   # *spec* is the rewriter spec itself. We include it in the digest to trigger
-  # rewrites on changes to the rules.
-  #
-  # FIXME: Use a stronger hashcode for digest!
-  private def vdigest(rewriter_digest : UInt64, input : Term) : Term
-    Term.of(Int.mix(rewriter_digest, Term.hashcode(input)).to_s(base: 16))
+  # rewrites on changes to the rules. Ditto for *data*.
+  private def vdigest(spec : Term, data : Term, input : Term) : Term
+    Term.of_digest(spec, data, input)
   end
 
   private def step(state, tasks, hg, node : D7::Node, variant : VersionedRelation) : D7::Patch?
@@ -383,7 +377,7 @@ module Ww::Rack::Rewriter
       )
     end
 
-    unless row = rewriter_and_digest?(state.rewriters, hg, variant.spec)
+    unless row = rewriter_and_spec?(state.rewriters, hg, variant.spec)
       # Clear output and version (missing spec cell or spec).
       return D7.patches(
         D7.patch(version_cell.node, {2, nil}),
@@ -391,8 +385,8 @@ module Ww::Rack::Rewriter
       )
     end
 
-    rewriter, rewriter_digest = row
-    digest = vdigest(rewriter_digest, input)
+    rewriter, rewriter_spec, rewriter_data = row
+    digest = vdigest(rewriter_spec, rewriter_data, input)
 
     if version_cell.value? == digest
       return # No change
@@ -424,7 +418,7 @@ module Ww::Rack::Rewriter
       return # No change
     end
 
-    unless row = rewriter_and_digest?(state.rewriters, hg, variant.spec)
+    unless row = rewriter_and_spec?(state.rewriters, hg, variant.spec)
       # Clear output and version (missing spec cell or spec).
       return D7.patches(
         D7.patch(version_cell.node, {2, nil}),
@@ -432,8 +426,8 @@ module Ww::Rack::Rewriter
       )
     end
 
-    rewriter, rewriter_digest = row
-    digest = vdigest(rewriter_digest, input)
+    rewriter, rewriter_spec, rewriter_data = row
+    digest = vdigest(rewriter_spec, rewriter_data, input)
 
     if version_cell.value? == digest
       # Input is the same as the one we've already seen, simply consume it.

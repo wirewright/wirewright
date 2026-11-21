@@ -916,27 +916,27 @@ module Ww
     end
 
     # :nodoc:
-    def self.hashcode(term : Term::Sym)
+    def self.hashcode(term : Sym)
       hashcode(:symbol, term.hashrepr)
     end
 
     # :nodoc:
-    def self.hashcode(term : Term::Str) : UInt64
+    def self.hashcode(term : Str) : UInt64
       hashcode(:string, term.hashrepr)
     end
 
     # :nodoc:
-    def self.hashcode(term : Term::Num) : UInt64
+    def self.hashcode(term : Num) : UInt64
       hashcode(:number, term.hashrepr)
     end
 
     # :nodoc:
-    def self.hashcode(term : Term::Boolean)
+    def self.hashcode(term : Boolean)
       hashcode(:boolean, term.hashrepr)
     end
 
     # :nodoc:
-    def self.hashcode(term : Term::Dict) : UInt64
+    def self.hashcode(term : Dict) : UInt64
       # Since dictionaries cache their hashcode, it'd be quite a complicated
       # matter to have hashcode(:dict, _) here. Right now, the latter is
       # called in `Summary.assoc` -- quite a distance from here, I know,
@@ -945,7 +945,7 @@ module Ww
     end
 
     # :nodoc:
-    def self.hashcode(term : Term::Blob) : UInt64
+    def self.hashcode(term : Blob) : UInt64
       hashcode(:blob, term.hashrepr)
     end
 
@@ -955,14 +955,31 @@ module Ww
     end
 
     {% if flag?(:docs) %}
-      # Returns a 64-bit digest of *term*.
+      # Returns a 64-bit hash of *term*.
       #
       # NOTE: This is a non-cryptographic hash. It is not meant to be used in
       # adversarial scenarios. I also cannot attest to its quality as I'm not
       # a cryptographer.
-      def self.hashcode(term : Term::Any | Term) : UInt64
+      def self.hashcode(term : Any | Term) : UInt64
       end
     {% end %}
+
+    # Returns the combined digest of *terms*. The digest is an extended `hashcode`.
+    #
+    # TODO: Right now this simply wraps `hashcode`. We must use a stronger/
+    # longer hash.
+    def self.digest(*terms : Any | Term) : Term::Str
+      digest = hashcode(terms[0])
+      terms.each(within: 1..) do |term|
+        digest = Int.mix(digest, hashcode(term))
+      end
+      Term[digest.to_s(base: 32)]
+    end
+
+    # :ditto:
+    def self.of_digest(*terms : Any | Term) : Term
+      of(digest(*terms))
+    end
 
     # Compares two term instances. Comparison is performed on the `TermType` first,
     # and then on the actual value using `<=>` if the types are equal. See `TermType`

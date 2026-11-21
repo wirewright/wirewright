@@ -421,7 +421,7 @@ module Ww::MxRack
             next unless automaton.workspace[:turn]?.in?(nil, Term.of(:automaton))
 
             current = automaton.workspace[:present]? || guest.draft
-            current_version = Term.of(Term.hashcode(current).to_s(base: 16))
+            current_version = Term.of_digest(current)
             next if automaton.workspace[:showing]? == current_version
 
             adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:turn), Term.of(:inspect))
