@@ -10,24 +10,44 @@
 ;;  ###############
 ;;   ###############
 
-;; TODO(???): go through examples/ and fix pretty printing bugs, there are plenty
+;; FIXME: All inputs must always be cleared on unfocus.
+;; TODO: implement C-r in editor to replace in place
+;; TODO: Do not omit Microfold `style: _` strings.
+;; TODO: parents without children shouldn't be printed as block/node
+;; FIXME: in pong, right pane is for some reason erased as left pane gets dirty. a scenery bug? sdl?
+;; FIXME: in pong, closing the right pane pauses everything. why?
+;;    maybe pretty printing doesn't occur so it stays in the print state??
+;; FIXME: navigation is behaving really strange. when you go back and then go forward, the same
+;;        frame's content can differ. how is that possible?
 ;;
-;; FIXME(???): calculator keyboard input doesn't work. Also, could be related: open
-;; mu in mu, then open e.g. calculator; can't press buttons even with mouse... why?
-;;   runes don't work, keys do, runes are captured by input but not processed...
-;;
-;; FIXME(???): there is some kind of `input`/`keyboard` update bug which leaves stale
-;; keys occasionally/on unfocus (?)
-;;    when you escape grab mode it leaves dead keys in input forever
-;;
-;; TODO(medium): Add hints & help like in previous MuSoma, maybe some sort of an
-;; interactive "tour"?
+;; FIXME: When we press keys, click, and so forth, we may not always land on the physics
+;;        step of the automaton; it could be pretty-printing or doing other things at that
+;;        moment. On the next frame the mouse click or input is gone. Then the automaton
+;;        wakes up. Thus we have lost the event, which is incredibly bad. We must
+;;        somehow queue events on automata so as to consume them, one after another, before
+;;        each physics step. Perhaps we need to maintain a queue of events for each automaton,
+;;        Idk. Our current problem is that automata are not truly "nested". We pretend they are
+;;        in many places, but they are not nested. So there is just one event delivery pass,
+;;        the global one, and that's it. Basically, to sum up, the problem is that we can't
+;;        guarantee the physics step is going to occur immediately after event delivery for
+;;        anything but the top-level automaton. We must be able to guarantee that. Some kind of queue
+;;        is necessary. I just don't know how to implement it. I think we need true nesting.
+;;        for the majority of things to work properly.
+;;    - related: pretty printing uses MxRack.clf instead of auclf which means things get
+;;      pretty printed even if they include the editor. E.g. (cell @x <editor>) (p @x)
+;;      is pretty printed even though we don't expect it to.
+;;    - we probably want to introduce D7::Autonomy feature instead of autonomous : Bool on
+;;      Circuit, because we want to know clearly where we need to handle it, and context should
+;;      determine how.
 ;;
 ;; TODO(hard): how to keep `expander` (and similar) state across pretty-print frames
 ;; (e.g. keyed by node addr)?
 ;;
+;; TODO(medium): Add hints & help like in previous MuSoma, maybe some sort of an
+;; interactive "tour"?
+;;
 ;; TODO(hard): How to test MxRack, and how to test MuSoma?
-;;   Traditional script / interaction end-to-end tests? E.g. add a special --record
+;;   Traditional script / interaction / end-to-end tests? E.g. add a special --record
 ;;   mode to MxRack which records events on eventq, then lets you press some key (eg F9)
 ;;   to make a screenshot. The resulting test is an interleaved sequence of events
 ;;   and screenshots. I honestly can't come up with anything better because the logical
@@ -36,7 +56,7 @@
 ;;   interactivity, hover handling, and so on, as they are in real apps or examples.
 ;;
 ;; TODO(hard): WE ARE TERRIBLY, TERRIBLY SLOW. MY GOSH! It's not going to be possible
-;; to ditch the old MuSoma until we can be on par with it in terms of performance
+;; to ditch the old MuSoma until we can be at least comparable with it in terms of performance
 
 (section "Theme"
   ;;| [Rose Pine Main](https://rosepinetheme.com)
@@ -497,8 +517,8 @@
            (group style: "flow-row text-theme-string"
              (p ^"\"⸢(escape prefix)⸣")
              (p ^"⸢(escape suffix)⸣\""))
-           (p style: "font-sans text-xs/4 text-theme-subtle center-x bg-theme-overlay \
-                      rounded-full px-3 py-1"
+           (p style: "font-sans text-xs/4 text-theme-subtle center-x border-xs \
+                      border-theme-decor-med bg-theme-base rounded-full px-2 py-1/2"
              ^"⸢omitted⸣ rune(s) omitted" )))
 
   (LongBlobWidget content←(%mime type_))
@@ -548,7 +568,7 @@
 
   (DirReportHeader path_string timestamp_string)
     => (group style: "flow-row item-center-y text-theme-subtle gap-2 px-2 \
-                      py-1 bg-theme-overlay"
+                      py-1 border-b-sm border-theme-overlay"
          (icon "folder")
          (p ^path style: "fr-1 clip")
          (p ^timestamp))
@@ -802,7 +822,7 @@
     ;; of nodes -- we have to use numeric ids (which we call `token`) to identify each
     ;; editor so as to disambiguite runtime instances of an editor from rule definition
     ;; time ones (e.g. editor patterns).
-    {¦ locus: (_* `dst) workspace: {¦ token_ repr: {¦ -editing}}}
+    {¦ locus: (_* `dst) workspace: {¦ token_ editing: false}}
       <> {dst: ("" (I ^token) "")})
 
   (step (guardR {¦ motions} rulesetR)
@@ -1335,7 +1355,7 @@
                ;; NOTE: We make the infix heavy to make sure only very small rules are printed
                ;; inline. Most rules should be printed multiline because they are very dense --
                ;; even if, in terms of characters, thay are not very long.
-               (atom "=>" detail: punct size: 32)
+               (atom "=>" detail: punct size: 40)
                (term ^body))
 
         ;; (backmap x_ {x: 123}) -> x_ <> {x: 123}
@@ -1343,9 +1363,10 @@
           => (group detail: (rule ^:doc)
                (term ^pattern)
                ;; Ditto
-               (atom "<>" detail: punct size: 32)
+               (atom "<>" detail: punct size: 40)
                (term ^backspec))
 
+        ;; Pure number lists such as (1 2 3) get formatted as number blocks.
         (term D←((%plural type: _number min: 1)))
           => (atom detail: (NumberBlock ^D) form: multiline)
 
@@ -1439,6 +1460,10 @@
           => (group detail: pair
                (inline (term ^key)) (term ^value))
 
+        ;; Widgets should always be multiline.
+        (widget _ ⍊ -form_)
+          <> {form: multiline}
+
         [inert term_] => (term ^term)
 
         ;; Recognize comment nodes (which also have the syntax `;;| ...`).
@@ -1520,31 +1545,44 @@
                (group detail: interior
                  ^child))
 
-        ;; Backsys or rewriter widget (open).
-        (gnd node←(⸨backsys,rewriter⸩ _* ¦ () open) ⍊ addr_ -editing)
+        ;; Backsys or rewriter widget (explicit edges; open).
+        (gnd (⸨backsys,rewriter⸩ header_dict rest_* ¦ () open) ⍊ addr_ -editing)
           => (group detail: row
                (atom form: inline detail: (expander (backsys ^addr) icon: "expand_more"))
-               (term ^(itemspart node)))
-
-        ;; Backsys or rewriter widget with explicit edges (closed).
-        (gnd reference←(⸨backsys,rewriter⸩ header_dict _*) ⍊ addr_ -editing)
-          => (group detail: row
-               (atom form: inline detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
                (group detail: dict
                  block
                  (term ⸨backsys,rewriter⸩)
-                 (term ^header)
+                 (inline (term ^header))
+                 (^each (rest as item_) (term ^item))))
+
+        ;; Backsys or rewriter widget (inferred edges; open).
+        (gnd (⸨backsys,rewriter⸩ fst←[(%any rule backmap) _ _] rest_* ¦ () open) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom form: inline detail: (expander (backsys ^addr) icon: "expand_more"))
+               (group detail: dict
+                 call
+                 (term ⸨backsys,rewriter⸩)
+                 (term ^fst)
+                 (^each (rest as item_) (term ^item))))
+
+        ;; Backsys or rewriter widget (explicit edges; closed).
+        (gnd reference←(⸨backsys,rewriter⸩ header_dict _*) ⍊ addr_ -editing)
+          => (group detail: row
+               (atom form: inline detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
+               (group detail: dict form: inline
+                 block
+                 (term ⸨backsys,rewriter⸩)
+                 (inline (term ^header))
                  (atom "…" detail: punct)))
 
-        ;; Backsys or rewriter with inferred edges widget (closed).
+        ;; Backsys or rewriter (inferred edges; closed).
         (gnd reference←(⸨backsys,rewriter⸩ [(%any rule backmap) _ _] _*) ⍊ addr_ -editing)
           => (group detail: row
                (atom form: inline detail: (expander (⸨backsys,rewriter⸩ ^addr) icon: "chevron_right"))
-               (inline
-                 (group detail: dict
-                   generic
-                   (term ⸨backsys,rewriter⸩)
-                   (atom "…" detail: punct))))
+               (group detail: dict form: inline
+                 generic
+                 (term ⸨backsys,rewriter⸩)
+                 (atom "…" detail: punct)))
 
         ;; Supervisor widget (open).
         (parent children_* ⍊ addr_ reference: (supervisor _* ¦ () open) -editing)
@@ -1628,7 +1666,7 @@
         ;; Exceptions to the rule above.
         (shape [(%any backsys rewriter) [(%any rule backmap) _ _] _*])
           => node
-        (shape [(%any group box window section stage device figure %all) _+])
+        (shape [(%any group box window section stage device widget %all) _+])
           => node
 
         ;; (head x: 100
@@ -1643,17 +1681,6 @@
         ;;  y: 200}
         (shape (¦ (%not ())))
           => pairsonly)
-
-      ;; Assign `form` locally based on shapes.
-      (step (waveR rulesetR cues: (dict))
-        ;; Forms are always always multiline.
-        (figure _* ⍊ -form_)
-          <> {form: multiline}
-
-        ;; Force dicts with these shapes to be multiline (but their children
-        ;; can be of any form).
-        (group node _* ⍊ detail: dict -form_)
-          <> {form: multiline})
 
       ;; Propagate `inline` down.
       (step (exhR (descR rulesetR cues: (inline)))
@@ -1880,8 +1907,7 @@
                (indent ^value))
 
         (group child_ ⍊ detail: interior)
-          => (interior ^child)
-      )
+          => (interior ^child))
 
       ;; Remove `pairsep`.
       (step (ascR rulesetR cues: (pairsep))
@@ -1893,25 +1919,22 @@
         node←(cat l←[(%any row col) _* tail_] r_)
           <> {node: ^(up l), tail: (cat ^tail ^r)}
 
-        ;; Let `cat`s "fall down" indents.
-        node←(cat l←[indent child_] r_)
+        ;; Let `cat`s "fall down" indent, bottom.
+        node←(cat l←[(%any indent bottom) child_] r_)
           <> {node: ^(up l), child: (cat ^child ^r)}
-
-        (head←cat [interior _] r_)
-          <> {head: row, r: (bottom ^r)}
 
         ;; A cat of atoms with the same detail is a string concat.
         (cat (atom l_string ¦ () detail_) (atom r_string ¦ () detail_))
-          => (atom ^(~ l r) ^:detail)
+          => (atom ^(~ l r), ^:detail)
 
         ;; A cat of atoms with different details or with additional pairs will lead
         ;; to loss of information if we were to concat strings. So we have to use
         ;; `row` instead to achieve visual concat.
-        (head←cat [atom _string] [atom _string])
-          <> {head: row}
+        (head←cat [atom _string] r←[atom _string])
+          <> {head: row, r: (bottom ^r)}
 
-        ;; We can't concatenate a text atom to a utility atom. Just bottom-align.
-        (head←cat [atom] r←[atom _string])
+        ;; Fallback
+        (head←cat (%any° [interior _*] [atom] [group _*]) r_)
           <> {head: row, r: (bottom ^r)}
 
         ;; Simplify col and row.
@@ -1985,7 +2008,8 @@
           => (box ^*children style: "page")
 
         (group header_ ⍊ detail: PathWidgetHeader)
-          => (box style: "bg-theme-overlay floating content overlay px-2 rounded-t-sm"
+          => (box style: "bg-theme-surface border-x-sm border-t-sm border-theme-overlay \
+                          floating content overlay px-2 rounded-t-sm"
                ^header)
 
         ;; Format path report absent.
@@ -2054,8 +2078,8 @@
                             (^head _* ⍊ -open_) <> {open: true}
                             (^head _* ⍊ open_) <> {(open): ()})})))
 
-        ;; Format figure.
-        [figure microfold_] => (visual ^microfold)
+        ;; Format widget.
+        [widget microfold_] => (visual ^microfold)
 
         ;; Format rows.
         (row members_*) => (group ^*members style: "flow-row")
@@ -2070,7 +2094,7 @@
 
         ;; Format interior.
         (interior member_)
-          => (box ^member style: "border-xs border-theme-decor-med px-3 py-1 rounded-sm")
+          => (box ^member style: "border-xs border-theme-decor-high p-2 rounded-sm")
 
         ;; Format bottom.
         (bottom member_)
@@ -2084,7 +2108,7 @@
     ;(cell @seed
       {document:
         (;;| Try incrementing / decrementing the counter.
-         (figure
+         (widget
            ;;| Here you are, inside the counter. ssuming It contains some state:
            (cell @count 15)
            (cell @msg)
@@ -2099,7 +2123,7 @@
                ($OutlinedButton (@msg inc) "Increment")
                ($OutlinedButton (@msg dec) "Decrement"))))
 
-         ;(figure
+         ;(widget
            (box style: "bg-red-500 min-w-32 min-h-32")
            (node @n
              (mousearea)))
@@ -2307,7 +2331,7 @@
         (module {:@pretty, :@mode, :@program}
           (node @camera
             (box style: "membrane content clip clip-aim-off mode/insert:clip-aim \
-                         mode/insert:cue-focused dragging:cursor-drag"
+                         mode/insert:cue-focused dragging:cursor-drag bg-transparent"
                  mode: @mode
                  µ-page-x: (0 px)
                  µ-page-y: (0 px)

@@ -394,11 +394,9 @@ module Ww::MxRack
           guest = circuits.put_if_absent(automaton.key) { Circuit.new(auclf(au_token), reprclf(au_token), alert) }
           guest.draft = automaton.draft
 
-          token = Term[Term.hashcode(automaton.key)]
-
           # Maintain automaton token up-to-date.
-          unless automaton.workspace[:token]? == token
-            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:token), Term.of(token))
+          unless automaton.workspace[:token]? == au_token
+            adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:token), Term.of(au_token))
           end
 
           pass do
@@ -458,7 +456,8 @@ module Ww::MxRack
               repr_tree = guest.repr_parser.parse(present)
               window_transcripts = windows(windowing_setup, automaton.scope, present_tree, interactive: false).map { |window| transcribe(window) }
 
-              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(windowing_setup, automaton.addr, repr_tree, present_tree, token))
+              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(windowing_setup, automaton.addr, repr_tree, present_tree, au_token))
+              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:editing), Term.of(editing?(guest.draft, au_token)))
               adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
             else
               window_transcripts = (au_windows[automaton]? || [] of Window).map { |window| transcribe(window) }
@@ -468,7 +467,8 @@ module Ww::MxRack
               draft_tree = guest.parser.parse(guest.draft)
               repr_tree = guest.repr_parser.parse(guest.draft)
 
-              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(windowing_setup, automaton.addr, repr_tree, draft_tree, token))
+              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:repr), repr(windowing_setup, automaton.addr, repr_tree, draft_tree, au_token))
+              adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:editing), Term.of(editing?(guest.draft, au_token)))
               adjustments << AdjustAutomatonUpdate.new(automaton.addr, Term.of(:windows), Term.of(window_transcripts))
             end
           end

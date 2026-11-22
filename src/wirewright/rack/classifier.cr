@@ -224,7 +224,7 @@ module Ww::Rack
       # (cell @y 100)
       # (feed @x @y)
       # ```
-      matchpi %{[cell @edge_]}, %{[cell @edge_ _]} do
+      matchpi %{[cell @edge_]}, %{[cell @edge_ _]} do # x
         D7.gnd(node, edge)
       end
 

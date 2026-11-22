@@ -470,7 +470,17 @@ module Ww::Rack::Tspace
   # :nodoc:
   SYM_APPEARANCE = Term[:appearance]
 
-  private def index(cache : ICache, tree : D7::ParentNode) : IndexNode
+  private def index(cache : ICache, tree : D7::CircuitNode) : IndexNode
+    # Ignore autonomous circuits such as `mxrack.automaton`. We don't want to enter
+    # them and we don't want them to share termspaces with outer stuff.
+    if tree.feature.autonomous
+      return NoIndex.new
+    end
+
+    index(cache, tree.to_group)
+  end
+
+  private def index(cache : ICache, tree : D7::GroupNode) : IndexNode
     node = tree.feature.node
     unless node.probably_includes_any?(SYM_SENSOR, SYM_APPEARANCE)
       return NoIndex.new

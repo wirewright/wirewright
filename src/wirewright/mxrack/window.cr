@@ -1993,7 +1993,7 @@ module Ww::MxRack
 
     staging = Pf::Kit.stack_array(StagingWindow)
 
-    setup.perf.stage("Render windows") do
+    setup.perf.stage("Microfold.render of windows") do
       ViSituated.each_window_group(situated) do |window_group|
         visuals, questions = ViSituated.window_root_markup(window_group)
         scenery = Microfold.pooled_render(setup.microfold, visuals).unwrap

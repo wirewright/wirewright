@@ -132,7 +132,7 @@ module Ww::MxRack
   def clf : D7::Classifier
     ->(node : Term) do
       Term.case(node) do
-        # See mxrack/window_spec.cr
+        # See mxrack/window.cr
         matchpi %{[window _*]} do
           D7.parent(node.as_d, 1u32...node.uitemsize)
         end

@@ -201,6 +201,7 @@ module Ww::MxRack
       Term.case(node) do
         matchpi %{(slot _ _? ⍊ -open)} do
           continue if feature.is_a?(D7::Inert)
+          continue if editing?(node, token)
 
           D7.gnd(node)
         end
@@ -211,7 +212,7 @@ module Ww::MxRack
           D7.parent(node.as_d, 2u32...node.uitemsize)
         end
 
-        matchpi %{[node @_ _]} do
+        matchpi %{[node _ _]} do
           continue if feature.is_a?(D7::Inert)
 
           D7.parent(node.as_d, 2u32...node.uitemsize)
@@ -225,6 +226,7 @@ module Ww::MxRack
 
         matchpi %{(section _string _* ⍊ -open)} do
           continue if feature.is_a?(D7::Inert)
+          continue if editing?(node, token)
 
           D7.gnd(node)
         end
@@ -251,6 +253,7 @@ module Ww::MxRack
 
         matchpi %{(device _* ⍊ -open)} do
           continue if feature.is_a?(D7::Inert)
+          continue if editing?(node, token)
 
           D7.gnd(node)
         end
@@ -263,6 +266,7 @@ module Ww::MxRack
 
         matchpi %{(supervisor (@_ @_ _ - @_) _* ⍊ -open)} do
           continue if feature.is_a?(D7::Inert)
+          continue if editing?(node, token)
 
           D7.gnd(node)
         end
