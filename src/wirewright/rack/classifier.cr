@@ -231,7 +231,7 @@ module Ww::Rack
       matchpiT(
         %{[cell (policyQ_symbol @edge_)]},
         %{[cell (policyQ_symbol @edge_) _]},
-      ) do
+      ) do # x
         continue unless policy = merge_policy?(policyQ)
 
         D7.gnd(node, edge, merge_policy: policy)
@@ -279,7 +279,7 @@ module Ww::Rack
       # (backsys @age
       #   ±n <> {n: ^(+ n 1)})
       # ```
-      matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do
+      matchpi %{[cell (edge←(%'edge capture_) pattern_) whole0_]} do # x
         case replacer = replacer(pattern, capture, whole0)
         in ZeroReplacer
           continue
@@ -352,7 +352,7 @@ module Ww::Rack
       #
       # ;; ...
       # ```
-      matchpi %{[feed (%group edges_ (%past @_ min: 3))]} do
+      matchpi %{[feed (%group edges_ (%past @_ min: 3))]} do # x
         defn = Term::Dict.build do |commit|
           commit << :group
           edges.items.each_cons_pair do |a, b|
@@ -545,7 +545,7 @@ module Ww::Rack
       # - `discard` empties the cell `@a` on the next tick.
       # - `feed...copy` does not touch `@a`, but copies its value into `@b` on
       #   the next tick.
-      matchpi %{[discard @edge_]} do
+      matchpi %{[discard @edge_]} do # x
         D7.gnd(node, edge)
       end
 
@@ -581,7 +581,7 @@ module Ww::Rack
       # ```
       #
       # Notice how the number disappeared while the string remains in place.
-      matchpi %{[discard @edge_ _]} do
+      matchpi %{[discard @edge_ _]} do # x
         D7.gnd(node, edge)
       end
 
@@ -590,7 +590,7 @@ module Ww::Rack
       # |@pattern
       # [part (@src_ @dst_) pattern_]
       # [part (@src_ @dst_) [backmap _ _] _*]
-      matchpi %{[part (@src_ @dst_) _*]} do
+      matchpi %{[part (@src_ @dst_) _*]} do # x
         D7.gnd(node, src, dst)
       end
 
@@ -617,7 +617,7 @@ module Ww::Rack
       #   (cell @y)
       #   (feed @x @y))
       # ```
-      matchpi %{[group _*]} do
+      matchpi %{[group _*]} do # x
         D7.parent(node.as_d, 1u32...node.uitemsize)
       end
 
@@ -701,7 +701,7 @@ module Ww::Rack
       # The `feed` refers to `@y` in the module because `@y` does not escape;
       # whereas `@x` does escape, so the cell outside the module participates
       # in the rewrite.
-      matchpi %{[module bindings_dict _*]} do
+      matchpi %{[module bindings_dict _*]} do # x
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), bindings: bindings.as_d)
       end
 
@@ -749,7 +749,7 @@ module Ww::Rack
       # to its edge. If `feed` were to try searching for `@x` higher in the node tree,
       # it'd hit `locals`, which blocks search specifically for `@x`. When `feed` searches
       # for `@y`, `locals` passe it through, so the destination cell is found correctly.
-      matchpi %{[locals locals←((%past @_ min: 0)) _*]} do
+      matchpi %{[locals locals←((%past @_ min: 0)) _*]} do # x
         D7.scope(D7.parent(node.as_d, 2u32...node.uitemsize), locals: locals.items)
       end
 
@@ -793,7 +793,7 @@ module Ww::Rack
       #
       # In Frame 1, the cell `@y` is nonempty, so the `guard` does not activate feed, and
       # xs stop flowing into ys. The circuit has reached quiescence.
-      matchpi %{[guard (@edge_) _*]} do
+      matchpi %{[guard (@edge_) _*]} do # x
         D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr|
           ann = GuardAnnotation.new(addr)
           next false if hg.annotated_with?(ann) # cycle
@@ -883,7 +883,7 @@ module Ww::Rack
       # ;; ... and so on until both queues are empty; at which point @turn
       # ;; just continues to cycle indefinitely.
       # ```
-      matchpi %{[guard (@edge_ pattern_) _*]} do
+      matchpi %{[guard (@edge_ pattern_) _*]} do # x
         D7.parent(node.as_d, 2u32...node.uitemsize) do |hg, addr|
           ann = GuardAnnotation.new(addr)
           next false if hg.annotated_with?(ann) # cycle
@@ -1022,7 +1022,7 @@ module Ww::Rack
       #     (cell @y "Look at me")
       #     (feed @x @y)))
       # ```
-      matchpi %{[device _*]} do
+      matchpi %{[device _*]} do # x
         D7.circuit(node.as_d, 1u32...node.uitemsize, D7.inert(node))
       end
 
@@ -1034,7 +1034,7 @@ module Ww::Rack
       matchpi(
         %{[circuit @header_ children0_*]},
         %{[circuit header←(_symbol @_) children0_*]},
-      ) do
+      ) do # x
         if children0.empty?
           mix0 = Term.of(:cell, {:circuit, header})
         else
@@ -1060,7 +1060,7 @@ module Ww::Rack
       #
       # |@pattern
       # [circuit (@edge_ pattern_) children_*]
-      matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do
+      matchpi %{[circuit (edge←(%'edge capture_) pattern_) children0_*]} do # x
         leaf = pass do
           replacer = replacer(pattern, capture, children0)
           if replacer.is_a?(ZeroReplacer)
@@ -1239,7 +1239,7 @@ module Ww::Rack
       matchpi(
         %{[node @header_ child0_]},
         %{[node header←(_symbol @_) child0_]},
-      ) do
+      ) do # x
         mix0 = Term.of(:group, {:cell, header, child0}, {:group, child0})
 
         D7.mixture(node, mix0) do |mix1|
@@ -1264,7 +1264,7 @@ module Ww::Rack
         end
       end
 
-      matchpi %{[node @header_]}, %{[node header←(_symbol @_)]} do
+      matchpi %{[node @header_]}, %{[node header←(_symbol @_)]} do # x
         D7.mixture(node, Term.of(:cell, header)) do |view|
           Term.of_case(view) do
             matchpi %{(cell _)} { node }
@@ -1336,7 +1336,7 @@ module Ww::Rack
       matchpi(
         %{[node (spec←edge←(%'edge capture_) pattern_) child0_]},
         %{[node (spec←(edge←(%'edge capture_)) pattern_) child0_]},
-      ) do
+      ) do # x
         case replacer = replacer(pattern, capture, child0, splice: !spec.same?(edge))
         in ZeroReplacer
           mix0 = child0
@@ -1392,7 +1392,7 @@ module Ww::Rack
       matchpi(
         %{[nodes @header_ children0_*]},
         %{[nodes header←(_symbol @_) children0_*]},
-      ) do
+      ) do # x
         if children0.empty?
           mix0 = Term.morph(node, {0, :group}, {1, {:cell, header}})
         else
@@ -1563,7 +1563,7 @@ module Ww::Rack
       # (feed @x @y)
       # (cell @y 0)
       # ```
-      matchpi %{[delay (%number +i32!)]}, %{[delay (%number +i32) _]} do
+      matchpi %{[delay (%number +i32) _]} do # x
         D7.gnd(node)
       end
 
@@ -1611,7 +1611,7 @@ module Ww::Rack
       # (cell @y 4)
       # (transfer (@x ±n @y) ^(* n 2))
       # ```
-      matchpi %{[transfer (@src_ _ @dst_) _]} do
+      matchpi %{[transfer (@src_ _ @dst_) _]} do # x
         D7.gnd(node, src, dst)
       end
 
@@ -1660,7 +1660,7 @@ module Ww::Rack
       #
       # (cell @sink (300 400 100))
       # ```
-      matchpi %{[transfer (srcs←((%past @_ min: 1)) _ @dst_) _]} do
+      matchpi %{[transfer (srcs←((%past @_ min: 1)) _ @dst_) _]} do # x
         edges = Set(Term).new
         edges.concat(srcs.items)
         edges << dst
@@ -1740,7 +1740,7 @@ module Ww::Rack
       #
       # Here, because the `@inhibitor` cell is nonempty, the transfer is not
       # carried out.
-      matchpi %{[transfer ((not (%group inhibitors_ (%past @_ min: 0))) srcs←((%past @_ min: 1)) _ @dst_) _]} do
+      matchpi %{[transfer ((not (%group inhibitors_ (%past @_ min: 0))) srcs←((%past @_ min: 1)) _ @dst_) _]} do # x
         edges = Set(Term).new
         edges.concat(inhibitors.items)
         edges.concat(srcs.items)
@@ -1808,7 +1808,7 @@ module Ww::Rack
       #   {¦ ±x} <> {x: ^(+ x 1)}
       #   {¦ ±y} <> {y: ^(- y 1)})
       # ```
-      matchpi %{[backsys [backmap _ _] _*]} do
+      matchpi %{[backsys [backmap _ _] _*]} do # x
         keys = keysof(rules: node.items.move(1))
 
         edges = Set(Term).new
@@ -1859,7 +1859,7 @@ module Ww::Rack
       #
       # ;; ...
       # ```
-      matchpi %{[backsys @target_ _*]} do
+      matchpi %{[backsys @target_ _*]} do # x
         D7.gnd(node, target)
       end
 
@@ -1908,7 +1908,7 @@ module Ww::Rack
       #
       # ;; ...
       # ```
-      matchpiT %{[backsys template_dict _*]} do
+      matchpiT %{[backsys template_dict _*]} do # x
         edges = Set(Term).new
 
         template.each_entry do |key, value|
@@ -1928,7 +1928,7 @@ module Ww::Rack
       #     min_: (%optional 1 (%number +i32!))
       #     max_: (%optional ∞ (%any° (%number +i32!) ∞)))
       #   buffer_dict]
-      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) buffer0_dict]}, min: Int32 do
+      matchpi %{[queue (@front_ @back_ ⍊ min_: (%optional 1 (%number +i32!)) max_: (%optional ∞ (%any° (%number +i32!) ∞))) buffer0_dict]}, min: Int32 do # x
         defn = Term::Dict.build do |commit|
           commit << :group
 
@@ -1976,7 +1976,7 @@ module Ww::Rack
       #
       # |@pattern
       # [view (@src_ pattern_ @dst_) template_]
-      matchpi %{[view (@src_ _ @dst_) _]} do
+      matchpi %{[view (@src_ _ @dst_) _]} do # x
         D7.gnd(node, src, dst)
       end
 
@@ -1984,7 +1984,7 @@ module Ww::Rack
       #
       # |@pattern
       # [view (srcs←((%past @_ min: 1)) pattern_ @dst_) template_]
-      matchpi %{[view (srcs←((%past @_ min: 1)) _ @dst_) _]} do
+      matchpi %{[view (srcs←((%past @_ min: 1)) _ @dst_) _]} do # x
         edges = Set(Term).new
         edges.concat(srcs.items)
         edges << dst
@@ -1995,7 +1995,7 @@ module Ww::Rack
       #
       # |@pattern
       # [view (@src_ pattern_ (over @dst_)) template_]
-      matchpi %{[view (@src_ _ (over @dst_)) _]} do
+      matchpi %{[view (@src_ _ (over @dst_)) _]} do # x
         D7.gnd(node, src, dst)
       end
 
@@ -2003,7 +2003,7 @@ module Ww::Rack
       #
       # |@pattern
       # [view (srcs←((%past @_ min: 1)) pattern_ (over @dst_)) template_]
-      matchpi %{[view (srcs←((%past @_ min: 1)) _ (over @dst_)) _]} do
+      matchpi %{[view (srcs←((%past @_ min: 1)) _ (over @dst_)) _]} do # x
         edges = Set(Term).new
         edges.concat(srcs.items)
         edges << dst
@@ -2820,16 +2820,6 @@ module Ww::Rack
         D7.parent(node.as_d, 2u32...3u32)
       end
 
-      # |@ rack.journal
-      #
-      # |@pattern
-      # [journal (@edge_ _?) _*]
-      matchpi %{[journal (@edge_ _?) _*]} do
-        # TODO: This node should supersede `log`, and be the swiss army knife of
-        # temporal / evolution tracking in Rack.
-        D7.gnd(node, edge)
-      end
-
       # |@ rack.reading
       #
       # |@pattern
@@ -2888,7 +2878,7 @@ module Ww::Rack
       #
       # ;; And so on...
       # ```
-      matchpi %{[reading @edge_]}, %{[reading @edge_ _]} do
+      matchpi %{[reading @edge_]}, %{[reading @edge_ _]} do # x
         D7.gnd(node, edge)
       end
 
@@ -2976,48 +2966,6 @@ module Ww::Rack
             otherwise do
               node # Leave the node as-is if @edge is absent or unchanged.
             end
-          end
-        end
-      end
-
-      # TODO: remove
-      matchpi %{[log (@all_ @last_ ⍊ limit_: (%optional 10 (%number +i32)) edges⋮ false) log0_dict]}, limit: Int32, log0: Term::Dict do
-        tail = log0.items.tail(limit)
-        tip0 = tail.last?
-
-        # HACK: We use `(delay 1)` to force a change on Rack pass. This way,
-        # the unmix function runs regardless of whether anything changed in
-        # *mix0* due to evaluation, **but only during Rack pass** -- since only
-        # Rack pass evaluates delays.
-        mix0 = Term.of(:group,
-          Term.of(:cell, all, tail),
-          Term.of(:cell, last, tip0),
-          Term.of(:delay, 1)
-        )
-
-        D7.mixture(node, mix0) do |mix1|
-          Term.matchpi(mix1, %{(group _ (cell _ tip1_) _)}) do
-            if edges.true? && tip0 == tip1  # Unchanged
-              if log0.itemsize == tail.size # Did not truncate
-                next node
-              end
-
-              # Truncated
-              next Term.morph(node, {2, Term.merge(Term[tail], log0.pairspart)})
-            end
-
-            log1 = log0.pairspart.transaction do |commit|
-              prefix = tail
-              if prefix.size + 1 > limit
-                prefix = prefix.move(1)
-              end
-
-              commit.concat(prefix)
-              commit << tip1
-            end
-
-            # Edge or forced
-            Term.morph(node, {2, log1})
           end
         end
       end

@@ -35,7 +35,7 @@
       (cell @n)
       (cell @m)
       (cell @sum)
-      (node @sums (journal (@sum)))
+      (node @sums (changes (async @sum limit: 1)))
 
       (backsys
         ;; Maintain sum as depdenency of n, m.
@@ -43,10 +43,10 @@
         {¦ -m sum_} <> {(sum): ()}
         {¦ ±n ±m ⋮sum} <> {sum: ^(+ n m)}
         ;; Write to disk on change.
-        {¦ sums: (journal _ event←((%any appeared changed) ±sum) _*) -fs-in_}
+        {¦ sums: (changes _ event←((%any put set) ±sum) _*) -fs-in_}
           <> {(event): (), fs-in: (overwrite file "/tmp/wirewright-path0-sum" ^(ml/compact sum))}
         ;; Remove sum file when we don't have a sum.
-        {¦ sums: (journal _ event←(disappeared _) _*) -fs-in_}
+        {¦ sums: (changes _ event←(drop _) _*) -fs-in_}
           <> {(event): (), fs-in: (delete file "/tmp/wirewright-path0-sum")}))
 
     (cell @plan

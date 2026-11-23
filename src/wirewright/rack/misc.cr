@@ -19,7 +19,6 @@ module Ww::Rack::Misc
     propose_transfer(hg, proposals)
     propose_delay(hg, proposals)
     propose_view(hg, proposals)
-    propose_journal(hg, proposals)
   end
 
   private def propose_discard(hg : D7::Hypergraph, proposals) : Nil
@@ -89,12 +88,6 @@ module Ww::Rack::Misc
         end
 
         matchpiT %{[delay n←(%number +i32!) _]} do
-          D7.patch(node, {1, n - 1})
-        end
-
-        # This one is used in some mixture()s wher ewe require the circuit to evolve
-        # despite the possibility of no other changes.
-        matchpiT %{[delay n←(%number +i32!)]} do
           D7.patch(node, {1, n - 1})
         end
 
@@ -238,38 +231,6 @@ module Ww::Rack::Misc
           end
 
           D7.patch(dst_cell.node, {2, output})
-        end
-
-        otherwise { }
-      end
-    end
-  end
-
-  private def propose_journal(hg : D7::Hypergraph, proposals) : Nil
-    hg.propose(proposals, :journal) do |node|
-      Term.case(node.term) do
-        matchpi %{[journal (@edge_) _*]} do
-          next unless target = Rack.cell?(hg, hg.resolve(node.addr, edge))
-          next unless goal = target.value?
-
-          event = Term.of(:appeared, goal)
-          D7.patch(node, {1, 1, goal}, {node.term.itemsize, event})
-        end
-
-        matchpi %{[journal (@edge_ state_) _*]} do
-          next unless target = Rack.cell?(hg, hg.resolve(node.addr, edge))
-
-          # State present, goal absent, we need to remove state.
-          unless goal = target.value?
-            event = Term.of(:disappeared, state)
-            next D7.patch(node, {1, 1, nil}, {node.term.itemsize, event})
-          end
-
-          next if state == goal
-
-          # State present, goal changed.
-          event = Term.of(:changed, goal)
-          D7.patch(node, {1, 1, nil}, {node.term.itemsize, event})
         end
 
         otherwise { }
