@@ -27,6 +27,10 @@ struct Ww::Term
 
     {% for cls in %w[WithItem InsertItem DeleteItem] %}
       struct {{cls.id}}
+        def key : Term
+          Term.of(index)
+        end
+
         # Returns the full path for this action (`prefix` plus `key`).
         def path : Slice(Term)
           prefix.append(Term.of(index))

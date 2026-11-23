@@ -5029,7 +5029,7 @@ module Ww::Rack
       matchpi(
         %{[form @edge_ _*]},
         %{[form (@edge_) _*]},
-      ) do
+      ) do # x
         D7.circuit(node.as_d, 2u32...node.uitemsize, D7.gnd(node, edge))
       end
 
@@ -5131,7 +5131,7 @@ module Ww::Rack
         %{[outlet @edge_ _]},
         %{[outlet (readonly @edge_)]},
         %{[outlet (readonly @edge_) _]},
-      ) do
+      ) do # x
         D7.gnd(node, edge)
       end
 
@@ -5140,7 +5140,7 @@ module Ww::Rack
         %{[outlet (policyQ_symbol @edge_) _]},
         %{[outlet (readonly (policyQ_symbol @edge_))]},
         %{[outlet (readonly (policyQ_symbol @edge_)) _]},
-      ) do
+      ) do # x
         continue unless policy = merge_policy?(policyQ)
 
         D7.gnd(node, edge, merge_policy: policy)
@@ -5286,7 +5286,7 @@ module Ww::Rack
         %{[field (readonly @edge_) _]},
         %{[field (readonly @edge_ _)]},
         %{[field (readonly @edge_ _) _]},
-      ) do
+      ) do # x
         D7.gnd(node, edge)
       end
 
@@ -5299,7 +5299,7 @@ module Ww::Rack
         %{[field (readonly (policyQ_symbol @edge_)) _]},
         %{[field (readonly (policyQ_symbol @edge_) _)]},
         %{[field (readonly (policyQ_symbol @edge_) _) _]},
-      ) do
+      ) do # x
         continue unless policy = merge_policy?(policyQ)
 
         D7.gnd(node, edge, merge_policy: policy)
@@ -5342,7 +5342,7 @@ module Ww::Rack
       # will treat values at that depth and below as atomic (so it will not descend
       # into them to find more fine-grained changes). Maxdepth of `0` treats the root
       # value atomically (so e.g. `{x: 1, y: 2} -> {x: 100, y: 2}` will be a single
-      # indivisible change, a replacement of the first dict by the second) . Maxdepth
+      # indivisible change, a replacement of the first dict with the second) . Maxdepth
       # of `1` will descend into the root if it is a dict, but no deeper. And so on for
       # greater maxdepths.
       #
@@ -5350,11 +5350,9 @@ module Ww::Rack
       # Records the history of changes to the value at *edge*.
       #
       # |@summary
-      # Maintains a history of changes to a cell or a similar node.
-      #
-      # |@block
       # Watches the evolution of the value at *edge* and describes it operationally.
       #
+      # |@block
       # The following is a list of operations emitted for changes pertaining to
       # the cell itself (i.e., at the depth of 0):
       # - `(put value_)`: the cell was empty and now holds *value*.
@@ -5457,7 +5455,7 @@ module Ww::Rack
       # ;; are pending *ops* (or, well, one op, the `assoc`). But then there
       # ;; is no one to handle the op so everything is at a standstill.
       # ```
-      matchpi %{[changes [(%any sync async) @edge_] _*]} do
+      matchpi %{[changes [(%any sync async) @edge_] _*]} do # x
         D7.gnd(node, merge_policy: D7::MergeDiff.new(1u32))
       end
 

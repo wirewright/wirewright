@@ -4,7 +4,10 @@ require "benchmark"
 module NeoRack
   extend self
 
-  alias Patch = D7::Patch
+  alias Patch = PatchTable | PatchCancel
+  alias PatchTable = D7::Patch
+
+  defrecord PatchCancel
 
   alias NodeAddr = D7::NodeAddr
   alias NodeAddrRouter = D7::NodeAddrRouter
@@ -52,6 +55,12 @@ module NeoRack
     PartBacksys
     BacksysSingle
     BacksysTemplate
+    Changes
+    FormLeaf
+    OutletEmpty
+    OutletOccupied
+    FieldEmpty
+    FieldOccupied
 
     def self.of(cls) : NodeSignature
       case cls
@@ -79,6 +88,14 @@ module NeoRack
       in NeoRack::Part::Backsys.class          then PartBacksys
       in NeoRack::Backsys::Single.class        then BacksysSingle
       in NeoRack::Backsys::Template.class      then BacksysTemplate
+      in NeoRack::Changes.class                then Changes
+      in NeoRack::FormLeaf.class               then FormLeaf
+      in NeoRack::Outlet.class                 then OutletEmpty | OutletOccupied
+      in NeoRack::Outlet::Empty.class          then OutletEmpty
+      in NeoRack::Outlet::Occupied.class       then OutletOccupied
+      in NeoRack::Field.class                  then FieldEmpty | FieldOccupied
+      in NeoRack::Field::Empty.class           then FieldEmpty
+      in NeoRack::Field::Occupied.class        then FieldOccupied
       end
     end
   end
@@ -106,7 +123,7 @@ module NeoRack
   defrecord ScopeClosedExcept, bindings : Term::Dict
 
   # Wraps a *successor* node in a lexical scope qualified by *scope*.
-  defcase Scope, original : Term, scope : NodeScope, successor : Group
+  defcase Scope, original : Term, scope : NodeScope, successor : IGroup
 
   # A node with zero or more children.
   module IParent
@@ -236,24 +253,24 @@ module NeoRack
   module Feed
     include IGnd
 
-    alias Src = PlaceCopy | Place
-    alias Dst = PlaceOver | Place
+    alias Src = RefCopy | Ref
+    alias Dst = RefOver | Ref
 
-    defrecord PlaceCopy, place : Place
-    defrecord PlaceOver, place : Place
+    defrecord RefCopy, ref : Ref
+    defrecord RefOver, ref : Ref
 
-    alias Place = Edge | DictFront | DictBack
+    alias Ref = Edge | DictFront | DictBack
 
     defrecord Edge, edge : Term
     defrecord DictFront, edge : Term
     defrecord DictBack, edge : Term
 
     def self.src?(term : Term) : Src?
-      place_copy?(term) || place?(term)
+      ref_copy?(term) || ref?(term)
     end
 
     def self.dst?(term : Term) : Dst?
-      place_over?(term) || place?(term)
+      ref_over?(term) || ref?(term)
     end
 
     {% for side in %w[src dst] %}
@@ -272,23 +289,23 @@ module NeoRack
       end
     {% end %}
 
-    def self.place_copy?(term : Term) : PlaceCopy?
-      Term.matchpi?(term, %{(copy placeQ_)}) do
-        return unless place = place?(placeQ)
+    def self.ref_copy?(term : Term) : RefCopy?
+      Term.matchpi?(term, %{(copy refQ_)}) do
+        return unless ref = ref?(refQ)
 
-        PlaceCopy.new(place)
+        RefCopy.new(ref)
       end
     end
 
-    def self.place_over?(term : Term) : PlaceOver?
-      Term.matchpi?(term, %{(over placeQ_)}) do
-        return unless place = place?(placeQ)
+    def self.ref_over?(term : Term) : RefOver?
+      Term.matchpi?(term, %{(over refQ_)}) do
+        return unless ref = ref?(refQ)
 
-        PlaceOver.new(place)
+        RefOver.new(ref)
       end
     end
 
-    def self.place?(term : Term) : Place?
+    def self.ref?(term : Term) : Ref?
       Term.case(term) do
         matchpi %{@_} do
           Edge.new(term)
@@ -354,8 +371,8 @@ module NeoRack
     end
 
     # :nodoc:
-    def self.take?(hg : Hypergraph, addr : NodeAddr, src : PlaceCopy) : TakeResult?
-      return unless result = take?(hg, addr, src.place)
+    def self.take?(hg : Hypergraph, addr : NodeAddr, src : RefCopy) : TakeResult?
+      return unless result = take?(hg, addr, src.ref)
 
       TakeResult.new(result.value, -> { NeoRack.patch })
     end
@@ -390,8 +407,8 @@ module NeoRack
     end
 
     # :nodoc:
-    def self.put?(hg : Hypergraph, addr : NodeAddr, dst : PlaceOver, value : Term) : PutResult?
-      over?(hg, addr, dst.place, value)
+    def self.put?(hg : Hypergraph, addr : NodeAddr, dst : RefOver, value : Term) : PutResult?
+      over?(hg, addr, dst.ref, value)
     end
 
     {% if flag?(:docs) %}
@@ -723,6 +740,357 @@ module NeoRack
     end
   end
 
+  defcase Changes,
+    original : Term,
+    edge : Term,
+    maxdepth : UInt32,
+    writable : Bool,
+    includes: {IGnd}
+
+  class Changes
+    def merge_policy : MergePolicy
+      # Different parties contributing different things to the same cell with a relaxed
+      # merge policy -- a cell this changes node is watching -- may require diff-based
+      # merging on the `changes` node itself. Hence the need for the surface merge policy
+      # on `changes`.
+      MergeDiff.new(1u32)
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield edge
+    end
+
+    def append(ops : Enumerable(Term)) : Term
+      if op = ops.single?
+        return Term.of(original.append(op))
+      end
+
+      # Sort operations to achieve deterministic ordering in the transaction.
+      # The system that will interpret / execute operations will, presumably,
+      # do its own sorting to properly modify the reference.
+      Term.of(original.append(Term[ops.to_a.sort!].prepend(:txn)))
+    end
+
+    def self.log(changes : NodeRef(Changes), before : Nil, after : Nil) : Patch
+      NeoRack.patch # no change
+    end
+
+    def self.log(changes : NodeRef(Changes), before : Term, after : Nil) : Patch
+      unless changes.node.writable
+        return PatchCancel.new
+      end
+
+      op = Term.of(:drop, before)
+      NeoRack.replace(changes, changes.node.append({op}))
+    end
+
+    def self.log(changes : NodeRef(Changes), before : Nil, after : Term) : Patch
+      unless changes.node.writable
+        return PatchCancel.new
+      end
+
+      op = Term.of(:put, after)
+      NeoRack.replace(changes, changes.node.append({op}))
+    end
+
+    def self.log(changes : NodeRef(Changes), before : Term, after : Term) : Patch
+      unless changes.node.writable
+        return PatchCancel.new
+      end
+
+      diff = Term.diff?(before, after, depth_limit: changes.node.maxdepth)
+
+      if diff.nil?
+        op = Term.of(:set, after)
+        return NeoRack.replace(changes, changes.node.append({op}))
+      end
+
+      insertions = {} of {Slice(Term), UInt32} => Array(Term)
+      deletions = [] of Term::Diff::DeleteItem
+      updates = [] of Term::Diff::WithItem | Term::Diff::PairAction
+
+      diff.each do |action|
+        case action
+        in Term::Diff::InsertItem
+          bucket = insertions.put_if_absent({action.prefix, action.index}) { [] of Term }
+          bucket << action.item # (i.e., preserving diff-order in buckets)
+        in Term::Diff::DeleteItem
+          deletions << action
+        in Term::Diff::WithItem, Term::Diff::PairAction
+          updates << action
+        end
+      end
+
+      ops = Pf::Kit.stack_array(Term)
+
+      insertions.each do |(prefix, index), bucket|
+        ops << insert_op(before, prefix, index, bucket)
+      end
+
+      deletions.each do |deletion|
+        ops << delete_op(before, deletion.prefix, deletion.index, deletion.old_item)
+      end
+
+      updates.each do |update|
+        case update
+        in Term::Diff::WithItem
+          ops << assoc_op(before, update.prefix, Term.of(update.index), update.item)
+        in Term::Diff::WithPair
+          ops << assoc_op(before, update.prefix, update.key, update.value)
+        in Term::Diff::WithoutPair
+          ops << dissoc_op(before, update.prefix, update.key, update.old_value)
+        end
+      end
+
+      NeoRack.replace(changes, changes.node.append(ops))
+    end
+
+    private def self.insert_op(reference : Term, prefix : Slice(Term), index : UInt32, seq : Array(Term)) : Term
+      Term.of(:insert, Term.of(prefix).append(index), seq)
+    end
+
+    private def self.delete_op(reference : Term, prefix : Slice(Term), index : UInt32, old_value : Term) : Term
+      Term.of(:delete, Term.of(prefix).append(index), old_value)
+    end
+
+    private def self.assoc_op(reference : Term, prefix : Slice(Term), key : Term, value : Term) : Term
+      Term.of(:assoc, Term.of(prefix).append(key), value)
+    end
+
+    private def self.dissoc_op(reference : Term, prefix : Slice(Term), key : Term, old_value : Term) : Term
+      Term.of(:dissoc, Term.of(prefix).append(key), old_value)
+    end
+  end
+
+  defrecord FormLeaf, form : Form, includes: {IGnd}
+
+  struct FormLeaf
+    def original : Term
+      form.original
+    end
+
+    def merge_policy : MergePolicy
+      form.merge_policy
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield form.edge
+    end
+  end
+
+  defcase Form,
+    children_summary : Summary,
+    original_dict : Term::Dict,
+    merge_policy : MergePolicy,
+    edge : Term,
+    children : Slice(Node),
+    range : Range(UInt32, UInt32),
+    includes: {ICircuit}
+
+  class Form
+    def self.new(original_dict : Term::Dict, merge_policy : MergePolicy, edge : Term, children : Slice(Node), range : Range(UInt32, UInt32)) : Form
+      children_summary = NeoRack.summarize(children)
+      new(children_summary, original_dict, merge_policy, edge, children, range)
+    end
+
+    def map(& : Node -> Node) : Form
+      Form.new(@original_dict, @merge_policy, @edge, @children.to_readonly_slice { |child| yield child }, @range)
+    end
+
+    def leaf : FormLeaf
+      FormLeaf.new(self)
+    end
+
+    alias Entry = OutletEntry | FieldEntry
+
+    defrecord OutletEntry, addr : NodeAddr, original : Term, key : Term, value : Term?, readonly : Bool
+    defrecord FieldEntry, addr : NodeAddr, original : Term, key : Term, value : Term?, readonly : Bool
+
+    private def self.scan(hg : Hypergraph, addr : NodeAddr, node : IInert | IAutonomy, ordptr : UInt32*, fn)
+    end
+
+    private def self.scan(hg : Hypergraph, addr : NodeAddr, node : IGnd, ordptr : UInt32*, fn)
+      case node
+      when Outlet::Empty
+        key = Term.of(ordptr.value)
+        ordptr.value += 1
+        fn.call(OutletEntry.new(addr, node.original, key, nil, node.readonly?))
+      when Outlet::Occupied
+        key = Term.of(ordptr.value)
+        ordptr.value += 1
+        fn.call(OutletEntry.new(addr, node.original, key, node.value, node.readonly?))
+      when Field::Empty
+        fn.call(FieldEntry.new(addr, node.original, node.key, nil, node.readonly?))
+      when Field::Occupied
+        fn.call(FieldEntry.new(addr, node.original, node.key, node.value, node.readonly?))
+      end
+    end
+
+    private def self.scan(hg : Hypergraph, addr : NodeAddr, node : Mixture | Scope, ordptr : UInt32*, fn)
+      scan(hg, addr, node.successor, ordptr, fn)
+    end
+
+    private def self.scan(hg : Hypergraph, addr : NodeAddr, node : ICircuit, ordptr : UInt32*, fn)
+      return if node.is_a?(Form) # Do not descend into nested forms.
+
+      node.children.zip(node.range) do |child, key|
+        scan(hg, addr.append(key), child, ordptr, fn)
+      end
+    end
+
+    private def self.scan(hg : Hypergraph, addr : NodeAddr, node : IGroup, ordptr : UInt32*, fn)
+      node.children.zip(node.range) do |child, key|
+        scan(hg, addr.append(key), child, ordptr, fn)
+      end
+    end
+
+    private def self.scan(hg : Hypergraph, addr : NodeAddr, node : Guard, ordptr : UInt32*, fn)
+      return unless node.passable?(hg, addr)
+
+      scan(hg, addr, node.successor, ordptr, fn)
+    end
+
+    def self.scan(form : Form, &fn : Entry ->)
+      summary = NeoRack.summarize(form)
+      return unless summary.includes?(Outlet) || summary.includes?(Field)
+
+      # We need this hypergraph to evaluate guards. Since forms are circuits they
+      # are self-enclosed, so we're fine rooting the hypergraph at the form.
+      hg = Hypergraph.new(form)
+
+      ord = 0u32
+
+      # Skip the form itself because we'd immediately hit the "do not descend
+      # into nested forms" branch above, thinking it's a nested form.
+      form.children.zip(form.range) do |child, key|
+        scan(hg, NodeAddr[key], child, pointerof(ord), fn)
+      end
+    end
+  end
+
+  module Outlet
+    include IGnd
+
+    def merge_policy : MergePolicy
+      spec.merge_policy
+    end
+
+    def readonly? : Bool
+      spec.readonly
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield spec.edge
+    end
+
+    defrecord Spec,
+      merge_policy : MergePolicy,
+      edge : Term,
+      readonly : Bool,
+      copying: true
+
+    defcase Empty, original : Term, spec : Spec, includes: {Outlet}
+    defcase Occupied, original : Term, spec : Spec, value : Term, includes: {Outlet}
+
+    def self.spec?(term : Term) : Spec?
+      Term.case(term) do
+        matchpi %{(readonly baseQ_)} do
+          continue unless base = spec_base?(baseQ)
+
+          base.copy_with(readonly: true)
+        end
+
+        otherwise { spec_base?(term) }
+      end
+    end
+
+    private def self.spec_base?(term : Term) : Spec?
+      Term.case(term) do
+        matchpi %{(%'edge key_)} do
+          Spec.new(MergeDiff.new(0u32), term, readonly: false)
+        end
+
+        matchpiT %{(policyQ_symbol edge←(%'edge key_))} do
+          return unless policy = NeoRack.merge_policy?(policyQ)
+
+          Spec.new(policy, edge, readonly: false)
+        end
+
+        otherwise { }
+      end
+    end
+  end
+
+  module Field
+    include IGnd
+
+    def merge_policy : MergePolicy
+      spec.merge_policy
+    end
+
+    def key : Term
+      spec.key
+    end
+
+    def readonly? : Bool
+      spec.readonly
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield spec.edge
+    end
+
+    defrecord Spec,
+      merge_policy : MergePolicy,
+      edge : Term,
+      key : Term,
+      readonly : Bool,
+      copying: true
+
+    defcase Empty, original : Term, spec : Spec, includes: {Field}
+    defcase Occupied, original : Term, spec : Spec, value : Term, includes: {Field}
+
+    def self.spec?(term : Term) : Spec?
+      Term.case(term) do
+        matchpi %{(readonly baseQ_)} do
+          continue unless base = spec_base?(baseQ)
+
+          base.copy_with(readonly: true)
+        end
+
+        matchpi %{(readonly baseQ_ name_)} do
+          continue unless base = spec_base?(baseQ)
+
+          base.copy_with(readonly: true, key: name)
+        end
+
+        matchpi %{(baseQ_ name_)} do
+          continue unless base = spec_base?(baseQ)
+
+          base.copy_with(key: name)
+        end
+
+        otherwise { spec_base?(term) }
+      end
+    end
+
+    private def self.spec_base?(term : Term) : Spec?
+      Term.case(term) do
+        matchpi %{(%'edge key_)} do
+          Spec.new(MergeDiff.new(0u32), term, key, readonly: false)
+        end
+
+        matchpiT %{(policyQ_symbol edge←(%'edge key_))} do
+          return unless policy = NeoRack.merge_policy?(policyQ)
+
+          Spec.new(policy, edge, key, readonly: false)
+        end
+
+        otherwise { }
+      end
+    end
+  end
+
   # Represents the toplevel circuit.
   defcase Root,
     original_dict : Term::Dict,
@@ -774,6 +1142,10 @@ module NeoRack
       automaton_count = a.automaton_count + b.automaton_count
       content = a.content | b.content
       new(maxlevel, gnd_count, automaton_count, content)
+    end
+
+    def includes?(cls : T.class) forall T
+      !(@content & NodeSignature.of(T)).none?
     end
   end
 
@@ -838,7 +1210,7 @@ module NeoRack
   # :nodoc:
   SYM_SPACE = Term[:space]
 
-  private def merge_policy?(name : Term::Sym) : MergePolicy?
+  def merge_policy?(name : Term::Sym) : MergePolicy?
     # |@ rack.[merge policy]
     #
     # |@summary
@@ -1541,6 +1913,85 @@ module NeoRack
         Mixture.new(original, rec.call(defn, rec), fold)
       end
 
+      # NOTE: The changes node cannot detect changes made upstream of *edge*. It
+      # can only detect changes made at *edge* or downstream of *edge*.
+      matchpi(<<-'WWML') do
+      [changes (behavior←(%any sync async) @edge_
+         ⍊ limit: (%optional ∞ limitQ←(%any° ∞ (%number u32)))
+           maxdepth: (%optional ∞ maxdepthQ←(%any° ∞ (%number u32))))
+        ops_*]
+      WWML
+        case behavior
+        when Term.of(:async)
+          writable = true
+        when Term.of(:sync)
+          writable = ops.empty?
+        else
+          unreachable
+        end
+
+        limit = limitQ == Term.of(:∞) ? UInt32::MAX : limitQ.to(UInt32)
+        maxdepth = maxdepthQ == Term.of(:∞) ? UInt32::MAX : maxdepthQ.to(UInt32)
+        defn = Changes.new(original, edge, maxdepth, writable)
+
+        # We cannot enforce changes `limit` deeper in the implementation, so we have
+        # to do it here.
+        fold = ->(mix : Term) do
+          # *mix* is (changes _ ops_*) -- of course, assuming the Changes implementation is
+          # bug-free and well-behaved.
+          result = mix.as_d
+
+          # (changes _ ⏏ops_*⏏)
+          if result.uitemsize - 2 >= limit
+            # (changes _ ⏏_⏏ ops_*) -> (changes _ ops_*)
+            result = result.replace(2u32...result.uitemsize - limit, Term.rep)
+          end
+
+          Term.of(result)
+        end
+
+        Mixture.new(original, defn, fold)
+      end
+
+      matchpi %{[form @edge_ _*]} do
+        policy = MergeDiff.new(0u32)
+        childrenQ = original.items.move(2)
+        children = childrenQ.to_readonly_slice { |child| rec.call(child, rec) }
+        Form.new(original.as_d, policy, edge, children, 2u32...original.uitemsize)
+      end
+
+      matchpiT %{[form (policyQ_symbol @edge_) _*]} do
+        continue unless policy = merge_policy?(policyQ)
+
+        childrenQ = original.items.move(2)
+        children = childrenQ.to_readonly_slice { |child| rec.call(child, rec) }
+        Form.new(original.as_d, policy, edge, children, 2u32...original.uitemsize)
+      end
+
+      matchpi %{[outlet specQ_]} do
+        continue unless spec = Outlet.spec?(specQ)
+
+        Outlet::Empty.new(original, spec)
+      end
+
+      matchpi %{[outlet specQ_ value_]} do
+        continue unless spec = Outlet.spec?(specQ)
+
+        Outlet::Occupied.new(original, spec, value)
+      end
+
+      matchpi %{[field specQ_]} do
+        continue unless spec = Field.spec?(specQ)
+
+        Field::Empty.new(original, spec)
+      end
+
+      matchpi %{[field specQ_ value_]} do
+        continue unless spec = Field.spec?(specQ)
+
+        Field::Occupied.new(original, spec, value)
+      end
+
       otherwise do
         Inert.new(original)
       end
@@ -1596,7 +2047,7 @@ module NeoRack
 
     alias SituatedMember = RWMember | MissingMember
 
-    defrecord RWMember, key : Term, initial : Term?, place : Place
+    defrecord RWMember, key : Term, initial : Term?, place : Place::Any
     defrecord MissingMember, key : Term
 
     def self.situate?(hg : Hypergraph, addr : NodeAddr, template : EdgeTemplate) : Slice(SituatedMember)?
@@ -1652,7 +2103,7 @@ module NeoRack
       end
     end
 
-    def self.writeback(situated : Slice(SituatedMember), reply : Term::Dict) : Patch
+    def self.writeback(hg : Hypergraph, situated : Slice(SituatedMember), reply : Term::Dict) : Patch
       NeoRack.txn(situated) do |member|
         case member
         in MissingMember
@@ -1718,69 +2169,197 @@ module NeoRack
   # Through this place abstraction we implement nodes such as `rack.part`, `rack.form`,
   # and `rack.changes`.
   module Place
-    abstract def target_id : NodeId
-    abstract def original : Term
-    abstract def decorate : Term::Rep -> Term::Rep
-    abstract def write(rep : Term::Rep) : Patch
+    alias Any = Empty | Occupied
+    alias Empty = EmptyDependency | EmptyCell | EmptyForm
+    alias Occupied = OccupiedDependency | OccupiedCell | OccupiedForm
 
-    struct Empty
-      include Place
-
-      getter target_id : NodeId
-      getter original : Term
-      getter decorate : Term::Rep -> Term::Rep
-
-      # :nodoc:
-      def initialize(@target_id : NodeId, @original : Term, @decorate : Term::Rep -> Term::Rep)
-      end
-
-      # :nodoc:
-      def self.new(target_id : NodeId, original : Term)
-        decorate = ->(rep : Term::Rep) { rep }
-        new(target_id, original, decorate)
-      end
+    module WritableCell
+      abstract def value? : Term?
 
       def write(rep : Term::Rep) : Patch
-        rep = @decorate.call(rep)
-
         unless rep.empty?
           value = Term.collapse(rep)
         end
         # value : Term?
 
-        Patch.assoc(@target_id, Term.morph(@original, {2, value}))
+        NeoRack.txn(
+          NeoRack.txn(@changes) { |node| Changes.log(node, before: value?, after: value) },
+          PatchTable.assoc(@target_id, Term.morph(@original, {2, value})),
+        )
       end
     end
 
-    struct Occupied
-      include Place
+    module WritableDependency
+      abstract def value? : Term?
 
-      getter target_id : NodeId
-      getter original : Term
+      def write(rep : Term::Rep) : Patch
+        # NOTE: We're interested in the value **before** decorate().
+        unless rep.empty?
+          value = Term.collapse(rep)
+        end
+        # value : Term?
+
+        rep = @decorate.call(rep)
+
+        NeoRack.txn(
+          NeoRack.txn(@changes) { |node| Changes.log(node, before: value?, after: value) },
+          @upstream.write(rep)
+        )
+      end
+    end
+
+    struct EmptyCell
+      include WritableCell
+
+      # :nodoc:
+      def initialize(@target_id : NodeId, @original : Term, @changes : Slice(NodeRef(Changes)))
+      end
+
+      def value? : Term?
+      end
+    end
+
+    struct OccupiedCell
+      include WritableCell
+
       getter value : Term
-      getter decorate : Term::Rep -> Term::Rep
 
       # :nodoc:
-      def initialize(@target_id : NodeId, @original : Term, @value : Term, @decorate : Term::Rep -> Term::Rep)
+      def initialize(@target_id : NodeId, @original : Term, @value, @changes : Slice(NodeRef(Changes)))
       end
 
+      def value? : Term?
+        value
+      end
+    end
+
+    class EmptyDependency
+      include WritableDependency
+
       # :nodoc:
-      def self.new(target_id : NodeId, original : Term, value : Term)
-        decorate = ->(rep : Term::Rep) { rep }
-        new(target_id, original, value, decorate)
+      def initialize(@upstream : Any, @changes : Slice(NodeRef(Changes)), @decorate : Term::Rep -> Term::Rep)
+      end
+
+      def value? : Term?
+      end
+    end
+
+    class OccupiedDependency
+      include WritableDependency
+
+      getter value : Term
+
+      # :nodoc:
+      def initialize(@upstream : Any, @value, @changes : Slice(NodeRef(Changes)), @decorate : Term::Rep -> Term::Rep)
+      end
+
+      def value? : Term?
+        value
+      end
+    end
+
+    struct EmptyForm
+      # :nodoc:
+      def initialize(@target_id : NodeId, @form : Form)
+      end
+
+      def write(rep : Term::Rep) : Term::Rep
+        pp! rep
+        raise ""
+      end
+    end
+
+    struct OccupiedForm
+      getter value : Term
+
+      # :nodoc:
+      def initialize(@target_id : NodeId, @entries : Slice(Form::Entry), @form : Form)
+        # Turn the entries into a dict.
+        row = Term::Dict.build do |commit|
+          @entries.each do |entry|
+            case entry
+            in Form::OutletEntry
+              commit << entry.value # can be nil, in which case nothing is appended
+            in Form::FieldEntry
+              commit.with(entry.key, entry.value) # value can be nil, in which case nothing is added
+            end
+          end
+        end
+
+        @value = Term.of(row)
       end
 
       def write(rep : Term::Rep) : Patch
-        rep = @decorate.call(rep)
-
-        unless rep.empty?
-          value = Term.collapse(rep)
+        # Figure out what changed.
+        unless changes = Term.diff?(@value, Term.collapse(rep), depth_limit: 1u32)
+          return PatchCancel.new
         end
-        # value : Term?
 
-        Patch.assoc(@target_id, Term.morph(@original, {2, value}))
+        # Build a schedule.
+        schedule = D7::NodeAddrRouter::Builder(Term?).new
+        accepted = true
+
+        changes.each do |action|
+          assert action.prefix.empty?
+
+          next unless entry_index = @entries.index { |entry| entry.key == Term.of(action.key) }
+          entry = @entries[entry_index]
+
+          pass do
+            next unless action.is_a?(Term::Diff::InsertItem)
+            next unless entry.is_a?(Form::OutletEntry) && entry.value
+
+            needle = nil
+
+            (0...entry_index).reverse_each do |candidate_index|
+              candidate = @entries[candidate_index]
+              break unless candidate.is_a?(Form::OutletEntry)
+              break unless candidate.value.nil? # we want an empty outlet
+              next if candidate.readonly        # we want a writable one
+
+              needle = candidate
+              break
+            end
+
+            if needle.nil?
+              accepted = false
+              next
+            end
+
+            entry = needle
+          end
+          break unless accepted
+
+          if entry.readonly
+            accepted = false
+            break
+          end
+
+          case action
+          in Term::Diff::WithItem, Term::Diff::InsertItem
+            schedule[entry.addr] = Term.morph(entry.original, {2, action.item})
+          in Term::Diff::WithPair
+            schedule[entry.addr] = Term.morph(entry.original, {2, action.value})
+          in Term::Diff::DeleteItem, Term::Diff::WithoutPair
+            schedule[entry.addr] = Term.morph(entry.original, {2, nil})
+          end
+        end
+
+        unless accepted
+          return PatchCancel.new
+        end
+
+        # Deliver changes to entries of the form. The result is a term -- the new value
+        # for the form, which we propose in the patch.
+        PatchTable.assoc(@target_id, NeoRack.apply(@form, schedule.router))
       end
     end
+  end
+
+  defrecord NodeRef(T), addr : NodeAddr, id : NodeId, node : T do
+    {% unless T < IGnd %}
+      {% T.raise "expected a IGnd includer" %}
+    {% end %}
   end
 
   class Hypergraph
@@ -1879,12 +2458,6 @@ module NeoRack
       AbsEdge.new(NodeAddr.empty, edge)
     end
 
-    defrecord Ref(T), addr : NodeAddr, id : NodeId, node : T do
-      {% unless T < IGnd %}
-        {% T.raise "expected a IGnd includer" %}
-      {% end %}
-    end
-
     # TODO: early exit
     def present?(cls : T.class, connected_to edge : AbsEdge) : Bool forall T
       present = false
@@ -1894,60 +2467,89 @@ module NeoRack
       present
     end
 
-    def single?(cls : T.class, connected_to edge : AbsEdge) : Ref(T)? forall T
-      refs = Pf::Kit.stack_array(Ref(T), 4)
+    def single?(cls : T.class, connected_to edge : AbsEdge) : NodeRef(T)? forall T
+      refs = Pf::Kit.stack_array(NodeRef(T), 4)
       each(cls, edge) do |ref|
         refs << ref
       end
       refs.single?
     end
 
-    private def places(addr : NodeAddr, edge : Term, seenptr : Pf::USet32*) : Slice(Place)
+    private def places(addr : NodeAddr, edge : Term, seenptr : Pf::USet32*) : Slice(Place::Any)
       abs_edge = resolve(addr, edge)
 
-      pool = Pf::Kit.stack_array(Ref(Cell) | Ref(Part), 4)
+      pool = Pf::Kit.stack_array(NodeRef(Cell) | NodeRef(Outlet) | NodeRef(Field) | NodeRef(Part), 4)
 
-      # Cells have just one edge so no worries here.
-      each(Cell, abs_edge) do |candidate|
+      each(Cell, connected_to: abs_edge) do |candidate|
+        # Cells have just one edge so no worries here.
         pool << candidate
       end
 
-      # Parts have two edges:
-      #
-      #   (part (@src @dst) ...)
-      #
-      # ... so we must verify which one we've actually hit. It must be @dst.
-      each(Part, abs_edge) do |candidate|
+      each(Outlet, connected_to: abs_edge) do |candidate|
+        # Outlets have just one edge so no worries here.
+        pool << candidate
+      end
+
+      each(Field, connected_to: abs_edge) do |candidate|
+        # Fields have just one edge so no worries here.
+        pool << candidate
+      end
+
+      each(Part, connected_to: abs_edge) do |candidate|
         abs_dst = resolve(candidate.addr, candidate.node.dst)
+        # Parts have two edges:
+        #
+        #   (part (@src @dst) ...)
+        #
+        # ... so we must verify which one we've actually hit. It must be @dst.
         next unless abs_edge == abs_dst
 
         pool << candidate
       end
 
-      places = Pf::Kit.stack_array(Place, 4)
+      # Collect changes nodes so that the resulting Place can refer to them.
+      changes = Pf::Kit.stack_array(NodeRef(Changes), 4)
+      each(Changes, connected_to: abs_edge) do |node|
+        changes << node
+      end
+
+      places = Pf::Kit.stack_array(Place::Any, 4)
+
+      # Process forms on the edge (if any).
+      each(FormLeaf, connected_to: abs_edge) do |leaf|
+        form = leaf.node.form
+
+        # Collect entries of the form, such as `rack.field` and `rack.outline`.
+        entries = Pf::Kit.stack_array(Form::Entry, 8)
+        Form.scan(form) do |entry|
+          entries << entry
+        end
+
+        places << Place::OccupiedForm.new(leaf.id, entries.to_unsafe_readonly_slice!, form)
+      end
 
       pool.each do |member|
         case node = member.node
         when Cell::Empty
-          places << Place::Empty.new(member.id, node.original)
-        when Cell::Occupied
-          places << Place::Occupied.new(member.id, node.original, node.value)
+          places << Place::EmptyCell.new(member.id, node.original, changes.to_unsafe_readonly_slice!)
+        when Cell::Occupied, Outlet::Occupied, Field::Occupied
+          places << Place::OccupiedCell.new(member.id, node.original, node.value, changes.to_unsafe_readonly_slice!)
         when Part
           if seenptr.value.includes?(member.id) # cycle
-            return Slice(Place).empty
+            return Slice(Place::Any).empty
           end
 
           seenptr.value = seenptr.value.add(member.id)
 
           unless upstream = place?(member.addr, node.src, seenptr)
-            return Slice(Place).empty
+            return Slice(Place::Any).empty
           end
 
           unless upstream.is_a?(Place::Occupied)
-            return Slice(Place).empty
+            return Slice(Place::Any).empty
           end
 
-          next unless place = part_place?(node, upstream)
+          next unless place = part_place?(node, upstream, changes)
 
           places << place
         end
@@ -1956,7 +2558,7 @@ module NeoRack
       places.to_unsafe_readonly_slice!
     end
 
-    private def part_place?(node : Part::Backmap, upstream : Place::Occupied)
+    private def part_place?(node : Part::Backmap, upstream : Place::Occupied, changes : Pf::Kit::HybridArray)
       env_trace_lists = M1.matches_and_traces(Term[], node.pattern, upstream.value)
       return if env_trace_lists.empty?
 
@@ -1992,13 +2594,13 @@ module NeoRack
       #   (part (@D @y) {¦ -y_})
       #   (feed @x @y)
       if value.nil?
-        return Place::Empty.new(upstream.target_id, upstream.original, decorate)
+        return Place::EmptyDependency.new(upstream, changes.to_unsafe_readonly_slice!, decorate)
       end
 
-      Place::Occupied.new(upstream.target_id, upstream.original, value, decorate)
+      Place::OccupiedDependency.new(upstream, value, changes.to_unsafe_readonly_slice!, decorate)
     end
 
-    private def part_place?(node : Part::Backsys, upstream : Place::Occupied)
+    private def part_place?(node : Part::Backsys, upstream : Place::Occupied, changes : Pf::Kit::HybridArray)
       query = Term.of(Term[].with(node.whole, upstream.value))
       reply = M1.backmap(node.backsys, query)
       return unless reply = reply.as_d?
@@ -2007,16 +2609,16 @@ module NeoRack
       decorate = decoratef(node, upstream, value)
 
       if value.nil?
-        return Place::Empty.new(upstream.target_id, upstream.original, decorate)
+        return Place::EmptyDependency.new(upstream, changes.to_unsafe_readonly_slice!, decorate)
       end
 
-      Place::Occupied.new(upstream.target_id, upstream.original, value, decorate)
+      Place::OccupiedDependency.new(upstream, value, changes.to_unsafe_readonly_slice!, decorate)
     end
 
     private def decoratef(node : Part::Backmap, upstream : Place::Occupied, input : Term?, env_trace_lists : M1::EnvTraceList)
       ->(rep : Term::Rep) do
         if input == rep.single? # Unchanged
-          return upstream.decorate.call(Term.rep(upstream.value))
+          return Term.rep(upstream.value)
         end
 
         backspec = pass do
@@ -2043,15 +2645,14 @@ module NeoRack
         end
 
         backmap = {env_trace_lists, backspec}
-        rep = M1.backmapR({backmap}, upstream.value)
-        upstream.decorate.call(rep)
+        M1.backmapR({backmap}, upstream.value)
       end
     end
 
     private def decoratef(node : Part::Backsys, upstream : Place::Occupied, input : Term?)
       ->(rep : Term::Rep) do
         if input == rep.single? # Unchanged
-          return upstream.decorate.call(Term.rep(upstream.value))
+          return Term.rep(upstream.value)
         end
 
         query = Term.of(
@@ -2069,18 +2670,17 @@ module NeoRack
           rep = Term.rep(successor)
         end
 
-        upstream.decorate.call(rep)
+        rep
       end
     end
 
-    private def place?(addr : NodeAddr, edge : Term, seenptr : Pf::USet32*) : Place?
+    private def place?(addr : NodeAddr, edge : Term, seenptr : Pf::USet32*) : Place::Any?
       places(addr, edge, seenptr).single?
     end
 
-    def place?(addr : NodeAddr, edge : Term) : Place::Occupied | Place::Empty?
+    def place?(addr : NodeAddr, edge : Term) : Place::Any?
       seen = Pf::USet32.new
-      result = place?(addr, edge, pointerof(seen))
-      result.as?(Place::Occupied) || result.as?(Place::Empty)
+      place?(addr, edge, pointerof(seen))
     end
 
     def occupied_place?(addr : NodeAddr, edge : Term) : Place::Occupied?
@@ -2097,11 +2697,11 @@ module NeoRack
       places.to_compact_readonly_slice { |place| place.as?(Place::Occupied) }
     end
 
-    def each(cls : T.class, &fn : Ref(T) ->) forall T
+    def each(cls : T.class, &fn : NodeRef(T) ->) forall T
       scan(NodeAddr.empty, 0u32, @root, fn)
     end
 
-    def each(cls : T.class, connected_to edge : AbsEdge, &fn : Ref(T) ->) : Nil forall T
+    def each(cls : T.class, connected_to edge : AbsEdge, &fn : NodeRef(T) ->) : Nil forall T
       id_zero, ceiling = Hypergraph.descend(@root, edge.module)
       assert ceiling.is_a?(Scope) || ceiling.is_a?(ICircuit)
 
@@ -2122,10 +2722,10 @@ module NeoRack
     end
 
     # :nodoc:
-    def scan(addr : NodeAddr, id : NodeId, node : IGnd, fn : Ref(T) ->) : Nil forall T
+    def scan(addr : NodeAddr, id : NodeId, node : IGnd, fn : NodeRef(T) ->) : Nil forall T
       return unless node.is_a?(T)
 
-      fn.call(Ref(T).new(addr, id, node))
+      fn.call(NodeRef(T).new(addr, id, node))
     end
 
     # :nodoc:
@@ -2141,9 +2741,9 @@ module NeoRack
     end
 
     # :nodoc:
-    def scan(addr : NodeAddr, id : NodeId, node : IParent, fn : Ref(T) ->) : Nil forall T
+    def scan(addr : NodeAddr, id : NodeId, node : IParent, fn : NodeRef(T) ->) : Nil forall T
       summary = NeoRack.summarize(node)
-      return if (summary.content & NodeSignature.of(T)).none?
+      return unless summary.includes?(T)
 
       node.children.zip(node.range) do |child, key|
         scan(addr.append(key), id, child, fn)
@@ -2156,7 +2756,7 @@ module NeoRack
     end
 
     # :nodoc:
-    def scan_scope(addr : NodeAddr, id : NodeId, edge : Term, node : IGnd, fn : Ref(T) ->) : Nil forall T
+    def scan_scope(addr : NodeAddr, id : NodeId, edge : Term, node : IGnd, fn : NodeRef(T) ->) : Nil forall T
       return unless node.is_a?(T)
 
       found = false
@@ -2168,7 +2768,7 @@ module NeoRack
 
       return unless found
 
-      fn.call(Ref(T).new(addr, id, node))
+      fn.call(NodeRef(T).new(addr, id, node))
     end
 
     # :nodoc:
@@ -2193,9 +2793,9 @@ module NeoRack
     end
 
     # :nodoc:
-    def scan_scope(addr : NodeAddr, id : NodeId, edge : Term, node : IParent, fn : Ref(T) ->) : Nil forall T
+    def scan_scope(addr : NodeAddr, id : NodeId, edge : Term, node : IParent, fn : NodeRef(T) ->) : Nil forall T
       summary = NeoRack.summarize(node)
-      return if (summary.content & NodeSignature.of(T)).none?
+      return unless summary.includes?(T)
 
       node.children.zip(node.range) do |child, key|
         scan_scope(addr.append(key), id, edge, child, fn)
@@ -2434,7 +3034,7 @@ module NeoRack
 
         # Merge patches proposed by the block so that we have one final patch
         # that we can apply to the circuit.
-        patch, _ = D7.merge(patches) do |node_id|
+        patch, _ = D7.merge(patches.reject(PatchCancel)) do |node_id|
           response = hg.fetch(node_id)
           {response.node.original, response.node.merge_policy}
         end
@@ -2471,21 +3071,21 @@ module NeoRack
     node.original
   end
 
-  def replace(object : Hypergraph::Ref, term : Term) : Patch
-    Patch.assoc(object.id, term)
+  def replace(object : NodeRef, term : Term) : Patch
+    PatchTable.assoc(object.id, term)
   end
 
   # Constructs an empty patch.
   def patch : Patch
-    Patch.new
+    PatchTable.new.as(Patch)
   end
 
   # Constructs a patch that morphs node terms in *object* according
   # to *morphseq*.
   #
   # See also `Term.morph`.
-  def patch(object : Hypergraph::Ref, *morphseq) : Patch
-    Patch.assoc(object.id, Term.morph(object.node.original, *morphseq))
+  def patch(object : NodeRef, *morphseq) : Patch
+    PatchTable.assoc(object.id, Term.morph(object.node.original, *morphseq)).as(Patch)
   end
 
   # Constructs patches for each object in *objects* using the block;
@@ -2494,11 +3094,15 @@ module NeoRack
   # Conflicting changes from later patches (*objects*-wise, with greater index)
   # win over former ones.
   def txn(objects : Enumerable(T), & : T, Int32 -> Patch?) : Patch forall T
-    patch = Patch.new
+    patch = PatchTable.new
 
     objects.each_with_index do |object, index|
       contrib = yield object, index
       next if contrib.nil?
+
+      if contrib.is_a?(PatchCancel)
+        return PatchCancel.new
+      end
 
       contrib.each do |key, value|
         patch = patch.assoc(key, value)
@@ -2523,53 +3127,136 @@ module NeoRack
   end
 end
 
+# TODO: add test:
+#   (cell (space @data) {x: 100, y: 200})
+#   (part (@data @x) {¦ ±x})
+#   (backsys @data {¦ ±y} <> {y: ^(* y 2)})
+#   (backsys @x ±n <> {n: ^(+ n 1)})
+#   (changes (async @data limit: 3))
+#   (changes (async @x limit: 3))
+#
+# TODO: add test:
+#   (part (@workspace @people) {¦ people_})
+#   (part (@people @jane) ⟨jane←{¦ name: "Jane"}⟩)
+#   (part (@jane @age) {¦ ±age})
+#   (backsys @age ±n <> {n: ^(+ n 1)})
+#   (backsys @jane {¦ busy_} <> {(busy): ()})
+#
+#   (part (@people @busy) ⟨{¦ -busy_}⟩°)
+#   (backsys {@:busy}
+#     {¦ -busy_} <> {busy: true})
+#
+#   (cell (space @workspace)
+#     {people:
+#       ({name: "Jane", age: 25}
+#        {name: "John", age: 30}
+#        {name: "Barbara", age: 35})})
+#
+#   (changes (async @age))
+#   (changes (async @jane))
+#   (changes (async @people))
+#   (changes (async @workspace))
+#
+# TODO: add test:
+#   (form @xf
+#     (outlet @x 100)
+#     (outlet @y 200)
+#     (outlet @z 300)
+#     (field @foo 100)
+#     (field @bar 200))
+#
+#   (reading @xf)
+#   (backsys @xf
+#     [±n _ _] <> {n: ^(+ n 1)}
+#     [_ m_ _] <> {(m): ()}
+#     [_ `m _] <> {m: 200}
+#     {¦ ±foo} <> {foo: ^(+ foo 1)}
+#     {¦ bar_} <> {(bar): ()}
+#     (±n _* ⍊ -bar_) <> {bar: ^n})
+#
+# TODO: add test:
+#   (form @xf
+#     (outlet @x)
+#     (outlet @y)
+#     (outlet @z))
+#
+#   (cell @xs (1 2 3))
+#   (feed (@xs back) (@xf front)) ;; clogs, vs. @xf back, which must work
+#
+# TODO: add test:
+#  (form @xf
+#    (group
+#      (outlet @x)
+#      (outlet (readonly (space @y))))
+#    (outlet @z))
+#
+#  (cell @xs (1 2 3))
+#  (feed (@xs front) (@xf back))
+#  ;; Right now this clogs at the readonly outlet. I don't know how this should
+#  ;; behave. Clogging seems fine.
+#
+# TODO: add test:
+#   (form (space @xf)
+#     (field @x 100)
+#     (field @y 200))
+#
+#   (part (@xf @x) {¦ ±x})
+#   (part (@xf @y) {¦ ±y})
+#   (discard @x)
+#   (discard @y)
+
 circuit = ML.document(<<-'WWML')
-(cell @x a)
-(cell @x 100)
-(cell @x 200)
-(cell @x "c")
-(discard @x _number)
+(form (space @xf)
+  (field @x 100)
+  (field @y 200))
+
+(part (@xf @x) {¦ ±x})
+(part (@xf @y) {¦ ±y})
+(discard @x)
+(discard @y)
 WWML
 
-# - changes
-# - form, outlet, field
-# - supervisor
-# - supervisor module
-# - manipulator
+# - (hard) manipulator
+#   It's basically the core of supervisor. A supervisor is just a much more
+#   complex manipulator. If we solve manipulator, then we've basically
+#   solved `supervisor`.
+#
+# - (hard) supervisor, supervisor module
 #
 # --- we've tackled the most complex stuff, yay ---
 #
-# - assembler: slot, rule
+# - (hard) assembler: slot, rule
 #
-# --- all prepasses gone, ready for MxRack experimentation ---
+# --- most tricky stuff done, ready for MxRack experimentation ---
 #
-# - timer
-# - countdown
-# - lfo
-# - timesource
-# - ticker
-# - sequencer
+# - (med) parser
+# - (med) rewriter
 #
-# - parser
-# - rewriter
+# - (easy) timer
+# - (easy) lfo
+# - (easy) timesource
+# - (easy) ticker
+# - (easy) sequencer
+# - (easy) countdown
+# - (easy) clock
 #
-# - fs
-# - harmony: path...reading, path...report
+# - (easy) fs
+# - (hard) harmony: path...reading, path...report
 #
 # --- self-hosted MuSoma should run ---
 #
-# - sensor
-# - sensor many
-# - sensor queue
-# - sensor view
-# - sensor journal
-# - appearance
+# - (med) sensor
+# - (med) sensor many
+# - (med) sensor queue
+# - (med) sensor view
+# - (med) sensor journal
+# - (med) appearance
 #
-# - resource
+# - (easy) resource
 #
-# - harmony: db
-# - harmony: server
-# - harmony: client
+# - (hard) harmony: db
+# - (hard) harmony: server
+# - (hard) harmony: client
 #
 # --- all of Rack complete, all examples and tests should run ---
 
@@ -2819,7 +3506,7 @@ loop do
       next unless reply = reply.as_d?
       next if query == reply # unchanged
 
-      patches << NeoRack::EdgeTemplate.writeback(situated, reply)
+      patches << NeoRack::EdgeTemplate.writeback(hg, situated, reply)
     end
   end
 

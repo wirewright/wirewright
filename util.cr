@@ -102,7 +102,7 @@ end
 annotation DefcaseField
 end
 
-macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, brief = false, &)
+macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash = false, copying = true, mutation = false, brief = false, includes = [] of ::NoReturn, &)
   {% unless equality == :value || equality == :ref %}
     {% raise "equality must be :value or :ref"%}
   {% end %}
@@ -129,9 +129,23 @@ macro defcase(cls, *properties, inherit = false, equality = :value, caches_hash 
   class {{cls}}
     {{header}}
 
-    {% for name in names %}
+    {% for dep in includes %}
+      include {{dep}}
+    {% end %}
+
+    {% for property in properties %}
+      {% if property.is_a?(Assign) %}
+        {% name = property.target.id %}
+        {% type = nil %}
+      {% elsif property.is_a?(TypeDeclaration) %}
+        {% name = property.var.id %}
+        {% type = property.type.id %}
+      {% else %}
+        {% property.raise "unrecognized property" %}
+      {% end %}
+
       @[::DefcaseField]
-      def {{name}}
+      def {{name}} {% if type %}: {{type}} {% end %}
         @{{name.id}}
       end
 
