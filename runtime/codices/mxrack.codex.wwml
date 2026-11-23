@@ -651,7 +651,7 @@ highlight-high: "#524f67"
 
        (node @input (input))
        (node @keyboard (keyboard focus: disabled))
-       (node @mouse-device (mouse *))
+       (node @mouse-device)
 
        ;;| This rewriter is the "brain" of the input.
        (rewriter (stageR (rulesetR exh: true))
@@ -730,13 +730,13 @@ highlight-high: "#524f67"
            {¦ -mouse view: {¦ hover_}}
              <> {(hover): ()}
 
-           ;; Focus keyboard.
-           {¦ focused keyboard: {¦ focus_: disabled}}
-             <> {focus: always}
+           ;; Focus keyboard and add mouse device.
+           {¦ focused keyboard: {¦ focus_: disabled} -mouse-device_}
+             <> {focus: always, mouse-device: (mouse *)}
 
-           ;; Unfocus keyboard.
-           {¦ -focused keyboard: (keyboard keys_* ⍊ focus_: always)}
-             <> {focus: disabled, (keys): ()}
+           ;; Unfocus keyboard and remove mouse device.
+           {¦ -focused keyboard: (keyboard keys_* ⍊ focus_: always) mouse-device_}
+             <> {focus: disabled, (keys): (), (mouse-device): ()}
 
            ;; Focus view.
            {¦ focused view: {¦ -focus_}}
@@ -860,7 +860,9 @@ highlight-high: "#524f67"
            ;; Maintain `disabled` on the view in sync.
            {¦ content: (%- _string) view: {¦ ⋮disabled} input: {¦ ⋮focus}}
              <> {disabled: true, focus: disabled}
-           {¦ content_string view: {¦ disabled_}}
+           {¦ content: _string input: {¦ focus_: disabled}}
+             <> {(focus): ()}
+           {¦ content: _string view: {¦ disabled_}}
              <> {(disabled): ()}
 
            ;; Release focus when the content cell is lost for some reason.
