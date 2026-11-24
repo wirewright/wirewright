@@ -235,8 +235,8 @@ class Ww::Rack::Automaton
 
   # :nodoc:
   def step(subframes, frames, circuit : Term, prepass, library, perf : IPerf = NoPerf.new) : Nil
-    # HACK: This is a "shadow step" to make sure rigs execute in the same tick
-    # invisibly from the main Rack pass. From the latter's point of view, rigs
+    # HACK: This is a "shadow step" to make sure manipulators execute in the same tick
+    # invisibly from the main Rack pass. From the latter's point of view, manipulators
     # are immediate.
     #
     # NOTE: this here is supposed to be executed only before the very first step of a circuit.

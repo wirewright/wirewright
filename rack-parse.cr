@@ -61,6 +61,7 @@ module NeoRack
     OutletOccupied
     FieldEmpty
     FieldOccupied
+    Manipulable
 
     def self.of(cls) : NodeSignature
       case cls
@@ -96,6 +97,7 @@ module NeoRack
       in NeoRack::Field.class                  then FieldEmpty | FieldOccupied
       in NeoRack::Field::Empty.class           then FieldEmpty
       in NeoRack::Field::Occupied.class        then FieldOccupied
+      in NeoRack::Manipulable.class            then Manipulable
       end
     end
   end
@@ -1091,6 +1093,24 @@ module NeoRack
     end
   end
 
+  defcase Manipulable,
+    original : Term,
+    edge : Term,
+    selector : M1::Op::Any,
+    env_trace_lists : M1::EnvTraceList,
+    operand : Term,
+    includes: {IGnd}
+
+  class Manipulable
+    def merge_policy : MergePolicy
+      MergeDiff.new(0u32)
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield edge
+    end
+  end
+
   # Represents the toplevel circuit.
   defcase Root,
     original_dict : Term::Dict,
@@ -1992,6 +2012,57 @@ module NeoRack
         Field::Occupied.new(original, spec, value)
       end
 
+      matchpi(
+        %{[manipulator (@edge_ -> _*) child0_]},
+        %{[manipulator (@edge_ _ -> _*) child0_]},
+      ) do
+        defn = Term.of(:group, Term.morph(original, {0, :manipulable}), child0)
+
+        fold = ->(mix : Term) do
+          Term.case(mix) do
+            # New value arrived. Higher priority.
+            matchpi %{(group [_ _ child1_] _)} do
+              continue if child0 == child1
+
+              Term.morph(original, {2, child1})
+            end
+
+            # New value computed.
+            matchpi %{(group _ child1_)} do
+              Term.morph(original, {2, child1})
+            end
+          end
+        end
+
+        Mixture.new(original, rec.call(defn, rec), fold)
+      end
+
+      matchpi %{[manipulable (@edge_ -> partsQ_*) child_]} do
+        selector = M1::Op::INSTANCE_PASS
+
+        parts = partsQ.items.to_readonly_slice { |pattern| M1.operator(pattern) }
+        winning_env_trace_lists = parts.leftmost? do |part|
+          env_trace_lists = M1.matches_and_traces(Term[], part, child)
+          env_trace_lists.present? ? env_trace_lists : nil
+        end
+        continue if winning_env_trace_lists.nil?
+
+        Manipulable.new(original, edge, selector, winning_env_trace_lists, child)
+      end
+
+      matchpi %{[manipulable (@edge_ selectorQ_ -> partsQ_*) child_]} do
+        selector = M1.operator(selectorQ)
+
+        parts = partsQ.items.to_readonly_slice { |pattern| M1.operator(pattern) }
+        winning_env_trace_lists = parts.leftmost? do |part|
+          env_trace_lists = M1.matches_and_traces(Term[], part, child)
+          env_trace_lists.present? ? env_trace_lists : nil
+        end
+        continue if winning_env_trace_lists.nil?
+
+        Manipulable.new(original, edge, selector, winning_env_trace_lists, child)
+      end
+
       otherwise do
         Inert.new(original)
       end
@@ -2138,7 +2209,7 @@ module NeoRack
 
   private def gather!(level, hg : Hypergraph, node : ICircuit, addr : NodeAddr, depth : UInt32) : Nil
     if depth.zero?
-      level << {addr, node}
+      level << node
       return
     end
 
@@ -2296,7 +2367,7 @@ module NeoRack
         end
 
         # Build a schedule.
-        schedule = D7::NodeAddrRouter::Builder(Term?).new
+        schedule = NodeAddrRouter::Builder(Term?).new
         accepted = true
 
         changes.each do |action|
@@ -3004,18 +3075,280 @@ module NeoRack
     summary.maxlevel > 0 ? circuit.map { |child| nested_seal(child) }.as(ICircuit) : circuit
   end
 
-  def step(world : Term, & : Hypergraph, Array(Patch) ->) : Slice(Term)
-    substeps = Pf::Kit.stack_array(Term, 8)
-    substeps << world
+  # Maintains relations across spots in the circuit.
+  def repair(hg : Hypergraph, patches : Array(Patch)) : Nil
+    hg.each(Manipulable) do |manipulable|
+      next unless target = hg.occupied_place?(manipulable.addr, manipulable.node.edge)
+      next unless env = M1.match?(Term[], manipulable.node.selector, target.value)
+      next unless entry = env.ee.first?
+      key, value = entry
 
-    level = [] of {NodeAddr, ICircuit}
-    changes = Deque({ICircuit, Term}).new
-    patches = [] of Patch
+      backspec = Term[].with(key, {:"^verbatim", value})
+      backmap = {manipulable.node.env_trace_lists, backspec}
+      rep = M1.backmapR({backmap}, manipulable.node.operand)
+      patches << patch(manipulable, {2, Term.collapse(rep)})
+    end
+  end
 
+  # Runs the main symbolic physics pass.
+  def advance(hg : Hypergraph, patches : Array(Patch)) : Nil
+    hg.each(Feed::Transfer) do |feed|
+      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
+      next unless took = Feed.take?(hg, feed.addr, feed.node.src)
+      next unless placed = Feed.put?(hg, feed.addr, feed.node.dst, took.value)
+
+      patches << txn(took.patch.call, placed.patch)
+    end
+
+    hg.each(Feed::Broadcast) do |feed|
+      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
+      next unless took = Feed.take?(hg, feed.addr, feed.node.src)
+
+      placed = Pf::Kit.stack_array(Feed::PutResult, 4)
+      feed.node.dsts.each do |dst|
+        break unless result = Feed.put?(hg, feed.addr, dst, took.value)
+        placed << result
+      end
+      next unless placed.size == feed.node.dsts.size # some destinations failed
+
+      patches << txn(took.patch.call, txn(placed, &.patch))
+    end
+
+    hg.each(Feed::Distribute) do |feed|
+      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
+      next unless took = Feed.take?(hg, feed.addr, feed.node.src)
+      next unless dict = took.value.as_d?
+      next unless dict.itemsize == feed.node.dsts.size
+
+      placed = Pf::Kit.stack_array(Feed::PutResult, 4)
+      dict.items.zip(feed.node.dsts) do |item, dst|
+        break unless result = Feed.put?(hg, feed.addr, dst, item)
+        placed << result
+      end
+      next unless placed.size == feed.node.dsts.size # some destinations failed
+
+      patches << txn(took.patch.call, txn(placed, &.patch))
+    end
+
+    hg.each(Feed::Aggregate) do |feed|
+      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
+
+      took = Pf::Kit.stack_array(Feed::TakeResult, 4)
+      feed.node.srcs.each do |src|
+        break unless result = Feed.take?(hg, feed.addr, src)
+        took << result
+      end
+      next unless took.size == feed.node.srcs.size # some sources missing
+
+      row = Term::Dict.build do |commit|
+        commit.concat(took, &.value)
+      end
+
+      next unless placed = Feed.put?(hg, feed.addr, feed.node.dst, Term.of(row))
+
+      patches << txn(txn(took, &.patch.call), placed.patch)
+    end
+
+    hg.each(Feed::ParallelTransfer) do |feed|
+      assert feed.node.srcs.size == feed.node.dsts.size
+
+      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
+
+      took = Pf::Kit.stack_array(Feed::TakeResult, 4)
+      feed.node.srcs.each do |src|
+        break unless result = Feed.take?(hg, feed.addr, src)
+        took << result
+      end
+      next unless took.size == feed.node.srcs.size # some sources missing
+
+      placed = Pf::Kit.stack_array(Feed::PutResult, 4)
+      took.zip(feed.node.dsts) do |src, dst|
+        break unless result = Feed.put?(hg, feed.addr, dst, src.value)
+        placed << result
+      end
+      next unless placed.size == feed.node.dsts.size # some destinations failed
+
+      patches << txn(
+        txn(took, &.patch.call),
+        txn(placed, &.patch),
+      )
+    end
+
+    hg.each(Discard::Unconditional) do |discard|
+      targets = hg.occupied_places(discard.addr, discard.node.edge)
+      next if targets.empty?
+
+      patches << txn(targets, &.write(Term.rep))
+    end
+
+    hg.each(Discard::Conditional) do |discard|
+      targets = hg.occupied_places(discard.addr, discard.node.edge)
+      next if targets.empty?
+
+      patches << txn(targets) do |target|
+        next unless M1.probe?(Term[], discard.node.pattern, target.value)
+
+        target.write(Term.rep)
+      end
+    end
+
+    hg.each(Reading) do |reading|
+      next unless target = hg.place?(reading.addr, reading.node.edge)
+
+      case target
+      when Place::Empty
+        patches << patch(reading, {2, nil})
+      when Place::Occupied
+        patches << patch(reading, {2, target.value})
+      end
+    end
+
+    hg.each(Transfer::One) do |transfer|
+      next unless src = hg.occupied_place?(transfer.addr, transfer.node.src)
+      next unless env = M1.match?(Term[], transfer.node.pattern, src.value)
+      next unless dst = hg.empty_place?(transfer.addr, transfer.node.dst)
+
+      instance_rep = Alloy.render_rep(transfer.node.template, locals: env)
+      patches << txn(src.write(Term.rep), dst.write(instance_rep))
+    end
+
+    hg.each(Transfer::Many) do |transfer|
+      next if transfer.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(transfer.addr, inhibitor) }
+
+      srcs = Pf::Kit.stack_array(Place::Occupied, 8)
+
+      transfer.node.srcs.each do |src_edge|
+        break unless src = hg.occupied_place?(transfer.addr, src_edge)
+
+        srcs << src
+      end
+
+      # Not all source cells were found, abort.
+      next unless srcs.size == transfer.node.srcs.size
+
+      row = Term::Dict.build do |commit|
+        commit.concat(srcs, &.value)
+      end
+
+      next unless env = M1.match?(Term[], transfer.node.pattern, Term.of(row))
+      next unless dst = hg.empty_place?(transfer.addr, transfer.node.dst)
+
+      instance_rep = Alloy.render_rep(transfer.node.template, locals: env)
+      patches << txn(txn(srcs, &.write(Term.rep)), dst.write(instance_rep))
+    end
+
+    hg.each(View::One) do |view|
+      next unless dst = hg.place?(view.addr, view.node.dst)
+
+      # If the source cell is missing or empty, clear the destination cell.
+      unless src = hg.occupied_place?(view.addr, view.node.src)
+        patches << dst.write(Term.rep)
+        next
+      end
+
+      # Clear the destination cell on pattern mismatch.
+      unless env = M1.match?(Term[], view.node.pattern, src.value)
+        patches << dst.write(Term.rep)
+        next
+      end
+
+      instance_rep = Alloy.render_rep(view.node.template, locals: env)
+      patches << dst.write(instance_rep)
+    end
+
+    hg.each(View::Many) do |view|
+      next unless dst = hg.place?(view.addr, view.node.dst)
+
+      row = Term::Dict.build do |commit|
+        view.node.srcs.each do |src_edge|
+          break unless src = hg.occupied_place?(view.addr, src_edge)
+
+          commit << src.value
+        end
+      end
+
+      # Not all source cells were found, abort. Remember to clear the destination cell.
+      unless row.size == view.node.srcs.size
+        patches << dst.write(Term.rep)
+        next
+      end
+
+      # Clear the destination cell on pattern mismatch.
+      unless env = M1.match?(Term[], view.node.pattern, Term.of(row))
+        patches << dst.write(Term.rep)
+        next
+      end
+
+      instance_rep = Alloy.render_rep(view.node.template, locals: env)
+      patches << dst.write(instance_rep)
+    end
+
+    hg.each(View::OneOver) do |view|
+      next unless src = hg.occupied_place?(view.addr, view.node.src)
+      next unless env = M1.match?(Term[], view.node.pattern, src.value)
+      next unless dst = hg.place?(view.addr, view.node.dst)
+
+      instance_rep = Alloy.render_rep(view.node.template, locals: env)
+      patches << dst.write(instance_rep)
+    end
+
+    hg.each(View::ManyOver) do |view|
+      row = Term::Dict.build do |commit|
+        view.node.srcs.each do |src_edge|
+          break unless src = hg.occupied_place?(view.addr, src_edge)
+
+          commit << src.value
+        end
+      end
+
+      next unless row.size == view.node.srcs.size
+      next unless env = M1.match?(Term[], view.node.pattern, Term.of(row))
+      next unless dst = hg.place?(view.addr, view.node.dst)
+
+      instance_rep = Alloy.render_rep(view.node.template, locals: env)
+      patches << dst.write(instance_rep)
+    end
+
+    hg.each(Delay) do |delay|
+      if delay.node.countdown <= 1
+        patches << replace(delay, delay.node.successor)
+        next
+      end
+
+      patches << patch(delay, {1, delay.node.countdown - 1})
+    end
+
+    hg.each(Backsys::Single) do |backsys|
+      next unless target = hg.occupied_place?(backsys.addr, backsys.node.edge)
+      next unless rep = M1.backmapR?(backsys.node.backsys, target.value)
+      next if rep == Term.rep(target.value) # Unchanged, get out early to avoid hitting e.g. merge()
+
+      patches << target.write(rep)
+    end
+
+    hg.each(Backsys::Template) do |backsys|
+      next unless situated = EdgeTemplate.situate?(hg, backsys.addr, backsys.node.template)
+
+      query = EdgeTemplate.render(backsys.node.template_dict, situated)
+      next unless reply = M1.backmap?(backsys.node.backsys, Term.of(query))
+      next unless reply = reply.as_d?
+      next if query == reply # unchanged
+
+      patches << EdgeTemplate.writeback(hg, situated, reply)
+    end
+  end
+
+  def step(world : Term, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
     root = recognize(world)
     if root.is_a?(Inert)
-      return substeps.to_unsafe_readonly_slice!
+      return Slice(Term).empty, world
     end
+
+    history = Pf::Kit.stack_array(Term, 8)
+
+    level = [] of ICircuit
+    changes = Deque({ICircuit, Term}).new
+    patches = [] of Patch
 
     MAX_STEP_DEPTH.times do |depth|
       assert level.empty?
@@ -3026,8 +3359,7 @@ module NeoRack
       # TODO: in my sweetest dreams this is a parallel each. Currently though fn()
       # is not guaranteed to be thread-safe, nor is the choice of whether to go
       # parallel so easy. We'd need heuristics since it's not always cheap.
-      while task = level.shift?
-        addr, circuit = task
+      while circuit = level.shift?
         hg = Hypergraph.new(seal(circuit))
         yield hg, patches
         next if patches.empty?
@@ -3054,8 +3386,8 @@ module NeoRack
 
       # Deliver desired changes to target circuits. Target circuits will replace
       # themselves with their successors
+      history << world
       world = broadcast(changes, root, depth)
-      substeps << world
       assert changes.empty?, "broadcast() should have cleared changes"
 
       # If the patch changed something, we have to reparse to obtain the new tree.
@@ -3064,11 +3396,19 @@ module NeoRack
       break if root.is_a?(Inert)
     end
 
-    substeps.to_unsafe_readonly_slice!
+    {history.to_unsafe_readonly_slice!, world}
   end
 
-  def step(node : IInert) : Term
-    node.original
+  def step(node : Inert, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
+    {Slice(Term).empty, node.original}
+  end
+
+  def step(world : Term) : Slice(Term)
+    _, world = step(world) { |hg, patches| repair(hg, patches) }
+    history, world = step(world) { |hg, patches| advance(hg, patches) }
+    _, world = step(world) { |hg, patches| repair(hg, patches) }
+
+    history.append(world)
   end
 
   def replace(object : NodeRef, term : Term) : Patch
@@ -3206,21 +3546,26 @@ end
 #   (discard @y)
 
 circuit = ML.document(<<-'WWML')
-(form (space @xf)
-  (field @x 100)
-  (field @y 200))
+;; (supervisor (@xs @x - @ys)
+;;   (blueprint
+;;     (cell @x ...)
+;;     (cell @y ...))
+;;
+;;   (cell @xs ...)
+;;   (node @ys ...)
+;;   ...)
+;;
+;; (ref @ys)
 
-(part (@xf @x) {¦ ±x})
-(part (@xf @y) {¦ ±y})
-(discard @x)
-(discard @y)
+(cell @xs (1 2 3))
+(backsys @xs
+  (_ ±n _) <> {n: ^(+ n 1)})
+
+;; Bind the value of the middle number to {count: _} in @ys using `node`
+(manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
+  (cell @ys {}))
 WWML
 
-# - (hard) manipulator
-#   It's basically the core of supervisor. A supervisor is just a much more
-#   complex manipulator. If we solve manipulator, then we've basically
-#   solved `supervisor`.
-#
 # - (hard) supervisor, supervisor module
 #
 # --- we've tackled the most complex stuff, yay ---
@@ -3262,255 +3607,7 @@ WWML
 
 loop do
   puts ML.display(circuit)
-
-  subframes = NeoRack.step(circuit) do |hg, patches|
-    hg.each(NeoRack::Feed::Transfer) do |feed|
-      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
-      next unless took = NeoRack::Feed.take?(hg, feed.addr, feed.node.src)
-      next unless placed = NeoRack::Feed.put?(hg, feed.addr, feed.node.dst, took.value)
-
-      patches << NeoRack.txn(took.patch.call, placed.patch)
-    end
-
-    hg.each(NeoRack::Feed::Broadcast) do |feed|
-      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
-      next unless took = NeoRack::Feed.take?(hg, feed.addr, feed.node.src)
-
-      placed = Pf::Kit.stack_array(NeoRack::Feed::PutResult, 4)
-      feed.node.dsts.each do |dst|
-        break unless result = NeoRack::Feed.put?(hg, feed.addr, dst, took.value)
-        placed << result
-      end
-      next unless placed.size == feed.node.dsts.size # some destinations failed
-
-      patches << NeoRack.txn(took.patch.call, NeoRack.txn(placed, &.patch))
-    end
-
-    hg.each(NeoRack::Feed::Distribute) do |feed|
-      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
-      next unless took = NeoRack::Feed.take?(hg, feed.addr, feed.node.src)
-      next unless dict = took.value.as_d?
-      next unless dict.itemsize == feed.node.dsts.size
-
-      placed = Pf::Kit.stack_array(NeoRack::Feed::PutResult, 4)
-      dict.items.zip(feed.node.dsts) do |item, dst|
-        break unless result = NeoRack::Feed.put?(hg, feed.addr, dst, item)
-        placed << result
-      end
-      next unless placed.size == feed.node.dsts.size # some destinations failed
-
-      patches << NeoRack.txn(took.patch.call, NeoRack.txn(placed, &.patch))
-    end
-
-    hg.each(NeoRack::Feed::Aggregate) do |feed|
-      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
-
-      took = Pf::Kit.stack_array(NeoRack::Feed::TakeResult, 4)
-      feed.node.srcs.each do |src|
-        break unless result = NeoRack::Feed.take?(hg, feed.addr, src)
-        took << result
-      end
-      next unless took.size == feed.node.srcs.size # some sources missing
-
-      row = Term::Dict.build do |commit|
-        commit.concat(took, &.value)
-      end
-
-      next unless placed = NeoRack::Feed.put?(hg, feed.addr, feed.node.dst, Term.of(row))
-
-      patches << NeoRack.txn(NeoRack.txn(took, &.patch.call), placed.patch)
-    end
-
-    hg.each(NeoRack::Feed::ParallelTransfer) do |feed|
-      assert feed.node.srcs.size == feed.node.dsts.size
-
-      next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
-
-      took = Pf::Kit.stack_array(NeoRack::Feed::TakeResult, 4)
-      feed.node.srcs.each do |src|
-        break unless result = NeoRack::Feed.take?(hg, feed.addr, src)
-        took << result
-      end
-      next unless took.size == feed.node.srcs.size # some sources missing
-
-      placed = Pf::Kit.stack_array(NeoRack::Feed::PutResult, 4)
-      took.zip(feed.node.dsts) do |src, dst|
-        break unless result = NeoRack::Feed.put?(hg, feed.addr, dst, src.value)
-        placed << result
-      end
-      next unless placed.size == feed.node.dsts.size # some destinations failed
-
-      patches << NeoRack.txn(
-        NeoRack.txn(took, &.patch.call),
-        NeoRack.txn(placed, &.patch),
-      )
-    end
-
-    hg.each(NeoRack::Discard::Unconditional) do |discard|
-      targets = hg.occupied_places(discard.addr, discard.node.edge)
-      next if targets.empty?
-
-      patches << NeoRack.txn(targets, &.write(Term.rep))
-    end
-
-    hg.each(NeoRack::Discard::Conditional) do |discard|
-      next unless targets = hg.occupied_places(discard.addr, discard.node.edge)
-      next if targets.empty?
-
-      patches << NeoRack.txn(targets) do |target|
-        next unless M1.probe?(Term[], discard.node.pattern, target.value)
-
-        target.write(Term.rep)
-      end
-    end
-
-    hg.each(NeoRack::Reading) do |reading|
-      next unless target = hg.place?(reading.addr, reading.node.edge)
-
-      case target
-      when NeoRack::Place::Empty
-        patches << NeoRack.patch(reading, {2, nil})
-      when NeoRack::Place::Occupied
-        patches << NeoRack.patch(reading, {2, target.value})
-      end
-    end
-
-    hg.each(NeoRack::Transfer::One) do |transfer|
-      next unless src = hg.occupied_place?(transfer.addr, transfer.node.src)
-      next unless env = M1.match?(Term[], transfer.node.pattern, src.value)
-      next unless dst = hg.empty_place?(transfer.addr, transfer.node.dst)
-
-      instance_rep = Alloy.render_rep(transfer.node.template, locals: env)
-      patches << NeoRack.txn(src.write(Term.rep), dst.write(instance_rep))
-    end
-
-    hg.each(NeoRack::Transfer::Many) do |transfer|
-      next if transfer.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(transfer.addr, inhibitor) }
-
-      srcs = Pf::Kit.stack_array(NeoRack::Place::Occupied, 8)
-
-      transfer.node.srcs.each do |src_edge|
-        break unless src = hg.occupied_place?(transfer.addr, src_edge)
-
-        srcs << src
-      end
-
-      # Not all source cells were found, abort.
-      next unless srcs.size == transfer.node.srcs.size
-
-      row = Term::Dict.build do |commit|
-        commit.concat(srcs, &.value)
-      end
-
-      next unless env = M1.match?(Term[], transfer.node.pattern, Term.of(row))
-      next unless dst = hg.empty_place?(transfer.addr, transfer.node.dst)
-
-      instance_rep = Alloy.render_rep(transfer.node.template, locals: env)
-      patches << NeoRack.txn(NeoRack.txn(srcs, &.write(Term.rep)), dst.write(instance_rep))
-    end
-
-    hg.each(NeoRack::View::One) do |view|
-      next unless dst = hg.place?(view.addr, view.node.dst)
-
-      # If the source cell is missing or empty, clear the destination cell.
-      unless src = hg.occupied_place?(view.addr, view.node.src)
-        patches << dst.write(Term.rep)
-        next
-      end
-
-      # Clear the destination cell on pattern mismatch.
-      unless env = M1.match?(Term[], view.node.pattern, src.value)
-        patches << dst.write(Term.rep)
-        next
-      end
-
-      instance_rep = Alloy.render_rep(view.node.template, locals: env)
-      patches << dst.write(instance_rep)
-    end
-
-    hg.each(NeoRack::View::Many) do |view|
-      next unless dst = hg.place?(view.addr, view.node.dst)
-
-      row = Term::Dict.build do |commit|
-        view.node.srcs.each do |src_edge|
-          break unless src = hg.occupied_place?(view.addr, src_edge)
-
-          commit << src.value
-        end
-      end
-
-      # Not all source cells were found, abort. Remember to clear the destination cell.
-      unless row.size == view.node.srcs.size
-        patches << dst.write(Term.rep)
-        next
-      end
-
-      # Clear the destination cell on pattern mismatch.
-      unless env = M1.match?(Term[], view.node.pattern, Term.of(row))
-        patches << dst.write(Term.rep)
-        next
-      end
-
-      instance_rep = Alloy.render_rep(view.node.template, locals: env)
-      patches << dst.write(instance_rep)
-    end
-
-    hg.each(NeoRack::View::OneOver) do |view|
-      next unless src = hg.occupied_place?(view.addr, view.node.src)
-      next unless env = M1.match?(Term[], view.node.pattern, src.value)
-      next unless dst = hg.place?(view.addr, view.node.dst)
-
-      instance_rep = Alloy.render_rep(view.node.template, locals: env)
-      patches << dst.write(instance_rep)
-    end
-
-    hg.each(NeoRack::View::ManyOver) do |view|
-      row = Term::Dict.build do |commit|
-        view.node.srcs.each do |src_edge|
-          break unless src = hg.occupied_place?(view.addr, src_edge)
-
-          commit << src.value
-        end
-      end
-
-      next unless row.size == view.node.srcs.size
-      next unless env = M1.match?(Term[], view.node.pattern, Term.of(row))
-      next unless dst = hg.place?(view.addr, view.node.dst)
-
-      instance_rep = Alloy.render_rep(view.node.template, locals: env)
-      patches << dst.write(instance_rep)
-    end
-
-    hg.each(NeoRack::Delay) do |delay|
-      if delay.node.countdown <= 1
-        patches << NeoRack.replace(delay, delay.node.successor)
-        next
-      end
-
-      patches << NeoRack.patch(delay, {1, delay.node.countdown - 1})
-    end
-
-    hg.each(NeoRack::Backsys::Single) do |backsys|
-      next unless target = hg.occupied_place?(backsys.addr, backsys.node.edge)
-      next unless rep = M1.backmapR?(backsys.node.backsys, target.value)
-      next if rep == Term.rep(target.value) # Unchanged, get out early to avoid hitting e.g. merge()
-
-      patches << target.write(rep)
-    end
-
-    hg.each(NeoRack::Backsys::Template) do |backsys|
-      next unless situated = NeoRack::EdgeTemplate.situate?(hg, backsys.addr, backsys.node.template)
-
-      query = NeoRack::EdgeTemplate.render(backsys.node.template_dict, situated)
-      next unless reply = M1.backmap?(backsys.node.backsys, Term.of(query))
-      next unless reply = reply.as_d?
-      next if query == reply # unchanged
-
-      patches << NeoRack::EdgeTemplate.writeback(hg, situated, reply)
-    end
-  end
-
+  subframes = NeoRack.step(circuit)
   circuit = subframes.last
-
   sleep 1.second
 end
