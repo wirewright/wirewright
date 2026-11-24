@@ -16,34 +16,37 @@ representation* of terms: a description of a term as a series of machine words,
 bits, and so on. WwML, on the other hand, is a *textual* representation of terms.
 You can use WwML to describe terms with *text*: a one-dimensional string of characters.
 
-As a thought experiment, you can imagine other media to understand what Wirewright
+As a thought experiment, you can imagine other media to understand what WwML
 is. An *audio language* might exist for describing terms: imagine yourself speaking,
 and the machine responding to that by building more and more elaborate terms. Another
-medium is two-dimensional graphics: dragging boxes around, or wiring diagrams, etc.,
-which end up describing the same abstract object -- the same term.
+medium is two-dimensional graphics: dragging boxes around, or wiring diagrams, etc.
+Despite the difference in medium, you end up describing the same abstract object --
+the same term.
 
 Most if not all subsystems of Wirewright communicate with each other using terms, some
-actively (by literally exchanging terms with each other) or more "stigmergically"
-(by using terms as a kind of "shared workspace" where one subsystem can put things
-that another one can take).
+actively -- by literally exchanging terms with each other -- and others  more "stigmergically"
+-- by using terms as a kind of "shared workspace" where one subsystem can put things
+that another one can take.
 
 Metaphorically, terms are the "thought-speak" of Wirewright. Some "shapes" or "forms"
 or "patterns of arrangement" of terms are particularly common in practice. WwML contains
-shorthands for many of them. For example, *edges* are very common in Delta7 (D7) and Rack;
-they look like `(edge x)`, `(edge foobar)`, etc. Due to their commonality, WwML has incorporated
+shorthands for many of them. For example, *edges* are very common in Rack; they look like
+`(edge x)`, `(edge foobar)`, etc. Due to their commonality, WwML has incorporated
 a shorthand for them. For example, `@x` is the same as writing `(edge x)`, and `@foobar`
 is the same as writing `(edge foobar)`. By far, the most major contributor of shorthands
 is the M1 pattern matching engine. This is because almost everything in Wirewright uses
-patterns (and thereby M1) -- many subsystems use them as "sensory organs".
+patterns (and thereby M1) -- many subsystems use them as "sensory organs". Therefore,
+a highly concise way to describe patterns is necessary. WwML offers such a way.
 
 It is important to note that WwML is a way to describe terms, and terms are
 used as "material" for structure and communication in Wirewright. That is, WwML
-is not a *language* in the usual sense -- the same way Python is called a language.
-WwML is a *notation* for objects Wirewright *computes with*.
+is not a *programming language*. It is closer to the formal notion of *language*.
+In other words, WwML is a *notation* for constructing and representing objects
+Wirewright *computes with*.
 
 WwML is primarily about *shorthands* -- *conveniences*, *syntactic sugar*. In other
 words, WwML can be thought of as a *system of interacting shorthands* on top of
-a "basis language" -- S-expressions extended with key-value pairs. In other words, there
+a "base language" -- S-expressions extended with key-value pairs. In other words, there
 is little "language" or intentional "language design" above S-expressions; only shorthands
 that manage to interact with each other in one way or another, forming larger, emergent
 (in the simplest sense of the word) "syntactic complexes". That is, when a subsystem
@@ -55,15 +58,16 @@ WwML is a rather complicated *constructor* or *(de)serialization* engine for the
 kinds of terms: dictionary, number, string, symbol, boolean, and blob terms. There is no AST --
 terms *are* the AST. Any dictionary representation can be rewritten in terms
 of another; and any shorthand lowered to its expansion without leaving the representation.
-This is because they are ultimately still describing the same data structure: a dictionary,
-most of the times.
+This is because everything is ultimately describing the same kind of data structure --
+a dictionary, most of the times; just with varying levels of brevity and readability.
 
 Interestingly, WwML can also be thought of as a "compressed representation" of terms, since
 a term's text representation is usually much more efficient in terms of its byte size than
-the corresponding in-memory representation. Something like `(+ 1 2)` takes only a few bytes
+the corresponding in-memory representation. Something like `(+ 1 2)` takes only a couple bytes
 of UTF-8 but may very well take hundreds of bytes in-memory with all the indexing and control
-structure overhead (I am working actively on reducing the memory footprint of dictionaries
-specifically, but there are limits).
+structure overhead. (I am working actively on reducing the memory footprint of dictionaries
+specifically, but there are limits. We will certainly not get machine `(+ 1 2)` down to
+7 bytes -- less than even the typical pointer!)
 
 > [!NOTE]
 > Character sets are expressed in [Crystal character set notation](https://crystal-lang.org/api/1.16.2/Char.html#in_set%3F%28%2Asets%3AString%29%3ABool-instance-method).
@@ -200,9 +204,10 @@ Here are the XCompose mappings for the table above. This should be put in `.XCom
 <Multi_key> <asciicircum> <asciicircum> : "⏏"
 ```
 
-## What fonts you are recommended to use with WwML
+## Fonts you are recommended to use with WwML
 
-- [Julia Mono](https://juliamono.netlify.app/) and [DejaVu Sans Mono] have all of the glyphs that WwML needs.
+- [Julia Mono](https://juliamono.netlify.app/) and [DejaVu Sans Mono](https://dejavu-fonts.github.io/)
+  have all of the glyphs that WwML needs.
 - [Fira Code](https://github.com/tonsky/FiraCode) appears to be missing some but is usable otherwise.
 - [IBM Plex](https://github.com/IBM/plex) and its Mono variant misses lots of the glyphs; on the other
   hand, the Plex family is the "official" font for Wirewright (in a sense); in addition, IBM Plex Mono
