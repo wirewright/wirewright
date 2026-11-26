@@ -64,44 +64,72 @@ module NeoRack
     Manipulable
     Supervisor
     ParserTransfer
+    ParserView
+    RewriterTransfer
+    RewriterView
+    RewriterVersionedView
+    RewriterAsymmetricVersionedView
+    RewriterRegimeTarget
+    RewriterRegimeTemplate
+    Fs
+    Sequencer
+    Ticker
+    Timesource
+    Lfo
+    PendingTimer
+    WaitingTimer
 
     def self.of(cls) : NodeSignature
       case cls
-      in NeoRack::Group.class                  then Group
-      in NeoRack::Cell.class                   then CellEmpty | CellOccupied
-      in NeoRack::Cell::Empty.class            then CellEmpty
-      in NeoRack::Cell::Occupied.class         then CellOccupied
-      in NeoRack::Feed::Transfer.class         then FeedTransfer
-      in NeoRack::Feed::Broadcast.class        then FeedBroadcast
-      in NeoRack::Feed::Aggregate.class        then FeedAggregate
-      in NeoRack::Feed::Distribute.class       then FeedDistribute
-      in NeoRack::Feed::ParallelTransfer.class then FeedParallelTransfer
-      in NeoRack::Discard::Unconditional.class then DiscardUnconditional
-      in NeoRack::Discard::Conditional.class   then DiscardConditional
-      in NeoRack::Reading.class                then Reading
-      in NeoRack::Transfer::One.class          then TransferOne
-      in NeoRack::Transfer::Many.class         then TransferMany
-      in NeoRack::View::One.class              then ViewOne
-      in NeoRack::View::Many.class             then ViewMany
-      in NeoRack::View::OneOver.class          then ViewOneOver
-      in NeoRack::View::ManyOver.class         then ViewManyOver
-      in NeoRack::Delay.class                  then Delay
-      in NeoRack::Part.class                   then PartBackmap | PartBacksys
-      in NeoRack::Part::Backmap.class          then PartBackmap
-      in NeoRack::Part::Backsys.class          then PartBacksys
-      in NeoRack::Backsys::Single.class        then BacksysSingle
-      in NeoRack::Backsys::Template.class      then BacksysTemplate
-      in NeoRack::Changes.class                then Changes
-      in NeoRack::FormLeaf.class               then FormLeaf
-      in NeoRack::Outlet.class                 then OutletEmpty | OutletOccupied
-      in NeoRack::Outlet::Empty.class          then OutletEmpty
-      in NeoRack::Outlet::Occupied.class       then OutletOccupied
-      in NeoRack::Field.class                  then FieldEmpty | FieldOccupied
-      in NeoRack::Field::Empty.class           then FieldEmpty
-      in NeoRack::Field::Occupied.class        then FieldOccupied
-      in NeoRack::Manipulable.class            then Manipulable
-      in NeoRack::Supervisor.class             then Supervisor
-      in NeoRack::Parser::Transfer.class       then ParserTransfer
+      in NeoRack::Group.class                             then Group
+      in NeoRack::Cell.class                              then CellEmpty | CellOccupied
+      in NeoRack::Cell::Empty.class                       then CellEmpty
+      in NeoRack::Cell::Occupied.class                    then CellOccupied
+      in NeoRack::Feed::Transfer.class                    then FeedTransfer
+      in NeoRack::Feed::Broadcast.class                   then FeedBroadcast
+      in NeoRack::Feed::Aggregate.class                   then FeedAggregate
+      in NeoRack::Feed::Distribute.class                  then FeedDistribute
+      in NeoRack::Feed::ParallelTransfer.class            then FeedParallelTransfer
+      in NeoRack::Discard::Unconditional.class            then DiscardUnconditional
+      in NeoRack::Discard::Conditional.class              then DiscardConditional
+      in NeoRack::Reading.class                           then Reading
+      in NeoRack::Transfer::One.class                     then TransferOne
+      in NeoRack::Transfer::Many.class                    then TransferMany
+      in NeoRack::View::One.class                         then ViewOne
+      in NeoRack::View::Many.class                        then ViewMany
+      in NeoRack::View::OneOver.class                     then ViewOneOver
+      in NeoRack::View::ManyOver.class                    then ViewManyOver
+      in NeoRack::Delay.class                             then Delay
+      in NeoRack::Part.class                              then PartBackmap | PartBacksys
+      in NeoRack::Part::Backmap.class                     then PartBackmap
+      in NeoRack::Part::Backsys.class                     then PartBacksys
+      in NeoRack::Backsys::Single.class                   then BacksysSingle
+      in NeoRack::Backsys::Template.class                 then BacksysTemplate
+      in NeoRack::Changes.class                           then Changes
+      in NeoRack::FormLeaf.class                          then FormLeaf
+      in NeoRack::Outlet.class                            then OutletEmpty | OutletOccupied
+      in NeoRack::Outlet::Empty.class                     then OutletEmpty
+      in NeoRack::Outlet::Occupied.class                  then OutletOccupied
+      in NeoRack::Field.class                             then FieldEmpty | FieldOccupied
+      in NeoRack::Field::Empty.class                      then FieldEmpty
+      in NeoRack::Field::Occupied.class                   then FieldOccupied
+      in NeoRack::Manipulable.class                       then Manipulable
+      in NeoRack::Supervisor.class                        then Supervisor
+      in NeoRack::Parser::Transfer.class                  then ParserTransfer
+      in NeoRack::Parser::View.class                      then ParserView
+      in NeoRack::Rewriter::Transfer.class                then RewriterTransfer
+      in NeoRack::Rewriter::View.class                    then RewriterView
+      in NeoRack::Rewriter::VersionedView.class           then RewriterVersionedView
+      in NeoRack::Rewriter::AsymmetricVersionedView.class then RewriterAsymmetricVersionedView
+      in NeoRack::Rewriter::RegimeTarget.class            then RewriterRegimeTarget
+      in NeoRack::Rewriter::RegimeTemplate.class          then RewriterRegimeTemplate
+      in NeoRack::Fs.class                                then Fs
+      in NeoRack::Timing::Sequencer.class                 then Sequencer
+      in NeoRack::Timing::Ticker.class                    then Ticker
+      in NeoRack::Timing::Timesource.class                then Timesource
+      in NeoRack::Timing::Lfo.class                       then Lfo
+      in NeoRack::Timing::PendingTimer.class              then PendingTimer
+      in NeoRack::Timing::WaitingTimer.class              then WaitingTimer
       end
     end
   end
@@ -891,16 +919,17 @@ module NeoRack
     edge : Term,
     children : Slice(Node),
     range : Range(UInt32, UInt32),
+    uniform : Bool,
     includes: {ICircuit}
 
   class Form
-    def self.new(original_dict : Term::Dict, merge_policy : MergePolicy, edge : Term, children : Slice(Node), range : Range(UInt32, UInt32)) : Form
+    def self.new(original_dict : Term::Dict, merge_policy : MergePolicy, edge : Term, children : Slice(Node), range : Range(UInt32, UInt32), uniform : Bool) : Form
       children_summary = NeoRack.summarize(children)
-      new(children_summary, original_dict, merge_policy, edge, children, range)
+      new(children_summary, original_dict, merge_policy, edge, children, range, uniform)
     end
 
     def map(& : Node -> Node) : Form
-      Form.new(@original_dict, @merge_policy, @edge, @children.to_readonly_slice { |child| yield child }, @range)
+      Form.new(@original_dict, @merge_policy, @edge, @children.to_readonly_slice { |child| yield child }, @range, @uniform)
     end
 
     def leaf : FormLeaf
@@ -1545,7 +1574,7 @@ module NeoRack
       end
 
       if pool_patch.nil? && tasks_patch.nil?
-        @@nops.put(digest, true) # Remember it's a nop so as to not waste time in the future.
+        @@nops.put(digest, true) # Remember it's a nop to avoid wasting time in the future.
         return
       end
 
@@ -1569,9 +1598,22 @@ module NeoRack
       original : Term,
       src : Term,
       dst : Term,
+      error : Term?,
       grammar : ParseKit::GrammarF,
       grammar_digest : Term::Str,
       top : Term::Sym,
+      cache : SyncLRU(Term::Str, Result),
+      includes: {Parser}
+
+    defcase View,
+      original : Term,
+      src : Term,
+      dst : Term,
+      error : Term?,
+      grammar : ParseKit::GrammarF,
+      grammar_digest : Term::Str,
+      top : Term::Sym,
+      cache : SyncLRU(Term::Str, Result),
       includes: {Parser}
 
     defrecord Task,
@@ -1590,6 +1632,878 @@ module NeoRack
       seln = task.text.to(Pf::StringSeln)
       ctx = ParseKit.context(task.grammar, ping)
       ParseKit.resolve(ParseKit.parse(ctx, task.top, seln))
+    end
+  end
+
+  module Rewriter
+    include IGnd
+
+    def merge_policy : MergePolicy
+      MergeDiff.new(0u32)
+    end
+
+    defcase Transfer,
+      original : Term,
+      src : Term,
+      dst : Term,
+      rho : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      includes: {Rewriter}
+
+    class Transfer
+      def each_edge(& : Term ->) : Nil
+        yield src
+        yield dst
+      end
+    end
+
+    defcase View,
+      original : Term,
+      src : Term,
+      dst : Term,
+      rho : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      includes: {Rewriter}
+
+    class View
+      def each_edge(& : Term ->) : Nil
+        yield src
+        yield dst
+      end
+    end
+
+    defcase VersionedView,
+      original : Term,
+      src : Term,
+      version : Term,
+      dst : Term,
+      rho : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      includes: {Rewriter}
+
+    class VersionedView
+      def each_edge(& : Term ->) : Nil
+        yield src
+        yield version
+        yield dst
+      end
+    end
+
+    defcase AsymmetricVersionedView,
+      original : Term,
+      src : Term,
+      version : Term,
+      dst : Term,
+      rho : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      includes: {Rewriter}
+
+    class AsymmetricVersionedView
+      def each_edge(& : Term ->) : Nil
+        yield src
+        yield version
+        yield dst
+      end
+    end
+
+    defcase RegimeTarget,
+      original : Term,
+      target : Term,
+      rho : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      nop : SyncLRU(Term::Str, Bool),
+      includes: {Rewriter}
+
+    class RegimeTarget
+      def each_edge(& : Term ->) : Nil
+        yield target
+      end
+    end
+
+    defcase RegimeTemplate,
+      original : Term,
+      template : EdgeTemplate,
+      template_dict : Term::Dict,
+      rho : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      nop : SyncLRU(Term::Str, Bool),
+      includes: {Rewriter}
+
+    class RegimeTemplate
+      def each_edge(& : Term ->) : Nil
+        template.each { |edge| yield edge }
+      end
+    end
+
+    defrecord Task,
+      rewriter : Rho::Rewriter,
+      cache : Rho::IRewriteCache,
+      input : Term
+
+    alias Result = Term
+
+    def self.execute(task : Task, ping) : Result
+      Rho.rewrite(task.rewriter, task.input, cache: task.cache, ping: ping)
+    end
+
+    def self.rewriter_and_cache(spec : Term, data : Term) : {Rho::Rewriter, Rho::IRewriteCache}
+      Term.case(spec) do
+        matchpiT %{(cached rwspec_ ⍊ capacity: (%optional 32 capacity←(%number +i32)))} do
+          rewriter = Rho.rewriter!(rwspec, data)
+          cache = SyncLRU({Rho::RewriterId, Term}, Term::Rep).new(capacity)
+          {rewriter, cache}
+        end
+
+        otherwise do
+          rewriter = Rho.rewriter!(spec, data)
+          cache = Uncached({Rho::RewriterId, Term}, Term::Rep).new
+          {rewriter, cache}
+        end
+      end
+    end
+  end
+
+  defcase Fs,
+    original : Term,
+    query : Term,
+    reply : Term,
+    includes: {IGnd}
+
+  class Fs
+    def merge_policy : MergePolicy
+      MergeDiff.new(0u32)
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield query
+      yield reply
+    end
+
+    alias Request = CreateFile | CreateDir | CreateDirIfMissing | DeleteFile | DeleteFileIfExists |
+                    DeleteDir | DeleteDirIfExists | Move | CreateTmpFile | OverwriteFile | AppendFile |
+                    ReadTextFile | ReadBinaryFile
+
+    defrecord CreateFile, path : NormalPath
+    defrecord CreateDir, path : NormalPath
+    defrecord CreateDirIfMissing, path : NormalPath
+    defrecord DeleteFile, path : NormalPath
+    defrecord DeleteFileIfExists, path : NormalPath
+    defrecord DeleteDir, path : NormalPath, recursive : Bool
+    defrecord DeleteDirIfExists, path : NormalPath, recursive : Bool
+    defrecord Move, src : NormalPath, dst : NormalPath
+    defrecord CreateTmpFile, parent : NormalPath
+    defrecord OverwriteFile, path : NormalPath, content : Term::Str | Term::Blob
+    defrecord AppendFile, path : NormalPath, content : Term::Str | Term::Blob
+    defrecord ReadTextFile, path : NormalPath
+    defrecord ReadBinaryFile, path : NormalPath
+
+    def self.request?(term : Term) : Request?
+      # |@ rack.fs.request
+      #
+      # |@summary
+      # Requests that you can make to the file system.
+      Term.case(term) do
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [create file path_string]
+        #
+        # |@block
+        # Creates a file at *path* if missing. This works like the shell
+        # command `touch`.
+        matchpi %{[create file path_string]}, path: NormalPath do
+          CreateFile.new(path)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [create dir path_string]
+        #
+        # |@block
+        # Creates a directory at *path*. Fails if *path* exists. This works
+        # like the shell command `mkdir`.
+        matchpi %{[create dir path_string]}, path: NormalPath do
+          CreateDir.new(path)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [create dir if missing path_string]
+        #
+        # |@block
+        # Creates a directory at *path* if it is missing.
+        matchpi %{[create dir if missing path_string]}, path: NormalPath do
+          CreateDirIfMissing.new(path)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [delete file path_string]
+        #
+        # |@block
+        # Removes the file at *path*. Fails if *path* does not exist or is
+        # a directory.
+        matchpi %{[delete file path_string]}, path: NormalPath do
+          DeleteFile.new(path)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [delete file if exists path_string]
+        #
+        # |@block
+        # Removes the file at *path* if present. Fails if *path* is a directory.
+        matchpi %{[delete file if exists path_string]}, path: NormalPath do
+          DeleteFileIfExists.new(path)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # (delete dir path_string ⍊ recursive⋮ false)
+        #
+        # |@key recursive
+        # Whether to delete recursively (e.g. `rm` vs. `rm -r`). If `false`, fails
+        # if *path* is a nonempty directory.
+        #
+        # |@block
+        # Removes the directory at *path*. Fails if *path* does not exist or is a file.
+        matchpi %{(delete dir path_string ⍊ recursive⋮ false)}, path: NormalPath do
+          DeleteDir.new(path, recursive.true?)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # (delete dir if exists path_string ⍊ recursive⋮ false)
+        #
+        # |@key recursive
+        # Whether to delete recursively (e.g. `rm` vs. `rm -r`). If `false`, fails
+        # if *path* is a nonempty directory.
+        #
+        # |@block
+        # Removes the directory at *path* if present. Fails if *path* is a file.
+        matchpi %{(delete dir if exists path_string ⍊ recursive⋮ false)}, path: NormalPath do
+          DeleteDirIfExists.new(path, recursive.true?)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [move src_string to dst_string]
+        #
+        # |@block
+        # Moves a file system entry from a source path *src* to a destination path
+        # *dst*. If *dst* is on another device, *src* is copied to *dst* and removed.
+        matchpi %{[move src_string to dst_string]}, src: NormalPath, dst: NormalPath do
+          Move.new(src, dst)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [create temporary file in parent_string]
+        #
+        # |@key parent
+        # Path to the directory where the temporary file should be created.
+        #
+        # |@block
+        # Creates a temporary file in the given *parent* directory. Its name can
+        # be retrieved from the `rack.fs.response` (`present`). You are responsible
+        # for eventually removing it.
+        matchpi %{[create temporary file in parent_string]}, parent: NormalPath do
+          CreateTmpFile.new(parent)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [overwrite file path_string content_blob]
+        # [overwrite file path_string content_string]
+        #
+        # |@block
+        # Overwrites the contents of the file at *path* with *content*. The file
+        # will be created if missing.
+        matchpi %{[overwrite file path_string content_]}, path: NormalPath do |content|
+          continue unless content = content.as_s? || content.as_blob?
+
+          OverwriteFile.new(path, content)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [append to file path_string content_blob]
+        # [append to file path_string content_string]
+        #
+        # |@block
+        # Appends *content* to the file at *path*. The file will be created
+        # if missing.
+        matchpi %{[append to file path_string content_]}, path: NormalPath do |content|
+          continue unless content = content.as_s? || content.as_blob?
+
+          AppendFile.new(path, content)
+        end
+
+        # |@ rack.fs.request
+        #
+        # |@pattern
+        # [read text file path_string]
+        # [read binary file path_string]
+        #
+        # |@block
+        # Reads the content of the file at *path* if it exists. The result is a string
+        # for `text` files (encoded using UTF-8; an error otherwise), and a blob
+        # for `binary` files.
+
+        matchpi %{[read text file path_string]}, path: NormalPath do
+          ReadTextFile.new(path)
+        end
+
+        matchpi %{[read binary file path_string]}, path: NormalPath do
+          ReadBinaryFile.new(path)
+        end
+
+        otherwise { }
+      end
+    end
+
+    alias Response = Present | Absent | Moved | Read | Wrote | Err
+
+    defrecord Present, path : NormalPath
+    defrecord Absent, path : NormalPath
+    defrecord Moved, src : NormalPath, dst : NormalPath
+    defrecord Read, path : NormalPath, content : Term::Str | Term::Blob
+    defrecord Wrote, path : NormalPath
+    defrecord Err, detail : String
+
+    def self.transcribe(response : Response) : Term
+      # |@ rack.fs.response
+      #
+      # |@summary
+      # The possible responses to a request.
+      case response
+      in Present
+        # |@ rack.fs.response
+        #
+        # |@pattern
+        # (ok (present path_string))
+        #
+        # |@block
+        # Confirms that an action was carried out after which *path* was
+        # observed present.
+        Term.of(:ok, {:present, response.path})
+      in Absent
+        # |@ rack.fs.response
+        #
+        # |@pattern
+        # (ok (absent path_string))
+        #
+        # |@block
+        # Confirms that an action was carried out after which *path* was
+        # observed absent.
+        Term.of(:ok, {:absent, response.path})
+      in Read
+        # |@ rack.fs.response
+        #
+        # |@pattern
+        # (ok (read path_string content_string))
+        # (ok (read path_string content_blob))
+        #
+        # |@block
+        # Shows the content of the file at *path* at some indeterminate point
+        # in the past.
+        Term.of(:ok, {:read, response.path, response.content})
+      in Wrote
+        # |@ rack.fs.response
+        #
+        # |@pattern
+        # (ok (wrote path_string))
+        #
+        # |@block
+        # Confirms that an action was carried out after which the content
+        # of the file at *path* changed.
+        Term.of(:ok, {:wrote, response.path})
+      in Moved
+        # |@ rack.fs.response
+        #
+        # |@pattern
+        # (ok (moved src_string dst_string))
+        #
+        # |@block
+        # Confirms that the file system entry at *src* was moved to *dst*.
+        Term.of(:ok, {:moved, response.src, response.dst})
+      in Err
+        # |@ rack.fs.response
+        #
+        # |@pattern
+        # (err detail_string)
+        #
+        # |@block
+        # Signals that an error occurred while performing a request. *detail*
+        # explains the reason.
+        Term.of(:err, response.detail)
+      end
+    end
+
+    def self.execute(task : CreateFile, ping : D7::TaskBoard::Ping) : Response
+      FileUtils.touch(task.path.unwrap)
+      Present.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : CreateDir, ping : D7::TaskBoard::Ping) : Response
+      FileUtils.mkdir(task.path.unwrap)
+      Present.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : CreateDirIfMissing, ping : D7::TaskBoard::Ping) : Response
+      FileUtils.mkdir(task.path.unwrap)
+      Present.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : DeleteFile, ping : D7::TaskBoard::Ping) : Response
+      FileUtils.rm(task.path.unwrap)
+      Absent.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : DeleteFileIfExists, ping : D7::TaskBoard::Ping) : Response
+      FileUtils.rm_f(task.path.unwrap)
+      Absent.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : DeleteDir, ping : D7::TaskBoard::Ping) : Response
+      if task.recursive
+        FileUtils.rm_r(task.path.unwrap)
+      else
+        FileUtils.rmdir(task.path.unwrap)
+      end
+
+      Absent.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : DeleteDirIfExists, ping : D7::TaskBoard::Ping) : Response
+      begin
+        if task.recursive
+          FileUtils.rm_r(task.path.unwrap)
+        else
+          FileUtils.rmdir(task.path.unwrap)
+        end
+      rescue File::NotFoundError
+      end
+
+      Absent.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : Move, ping : D7::TaskBoard::Ping) : Response
+      FileUtils.mv(task.src.unwrap, task.dst.unwrap)
+      Moved.new(task.src, task.dst)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : CreateTmpFile, ping : D7::TaskBoard::Ping) : Response
+      name = File.tempname(prefix: "ww", suffix: nil, dir: task.parent.unwrap.to_s)
+      File.touch(name)
+      Present.new(NormalPath[task.parent / name])
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : OverwriteFile, ping : D7::TaskBoard::Ping) : Response
+      case content = task.content
+      in Term::Str # Assume UTF-8 / text
+        File.write(task.path.unwrap, content.to(String), mode: "w")
+      in Term::Blob # Assume binary data
+        File.open(task.path.unwrap, mode: "wb", &.write(content.to_slice))
+      end
+
+      Wrote.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : AppendFile, ping : D7::TaskBoard::Ping) : Response
+      case content = task.content
+      in Term::Str # Assume UTF-8 / text
+        File.write(task.path.unwrap, content.to(String), mode: "a")
+      in Term::Blob # Assume binary data
+        File.open(task.path.unwrap, mode: "ab", &.write(content.to_slice))
+      end
+
+      Wrote.new(task.path)
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    # :nodoc:
+    READ_BLOCK_SIZE = 4096
+
+    def self.execute(task : ReadTextFile, ping : D7::TaskBoard::Ping) : Response
+      File.open(task.path.unwrap, "r") do |src|
+        content = String.build do |dst|
+          # Read in blocks to have an opportunity to call ping.
+          loop do
+            ping.call
+
+            finished = false
+
+            READ_BLOCK_SIZE.times do
+              unless chr = src.read_char
+                finished = true
+                break
+              end
+
+              dst << chr
+            end
+
+            break if finished
+          end
+        end
+
+        Read.new(task.path, Term[content])
+      end
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+
+    def self.execute(task : ReadBinaryFile, ping : D7::TaskBoard::Ping) : Response
+      File.open(task.path.unwrap, "r") do |src|
+        content = Term::Blob.build do |dst|
+          # Read in blocks to have an opportunity to call ping.
+          loop do
+            ping.call
+
+            bytes_read = IO.copy(src, dst, limit: READ_BLOCK_SIZE)
+            break if bytes_read.zero?
+          end
+        end
+
+        Read.new(task.path, Term[content])
+      end
+    rescue e : File::Error | IO::Error
+      Err.new(e.message || "internal error")
+    end
+  end
+
+  module Timing
+    include IGnd
+
+    UNIVERSE = Random::Secure.rand(UInt64)
+
+    def merge_policy : MergePolicy
+      MergeDiff.new(0u32)
+    end
+
+    def each_edge(& : Term ->) : Nil
+    end
+
+    defcase Sequencer,
+      original : Term,
+      period : Time::Span,
+      includes: {Timing}
+
+    defcase Ticker,
+      original : Term,
+      period : Time::Span,
+      step : Term::Num,
+      state : Term::Num,
+      includes: {Timing}
+
+    defcase Timesource,
+      original : Term,
+      period : Time::Span,
+      target : Term,
+      message : Term,
+      includes: {Timing}
+
+    class Timesource
+      def each_edge(& : Term ->) : Nil
+        yield target
+      end
+    end
+
+    defcase Lfo,
+      original : Term,
+      period : Time::Span,
+      waveform : Waveform,
+      includes: {Timing}
+
+    defcase PendingTimer,
+      original : Term,
+      delay : Time::Span,
+      includes: {Timing}
+
+    defcase WaitingTimer,
+      original : Term,
+      delay : Time::Span,
+      universe : UInt64,
+      deadline : Time::Span,
+      includes: {Timing}
+
+    def self.crossingcnt(checkpoint : Time::Span, now : Time::Span, period : Time::Span) : Int64
+      if period.zero?
+        # Zero period should make it always cross.
+        1i64
+      else
+        previous = (checkpoint / period).floor.to_i64
+        current = (now / period).floor.to_i64
+        current - previous
+      end
+    end
+
+    def self.freq?(term : Term) : Float64?
+      Term.case(term) do
+        # |@ rack.lfo.freq
+        #
+        # |@pattern
+        # (±freq hz)
+        # (±freq Hz)
+        #
+        # |@block
+        # Specifies a frequency in hertz.
+        #
+        # |@example
+        # ```wwml
+        # (440 Hz)
+        # ```
+        matchpi %{(±freq hz)}, %{(±freq Hz)} do
+          freq.to(Float64)
+        end
+
+        # |@ rack.lfo.freq
+        #
+        # |@pattern
+        # (±freq khz)
+        # (±freq kHz)
+        #
+        # |@block
+        # Specifies a frequency in kilohertz.
+        #
+        # |@example
+        # ```wwml
+        # (10 kHz)
+        # ```
+        matchpi %{(±freq khz)}, %{(±freq kHz)} do
+          freq.to(Float64) * 1000
+        end
+
+        otherwise { }
+      end
+    end
+
+    alias Waveform = SinWave | SawUpWave | SawDnWave | TriWave | PulseWave
+
+    defrecord SinWave, freq : Float64, offset : Float64, amplitude : Float64
+    defrecord SawUpWave, freq : Float64
+    defrecord SawDnWave, freq : Float64
+    defrecord TriWave, freq : Float64
+    defrecord PulseWave, freq : Float64, duty : Float64
+
+    def self.waveform?(waveform : Term) : Waveform?
+      Term.case(waveform) do
+        # |@ rack.lfo.waveform
+        #
+        # |@pattern
+        # (sin freq_ ⍊ offset⋮ 1/2 amplitude⋮ 1/2)
+        #
+        # |@key freq rack.lfo.freq
+        # The frequency of the wave.
+        #
+        # |@key offset
+        # The offset of the wave.
+        #
+        # |@key amplitude
+        # The amplitude of the wave.
+        #
+        # |@block
+        # Defines a sine waveform.
+        #
+        # |@example
+        # ```wwml
+        # (sin (440 Hz))
+        # (sin (1 Hz) offset: 0 amplitude: 1)
+        # ```
+        matchpi(
+          %{(sin freqQ_ ⍊ offset⋮ 1/2 amplitude⋮ 1/2)},
+          offset: Float64,
+          amplitude: Float64,
+        ) do
+          next unless freq = freq?(freqQ)
+
+          SinWave.new(freq, offset, amplitude)
+        end
+
+        # |@ rack.lfo.waveform
+        #
+        # |@pattern
+        # (saw freq_ ⍊ direction_: (%optional up (%any up dn)))
+        #
+        # |@key freq rack.freq
+        # The frequency of the wave.
+        #
+        # |@key direction
+        # Whether the saw should be rising (`up`) or falling (`dn`).
+        #
+        # |@block
+        # Defines a sawtooth waveform.
+        #
+        # |@example
+        # ```wwml
+        # (saw (10 Hz))
+        # (saw (10 Hz) direction: dn)
+        # ```
+
+        matchpi %{(saw freqQ_ ⍊ direction: (%optional up up))} do
+          next unless freq = freq?(freqQ)
+
+          SawUpWave.new(freq)
+        end
+
+        matchpi %{(saw freqQ_ ⍊ direction: dn)} do
+          next unless freq = freq?(freqQ)
+
+          SawDnWave.new(freq)
+        end
+
+        # |@ rack.lfo.waveform
+        #
+        # |@pattern
+        # [tri freq_]
+        #
+        # |@key freq rack.freq
+        # The frequency of the wave.
+        #
+        # |@block
+        # Defines a triangle waveform.
+        #
+        # |@example
+        # ```wwml
+        # (tri (10 Hz))
+        # ```
+        matchpi %{[tri freqQ_]} do
+          next unless freq = freq?(freqQ)
+
+          TriWave.new(freq)
+        end
+
+        # |@ rack.lfo.waveform
+        #
+        # |@pattern
+        # (pulse freq_ ⍊ duty⋮ 1/2)
+        #
+        # |@key freq rack.freq
+        # The frequency of the wave.
+        #
+        # |@key duty
+        # The fraction of each cycle spent in the high state.
+        #
+        # |@block
+        # Defines a pulse waveform.
+        #
+        # |@example
+        # ```wwml
+        # (pulse (1 Hz))
+        # (pulse (10 Hz) duty: 1/5)
+        # ```
+        matchpi %{(pulse freqQ_ ⍊ duty⋮ 1/2)}, duty: Float64 do
+          next unless freq = freq?(freqQ)
+
+          PulseWave.new(freq, duty)
+        end
+
+        otherwise { }
+      end
+    end
+
+    def self.sample(waveform : SinWave, now : Time::Span) : Float64?
+      # Calculate how many cycles have passed.
+      cycles = now.total_seconds * waveform.freq
+      # Take the fractional part, e.g. 1.⏏23⏏, telling us how far we are
+      # into the current cycle.
+      phase = cycles - cycles.floor
+      waveform.offset + waveform.amplitude*Math.sin(Math::TAU * phase)
+    end
+
+    def self.sample(waveform : SawUpWave, now : Time::Span) : Float64?
+      cycles = now.total_seconds * waveform.freq
+      phase = cycles - cycles.floor
+      phase # Ramp is just phase
+    end
+
+    def self.sample(waveform : SawDnWave, now : Time::Span) : Float64?
+      cycles = now.total_seconds * waveform.freq
+      phase = cycles - cycles.floor
+      1.0f64 - phase
+    end
+
+    def self.sample(waveform : TriWave, now : Time::Span) : Float64?
+      cycles = now.total_seconds * waveform.freq
+      phase = cycles - cycles.floor
+      1.0f64 - (2*phase - 1.0f64).abs
+    end
+
+    def self.sample(waveform : PulseWave, now : Time::Span) : Float64?
+      cycles = now.total_seconds * waveform.freq
+      phase = cycles - cycles.floor
+      phase < waveform.duty ? 0.0f64 : 1.0f64
+    end
+
+    private def freq?(term : Term) : Float64?
+      Term.case(term) do
+        # |@ rack.lfo.freq
+        #
+        # |@pattern
+        # (±freq hz)
+        # (±freq Hz)
+        #
+        # |@block
+        # Specifies a frequency in hertz.
+        #
+        # |@example
+        # ```wwml
+        # (440 Hz)
+        # ```
+        matchpi %{(±freq hz)}, %{(±freq Hz)} do
+          freq.to(Float64)
+        end
+
+        # |@ rack.lfo.freq
+        #
+        # |@pattern
+        # (±freq khz)
+        # (±freq kHz)
+        #
+        # |@block
+        # Specifies a frequency in kilohertz.
+        #
+        # |@example
+        # ```wwml
+        # (10 kHz)
+        # ```
+        matchpi %{(±freq khz)}, %{(±freq kHz)} do
+          freq.to(Float64) * 1000
+        end
+
+        otherwise { }
+      end
     end
   end
 
@@ -1683,23 +2597,24 @@ module NeoRack
     end
   end
 
-  def recognize(original : Term) : Root | Inert
+  alias RecognizeCache = DependentCache(Term, Node)
+  alias RecognizeProc = RecognizeCache, Term, RecognizeProc -> Node
+
+  def recognize(recognize_cache : RecognizeCache, original : Term) : Root | Inert
     unless document = original.as_d?
       return Inert.new(original)
     end
 
-    rec = ->(member : Term, this : RecognizeProc) do
-      recognize(member, this).as(Node)
+    rec = ->(recognize_cache : RecognizeCache, member : Term, this : RecognizeProc) do
+      recognize(recognize_cache, member, this).as(Node)
     end
 
     children = document.items.to_readonly_slice do |node|
-      recognize(node, rec).as(Node)
+      recognize(recognize_cache, node, rec).as(Node)
     end
 
     Root.new(document, children)
   end
-
-  alias RecognizeProc = Term, RecognizeProc -> Node
 
   # :nodoc:
   SYM_SEQ = Term[:seq]
@@ -1869,7 +2784,11 @@ module NeoRack
     keys
   end
 
-  def recognize(original : Term, rec : RecognizeProc) : Node
+  def recognize(recognize_cache : RecognizeCache, original : Term, rec : RecognizeProc) : Node
+    recognize_cache.put_if_absent(original) { recognize!(recognize_cache, original, rec) }
+  end
+
+  private def recognize!(recognize_cache : RecognizeCache, original : Term, rec : RecognizeProc) : Node
     Term.case(original) do
       matchpi %{[cell @edge_]} do
         policy = MergeDiff.new(0u32)
@@ -1924,7 +2843,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       matchpi %{[feed (%group edges_ (%past @_ min: 3))]} do
@@ -1935,7 +2854,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(Term.of(defn), rec), ->(mix : Term) { original })
+        Mixture.new(original, rec.call(recognize_cache, Term.of(defn), rec), ->(mix : Term) { original })
       end
 
       matchpi(
@@ -2010,14 +2929,14 @@ module NeoRack
 
       matchpi %{[group _*]} do
         childrenQ = original.items.move(1)
-        children = childrenQ.to_readonly_slice { |childQ| rec.call(childQ, rec) }
+        children = childrenQ.to_readonly_slice { |childQ| rec.call(recognize_cache, childQ, rec) }
         Group.new(original.as_d, children, 1u32...original.uitemsize)
       end
 
       matchpiT %{[module bindings_dict _*]} do
         scope = ScopeClosedExcept.new(bindings)
         childrenQ = original.items.move(2)
-        children = childrenQ.to_readonly_slice { |childQ| rec.call(childQ, rec) }
+        children = childrenQ.to_readonly_slice { |childQ| rec.call(recognize_cache, childQ, rec) }
         Scope.new(original, scope, Group.new(original.as_d, children, 2u32...original.uitemsize))
       end
 
@@ -2025,7 +2944,7 @@ module NeoRack
         locals = localsQ.items.to_readonly_slice(&.itself)
         scope = ScopeOpenExcept.new(locals)
         childrenQ = original.items.move(2)
-        children = childrenQ.to_readonly_slice { |childQ| rec.call(childQ, rec) }
+        children = childrenQ.to_readonly_slice { |childQ| rec.call(recognize_cache, childQ, rec) }
         Scope.new(original, scope, Group.new(original.as_d, children, 2u32...original.uitemsize))
       end
 
@@ -2084,7 +3003,7 @@ module NeoRack
 
       matchpi %{[device _*]} do
         childrenQ = original.items.move(1)
-        children = childrenQ.to_readonly_slice { |childQ| rec.call(childQ, rec) }
+        children = childrenQ.to_readonly_slice { |childQ| rec.call(recognize_cache, childQ, rec) }
         Device.new(original.as_d, children, 1u32...original.uitemsize)
       end
 
@@ -2110,9 +3029,9 @@ module NeoRack
           end
         end
 
-        children = children0.items.to_readonly_slice { |child| rec.call(child, rec) }
+        children = children0.items.to_readonly_slice { |child| rec.call(recognize_cache, child, rec) }
         range = 2u32...original.uitemsize
-        leaf = Mixture.new(original, rec.call(defn, rec), fold)
+        leaf = Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
         Circuit.new(original.as_d, children, range, leaf)
       end
 
@@ -2136,9 +3055,9 @@ module NeoRack
           Term.of(original.replace(2...original.itemsize, Term.rep(children1.items)))
         end
 
-        children = children0.items.to_readonly_slice { |child| rec.call(child, rec) }
+        children = children0.items.to_readonly_slice { |child| rec.call(recognize_cache, child, rec) }
         range = 2u32...original.uitemsize
-        leaf = Mixture.new(original, rec.call(defn, rec), fold)
+        leaf = Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
         Circuit.new(original.as_d, children, range, leaf)
       end
 
@@ -2152,7 +3071,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       matchpi(
@@ -2182,7 +3101,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       matchpi(
@@ -2222,7 +3141,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       matchpi(
@@ -2253,7 +3172,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       matchpi(<<-'WWML', min: Int32) do
@@ -2304,12 +3223,12 @@ module NeoRack
           Term.morph(original, {2, buffer1})
         end
 
-        Mixture.new(original, rec.call(Term.of(defn), rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, Term.of(defn), rec), fold)
       end
 
       matchpi %{[guard (@edge_) _*]} do
         childrenQ = original.items.move(2)
-        children = childrenQ.to_readonly_slice { |child| rec.call(child, rec) }
+        children = childrenQ.to_readonly_slice { |child| rec.call(recognize_cache, child, rec) }
         range = 2u32...original.uitemsize
         successor = Group.new(original.as_d, children, range)
         Guard::Empty.new(original, edge, successor)
@@ -2318,7 +3237,7 @@ module NeoRack
       matchpi %{[guard (@edge_ patternQ_) _*]} do
         pattern = M1.operator(patternQ)
         childrenQ = original.items.move(2)
-        children = childrenQ.to_readonly_slice { |child| rec.call(child, rec) }
+        children = childrenQ.to_readonly_slice { |child| rec.call(recognize_cache, child, rec) }
         range = 2u32...original.uitemsize
         successor = Group.new(original.as_d, children, range)
         Guard::Occupied.new(original, edge, pattern, successor)
@@ -2412,7 +3331,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       # NOTE: The changes node cannot detect changes made upstream of *edge*. It
@@ -2455,19 +3374,23 @@ module NeoRack
         Mixture.new(original, defn, fold)
       end
 
-      matchpi %{[form @edge_ _*]} do
+      matchpi %{[form fst←(%any° @edge_ (@edge_)) _*]} do
         policy = MergeDiff.new(0u32)
         childrenQ = original.items.move(2)
-        children = childrenQ.to_readonly_slice { |child| rec.call(child, rec) }
-        Form.new(original.as_d, policy, edge, children, 2u32...original.uitemsize)
+        children = childrenQ.to_readonly_slice { |child| rec.call(recognize_cache, child, rec) }
+        range = 2u32...original.uitemsize
+        uniform = fst != edge # @edge is not uniform, (@edge) is uniform
+        Form.new(original.as_d, policy, edge, children, range, uniform)
       end
 
-      matchpiT %{[form (policyQ_symbol @edge_) _*]} do
+      matchpiT %{[form (policyQ_symbol fst←(%any° @edge_ (@edge_))) _*]} do
         continue unless policy = merge_policy?(policyQ)
 
         childrenQ = original.items.move(2)
-        children = childrenQ.to_readonly_slice { |child| rec.call(child, rec) }
-        Form.new(original.as_d, policy, edge, children, 2u32...original.uitemsize)
+        children = childrenQ.to_readonly_slice { |child| rec.call(recognize_cache, child, rec) }
+        range = 2u32...original.uitemsize
+        uniform = fst != edge # @edge is not uniform, (@edge) is uniform
+        Form.new(original.as_d, policy, edge, children, range, uniform)
       end
 
       matchpi %{[outlet specQ_]} do
@@ -2516,7 +3439,7 @@ module NeoRack
           end
         end
 
-        Mixture.new(original, rec.call(defn, rec), fold)
+        Mixture.new(original, rec.call(recognize_cache, defn, rec), fold)
       end
 
       matchpi %{[manipulable (@edge_ -> partsQ_*) child_]} do
@@ -2556,9 +3479,150 @@ module NeoRack
       end
 
       matchpiT %{[parser (@src_ -> top_symbol -> @dst_) grammarQ_*]} do
+        error = nil
         grammar = ParseKit.flatten(ParseKit.grammar(grammarQ))
         grammar_digest = Term.digest(grammarQ)
-        Parser::Transfer.new(original, src, dst, grammar, grammar_digest, top)
+        cache = SyncLRU(Term::Str, Parser::Result).new(capacity: 8)
+        Parser::Transfer.new(original, src, dst, error, grammar, grammar_digest, top, cache)
+      end
+
+      matchpiT %{[parser (@src_ -> top_symbol -> @dst_ / @error_) grammarQ_*]} do
+        grammar = ParseKit.flatten(ParseKit.grammar(grammarQ))
+        grammar_digest = Term.digest(grammarQ)
+        cache = SyncLRU(Term::Str, Parser::Result).new(capacity: 8)
+        Parser::Transfer.new(original, src, dst, error, grammar, grammar_digest, top, cache)
+      end
+
+      matchpiT %{[parser (@src_ - top_symbol - @dst_) grammarQ_*]} do
+        error = nil
+        grammar = ParseKit.flatten(ParseKit.grammar(grammarQ))
+        grammar_digest = Term.digest(grammarQ)
+        cache = SyncLRU(Term::Str, Parser::Result).new(capacity: 8)
+        Parser::View.new(original, src, dst, error, grammar, grammar_digest, top, cache)
+      end
+
+      matchpiT %{[parser (@src_ - top_symbol - @dst_ / @error_) grammarQ_*]} do
+        grammar = ParseKit.flatten(ParseKit.grammar(grammarQ))
+        grammar_digest = Term.digest(grammarQ)
+        cache = SyncLRU(Term::Str, Parser::Result).new(capacity: 8)
+        Parser::View.new(original, src, dst, error, grammar, grammar_digest, top, cache)
+      end
+
+      matchpiT %{[rewriter (@src_ -> specQ_ -> @dst_) data_*]} do
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        Rewriter::Transfer.new(original, src, dst, rewriter, cache)
+      end
+
+      matchpiT %{[rewriter (@src_ - specQ_ - @dst_) data_*]} do
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        Rewriter::View.new(original, src, dst, rewriter, cache)
+      end
+
+      matchpiT %{[rewriter ((@src_ @version_) - specQ_ - @dst_) data_*]} do
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        Rewriter::VersionedView.new(original, src, version, dst, rewriter, cache)
+      end
+
+      matchpiT %{[rewriter ((@src_ @version_) -> specQ_ - @dst_) data_*]} do
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        Rewriter::AsymmetricVersionedView.new(original, src, version, dst, rewriter, cache)
+      end
+
+      matchpiT %{[rewriter (specQ_ - @target_) data_*]} do
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        nop = SyncLRU(Term::Str, Bool).new(capacity: 8)
+        Rewriter::RegimeTarget.new(original, target, rewriter, cache, nop)
+      end
+
+      matchpiT %{[rewriter (specQ_ - templateQ_dict) data_*]} do
+        template = EdgeTemplate.recognize(templateQ)
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        nop = SyncLRU(Term::Str, Bool).new(capacity: 8)
+        Rewriter::RegimeTemplate.new(original, template, templateQ, rewriter, cache, nop)
+      end
+
+      matchpi %{[rewriter specQ_ (%group data_ [(%any rule backmap) _*] _*)]} do
+        keys = keyset(rules: original.items.move(2))
+
+        templateQ = Term::Dict.build do |commit|
+          keys.each do |key|
+            commit.with(key, {:edge, key})
+          end
+        end
+
+        template = EdgeTemplate.recognize(templateQ)
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        nop = SyncLRU(Term::Str, Bool).new(capacity: 8)
+        Rewriter::RegimeTemplate.new(original, template, templateQ, rewriter, cache, nop)
+      end
+
+      matchpi %{[rewriter specQ_ (%group data_ [stage _*] _*)]} do
+        keys = Set(Term).new
+        stages = original.items.move(2)
+        stages.each do |stage|
+          keys.concat(keyset(stage.items.move(1)))
+        end
+
+        templateQ = Term::Dict.build do |commit|
+          keys.each do |key|
+            commit.with(key, {:edge, key})
+          end
+        end
+
+        template = EdgeTemplate.recognize(templateQ)
+        rewriter, cache = Rewriter.rewriter_and_cache(specQ, data)
+        nop = SyncLRU(Term::Str, Bool).new(capacity: 8)
+        Rewriter::RegimeTemplate.new(original, template, templateQ, rewriter, cache, nop)
+      end
+
+      matchpi %{[fs @query_ @reply_]} do
+        Fs.new(original, query, reply)
+      end
+
+      matchpi %{[sequencer periodQ_ _*]} do
+        continue unless period = DurationLanguage.decode?(periodQ)
+
+        Timing::Sequencer.new(original, period)
+      end
+
+      matchpi %{[ticker (%layer periodQ_ {| step⋮ 1}) ±state]} do
+        continue unless period = DurationLanguage.decode?(periodQ)
+
+        Timing::Ticker.new(original, period, step.as_n, state.as_n)
+      end
+
+      matchpi %{[timesource (periodQ_ @edge_) message_]} do
+        continue unless period = DurationLanguage.decode?(periodQ)
+
+        Timing::Timesource.new(original, period, edge, message)
+      end
+
+      matchpi %{[lfo (periodQ_ waveformQ_) _?]} do
+        continue unless period = DurationLanguage.decode?(periodQ)
+        continue unless waveform = Timing.waveform?(waveformQ)
+
+        Timing::Lfo.new(original, period, waveform)
+      end
+
+      matchpi %{[timer delayQ_ start]} do
+        continue unless delay = DurationLanguage.decode?(delayQ)
+
+        Timing::PendingTimer.new(original, delay)
+      end
+
+      matchpi %{[timer delayQ_ (wait instant_string)]}, instant: String do
+        continue unless delay = DurationLanguage.decode?(delayQ)
+
+        parts = instant.split(':', limit: 2)
+        continue unless parts.size == 2
+
+        universe, deadline_ns = parts
+        continue unless universe = universe.to_u64?(base: 62)
+        continue unless deadline_ns = deadline_ns.to_u64?(base: 62)
+
+        deadline = deadline_ns.nanoseconds
+
+        Timing::WaitingTimer.new(original, delay, universe, deadline)
       end
 
       otherwise do
@@ -2739,21 +3803,22 @@ module NeoRack
   # and `rack.changes`.
   module Place
     alias Any = Empty | Occupied
-    alias Empty = EmptyDependency | EmptyCell | EmptyForm
-    alias Occupied = OccupiedDependency | OccupiedCell | OccupiedForm
+    alias Empty = EmptyDependency | EmptyCell | EmptyOutlet
+    alias Occupied = OccupiedDependency | OccupiedCell | OccupiedOutlet | OccupiedForm
 
     module WritableCell
       abstract def value? : Term?
 
       def write(rep : Term::Rep) : Patch
+        value0 = value?
         unless rep.empty?
-          value = Term.collapse(rep)
+          value1 = Term.collapse(rep)
         end
-        # value : Term?
+        # value1 : Term?
 
         NeoRack.txn(
-          NeoRack.txn(@changes) { |node| Changes.log(node, before: value?, after: value) },
-          PatchTable.assoc(@target_id, Term.morph(@original, {2, value})),
+          NeoRack.txn(@changes) { |node| Changes.log(node, before: value0, after: value1) },
+          PatchTable.assoc(@target_id, Term.morph(@original, {2, value1})),
         )
       end
     end
@@ -2762,17 +3827,43 @@ module NeoRack
       abstract def value? : Term?
 
       def write(rep : Term::Rep) : Patch
+        value0 = value?
         # NOTE: We're interested in the value **before** decorate().
         unless rep.empty?
-          value = Term.collapse(rep)
+          value1 = Term.collapse(rep)
         end
-        # value : Term?
+        # value1 : Term?
 
         rep = @decorate.call(rep)
 
         NeoRack.txn(
-          NeoRack.txn(@changes) { |node| Changes.log(node, before: value?, after: value) },
+          NeoRack.txn(@changes) { |node| Changes.log(node, before: value0, after: value1) },
           @upstream.write(rep)
+        )
+      end
+    end
+
+    module WritableOutlet
+      abstract def value? : Term?
+
+      def write(rep : Term::Rep) : Patch
+        if @outlet.readonly
+          return PatchCancel.new
+        end
+
+        value0 = value?
+        unless rep.empty?
+          value1 = Term.collapse(rep)
+        end
+        # value1 : Term?
+
+        schedule = NodeAddrRouter::Builder(Term?).new
+        # `2` refers to (outlet @edge ⏏)
+        schedule[@outlet.addr] = Term.morph(@outlet.original, {2, value1})
+
+        NeoRack.txn(
+          NeoRack.txn(@changes) { |node| Changes.log(node, before: value0, after: value1) },
+          PatchTable.assoc(@target_id, NeoRack.apply(@form, schedule.router)),
         )
       end
     end
@@ -2827,14 +3918,39 @@ module NeoRack
       end
     end
 
-    struct EmptyForm
+    struct EmptyOutlet
+      include WritableOutlet
+
       # :nodoc:
-      def initialize(@target_id : NodeId, @form : Form)
+      def initialize(
+        @target_id : NodeId,
+        @outlet : Form::OutletEntry,
+        @form : Form,
+        @changes : Slice(NodeRef(Changes)),
+      )
       end
 
-      def write(rep : Term::Rep) : Term::Rep
-        pp! rep
-        raise ""
+      def value? : Term?
+      end
+    end
+
+    struct OccupiedOutlet
+      include WritableOutlet
+
+      getter value : Term
+
+      # :nodoc:
+      def initialize(
+        @target_id : NodeId,
+        @outlet : Form::OutletEntry,
+        @value : Term,
+        @form : Form,
+        @changes : Slice(NodeRef(Changes)),
+      )
+      end
+
+      def value? : Term?
+        value
       end
     end
 
@@ -2842,7 +3958,12 @@ module NeoRack
       getter value : Term
 
       # :nodoc:
-      def initialize(@target_id : NodeId, @entries : Slice(Form::Entry), @form : Form)
+      def initialize(
+        @target_id : NodeId,
+        @entries : Slice(Form::Entry),
+        @form : Form,
+        @changes : Slice(NodeRef(Changes)),
+      )
         # Turn the entries into a dict.
         row = Term::Dict.build do |commit|
           @entries.each do |entry|
@@ -2856,6 +3977,10 @@ module NeoRack
         end
 
         @value = Term.of(row)
+      end
+
+      def value? : Term?
+        value
       end
 
       def write(rep : Term::Rep) : Patch
@@ -2918,9 +4043,15 @@ module NeoRack
           return PatchCancel.new
         end
 
+        value0 = value?
+        value1 = rep.empty? ? nil : Term.collapse(rep)
+
         # Deliver changes to entries of the form. The result is a term -- the new value
         # for the form, which we propose in the patch.
-        PatchTable.assoc(@target_id, NeoRack.apply(@form, schedule.router))
+        NeoRack.txn(
+          NeoRack.txn(@changes) { |node| Changes.log(node, before: value0, after: value1) },
+          PatchTable.assoc(@target_id, NeoRack.apply(@form, schedule.router)),
+        )
       end
     end
   end
@@ -3094,7 +4225,23 @@ module NeoRack
           entries << entry
         end
 
-        places << Place::OccupiedForm.new(leaf.id, entries.to_unsafe_readonly_slice!, form)
+        added = false
+        pass do
+          next if form.uniform
+          next unless outlet = entries.single?.as?(Form::OutletEntry)
+
+          case value = outlet.value
+          in Nil
+            places << Place::EmptyOutlet.new(leaf.id, outlet, form, changes.to_unsafe_readonly_slice!)
+          in Term
+            places << Place::OccupiedOutlet.new(leaf.id, outlet, value, form, changes.to_unsafe_readonly_slice!)
+          end
+          added = true
+        end
+
+        next if added
+
+        places << Place::OccupiedForm.new(leaf.id, entries.to_unsafe_readonly_slice!, form, changes.to_unsafe_readonly_slice!)
       end
 
       pool.each do |member|
@@ -3570,7 +4717,8 @@ module NeoRack
   # Replaces subcircuits of *circuit* with their corresponding leaf nodes (`ICircuit#leaf`).
   def seal(circuit : ICircuit) : ICircuit
     summary = summarize(circuit)
-    summary.maxlevel > 0 ? circuit.map { |child| nested_seal(child) }.as(ICircuit) : circuit
+    # Since *circuit* is an ICircuit, the resulting maxlevel is at least 1.
+    summary.maxlevel > 1 ? circuit.map { |child| nested_seal(child) }.as(ICircuit) : circuit
   end
 
   # Maintains relations across spots in the circuit.
@@ -3595,29 +4743,83 @@ module NeoRack
   alias ParserTaskBoard = D7::TaskBoard(BlockingSignal, Parser::Task, Parser::Result)
   alias ParserRdv = D7::TaskBoard::Rdv(BlockingSignal, Parser::Task, Parser::Result)
 
+  alias RewriterTaskBoard = D7::TaskBoard(BlockingSignal, Rewriter::Task, Rewriter::Result)
+  alias RewriterRdv = D7::TaskBoard::Rdv(BlockingSignal, Rewriter::Task, Rewriter::Result)
+
+  alias FsTaskBoard = D7::TaskBoard(BlockingSignal, Fs::Request, Fs::Response)
+  alias FsRdv = D7::TaskBoard::Rdv(BlockingSignal, Fs::Request, Fs::Response)
+
   class Context
     def initialize(@signal : BlockingSignal)
+      @fs_tasks = FsTaskBoard.new(@signal) { |task, ping| Fs.execute(task, ping) }
       @parser_tasks = ParserTaskBoard.new(@signal) { |task, ping| Parser.execute(task, ping) }
-      @parser_errors = Set(Parser::Task).new
+      @rewriter_tasks = RewriterTaskBoard.new(@signal) { |task, ping| Rewriter.execute(task, ping) }
+
+      @time_origin = Time.instant
+      @time_checkpoint = Time::Span.zero
+      @time_periods = Set(Time::Span).new
+      @time_deadlines = Set(Time::Span).new
     end
 
+    # Returns `true` if there are pending background or future tasks, or any
+    # other sort of business. Quiescence cannot be reached while the context
+    # is pending.
+    def pending? : Bool
+      {@fs_tasks, @parser_tasks, @rewriter_tasks}.any?(&.pending?)
+    end
+
+    def deadline? : Time::Instant?
+      now = Time.instant
+      elapsed = now - @time_origin
+
+      period_t = @time_periods.min_of? do |period|
+        if period.zero?
+          now
+        else
+          n = (elapsed / period).floor.to_i64 + 1
+          @time_origin + period * n
+        end
+      end
+
+      deadline_t = @time_deadlines.min_of? do |deadline|
+        @time_origin + deadline
+      end
+
+      if period_t && deadline_t
+        {period_t, deadline_t}.min
+      else
+        period_t || deadline_t
+      end
+    end
+
+    # :nodoc:
     def epoch(&)
-      @parser_tasks.rdv do |parser_rdv|
-        parser_errors1 = Set(Parser::Task).new
+      @fs_tasks.rdv do |fs_rdv|
+        @parser_tasks.rdv do |parser_rdv|
+          @rewriter_tasks.rdv do |rewriter_rdv|
+            @time_periods.clear
+            @time_deadlines.clear
 
-        result = yield ContextEpoch.new(parser_rdv, @parser_errors, parser_errors1)
-
-        @parser_errors = parser_errors1
-
-        result
+            time_now = Time.instant - @time_origin
+            begin
+              yield ContextEpoch.new(fs_rdv, parser_rdv, rewriter_rdv, @time_checkpoint, time_now, @time_periods, @time_deadlines)
+            ensure
+              @time_checkpoint = time_now
+            end
+          end
+        end
       end
     end
   end
 
   defrecord ContextEpoch,
+    fs_rdv : FsRdv,
     parser_rdv : ParserRdv,
-    parser_errors0 : Set(Parser::Task),
-    parser_errors1 : Set(Parser::Task)
+    rewriter_rdv : RewriterRdv,
+    time_checkpoint : Time::Span,
+    time_now : Time::Span,
+    time_periods : Set(Time::Span),
+    time_deadlines : Set(Time::Span)
 
   # Runs the main symbolic physics pass.
   def advance(epoch : ContextEpoch, hg : Hypergraph, patches : Array(Patch)) : Nil
@@ -3870,16 +5072,21 @@ module NeoRack
       next unless src = hg.occupied_place?(parser.addr, parser.node.src)
       next unless text = src.value.as_s?
       next unless dst = hg.empty_place?(parser.addr, parser.node.dst)
-
-      task = Parser::Task.new(text, parser.node.grammar, parser.node.grammar_digest, parser.node.top)
-      if task.in?(epoch.parser_errors0)
-        epoch.parser_errors1 << task # confirms its liveness
-        next
+      if error_edge = parser.node.error
+        next unless error = hg.empty_place?(parser.addr, error_edge)
       end
 
-      result = epoch.parser_rdv.result?(task)
-      # Try computing inline (returns Result) or schedule (returns Nil).
-      result ||= epoch.parser_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      unless result = parser.node.cache.get?(text)
+        task = Parser::Task.new(text, parser.node.grammar, parser.node.grammar_digest, parser.node.top)
+
+        result = epoch.parser_rdv.result?(task)
+        # Try computing inline (returns Result) or schedule (returns Nil).
+        result ||= epoch.parser_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+
+        if result
+          parser.node.cache.put(text, result)
+        end
+      end
 
       case result
       in Nil
@@ -3887,16 +5094,330 @@ module NeoRack
       in Term
         patches << txn(src.write(Term.rep), dst.write(Term.rep(result)))
       in ParseKit::Err
-        # If there's a parse error, it has nowhere to go in this variant, so
-        # we clog the input. We also remember task ended in an error, so as
-        # to not redo parsing every time.
-        epoch.parser_errors1 << task
+        # Parse error has nowhere to go, so we clog the input.
+        next if error.nil?
+
+        repr = Term.of(:err, result.detail)
+        patches << txn(src.write(Term.rep), error.write(Term.rep(repr)))
       end
+    end
+
+    hg.each(Parser::View) do |parser|
+      next unless dst = hg.place?(parser.addr, parser.node.dst)
+
+      src = hg.place?(parser.addr, parser.node.src)
+      if error_edge = parser.node.error
+        error = hg.place?(parser.addr, error_edge)
+      end
+
+      txn = [] of Patch
+
+      pass do
+        # If the source cell is absent or empty, clear target cell(s).
+        unless src.is_a?(Place::Occupied) && (text = src.value.as_s?)
+          txn << dst.write(Term.rep)
+          txn << error.write(Term.rep) if error
+          next
+        end
+
+        unless result = parser.node.cache.get?(text)
+          task = Parser::Task.new(text, parser.node.grammar, parser.node.grammar_digest, parser.node.top)
+
+          result = epoch.parser_rdv.result?(task)
+          result ||= epoch.parser_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+
+          if result
+            parser.node.cache.put(text, result)
+          end
+        end
+
+        case result
+        in Nil
+          # Result not available
+          txn << dst.write(Term.rep)
+          txn << error.write(Term.rep) if error
+        in Term
+          txn << dst.write(Term.rep(result))
+          txn << error.write(Term.rep) if error
+        in ParseKit::Err
+          repr = Term.of(:err, result.detail)
+          txn << dst.write(Term.rep)
+          txn << error.write(Term.rep(repr)) if error
+        end
+      end
+
+      patches << txn(txn)
+    end
+
+    hg.each(Rewriter::Transfer) do |rewriter|
+      next unless src = hg.occupied_place?(rewriter.addr, rewriter.node.src)
+      next unless dst = hg.empty_place?(rewriter.addr, rewriter.node.dst)
+
+      task = Rewriter::Task.new(rewriter.node.rho, rewriter.node.cache, src.value)
+
+      result = epoch.rewriter_rdv.result?(task)
+      result ||= epoch.rewriter_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      next unless result # Result not available yet.
+
+      patches << txn(src.write(Term.rep), dst.write(Term.rep(result)))
+    end
+
+    hg.each(Rewriter::View) do |rewriter|
+      next unless dst = hg.place?(rewriter.addr, rewriter.node.dst)
+
+      src = hg.place?(rewriter.addr, rewriter.node.src)
+      unless src.is_a?(Place::Occupied)
+        patches << dst.write(Term.rep)
+        next
+      end
+
+      task = Rewriter::Task.new(rewriter.node.rho, rewriter.node.cache, src.value)
+
+      result = epoch.rewriter_rdv.result?(task)
+      result ||= epoch.rewriter_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      next unless result # Result not available yet.
+
+      patches << dst.write(Term.rep(result))
+    end
+
+    hg.each(Rewriter::VersionedView) do |rewriter|
+      next unless version = hg.place?(rewriter.addr, rewriter.node.version)
+
+      unless dst = hg.place?(rewriter.addr, rewriter.node.dst)
+        # Clear version (missing output cell).
+        patches << version.write(Term.rep)
+        next
+      end
+
+      # Find a single nonempty input cell.
+      unless src = hg.occupied_place?(rewriter.addr, rewriter.node.src)
+        # Clear output and version (missing input cell or input).
+        patches << txn(version.write(Term.rep), dst.write(Term.rep))
+        next
+      end
+
+      # Include rewriter node digest to ensure rule and spec changes trigger
+      # recomputation of the result.
+      digest = Term.digest(rewriter.node.original, src.value)
+      next if version.value? == digest # Unchanged
+
+      task = Rewriter::Task.new(rewriter.node.rho, rewriter.node.cache, src.value)
+
+      result = epoch.rewriter_rdv.result?(task)
+      result ||= epoch.rewriter_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      next unless result # Result not available yet.
+
+      patches << txn(version.write(Term.rep_of(digest)), dst.write(Term.rep(result)))
+    end
+
+    hg.each(Rewriter::AsymmetricVersionedView) do |rewriter|
+      next unless version = hg.place?(rewriter.addr, rewriter.node.version)
+
+      unless dst = hg.place?(rewriter.addr, rewriter.node.dst)
+        # Clear version (missing output cell).
+        patches << version.write(Term.rep)
+        next
+      end
+
+      # Find a single nonempty input cell.
+      unless src = hg.occupied_place?(rewriter.addr, rewriter.node.src)
+        # Clear output and version (missing input cell or input).
+        patches << txn(version.write(Term.rep), dst.write(Term.rep))
+        next
+      end
+
+      # Include rewriter node digest to ensure rule and spec changes trigger
+      # recomputation of the result.
+      digest = Term.digest(rewriter.node.original, src.value)
+
+      if version.value? == digest # Unchanged
+        # Input is the same as the one we've already seen, simply consume it.
+        patches << src.write(Term.rep)
+        next
+      end
+
+      task = Rewriter::Task.new(rewriter.node.rho, rewriter.node.cache, src.value)
+
+      result = epoch.rewriter_rdv.result?(task)
+      result ||= epoch.rewriter_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      next unless result # Result not available yet.
+
+      patches << txn(
+        src.write(Term.rep),
+        version.write(Term.rep_of(digest)),
+        dst.write(Term.rep(result)),
+      )
+    end
+
+    hg.each(Rewriter::RegimeTarget) do |rewriter|
+      next unless target = hg.occupied_place?(rewriter.addr, rewriter.node.target)
+
+      target_digest = Term.digest(target.value)
+      next if rewriter.node.nop.get?(target_digest) # unchanged
+
+      task = Rewriter::Task.new(rewriter.node.rho, rewriter.node.cache, target.value)
+
+      result = epoch.rewriter_rdv.result?(task)
+      result ||= epoch.rewriter_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      next unless result # Result not available yet.
+
+      if target == result # damaged or unchanged
+        rewriter.node.nop.put(target_digest, true)
+        next
+      end
+
+      patches << target.write(Term.rep(result))
+    end
+
+    hg.each(Rewriter::RegimeTemplate) do |rewriter|
+      next unless situated = EdgeTemplate.situate?(hg, rewriter.addr, rewriter.node.template)
+
+      query : Term::Dict
+      query = EdgeTemplate.render(rewriter.node.template_dict, situated)
+      query_digest = Term.digest(query)
+      next if rewriter.node.nop.get?(query_digest) # unchanged
+
+      task = Rewriter::Task.new(rewriter.node.rho, rewriter.node.cache, Term.of(query))
+
+      reply = epoch.rewriter_rdv.result?(task)
+      reply ||= epoch.rewriter_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+      next unless reply # Result not available yet.
+
+      reply = reply.as_d?
+      if reply.nil? || query == reply # damaged or unchanged
+        rewriter.node.nop.put(query_digest, true)
+        next
+      end
+
+      patches << EdgeTemplate.writeback(hg, situated, reply)
+    end
+
+    hg.each(Fs) do |fs|
+      next unless query = hg.occupied_place?(fs.addr, fs.node.query)
+      next unless reply = hg.empty_place?(fs.addr, fs.node.reply)
+      next unless request = Fs.request?(query.value)
+
+      if response = epoch.fs_rdv.result?(request)
+        responseQ = Fs.transcribe(response)
+        patches << txn(query.write(Term.rep), reply.write(Term.rep(responseQ)))
+        next
+      end
+
+      # File system operations are always executed on a different fiber
+      # to avoid blocking evolution.
+      epoch.fs_rdv.publish(request)
+    end
+
+    hg.each(Timing::Sequencer) do |sequencer|
+      # Maintain a set of active periods. Note that it *is* possible to get these from
+      # the circuit instead of having to mutate this set. However, getting them from
+      # the circuit is probably more expensive, but more importantly, it will also
+      # bypass `guard`s. So if you have a sequencer inside an inactive guard, it'll
+      # still be seen and it'll cause a wakeup. We clearly don't want that. By far,
+      # the easiest way is to just maintain this set here of "live" (reachable) periods.
+      epoch.time_periods << sequencer.node.period
+
+      sequencerQ = sequencer.node.original
+
+      # The (> _) term is called the *needle*. A sequencer can have zero or more
+      # needles. A needle is moved forward, with wraparound, for each crossing.
+
+      crossings = Timing.crossingcnt(epoch.time_checkpoint, epoch.time_now, sequencer.node.period)
+      crossings.times do
+        successor = sequencerQ.transaction do |commit|
+          steps = sequencerQ.items.move(2)
+          steps.each_with_index do |step, index|
+            pred = steps[(index - 1) % steps.size]
+
+            # If this step was active, then disable it.
+            Term.matchpi?(step, %{(> term_)}) do
+              step = term
+            end
+
+            # If this step had an active predecessor, then enable it.
+            Term.matchpi?(pred, %{(> _)}) do
+              step = Term.of(:>, step)
+            end
+
+            key = 2 + index
+            commit.with(key, step)
+          end
+        end
+
+        sequencerQ = Term.of(successor)
+      end
+
+      patches << replace(sequencer, sequencerQ)
+    end
+
+    hg.each(Timing::Ticker) do |ticker|
+      epoch.time_periods << ticker.node.period
+
+      crossings = Timing.crossingcnt(epoch.time_checkpoint, epoch.time_now, ticker.node.period)
+      next if crossings.zero? # Fast path
+
+      # (ticker _ ⏏)
+      patches << patch(ticker, {2, ticker.node.state + ticker.node.step*Term[crossings]})
+    end
+
+    hg.each(Timing::Timesource) do |timesource|
+      next unless target = hg.empty_place?(timesource.addr, timesource.node.target)
+
+      epoch.time_periods << timesource.node.period
+
+      crossings = Timing.crossingcnt(epoch.time_checkpoint, epoch.time_now, timesource.node.period)
+      next if crossings.zero?
+
+      patches << target.write(Term.rep(timesource.node.message))
+    end
+
+    hg.each(Timing::Lfo) do |lfo|
+      epoch.time_periods << lfo.node.period
+
+      crossings = Timing.crossingcnt(epoch.time_checkpoint, epoch.time_now, lfo.node.period)
+      next if crossings.zero? # Fast path out
+
+      next unless readout = Timing.sample(lfo.node.waveform, epoch.time_now)
+
+      # (lfo _ ⏏)
+      patches << patch(lfo, {2, readout})
+    end
+
+    hg.each(Timing::PendingTimer) do |timer|
+      deadline = (epoch.time_now + timer.node.delay).total_nanoseconds.to_u64
+
+      instant = String.build do |io|
+        Timing::UNIVERSE.to_s(io, base: 62)
+        io << ':'
+        deadline.to_s(io, base: 62)
+      end
+
+      # (timer _ ⏏)
+      patches << patch(timer, {2, {:wait, instant}})
+    end
+
+    hg.each(Timing::WaitingTimer) do |timer|
+      # If universe does not match, we restart the timer node.
+      unless timer.node.universe == Timing::UNIVERSE
+        # (timer _ ⏏)
+        patches << patch(timer, {2, :start})
+        next
+      end
+
+      if epoch.time_now < timer.node.deadline
+        # Keep waiting
+        epoch.time_deadlines << timer.node.deadline
+        next
+      end
+
+      # We're past the deadline.
+      # (timer _ ⏏)
+      patches << patch(timer, {2, :ready})
     end
   end
 
-  def step(world : Term, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
-    root = recognize(world)
+  def step(recognize_cache : RecognizeCache, world : Term, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
+    root = recognize(recognize_cache, world)
     if root.is_a?(Inert)
       return Slice(Term).empty, world
     end
@@ -3949,22 +5470,22 @@ module NeoRack
 
       # If the patch changed something, we have to reparse to obtain the new tree.
       # This heavily relies on recognition cache for performance.
-      root = recognize(world)
+      root = recognize(recognize_cache, world)
       break if root.is_a?(Inert)
     end
 
     {history.to_unsafe_readonly_slice!, world}
   end
 
-  def step(node : Inert, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
+  def step(recognize_cache : RecognizeCache, node : Inert, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
     {Slice(Term).empty, node.original}
   end
 
-  def step(ctx : Context, world : Term) : Slice(Term)
+  def step(ctx : Context, recognize_cache : RecognizeCache, world : Term) : Slice(Term)
     ctx.epoch do |epoch|
-      _, world = step(world) { |hg, patches| repair(hg, patches) }
-      history, world = step(world) { |hg, patches| advance(epoch, hg, patches) }
-      _, world = step(world) { |hg, patches| repair(hg, patches) }
+      _, world = step(recognize_cache, world) { |hg, patches| repair(hg, patches) }
+      history, world = step(recognize_cache, world) { |hg, patches| advance(epoch, hg, patches) }
+      _, world = step(recognize_cache, world) { |hg, patches| repair(hg, patches) }
 
       history.append(world)
     end
@@ -4114,38 +5635,67 @@ end
 #     a
 #     b
 #     c)
+#
+# TODO: add to tests:
+#   (cell @x 100)
+#   (feed @x @xf)
+#   (form @xf
+#     (outlet @x))
+#   (reading @xf)
+#
+# TODO: add to tests
+#   (form @xf
+#     (field @x 100)
+#     (field @y 200))
+#   (changes (sync @xf limit: 3))
+#   (backsys @xf
+#     {¦ ±x} <> {x: ^(+ x 1)}
+#     {¦ ±y} <> {y: ^(- y 1)})
+#
+# TODO: add to tests:
+#   (form @xf
+#     (field @x 100)
+#     (field @y 200))
+#   (changes (sync @xf limit: 3))
+#   (backsys @xf
+#     {¦ ±x} <> {x: ^(+ x 1)}
+#     {¦ ±y} <> {y: ^(- y 1)})
+#
+# TODO: add to tests:
+#  (form @xf
+#    (field @x 100)
+#    (field @y 200))
+#  (node (@change (changes _ change_ _*))
+#    (changes (sync @xf limit: 3)))
+#  (backsys @xf
+#    {¦ ±x} <> {x: ^(+ x 1)}
+#    {¦ ±y} <> {y: ^(- y 1)})
+#  (discard @change)
 
 circuit = ML.document(<<-'WWML')
-(cell @src "{x")
-(cell @dst)
-(parser (@src -> top -> @dst)
-  (top "{" x←letter "}") => ^x
-  (letter "(x←[a-z])"))
+(timer (2 s) start)
 WWML
 
-# - (med) parser
-# - (med) rewriter
+# - (easy) countdown (like timer but samples progress at a given rate in wait state)
+# - (easy) clock (update datetime at a given rate, maybe time format string or smth.)
 #
 # - (hard) assembler: slot, rule
 #
-# - (easy) timer
-# - (easy) lfo
-# - (easy) timesource
-# - (easy) ticker
-# - (easy) sequencer
-# - (easy) countdown
-# - (easy) clock
+# - (med) include bloom filter of edges in summary (128 bits?), use during traversal
+# - (med) include bloom filter of {head, edge} pairs in summary (256 or 512 bits?), use during traversal
+# - (med) use finger tree with Summary instead of children : Slice(Node)
 #
-# - (easy) fs
-# - (easy) resource
+# --- Move to src/wirewright/future/rack (?)
+# --- try to implement MxRack on top of NeoRack ---
 #
-# - (med) sensor
-# - (med) sensor many
-# - (med) sensor queue
-# - (med) sensor view
-# - (med) sensor journal
-# - (med) appearance
+# - (med) tspace: sensor
+# - (med) tspace: sensor many
+# - (med) tspace: sensor queue
+# - (med) tspace: sensor view
+# - (med) tspace: sensor journal
+# - (med) tspace: appearance
 #
+# - (hard) harmony: resource
 # - (hard) harmony: path...reading, path...report
 # - (hard) harmony: db
 # - (hard) harmony: server
@@ -4155,11 +5705,38 @@ WWML
 
 signal = BlockingSignal.new
 ctx = NeoRack::Context.new(signal)
+recognize_cache = NeoRack::RecognizeCache.new
 
+# Benchmark.ips do |x|
+#   x.report("step") do
+#     subframes = NeoRack.step(ctx, recognize_cache, circuit)
+#     circuit = subframes.last
+#     recognize_cache.sweep
+#   end
+# end
+
+printed = nil
+epoch = 0u64
 loop do
-  puts ML.display(circuit)
-  pp! ctx
-  subframes = NeoRack.step(ctx, circuit)
+  pred = circuit
+
+  unless printed == circuit
+    puts ML.display(circuit)
+    printed = circuit
+  end
+
+  subframes = NeoRack.step(ctx, recognize_cache, circuit)
   circuit = subframes.last
-  sleep 1.second
+  recognize_cache.sweep
+
+  next unless pred == circuit
+
+  if deadline = ctx.deadline?
+    epoch = signal.wait_until(epoch, timeout: deadline - Time.instant)
+    next
+  end
+
+  break unless ctx.pending?
+
+  epoch = signal.wait(epoch)
 end

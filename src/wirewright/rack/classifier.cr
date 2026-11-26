@@ -2502,7 +2502,7 @@ module Ww::Rack
       matchpi(
         %{[rewriter (@input_ -> spec_ -> @output_) _*]},
         %{[rewriter (@input_ - spec_ - @output_) _*]},
-      ) do
+      ) do # x
         edges = Pf::Kit.stack_array(Term, 3)
         edges << input << output
 
@@ -2609,7 +2609,7 @@ module Ww::Rack
       matchpi(
         %{[rewriter ((@input_ @version_) - spec_ - @output_) _*]},
         %{[rewriter ((@input_ @version_) -> spec_ - @output_) _*]},
-      ) do
+      ) do # x
         edges = Pf::Kit.stack_array(Term, 4)
         edges << input << version << output
 
@@ -2688,7 +2688,7 @@ module Ww::Rack
       #
       # ;; etc...
       # ```
-      matchpiT %{[rewriter (spec_ - target_dict) _*]} do
+      matchpiT %{[rewriter (spec_ - target_dict) _*]} do # x
         edges = Pf::Kit.stack_array(Term, 8)
 
         pass do
@@ -2763,8 +2763,8 @@ module Ww::Rack
       # ;; etc...
       # ```
 
-      matchpi %{[rewriter spec_ [(%any rule backmap) _*] _*]} do
-        keys = keysof(rules: node.items.move(1))
+      matchpi %{[rewriter spec_ [(%any rule backmap) _*] _*]} do # x
+        keys = keysof(rules: node.items.move(2))
 
         edges = Set(Term).new
         template = Term::Dict.build do |commit|
@@ -2779,9 +2779,9 @@ module Ww::Rack
         D7.gnd(node, edges, defn: defn)
       end
 
-      matchpi %{[rewriter spec_ [stage _*] _*]} do
+      matchpi %{[rewriter spec_ [stage _*] _*]} do # x
         keys = Set(Term).new
-        stages = node.items.move(1)
+        stages = node.items.move(2)
         stages.each do |stage|
           keys.concat(keysof(stage.items.move(1)))
         end
@@ -2982,7 +2982,7 @@ module Ww::Rack
       #
       # |@pattern
       # [parser (@input_ -> top_symbol -> @output_ / @error_) grammar_*]
-      matchpi %{[parser (@input_ -> _symbol -> @output_ / @error_) _*]} do
+      matchpi %{[parser (@input_ -> _symbol -> @output_ / @error_) _*]} do # x
         D7.gnd(node, input, output, error)
       end
 
@@ -2990,7 +2990,7 @@ module Ww::Rack
       #
       # |@pattern
       # [parser (@input_ - top_symbol - @output_) grammar_*]
-      matchpi %{[parser (@input_ - _symbol - @output_) _*]} do
+      matchpi %{[parser (@input_ - _symbol - @output_) _*]} do # x
         D7.gnd(node, input, output)
       end
 
@@ -2998,7 +2998,7 @@ module Ww::Rack
       #
       # |@pattern
       # [parser (@input_ - top_symbol - @output_ / @error_) grammar_*]
-      matchpi %{[parser (@input_ - _symbol - @output_ / @error_) _*]} do
+      matchpi %{[parser (@input_ - _symbol - @output_ / @error_) _*]} do # x
         D7.gnd(node, input, output, error)
       end
 
@@ -3429,7 +3429,7 @@ module Ww::Rack
       # ;; $ cat /tmp/b
       # ;; Hello from file B
       # ```
-      matchpi %{[fs @request_ @response_]} do
+      matchpi %{[fs @request_ @response_]} do # x
         D7.gnd(node, request, response)
       end
 
@@ -4394,7 +4394,7 @@ module Ww::Rack
       #
       # ;; And so on...
       # ```
-      matchpi %{[sequencer _ _+]} do
+      matchpi %{[sequencer _ _+]} do # x
         D7.gnd(node)
       end
 
@@ -4440,7 +4440,7 @@ module Ww::Rack
       #
       # ;; And so on...
       # ```
-      matchpi %{[ticker _dict _number]} do
+      matchpi %{[ticker _dict _number]} do # x
         D7.gnd(node)
       end
 
@@ -4511,7 +4511,7 @@ module Ww::Rack
       # ;; Here we just queue them up.
       # (queue (@sample @samples) ())
       # ```
-      matchpi %{[timesource (_dict @edge_) _]} do
+      matchpi %{[timesource (_dict @edge_) _]} do # x
         D7.gnd(node, edge)
       end
 
@@ -4611,7 +4611,7 @@ module Ww::Rack
       #
       # In the example, the lfo node is used to modulate the `viewport`'s `page-x`,
       # with the help of other properties and a visual query.
-      matchpi %{[lfo (_ _) _?]} do
+      matchpi %{[lfo (_ _) _?]} do # x
         D7.gnd(node)
       end
 
@@ -4706,7 +4706,7 @@ module Ww::Rack
       # Note that the timer node does not do countdown. For a timer that counts down (think
       # a smartphone timer app where milliseconds, seconds, etc. count down while the timer
       # is waiting), use the `rack.countdown` node.
-      matchpi %{[timer _ _?]} do
+      matchpi %{[timer _ _?]} do # x
         D7.gnd(node)
       end
 

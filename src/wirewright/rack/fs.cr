@@ -208,7 +208,7 @@ module ::Ww::Rack::FS
   defrecord Wrote, path : NormalPath
   defrecord Err, detail : String
 
-  def render(response : Response) : Term
+  def transcribe(response : Response) : Term
     # |@ rack.fs.response
     #
     # |@summary
@@ -323,7 +323,7 @@ module ::Ww::Rack::FS
     if response = tasks.result?(request)
       return D7.patches(
         D7.patch(request_cell.node, {2, nil}),
-        D7.patch(response_cell.node, {2, render(response)}),
+        D7.patch(response_cell.node, {2, transcribe(response)}),
       )
     end
 

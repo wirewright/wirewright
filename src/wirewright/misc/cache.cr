@@ -112,7 +112,7 @@ module Ww
       {% end %}
 
       @entries = Dll.empty(Entry(K, V))
-      @table = Hash(K, Dll::Item(Entry(K, V))).new(initial_capacity: @capacity)
+      @table = {} of K => Dll::Item(Entry(K, V))
       if by_ref
         @table.compare_by_identity
       end
