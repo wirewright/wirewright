@@ -1484,7 +1484,7 @@ module Ww::Rack
       matchpi(
         %{[manipulator (@edge_ -> _*) child0_]},
         %{[manipulator (@edge_ _ -> _*) child0_]},
-      ) do
+      ) do # x
         mix0 = Term.of(:group, Term.morph(node, {0, :manipulable}), child0)
 
         D7.mixture(node, mix0) do |mix1|
@@ -1508,7 +1508,7 @@ module Ww::Rack
       matchpi(
         %{[manipulable (@edge_ -> _*) _]},
         %{[manipulable (@edge_ _ -> _*) _]},
-      ) do
+      ) do # x
         D7.gnd(node, edge)
       end
 
@@ -2974,7 +2974,7 @@ module Ww::Rack
       #
       # |@pattern
       # [parser (@input_ -> top_symbol -> @output_) grammar_*]
-      matchpi %{[parser (@input_ -> _symbol -> @output_) _*]} do
+      matchpi %{[parser (@input_ -> _symbol -> @output_) _*]} do # x
         D7.gnd(node, input, output)
       end
 
@@ -4328,13 +4328,13 @@ module Ww::Rack
       #     (p "Hello World")))
       # ```
 
-      matchpi %{[supervisor (@tasks_ @_ _ - @pool_) _*]} do
+      matchpi %{[supervisor (@tasks_ @_ _ - @pool_) _*]} do # x
         # NOTE: the other edge, @tasks_ ⏏@task_⏏, is an interior edge; it is
         # not exposed to the outside world.
         D7.gnd(node, tasks, pool)
       end
 
-      matchpi %{[supervisor (@tasks_ @_ _ - @pool_ _dict) _*]} do
+      matchpi %{[supervisor (@tasks_ @_ _ - @pool_ _dict) _*]} do # x
         D7.gnd(node, tasks, pool)
       end
 

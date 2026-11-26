@@ -2,6 +2,9 @@ module Ww
   struct Term::Dict::ItemsView
     include Indexable(Term)
 
+    getter b : Int32
+    getter e : Int32
+
     def initialize(@dict : Dict, @b : Int32, @e : Int32)
       assert 0 <= @b <= @e <= @dict.itemsize # Sanity
     end

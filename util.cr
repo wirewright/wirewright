@@ -2800,6 +2800,12 @@ class BlockingSignal
       @cv.broadcast
     end
   end
+
+  def inspect(io)
+    io << "#<BlockingSignal:0x"
+    object_id.to_s(io, base: 16)
+    io << " ...>"
+  end
 end
 
 class BlockingSlot(T)

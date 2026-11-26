@@ -62,6 +62,8 @@ module NeoRack
     FieldEmpty
     FieldOccupied
     Manipulable
+    Supervisor
+    ParserTransfer
 
     def self.of(cls) : NodeSignature
       case cls
@@ -98,6 +100,8 @@ module NeoRack
       in NeoRack::Field::Empty.class           then FieldEmpty
       in NeoRack::Field::Occupied.class        then FieldOccupied
       in NeoRack::Manipulable.class            then Manipulable
+      in NeoRack::Supervisor.class             then Supervisor
+      in NeoRack::Parser::Transfer.class       then ParserTransfer
       end
     end
   end
@@ -1111,6 +1115,484 @@ module NeoRack
     end
   end
 
+  defcase Supervisor,
+    original : Term,
+    tasks : Term,
+    reference_edge : Term,
+    task_edge : Term,
+    keyp : M1::Op::Any,
+    pool : Pool,
+    template : Term::Dict,
+    includes: {IGnd}
+
+  class Supervisor
+    def merge_policy : MergePolicy
+      MergeDiff.new(0u32)
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield tasks
+      yield pool
+    end
+
+    alias Pool = DevicePool | ModulePool
+
+    defrecord DevicePool, edge : Term
+    defrecord ModulePool, edge : Term, bindings : Term::Dict
+
+    defrecord Fixture, original : Term
+
+    defrecord Task, key : Term, body : Term, copying: true
+
+    defrecord Worker,
+      original : Term,
+      key : Term,
+      reference : Term,
+      current : Term?,
+      reference_index : UInt32,
+      current_index : UInt32,
+      copying: true
+
+    # Instantiates a worker for *task*.
+    def self.worker(supervisor : Supervisor, task : Task) : Worker
+      original = Term::Dict.build do |commit|
+        case pool = supervisor.pool
+        in DevicePool
+          commit << :device
+        in ModulePool
+          commit << :module
+          commit << pool.bindings
+        end
+
+        commit << {:cell, {:edge, :reference}, task.body}
+        commit << {:cell, supervisor.task_edge, task.body}
+        commit.concat(supervisor.template.items)
+      end
+
+      reference = current = task.body
+      case supervisor.pool
+      in DevicePool
+        reference_index = 1u32 # < refer to the dict we've just constructed
+        current_index = 2u32   # <
+      in ModulePool
+        reference_index = 2u32
+        current_index = 3u32
+      end
+      Worker.new(Term.of(original), task.key, reference, current, reference_index, current_index)
+    end
+
+    # Returns the value of a cell at *edge* in a *worker*.
+    def self.worker_get?(ahead : Term::Dict::ItemsView, edge : Term) : {Term?, UInt32}?
+      ahead.zip(ahead.b...ahead.e) do |child, index|
+        Term.case(child) do
+          matchpi %{[cell @candidate_ value_]} do
+            next unless candidate == edge
+            return value, index.to_u32
+          end
+
+          matchpi %{[cell @candidate_]} do
+            return nil, index.to_u32
+          end
+
+          otherwise { }
+        end
+      end
+    end
+
+    # Parses a task dict into a sequence of `Task`s and `Fixture`s (unrecognized terms
+    # which `supervisor` leaves as-is).
+    def self.task_seq(supervisor : Supervisor, tasks : Term::Dict) : Array(Task | Fixture)
+      seq = [] of Task | Fixture
+
+      tasks.items.each do |item|
+        added = false
+
+        pass do
+          next unless env = M1.match?(Term[], supervisor.keyp, item)
+          next unless entry = env.ee.first?
+          _, key = entry
+
+          seq << Task.new(key, item)
+          added = true
+        end
+
+        next if added
+
+        seq << Fixture.new(item)
+      end
+
+      seq
+    end
+
+    # :nodoc:
+    SYM_DEVICE = Term.of(:device)
+    # :nodoc:
+    SYM_MODULE = Term.of(:module)
+
+    # Parses a worker pool dict into a sequence of `Worker`s and `Fixture`s (unrecognized
+    # terms which `supervisor` leaves as-is).
+    def self.worker_seq(supervisor : Supervisor, workers : Term::Dict) : Array(Worker | Fixture)
+      seq = [] of Worker | Fixture
+
+      workers.items.each do |item|
+        added = false
+
+        pass do
+          next unless worker = item.as_d?
+          next unless worker.itemsize >= 2
+
+          ahead = worker.items
+
+          case pool = supervisor.pool
+          in Supervisor::DevicePool
+            next unless ahead.starts_with?({SYM_DEVICE})
+            ahead = ahead.move(1)
+          in Supervisor::ModulePool
+            next unless ahead.starts_with?({SYM_MODULE, pool.bindings})
+            ahead = ahead.move(2)
+          end
+
+          next unless row = worker_get?(ahead, supervisor.reference_edge)
+
+          reference, reference_index = row
+          next if reference.nil?
+          next unless env = M1.match?(Term[], supervisor.keyp, reference)
+          next unless entry = env.ee.first?
+          _, key = entry
+
+          next unless row = worker_get?(ahead, supervisor.task_edge)
+          current, current_index = row
+
+          seq << Worker.new(item, key, reference, current, reference_index, current_index)
+          added = true
+        end
+
+        next if added
+
+        seq << Fixture.new(item)
+      end
+
+      seq
+    end
+
+    alias TaskMap = Hash(Term, Array(Task))
+    alias WorkerMap = Hash(Term, Array(Worker))
+
+    # Indexes a sequence of workers and fixtures *seq*.
+    def self.worker_map(seq : Array(Worker | Fixture)) : WorkerMap
+      map = WorkerMap.new
+
+      seq.each do |item|
+        case item
+        in Fixture
+        in Worker
+          bucket = map.put_if_absent(item.key) { [] of Worker }
+          bucket << item
+        end
+      end
+
+      map
+    end
+
+    # Creates a task order map, which maps a task key to the index of
+    # the corresponding task.
+    def self.task_order(seq : Array(Task | Fixture)) : Hash(Term, UInt32)
+      seq.each
+        .select(Task)
+        .with_index
+        .to_h { |task, index| {task.key, index.to_u32} }
+    end
+
+    # Indexes a sequence of tasks and fixtures *seq*.
+    def self.task_map(seq : Array(Task | Fixture)) : TaskMap
+      map = TaskMap.new
+
+      seq.each do |item|
+        case item
+        in Fixture
+        in Task
+          bucket = map.put_if_absent(item.key) { [] of Task }
+          bucket << item
+        end
+      end
+
+      map
+    end
+
+    # *delete* is a set of keys. Tasks with these keys must be removed.
+    # *update* maps a key to the corresponding updated task.
+    defrecord TaskPlan,
+      delete = Set(Term).new,
+      update = {} of Term => Term
+
+    struct TaskPlan
+      def empty? : Bool
+        delete.empty? && update.empty?
+      end
+    end
+
+    # *create* is a list of tasks for which workers should be inserted.
+    # *update* maps a key to a task. Workers must update their reference and
+    # current cell to the task.
+    # *delete* is a set of keys. Workers with these keys must be removed.
+    defrecord WorkerPlan,
+      create = Array(Task).new,
+      update = {} of Term => Term,
+      delete = Set(Term).new
+
+    struct WorkerPlan
+      def empty? : Bool
+        create.empty? && update.empty? && delete.empty?
+      end
+    end
+
+    def self.plan(task_map : TaskMap, worker_map : WorkerMap) : {TaskPlan, WorkerPlan}
+      task_plan = TaskPlan.new
+      worker_plan = WorkerPlan.new
+
+      task_map.each do |key, bucket|
+        # Supervisors really don't like colliding tasks so they completely prune them
+        # and the corresponding devices (if any).
+        unless task = bucket.single?
+          task_plan.delete << key
+          worker_plan.delete << key
+          next
+        end
+
+        unless associated_workers = worker_map[key]?
+          worker_plan.create << task
+          next
+        end
+
+        # If there are two or more workers on the same key, delete them.
+        # They collide.
+        unless worker = associated_workers.single?
+          worker_plan.delete << key # this will delete all of them
+          next
+        end
+
+        # Process changes of tasks by workers.
+        current = worker.current
+
+        if current.nil?
+          # The worker wants to remove itself and the associated task. Perhaps
+          # it is "complete".
+          task_plan.delete << key
+          worker_plan.delete << key
+          next
+        end
+
+        if worker.reference == current
+          next if worker.reference == task.body
+
+          # The worker did not change its copy of task, but the task in tasks
+          # changed. Update the worker's copy.
+          worker_plan.update[key] = task.body
+          next
+        end
+
+        # The worker updated its copy of the task. Update the task and the worker's
+        # own reference copy.
+        task_plan.update[key] = current
+        worker_plan.update[key] = current
+      end
+
+      # Prune workers without associated tasks.
+      worker_map.each do |key, bucket|
+        next if task_map.has_key?(key)
+
+        worker_plan.delete << key
+      end
+
+      {task_plan, worker_plan}
+    end
+
+    def self.execute(supervisor : Supervisor, seq : Array(Task | Fixture), plan : TaskPlan) : Array(Task | Fixture)
+      seq.compact_map do |item|
+        case item
+        in Fixture
+          item # Keep it as-is.
+        in Task
+          next if item.key.in?(plan.delete) # Skip it if they want to delete it.
+
+          updated = plan.update[item.key]?
+          updated ? item.copy_with(body: updated) : item
+        end
+      end
+    end
+
+    def self.execute(supervisor : Supervisor, seq : Array(Worker | Fixture), plan : WorkerPlan) : Array(Worker | Fixture)
+      seq = seq.compact_map do |item|
+        case item
+        in Fixture
+          item
+        in Worker
+          next if item.key.in?(plan.delete) # Skip it if they want to delete it.
+
+          updated = plan.update[item.key]?
+          updated ? item.copy_with(reference: updated, current: updated) : item
+        end
+      end
+
+      plan.create.each do |task|
+        seq << worker(supervisor, task)
+      end
+
+      seq
+    end
+
+    def self.render(seq : Array(Task | Fixture), tasks : Term::Dict) : Term::Dict
+      Term::Dict.build do |commit|
+        seq.each do |item|
+          case item
+          in Fixture then commit << item.original
+          in Task    then commit << item.body
+          end
+        end
+      end
+    end
+
+    def self.render(seq : Array(Worker | Fixture), order : Hash(Term, UInt32), workers : Term::Dict) : Term::Dict
+      # Sort workers so that they have the same order as their corresponding tasks.
+      workerq = seq.select(Worker)
+      workerq.sort_by! { |worker| order[worker.key] }
+
+      # Render the resulting pool.
+      Term::Dict.build do |commit|
+        seq.each do |item|
+          case item
+          in Fixture
+            commit << item.original
+          in Worker
+            item = workerq.shift # shadow
+
+            # 2 refers to the cell's value:
+            #   (cell @reference ⏏)
+            #   (cell @current ⏏)
+            commit << Term.morph(item.original,
+              {item.reference_index, 2, item.reference},
+              {item.current_index, 2, item.current},
+            )
+          end
+        end
+      end
+    end
+
+    def self.ordered?(seq : Array(Worker | Fixture), order : Hash(Term, UInt32)) : Bool
+      seq.each
+        .select(Worker)
+        .map { |worker| order[worker.key] }
+        .cons_pair
+        .all? { |l, r| l < r }
+    end
+
+    @@nops = SyncLRU(Term::Str, Bool).new(capacity: 128)
+
+    def self.repair(hg : Hypergraph, patches : Array(Patch), supervisor : NodeRef(Supervisor)) : Nil
+      # Fetch stuff from the hypergraph.
+      if tasks_cell = hg.occupied_place?(supervisor.addr, supervisor.node.tasks)
+        tasks0 = tasks_cell.value.as_d?
+      end
+      tasks0 ||= Term[]
+
+      return unless pool_cell = hg.place?(supervisor.addr, supervisor.node.pool.edge)
+
+      workers0 = pool_cell.as?(Place::Occupied).try(&.value.as_d?) || Term[]
+
+      digest = Term.digest(supervisor.node.original, workers0, tasks0)
+      return if !!@@nops.get?(digest) # Fast path if we've recently learned it's a nop.
+
+      # Parse tasks.
+      task_seq = Supervisor.task_seq(supervisor.node, tasks0)
+      task_order = Supervisor.task_order(task_seq)
+      task_map = Supervisor.task_map(task_seq)
+
+      # Parse workers.
+      worker_seq = Supervisor.worker_seq(supervisor.node, workers0)
+      worker_map = Supervisor.worker_map(worker_seq)
+
+      # Build and execute plans.
+      task_plan, worker_plan = Supervisor.plan(task_map, worker_map)
+
+      unless task_plan.empty?
+        task_seq = Supervisor.execute(supervisor.node, task_seq, task_plan)
+      end
+      unless worker_plan.empty?
+        worker_seq = Supervisor.execute(supervisor.node, worker_seq, worker_plan)
+      end
+
+      # Render the new task and worker dicts.
+
+      # Task render() only depends on the task plan.
+      unless task_plan.empty?
+        tasks1 = Supervisor.render(task_seq, tasks0)
+      end
+
+      # Worker render() depends on worker plan and also on proper order, since it
+      # may want to order workers properly.
+      unless worker_plan.empty? && Supervisor.ordered?(worker_seq, task_order)
+        workers1 = Supervisor.render(worker_seq, task_order, workers0)
+      end
+
+      # Produce patches.
+
+      if workers1 && workers0 != workers1
+        pool_patch = pool_cell.write(Term.rep_of(workers1))
+      end
+
+      if tasks1 && tasks_cell && tasks0 != tasks1
+        tasks_patch = tasks_cell.write(Term.rep_of(tasks1))
+      end
+
+      if pool_patch.nil? && tasks_patch.nil?
+        @@nops.put(digest, true) # Remember it's a nop so as to not waste time in the future.
+        return
+      end
+
+      patches << NeoRack.txn(tasks_patch || NeoRack.patch, pool_patch || NeoRack.patch)
+    end
+  end
+
+  module Parser
+    include IGnd
+
+    def merge_policy : MergePolicy
+      MergeDiff.new(0u32)
+    end
+
+    def each_edge(& : Term ->) : Nil
+      yield src
+      yield dst
+    end
+
+    defcase Transfer,
+      original : Term,
+      src : Term,
+      dst : Term,
+      grammar : ParseKit::GrammarF,
+      grammar_digest : Term::Str,
+      top : Term::Sym,
+      includes: {Parser}
+
+    defrecord Task,
+      text : Term::Str,
+      grammar : ParseKit::GrammarF,
+      grammar_digest : Term::Str,
+      top : Term::Sym
+
+    struct Task
+      def_equals_and_hash text, grammar_digest, top
+    end
+
+    alias Result = Term | ParseKit::Err
+
+    def self.execute(task : Task, ping) : Result
+      seln = task.text.to(Pf::StringSeln)
+      ctx = ParseKit.context(task.grammar, ping)
+      ParseKit.resolve(ParseKit.parse(ctx, task.top, seln))
+    end
+  end
+
   # Represents the toplevel circuit.
   defcase Root,
     original_dict : Term::Dict,
@@ -2061,6 +2543,22 @@ module NeoRack
         continue if winning_env_trace_lists.nil?
 
         Manipulable.new(original, edge, selector, winning_env_trace_lists, child)
+      end
+
+      matchpi %{[supervisor (@tasks_ @task_ keypQ_ - @pool_ ⍊ reference_: (%optional @reference @_)) template_*]} do
+        keyp = M1.operator(keypQ)
+        Supervisor.new(original, tasks, reference, task, keyp, Supervisor::DevicePool.new(pool), template.as_d)
+      end
+
+      matchpi %{[supervisor (@tasks_ @task_ keypQ_ - @pool_ bindings_dict ⍊ reference_: (%optional @reference @_)) template_*]} do
+        keyp = M1.operator(keypQ)
+        Supervisor.new(original, tasks, reference, task, keyp, Supervisor::ModulePool.new(pool, bindings.as_d), template.as_d)
+      end
+
+      matchpiT %{[parser (@src_ -> top_symbol -> @dst_) grammarQ_*]} do
+        grammar = ParseKit.flatten(ParseKit.grammar(grammarQ))
+        grammar_digest = Term.digest(grammarQ)
+        Parser::Transfer.new(original, src, dst, grammar, grammar_digest, top)
       end
 
       otherwise do
@@ -3088,10 +3586,41 @@ module NeoRack
       rep = M1.backmapR({backmap}, manipulable.node.operand)
       patches << patch(manipulable, {2, Term.collapse(rep)})
     end
+
+    hg.each(Supervisor) do |supervisor|
+      Supervisor.repair(hg, patches, supervisor)
+    end
   end
 
+  alias ParserTaskBoard = D7::TaskBoard(BlockingSignal, Parser::Task, Parser::Result)
+  alias ParserRdv = D7::TaskBoard::Rdv(BlockingSignal, Parser::Task, Parser::Result)
+
+  class Context
+    def initialize(@signal : BlockingSignal)
+      @parser_tasks = ParserTaskBoard.new(@signal) { |task, ping| Parser.execute(task, ping) }
+      @parser_errors = Set(Parser::Task).new
+    end
+
+    def epoch(&)
+      @parser_tasks.rdv do |parser_rdv|
+        parser_errors1 = Set(Parser::Task).new
+
+        result = yield ContextEpoch.new(parser_rdv, @parser_errors, parser_errors1)
+
+        @parser_errors = parser_errors1
+
+        result
+      end
+    end
+  end
+
+  defrecord ContextEpoch,
+    parser_rdv : ParserRdv,
+    parser_errors0 : Set(Parser::Task),
+    parser_errors1 : Set(Parser::Task)
+
   # Runs the main symbolic physics pass.
-  def advance(hg : Hypergraph, patches : Array(Patch)) : Nil
+  def advance(epoch : ContextEpoch, hg : Hypergraph, patches : Array(Patch)) : Nil
     hg.each(Feed::Transfer) do |feed|
       next if feed.node.inhibitors.any? { |inhibitor| !!hg.occupied_place?(feed.addr, inhibitor.edge) }
       next unless took = Feed.take?(hg, feed.addr, feed.node.src)
@@ -3336,6 +3865,34 @@ module NeoRack
 
       patches << EdgeTemplate.writeback(hg, situated, reply)
     end
+
+    hg.each(Parser::Transfer) do |parser|
+      next unless src = hg.occupied_place?(parser.addr, parser.node.src)
+      next unless text = src.value.as_s?
+      next unless dst = hg.empty_place?(parser.addr, parser.node.dst)
+
+      task = Parser::Task.new(text, parser.node.grammar, parser.node.grammar_digest, parser.node.top)
+      if task.in?(epoch.parser_errors0)
+        epoch.parser_errors1 << task # confirms its liveness
+        next
+      end
+
+      result = epoch.parser_rdv.result?(task)
+      # Try computing inline (returns Result) or schedule (returns Nil).
+      result ||= epoch.parser_rdv.publish?(task, throttle: 64u64, deadline: 100.microseconds)
+
+      case result
+      in Nil
+        # Result not available
+      in Term
+        patches << txn(src.write(Term.rep), dst.write(Term.rep(result)))
+      in ParseKit::Err
+        # If there's a parse error, it has nowhere to go in this variant, so
+        # we clog the input. We also remember task ended in an error, so as
+        # to not redo parsing every time.
+        epoch.parser_errors1 << task
+      end
+    end
   end
 
   def step(world : Term, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
@@ -3403,12 +3960,14 @@ module NeoRack
     {Slice(Term).empty, node.original}
   end
 
-  def step(world : Term) : Slice(Term)
-    _, world = step(world) { |hg, patches| repair(hg, patches) }
-    history, world = step(world) { |hg, patches| advance(hg, patches) }
-    _, world = step(world) { |hg, patches| repair(hg, patches) }
+  def step(ctx : Context, world : Term) : Slice(Term)
+    ctx.epoch do |epoch|
+      _, world = step(world) { |hg, patches| repair(hg, patches) }
+      history, world = step(world) { |hg, patches| advance(epoch, hg, patches) }
+      _, world = step(world) { |hg, patches| repair(hg, patches) }
 
-    history.append(world)
+      history.append(world)
+    end
   end
 
   def replace(object : NodeRef, term : Term) : Patch
@@ -3544,38 +4103,30 @@ end
 #   (part (@xf @y) {¦ ±y})
 #   (discard @x)
 #   (discard @y)
+#
+# TODO: add to tests:
+#   (cell @tasks (1 x y 2 3 z))
+#   (cell @amount 1)
+#   (supervisor (@tasks @task ±n - @pool {:@amount})
+#     (backsys
+#       {¦ ±task ±amount} <> {task: ^(+ task amount)}))
+#   (nodes @pool
+#     a
+#     b
+#     c)
 
 circuit = ML.document(<<-'WWML')
-;; (supervisor (@xs @x - @ys)
-;;   (blueprint
-;;     (cell @x ...)
-;;     (cell @y ...))
-;;
-;;   (cell @xs ...)
-;;   (node @ys ...)
-;;   ...)
-;;
-;; (ref @ys)
-
-(cell @xs (1 2 3))
-(backsys @xs
-  (_ ±n _) <> {n: ^(+ n 1)})
-
-;; Bind the value of the middle number to {count: _} in @ys using `node`
-(manipulator (@xs (_ ±n _) -> (cell @ys {¦ -count: n}) (cell @ys {¦ count: n_}))
-  (cell @ys {}))
+(cell @src "{x")
+(cell @dst)
+(parser (@src -> top -> @dst)
+  (top "{" x←letter "}") => ^x
+  (letter "(x←[a-z])"))
 WWML
 
-# - (hard) supervisor, supervisor module
-#
-# --- we've tackled the most complex stuff, yay ---
-#
-# - (hard) assembler: slot, rule
-#
-# --- most tricky stuff done, ready for MxRack experimentation ---
-#
 # - (med) parser
 # - (med) rewriter
+#
+# - (hard) assembler: slot, rule
 #
 # - (easy) timer
 # - (easy) lfo
@@ -3586,9 +4137,7 @@ WWML
 # - (easy) clock
 #
 # - (easy) fs
-# - (hard) harmony: path...reading, path...report
-#
-# --- self-hosted MuSoma should run ---
+# - (easy) resource
 #
 # - (med) sensor
 # - (med) sensor many
@@ -3597,17 +4146,20 @@ WWML
 # - (med) sensor journal
 # - (med) appearance
 #
-# - (easy) resource
-#
+# - (hard) harmony: path...reading, path...report
 # - (hard) harmony: db
 # - (hard) harmony: server
 # - (hard) harmony: client
 #
 # --- all of Rack complete, all examples and tests should run ---
 
+signal = BlockingSignal.new
+ctx = NeoRack::Context.new(signal)
+
 loop do
   puts ML.display(circuit)
-  subframes = NeoRack.step(circuit)
+  pp! ctx
+  subframes = NeoRack.step(ctx, circuit)
   circuit = subframes.last
   sleep 1.second
 end
