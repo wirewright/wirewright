@@ -78,6 +78,9 @@ module NeoRack
     Lfo
     PendingTimer
     WaitingTimer
+    PendingCountdown
+    WaitingCountdown
+    Clock
 
     def self.of(cls) : NodeSignature
       case cls
@@ -130,6 +133,9 @@ module NeoRack
       in NeoRack::Timing::Lfo.class                       then Lfo
       in NeoRack::Timing::PendingTimer.class              then PendingTimer
       in NeoRack::Timing::WaitingTimer.class              then WaitingTimer
+      in NeoRack::Timing::PendingCountdown.class          then PendingCountdown
+      in NeoRack::Timing::WaitingCountdown.class          then WaitingCountdown
+      in NeoRack::Timing::Clock.class                     then Clock
       end
     end
   end
@@ -2258,6 +2264,27 @@ module NeoRack
       deadline : Time::Span,
       includes: {Timing}
 
+    defcase PendingCountdown,
+      original : Term,
+      delay : Time::Span,
+      rate : Time::Span,
+      includes: {Timing}
+
+    defcase WaitingCountdown,
+      original : Term,
+      delay : Time::Span,
+      rate : Time::Span,
+      universe : UInt64,
+      deadline : Time::Span,
+      includes: {Timing}
+
+    defcase Clock,
+      original : Term,
+      rate : Time::Span,
+      format : Time::Format,
+      location : Time::Location,
+      includes: {Timing}
+
     def self.crossingcnt(checkpoint : Time::Span, now : Time::Span, period : Time::Span) : Int64
       if period.zero?
         # Zero period should make it always cross.
@@ -2504,6 +2531,26 @@ module NeoRack
 
         otherwise { }
       end
+    end
+
+    def self.location?(term : Term) : Time::Location?
+      Term.case(term) do
+        matchpi %{local} do
+          Time::Location.local
+        end
+
+        matchpi %{utc} do
+          Time::Location::UTC
+        end
+
+        matchpi %{_string} do
+          Time::Location.load?(term.to(String))
+        end
+
+        otherwise { }
+      end
+    rescue Time::Error
+      # TODO: Log it or something...
     end
   end
 
@@ -3625,6 +3672,55 @@ module NeoRack
         Timing::WaitingTimer.new(original, delay, universe, deadline)
       end
 
+      # |@example
+      # ```wwml
+      # (node @countdown
+      #   (countdown (10 s rate: (33 ms)) start))
+      #
+      # (cell @display)
+      #
+      # (backsys
+      #   {¦ countdown: (countdown _ ready) display_}
+      #     <> {(display): ()}
+      #
+      #   {¦ countdown: (countdown [±t s] (wait ±progress _)) ⋮display}
+      #     <> {display: ^(let* ((remaining-ms (* (* t 1000) (- 1 (exact progress))))
+      #                          (centiseconds (floor (/ remaining-ms 10)))
+      #                          (minutes (floor (/ centiseconds 6000)))
+      #                          (seconds (mod (floor (/ centiseconds 100)) 60))
+      #                          (milliseconds (mod (floor remaining-ms) 1000)))
+      #                     "⸢(zeropad minutes 2)⸣:⸢(zeropad seconds 2)⸣.⸢(zeropad milliseconds 3)⸣")})
+      # ```
+
+      matchpi %{[countdown (%layer delayQ_ {| rate: rateQ_}) start]} do
+        continue unless delay = DurationLanguage.decode?(delayQ)
+        continue unless rate = DurationLanguage.decode?(rateQ)
+
+        Timing::PendingCountdown.new(original, delay, rate)
+      end
+
+      matchpi %{[countdown (%layer delayQ_ {| rate: rateQ_}) (wait _number instant_string)]}, instant: String do
+        continue unless delay = DurationLanguage.decode?(delayQ)
+        continue unless rate = DurationLanguage.decode?(rateQ)
+
+        parts = instant.split(':', limit: 2)
+        continue unless parts.size == 2
+
+        universe, deadline_ns = parts
+        continue unless universe = universe.to_u64?(base: 62)
+        continue unless deadline_ns = deadline_ns.to_u64?(base: 62)
+
+        deadline = deadline_ns.nanoseconds
+        Timing::WaitingCountdown.new(original, delay, rate, universe, deadline)
+      end
+
+      matchpi %{[clock (formatQ_string rate: rateQ_ location: locationQ_) _?]}, formatQ: String do
+        continue unless rate = DurationLanguage.decode?(rateQ)
+        continue unless location = Timing.location?(locationQ)
+
+        format = Time::Format.new(formatQ, location)
+        Timing::Clock.new(original, rate, format, location)
+      end
       otherwise do
         Inert.new(original)
       end
@@ -4058,7 +4154,7 @@ module NeoRack
 
   defrecord NodeRef(T), addr : NodeAddr, id : NodeId, node : T do
     {% unless T < IGnd %}
-      {% T.raise "expected a IGnd includer" %}
+      {% T.raise "expected an IGnd includer" %}
     {% end %}
   end
 
@@ -5414,6 +5510,59 @@ module NeoRack
       # (timer _ ⏏)
       patches << patch(timer, {2, :ready})
     end
+
+    hg.each(Timing::PendingCountdown) do |countdown|
+      deadline = (epoch.time_now + countdown.node.delay).total_nanoseconds.to_u64
+
+      instant = String.build do |io|
+        Timing::UNIVERSE.to_s(io, base: 62)
+        io << ':'
+        deadline.to_s(io, base: 62)
+      end
+
+      # (countdown _ ⏏)
+      patches << patch(countdown, {2, {:wait, 0, instant}})
+    end
+
+    hg.each(Timing::WaitingCountdown) do |timer|
+      # If universe does not match, we restart the timer node.
+      unless timer.node.universe == Timing::UNIVERSE
+        # (countdown _ ⏏)
+        patches << patch(timer, {2, :start})
+        next
+      end
+
+      if epoch.time_now < timer.node.deadline
+        # Keep waiting
+        epoch.time_periods << timer.node.rate
+        epoch.time_deadlines << timer.node.deadline
+
+        crossings = Timing.crossingcnt(epoch.time_checkpoint, epoch.time_now, timer.node.rate)
+        next if crossings.zero?
+
+        progress = (epoch.time_now/timer.node.deadline).clamp(0.0..1.0)
+
+        # (countdown _ (wait ⏏ _))
+        patches << patch(timer, {2, 1, progress})
+        next
+      end
+
+      # We're past the deadline.
+      # (countdown _ ⏏)
+      patches << patch(timer, {2, :ready})
+    end
+
+    hg.each(Timing::Clock) do |clock|
+      epoch.time_periods << clock.node.rate
+
+      crossings = Timing.crossingcnt(epoch.time_checkpoint, epoch.time_now, clock.node.rate)
+      next if crossings.zero?
+
+      readout = clock.node.format.format(Time.local(clock.node.location))
+
+      # (clock _ ⏏)
+      patches << patch(clock, {2, readout})
+    end
   end
 
   def step(recognize_cache : RecognizeCache, world : Term, & : Hypergraph, Array(Patch) ->) : {Slice(Term), Term}
@@ -5676,17 +5825,21 @@ circuit = ML.document(<<-'WWML')
 (timer (2 s) start)
 WWML
 
-# - (easy) countdown (like timer but samples progress at a given rate in wait state)
-# - (easy) clock (update datetime at a given rate, maybe time format string or smth.)
-#
 # - (hard) assembler: slot, rule
+#   - prevent infinite recursion when instantiating call template, depth limit
+#   - refactors. how to do less in Summary, esp. in terms of memory allocation?
 #
 # - (med) include bloom filter of edges in summary (128 bits?), use during traversal
 # - (med) include bloom filter of {head, edge} pairs in summary (256 or 512 bits?), use during traversal
-# - (med) use finger tree with Summary instead of children : Slice(Node)
 #
 # --- Move to src/wirewright/future/rack (?)
-# --- try to implement MxRack on top of NeoRack ---
+#
+# - Try running all the rack tests we can
+#
+# --- Try to implement MxRack on top of NeoRack. I'm especially interested in Automaton
+#     since it's the buggiest part of the current MxRack impl. See if there's a way to
+#     improve anything. How to implement/step() nested automata? How to deliver events
+#     to them? How to consume them during Automaton step? How to put the circuit in the loop? ---
 #
 # - (med) tspace: sensor
 # - (med) tspace: sensor many
@@ -5702,6 +5855,8 @@ WWML
 # - (hard) harmony: client
 #
 # --- all of Rack complete, all examples and tests should run ---
+#
+# - (med) use finger tree with Summary instead of children : Slice(Node)
 
 signal = BlockingSignal.new
 ctx = NeoRack::Context.new(signal)
